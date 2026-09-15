@@ -199,8 +199,8 @@ export function SettingsView() {
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
         <StaggerItem className="hidden items-center justify-between gap-4 lg:flex">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold text-foreground">{t("nav.settings")}</h1>
-            <p className="text-sm text-muted-foreground">{t("settings.subtitle")}</p>
+            <h1 className="text-2xl font-semibold text-ink">{t("nav.settings")}</h1>
+            <p className="text-sm text-ink-soft">{t("settings.subtitle")}</p>
           </div>
           {section === "general" && (
             // Both children are `shrink-0` beside a `min-w-0` heading column, so their
@@ -273,7 +273,7 @@ export function SettingsView() {
                   onClick={() => setSection(item.id)}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                    active ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "text-foreground hover:bg-foreground/5",
+                    active ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "text-ink hover:bg-ink/5",
                   )}
                 >
                   <Icon className="size-4.5" />

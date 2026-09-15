@@ -51,7 +51,7 @@ export function RefusalNotice({ refusal, liftsAt }: { refusal: ConsiliumRefusal;
     <Alert role="status" className="border-main-accent-t3/40 bg-main-accent-t3/10">
       {icon}
       <AlertTitle>{title}</AlertTitle>
-      <AlertDescription className="text-foreground">{body}</AlertDescription>
+      <AlertDescription className="text-ink">{body}</AlertDescription>
     </Alert>
   );
 }

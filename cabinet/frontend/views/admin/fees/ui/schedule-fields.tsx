@@ -133,7 +133,7 @@ export function ScheduleFields({
           parse: a requirement computed from a field the form is about to reject would
           name a decision nobody can send. */}
       {requirement && (
-        <p className={cn("text-xs", consilium ? "text-main-accent-t3" : "text-muted-foreground")}>
+        <p className={cn("text-xs", consilium ? "text-main-accent-t3" : "text-ink-soft")}>
           {t(consilium ? "admin.fees.requirement.consilium" : "admin.fees.requirement.admin")}
         </p>
       )}

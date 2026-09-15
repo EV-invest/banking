@@ -51,7 +51,7 @@ export function GeneralSection({
           ) : <FieldSkeleton />}
         </Field>
         <Field label={t("ui.emailAddress")} trailing={verified ? <VerifiedTag /> : undefined}>
-          {loading ? <FieldSkeleton /> : <Input value={formatEmail(email)} readOnly className="border-border bg-main-surface text-muted-foreground" />}
+          {loading ? <FieldSkeleton /> : <Input value={formatEmail(email)} readOnly className="border-border bg-main-surface text-ink-soft" />}
         </Field>
         <Field label={t("profile.phoneNumber")}>
           {ready ? <PhoneField initial={form.phone} onChange={(v) => onChange("phone", v)} error={fieldErrors.phone} /> : <FieldSkeleton />}

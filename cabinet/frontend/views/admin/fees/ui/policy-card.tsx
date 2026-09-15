@@ -132,7 +132,7 @@ export function PolicyCard({
         <CardTitle ref={titleRef} tabIndex={-1} role="heading" aria-level={2} className="rounded-sm text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {t("admin.fees.terms")}
         </CardTitle>
-        <CardDescription className="text-xs text-muted-foreground">
+        <CardDescription className="text-xs text-ink-soft">
           {current ? t("admin.fees.inForce", { version: current.version, since: formatMoment(current.effective_from, locale) }) : t("admin.fees.notConfigured")}
         </CardDescription>
       </CardHeader>
@@ -149,7 +149,7 @@ export function PolicyCard({
           disabled={blocked}
         />
 
-        {blocked && <p className="text-xs text-muted-foreground">{t("admin.fees.pendingBlocks")}</p>}
+        {blocked && <p className="text-xs text-ink-soft">{t("admin.fees.pendingBlocks")}</p>}
         {rateProblem && !blocked && <p className="text-xs text-destructive">{rateProblem}</p>}
         {problem && <p className="text-xs text-destructive">{problem}</p>}
 

@@ -24,12 +24,12 @@ const CARD = "rounded-xl border border-border bg-main-card";
 // focus ring has to be written out — once, here, so the four of them cannot drift apart.
 const FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
 // "Mark all read" and "Load older" are the same control in two places.
-const GHOST_BUTTON = `rounded-lg border border-border/60 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5 disabled:opacity-40 ${FOCUS}`;
+const GHOST_BUTTON = `rounded-lg border border-border/60 px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/5 disabled:opacity-40 ${FOCUS}`;
 // Rows are dense, so the inset is wider than the vertical rhythm.
 const ROW_PAD = "px-5.5 py-4.5";
 // A row spans the full width of a card that clips its overflow, so an outset ring would be
 // shaved off on both sides — this one draws inside the row instead.
-const ROW = "block outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+const ROW = "block outline-none transition-colors hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 type Filter = "all" | "unread";
 
@@ -132,8 +132,8 @@ export function NotificationsView() {
     <Stagger step={SECTION_STAGGER} className="mx-auto w-full max-w-282 px-4 py-6 sm:px-6 lg:px-8">
       <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">{t("nav.notifications")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("notif.subtitle")}</p>
+          <h1 className="text-3xl font-semibold text-ink">{t("nav.notifications")}</h1>
+          <p className="mt-1 text-sm text-ink-soft">{t("notif.subtitle")}</p>
         </div>
         <button type="button" onClick={markAll} disabled={busy || unread === 0} className={GHOST_BUTTON}>
           {t("notif.markAllRead")}
@@ -152,7 +152,7 @@ export function NotificationsView() {
             className={cn(
               "rounded-md px-3.5 py-1.5 text-sm transition-colors",
               FOCUS,
-              filter === f ? "bg-primary font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
+              filter === f ? "bg-primary font-semibold text-on-primary" : "font-medium text-ink hover:bg-ink/5",
             )}
           >
             {/* i18n-max: 14 — two pills in an `inline-flex` bar that cannot wrap. */}
@@ -172,10 +172,10 @@ export function NotificationsView() {
           <ul>
             {[0, 1, 2].map((i) => (
               <li key={i} className={cn("flex items-center gap-3.5", ROW_PAD, i > 0 && "border-t border-border/10")}>
-                <div className="size-9 animate-pulse rounded-lg bg-foreground/5" />
+                <div className="size-9 animate-pulse rounded-lg bg-ink/5" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-3.5 w-1/3 animate-pulse rounded bg-foreground/5" />
-                  <div className="h-3 w-2/3 animate-pulse rounded bg-foreground/5" />
+                  <div className="h-3.5 w-1/3 animate-pulse rounded bg-ink/5" />
+                  <div className="h-3 w-2/3 animate-pulse rounded bg-ink/5" />
                 </div>
               </li>
             ))}
@@ -205,15 +205,15 @@ export function NotificationsView() {
 function Row({ n, first, onOpen, locale, t }: { n: Notification; first: boolean; onOpen: () => void; locale: Locale; t: Translate }) {
   const unread = isUnread(n);
   const body = (
-    <div className={cn("flex items-center gap-3.5 text-left", ROW_PAD, unread && "bg-foreground/5")}>
+    <div className={cn("flex items-center gap-3.5 text-left", ROW_PAD, unread && "bg-ink/5")}>
       <span aria-hidden className={cn("size-2 shrink-0 rounded-full", unread ? "bg-main-accent-t1" : "bg-transparent")} />
       <div className="min-w-0 flex-1">
         {/* Read and unread titles share a step on the type scale, so the state is carried
             by weight and colour instead of the 1px that used to separate them. */}
-        <p className={cn("truncate text-sm", unread ? "font-semibold text-foreground" : "text-muted-foreground")}>{n.title}</p>
-        {n.body && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</p>}
+        <p className={cn("truncate text-sm", unread ? "font-semibold text-ink" : "text-ink-soft")}>{n.title}</p>
+        {n.body && <p className="mt-0.5 line-clamp-2 text-xs text-ink-soft">{n.body}</p>}
       </div>
-      <time className="shrink-0 text-xs tabular-nums text-muted-foreground" dateTime={toDate(n.created_at)?.toISOString()}>
+      <time className="shrink-0 text-xs tabular-nums text-ink-soft" dateTime={toDate(n.created_at)?.toISOString()}>
         {formatWhen(n.created_at, locale, t)}
       </time>
     </div>
@@ -240,11 +240,11 @@ function EmptyState({ filter, t }: { filter: Filter; t: Translate }) {
       <span className="flex size-14 items-center justify-center rounded-xl bg-main-accent-t1/15">
         <Bell className="size-6 text-main-accent-t1" />
       </span>
-      <p className="mt-5 text-base font-semibold text-foreground">{t(filter === "unread" ? "notif.nothingUnread" : "notif.nothingYet")}</p>
-      <p className="mt-2 max-w-108 text-sm text-muted-foreground">{t(filter === "unread" ? "notif.allCaughtUp" : "notif.emptyHint")}</p>
+      <p className="mt-5 text-base font-semibold text-ink">{t(filter === "unread" ? "notif.nothingUnread" : "notif.nothingYet")}</p>
+      <p className="mt-2 max-w-108 text-sm text-ink-soft">{t(filter === "unread" ? "notif.allCaughtUp" : "notif.emptyHint")}</p>
       <Link
         href="/settings"
-        className={cn("mt-5 rounded-lg border border-border px-5.5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-foreground/5", FOCUS)}
+        className={cn("mt-5 rounded-lg border border-border px-5.5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-ink/5", FOCUS)}
       >
         {t("notif.settingsLink")}
       </Link>

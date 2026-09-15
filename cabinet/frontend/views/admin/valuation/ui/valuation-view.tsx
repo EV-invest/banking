@@ -108,12 +108,12 @@ export function ValuationView() {
       {error && <ResourceError message={error} />}
 
       <StaggerItem as="section" className="space-y-3" id="post-valuation">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.valuation.postValuation")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.valuation.postValuation")}</p>
         <Card>
           <CardContent className="space-y-5 py-6">
             <div className="grid gap-4 md:grid-cols-3">
               <div className="flex flex-col gap-1.5">
-                <span className="text-sm text-muted-foreground">{t("admin.valuation.fundService")}</span>
+                <span className="text-sm text-ink-soft">{t("admin.valuation.fundService")}</span>
                 <Select
                   value={service || undefined}
                   onValueChange={setService}
@@ -123,7 +123,7 @@ export function ValuationView() {
                   <SelectTrigger className="w-full border-border bg-main-surface" disabled={!allocations || allocations.length === 0}>
                     {/* Not `SelectValue`: the uikit's renders the raw stored value, so the
                         trigger would read the bare slug instead of the product's title. */}
-                    <span className={cn("truncate", !selected && "text-muted-foreground")}>
+                    <span className={cn("truncate", !selected && "text-ink-soft")}>
                       {selected ? allocationLabel(selected, t) : !allocations ? t("ui.loading") : t("admin.valuation.noAllocations")}
                     </span>
                   </SelectTrigger>
@@ -137,14 +137,14 @@ export function ValuationView() {
                 </Select>
               </div>
               <label className="flex flex-col gap-1.5">
-                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1.5 text-sm text-ink-soft">
                   {t("admin.valuation.aumUsdt")}
                   <TipAnchor anchor="admin.valuation.post.aum" />
                 </span>
                 <Input value={aum} onChange={(e) => setAum(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
               </label>
               <div className="flex flex-col gap-1.5">
-                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1.5 text-sm text-ink-soft">
                   {t("admin.valuation.derivedNav")}
                   <TipAnchor anchor="admin.valuation.post.derived-nav" />
                 </span>
@@ -155,13 +155,13 @@ export function ValuationView() {
                   <span className="font-semibold text-main-accent-t1 tabular-nums">{derivedNav ? formatNav(derivedNav) : "—"}</span>
                   {/* An ICU plural, so `units` agrees with the count and `#` groups the
                       digits in the reader's convention — the hard-coded `en-US` is gone. */}
-                  {units > 0 && <span className="ml-2 text-xs tabular-nums text-muted-foreground">{t("admin.valuation.derivedFormula", { n: units })}</span>}
+                  {units > 0 && <span className="ml-2 text-xs tabular-nums text-ink-soft">{t("admin.valuation.derivedFormula", { n: units })}</span>}
                 </div>
               </div>
             </div>
 
             {noUnits ? (
-              <div className="rounded-lg border border-border bg-foreground/5 px-4 py-2.5 text-sm text-muted-foreground">
+              <div className="rounded-lg border border-border bg-ink/5 px-4 py-2.5 text-sm text-ink-soft">
                 <TriangleAlert className="mr-2 inline size-4" />
                 {/* The emphasised fragment is the formula, mid-sentence — an ICU argument
                     rather than a cut, so a translator gets the whole thought. */}
@@ -197,7 +197,7 @@ export function ValuationView() {
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
           {t("admin.valuation.unitSupply")}
           <TipAnchor anchor="admin.valuation.post.derived-nav" />
         </p>
@@ -218,7 +218,7 @@ export function ValuationView() {
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
           {t("admin.valuation.redemptionQueue")}
           {/* The count pill lands on the same step as the label it trails, so its fill and
               accent colour — not a smaller size — are what set it apart. */}
@@ -239,12 +239,12 @@ export function ValuationView() {
               }
             >
               {!queue ? null : queue.length === 0 ? (
-                <p className="p-8 text-center text-sm text-muted-foreground">{t("admin.valuation.queueEmpty")}</p>
+                <p className="p-8 text-center text-sm text-ink-soft">{t("admin.valuation.queueEmpty")}</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     {/* i18n-max: 14 per header — auto-layout table with no scroll wrapper. */}
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
                       <th className="px-5 py-3 font-medium">{t("admin.col.user")}</th>
                       <th className="px-5 py-3 font-medium">{t("invest.units")}</th>
                       <th className="px-5 py-3 font-medium">
@@ -264,14 +264,14 @@ export function ValuationView() {
                         <tr key={item.redemption_id}>
                           <td className="px-5 py-3">
                             <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
-                            <p className="font-mono-tech text-xs text-muted-foreground">{item.service}</p>
+                            <p className="font-mono-tech text-xs text-ink-soft">{item.service}</p>
                           </td>
                           {/* A bare unit count, grouped in the reader's locale rather than
                               `en-US` — it is not money, so `shared/lib/money.ts` has no
                               say here. */}
                           <td className="px-5 py-3 tabular-nums">{Number(item.units).toLocaleString(locale)}</td>
-                          <td className="px-5 py-3 tabular-nums text-muted-foreground">{est ? t("admin.valuation.approx", { amount: formatUsd(est) }) : "—"}</td>
-                          <td className="px-5 py-3 text-muted-foreground">{ago(item.created_at, t)}</td>
+                          <td className="px-5 py-3 tabular-nums text-ink-soft">{est ? t("admin.valuation.approx", { amount: formatUsd(est) }) : "—"}</td>
+                          <td className="px-5 py-3 text-ink-soft">{ago(item.created_at, t)}</td>
                           <td className="px-5 py-3">
                             {/* i18n-max: 12 per verb — two `shrink-0` Buttons, each with a
                                 tip anchor, share this cell. */}
@@ -306,7 +306,7 @@ export function ValuationView() {
             </Settled>
           </CardContent>
         </Card>
-        <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.valuation.queueFootnote")}</p>
+        <p className="max-w-3xl text-xs text-ink-soft">{t("admin.valuation.queueFootnote")}</p>
       </StaggerItem>
     </AdminScreen>
   );
@@ -362,7 +362,7 @@ function SupplyCapCard({
   if (!allocation) {
     return (
       <Card>
-        <CardContent className="py-6 text-sm text-muted-foreground">{t("admin.valuation.pickAFund")}</CardContent>
+        <CardContent className="py-6 text-sm text-ink-soft">{t("admin.valuation.pickAFund")}</CardContent>
       </Card>
     );
   }
@@ -372,8 +372,8 @@ function SupplyCapCard({
       <CardContent className="space-y-5 py-6">
         <div className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-sm text-muted-foreground">{t("admin.valuation.unitsIssuedIn", { service: allocation.service })}</span>
-            <span className={cn("text-sm font-semibold tabular-nums", nearCap ? "text-main-accent-t3" : "text-foreground")}>
+            <span className="text-sm text-ink-soft">{t("admin.valuation.unitsIssuedIn", { service: allocation.service })}</span>
+            <span className={cn("text-sm font-semibold tabular-nums", nearCap ? "text-main-accent-t3" : "text-ink")}>
               {t("admin.valuation.issuedOfCap", { issued: compactUnits(issued), cap: compactUnits(cap) })}
             </span>
           </div>
@@ -385,14 +385,14 @@ function SupplyCapCard({
           {/* Two whole sentences rather than a shared " — …" tail: a suffix key would be a
               fragment no translator could place, and the loading branch reads differently
               from the figure branch in most languages. */}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-ink-soft">
             {nav ? t("admin.valuation.stillIssuable", { units: formatUnits(nav.remaining_capacity) }) : t("admin.valuation.loadingSupply")}
           </p>
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex w-56 flex-col gap-1.5">
-            <span className="text-sm text-muted-foreground">{t("admin.valuation.capUnits")}</span>
+            <span className="text-sm text-ink-soft">{t("admin.valuation.capUnits")}</span>
             <Input value={value} onChange={(e) => setDraft(e.target.value)} inputMode="decimal" placeholder="100000000" className="w-full" />
           </label>
           <Button type="button" className={cn(TEAL_CTA)} disabled={saving || invalid || !changed} onClick={save}>
@@ -405,7 +405,7 @@ function SupplyCapCard({
               {t("ui.reset")}
             </Button>
           )}
-          <p className={cn("min-w-48 flex-1 text-xs", invalid ? "text-destructive" : belowIssued ? "text-main-accent-t3" : "text-muted-foreground")}>
+          <p className={cn("min-w-48 flex-1 text-xs", invalid ? "text-destructive" : belowIssued ? "text-main-accent-t3" : "text-ink-soft")}>
             {invalid
               ? t("admin.valuation.capInvalid")
               : belowIssued

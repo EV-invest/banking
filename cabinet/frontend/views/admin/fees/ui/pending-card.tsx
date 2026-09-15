@@ -71,7 +71,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
           </Badge>
         </div>
         <p className="text-sm tabular-nums">{termsSummary(change, t)}</p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-soft">
           {awaiting
             ? t("admin.fees.pending.awaiting", { version: change.version })
             : kind === "immediate"
@@ -81,7 +81,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
         {change.reason.trim() && (
           <blockquote className="border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed">{change.reason.trim()}</blockquote>
         )}
-        <p className="text-xs text-muted-foreground">{t("admin.fees.pending.requested", { when: ago(change.requested_at, t) })}</p>
+        <p className="text-xs text-ink-soft">{t("admin.fees.pending.requested", { when: ago(change.requested_at, t) })}</p>
         <NoticeWaiver change={change} />
 
         {problem && <p className="text-xs text-destructive">{problem}</p>}

@@ -76,7 +76,7 @@ function Outcome({ state, className }: { state: StartState; className?: string }
 
 function Note({ tone, className, children }: { tone?: "destructive"; className?: string; children: ReactNode }) {
   return (
-    <p className={cn("text-xs leading-snug", className, tone === "destructive" ? "text-destructive" : "text-muted-foreground")}>
+    <p className={cn("text-xs leading-snug", className, tone === "destructive" ? "text-destructive" : "text-ink-soft")}>
       {children}
     </p>
   );

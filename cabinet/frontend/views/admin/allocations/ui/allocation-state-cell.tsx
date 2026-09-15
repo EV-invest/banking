@@ -13,7 +13,7 @@ import { stateLabel } from "@/views/admin/lib/format";
 // `closed` is amber rather than destructive: it stops new subscriptions but investors
 // can still redeem out of it, so it is a wind-down, not a failure.
 const STATE_TONE: Record<AllocationState, string> = {
-  draft: "border-border text-muted-foreground",
+  draft: "border-border text-ink-soft",
   open: "border-main-accent-t2/40 bg-main-accent-t2/10 text-main-accent-t2",
   closed: "border-main-accent-t3/40 bg-main-accent-t3/10 text-main-accent-t3",
 };

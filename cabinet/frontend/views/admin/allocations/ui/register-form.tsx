@@ -34,31 +34,31 @@ export function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCa
       <CardContent className="space-y-4 py-6">
         <div className="grid gap-4 md:grid-cols-3">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm text-muted-foreground">{t("admin.alloc.col.serviceId")}</span>
+            <span className="text-sm text-ink-soft">{t("admin.alloc.col.serviceId")}</span>
             {/* The two placeholders are format examples, not prose — a slug and a proper
                 noun — so they stay as they are in every locale. */}
             <Input value={service} onChange={(e) => setService(e.target.value.trim())} placeholder="quy-nhon-fund" spellCheck={false} className="w-full font-mono-tech" />
-            <span className={cn("text-xs", service && !slugOk ? "text-destructive" : "text-muted-foreground")}>
+            <span className={cn("text-xs", service && !slugOk ? "text-destructive" : "text-ink-soft")}>
               {service && !slugOk ? t("admin.alloc.slugInvalid") : t("admin.alloc.slugHint")}
             </span>
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm text-muted-foreground">{t("admin.alloc.field.title")}</span>
+            <span className="text-sm text-ink-soft">{t("admin.alloc.field.title")}</span>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Quy Nhon Fund" className="w-full" />
           </label>
           {/* Not a `<label>` — see the row editor: the trigger is a button, so a wrapping
               label would toggle the popup a second time. */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-sm text-muted-foreground">{t("admin.alloc.field.icon")}</span>
+            <span className="text-sm text-ink-soft">{t("admin.alloc.field.icon")}</span>
             <IconSelect value={icon} onChange={setIcon} />
           </div>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm text-muted-foreground">{t("admin.alloc.field.summary")}</span>
+            <span className="text-sm text-ink-soft">{t("admin.alloc.field.summary")}</span>
             <Input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder={t("admin.alloc.placeholder.summary")} className="w-full" />
           </label>
         </div>
         <div className="flex items-center gap-3">
-          <p className="min-w-0 text-xs text-muted-foreground">{t("admin.alloc.registerHint")}</p>
+          <p className="min-w-0 text-xs text-ink-soft">{t("admin.alloc.registerHint")}</p>
           {/* i18n-max: 12 per verb — both Buttons are `shrink-0` beside the hint above. */}
           <Button type="button" variant="outline" className="ml-auto" onClick={onCancel}>
             {t("ui.cancel")}

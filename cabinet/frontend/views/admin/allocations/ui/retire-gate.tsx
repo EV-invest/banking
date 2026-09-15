@@ -16,7 +16,7 @@ export function RetireGate({ force, onForce }: { force: boolean; onForce: (force
   const id = useId();
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">{t("admin.alloc.retire.closeFirst")}</p>
+      <p className="text-xs text-ink-soft">{t("admin.alloc.retire.closeFirst")}</p>
       <div className="flex items-start gap-2">
         <Checkbox id={id} checked={force} onCheckedChange={onForce} className="mt-0.5" />
         <label htmlFor={id} className="text-xs">

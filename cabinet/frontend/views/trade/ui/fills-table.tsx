@@ -11,7 +11,7 @@ import { useLocale } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
 import { formatUnits, formatUsdt, formatWhen } from "@/views/trade/lib/format";
 
-const HEAD = "h-8 text-xs font-medium text-muted-foreground";
+const HEAD = "h-8 text-xs font-medium text-ink-soft";
 const CELL = "py-1.5 font-mono-tech text-xs tabular-nums";
 
 export function FillsTable({ trades }: { trades: Trade[] }) {
@@ -36,12 +36,12 @@ export function FillsTable({ trades }: { trades: Trade[] }) {
           const taker = trade.user_side !== "" && trade.user_side === trade.taker_side;
           return (
             <TableRow key={trade.id ?? i}>
-              <TableCell className={cn(CELL, "text-muted-foreground")}>{formatWhen(trade.executed_at, locale)}</TableCell>
+              <TableCell className={cn(CELL, "text-ink-soft")}>{formatWhen(trade.executed_at, locale)}</TableCell>
               <TableCell className={cn(CELL, "font-semibold", sell ? "text-accent-error" : "text-positive")}>{t(sell ? "trade.form.sell" : "trade.form.buy")}</TableCell>
               <TableCell className={cn(CELL, "text-right")}>{formatUsdt(trade.price)}</TableCell>
               <TableCell className={cn(CELL, "text-right")}>{formatUnits(trade.size)}</TableCell>
               <TableCell className={cn(CELL, "text-right")}>{trade.fee ? formatUsdt(trade.fee) : "—"}</TableCell>
-              <TableCell className={cn(CELL, "text-muted-foreground")}>{t(taker ? "trade.orders.taker" : "trade.orders.maker")}</TableCell>
+              <TableCell className={cn(CELL, "text-ink-soft")}>{t(taker ? "trade.orders.taker" : "trade.orders.maker")}</TableCell>
             </TableRow>
           );
         })}

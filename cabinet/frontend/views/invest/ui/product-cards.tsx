@@ -31,7 +31,7 @@ export function SupplyCard({ nav }: { nav: FundNav | null }) {
     return (
       <Card>
         <CardContent className="py-6">
-          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          <Loader2 className="size-4 animate-spin text-ink-soft" />
         </CardContent>
       </Card>
     );
@@ -54,7 +54,7 @@ export function SupplyCard({ nav }: { nav: FundNav | null }) {
           <Row label={t("invest.navPerUnit")} value={`${formatUsdt(nav.nav)} USDT`} />
           <Row label={t("invest.fundAum")} value={nav.aum ? `${formatUsdt(nav.aum)} USDT` : t("invest.notYetValued")} />
         </dl>
-        <p className="text-xs text-muted-foreground">{t("invest.supplyNote")}</p>
+        <p className="text-xs text-ink-soft">{t("invest.supplyNote")}</p>
       </CardContent>
     </Card>
   );
@@ -103,7 +103,7 @@ export function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued
             {/* Its own heading, so the rows can be labelled `Management` and `Performance`
                 without colliding with the identically-named terms above. Long enough labels
                 to disambiguate inline would wrap onto two lines in this column. */}
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("invest.accruedOnHolding")}</p>
+            <p className="text-xs uppercase tracking-wide text-ink-soft">{t("invest.accruedOnHolding")}</p>
             <dl className="space-y-2.5 text-sm">
               <Row label={t("admin.fees.field.management")} value={`${formatUsdt(owed.management)} USDT`} />
               <Row label={t("admin.fees.field.performance")} value={`${formatUsdt(owed.performance)} USDT`} />
@@ -114,7 +114,7 @@ export function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued
           </div>
         )}
 
-        <p className="text-xs text-muted-foreground">{t(owed ? "invest.feeNoteHolder" : "invest.feeNoteProspect")}</p>
+        <p className="text-xs text-ink-soft">{t(owed ? "invest.feeNoteHolder" : "invest.feeNoteProspect")}</p>
       </CardContent>
     </Card>
   );
@@ -123,7 +123,7 @@ export function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
+      <dt className="text-ink-soft">{label}</dt>
       <dd className="font-medium tabular-nums">{value}</dd>
     </div>
   );

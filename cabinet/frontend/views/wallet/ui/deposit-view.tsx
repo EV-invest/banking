@@ -115,7 +115,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
             // warning about sending to the wrong chain has nothing to be sent to.
             <VerificationRequired title={t("wallet.depositVerifyTitle")} description={t("wallet.depositVerifyBody")} />
           ) : networks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-ink-soft">
               {error ?? t("wallet.noDepositRails")}
             </p>
           ) : (
@@ -129,7 +129,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
               </div>
 
               <div className={cn(WALLET_CARD, "flex flex-col items-center gap-4 p-4.5 lg:gap-4.5 lg:p-6")}>
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                   {/* The mark leads the line rather than being spliced into it: the
                       sentence is one translated string, and cutting a component into the
                       middle of it would fix the chain's position in word order for every
@@ -150,7 +150,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                   <>
                     <DepositQr value={shown} />
                     <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-input px-3 py-2.5 lg:py-2.5 lg:pl-3.5 lg:pr-2">
-                      <code className="min-w-0 flex-1 break-all font-sans text-xs text-foreground lg:text-sm">{shown}</code>
+                      <code className="min-w-0 flex-1 break-all font-sans text-xs text-ink lg:text-sm">{shown}</code>
                       {/* i18n-max: 11 — a `shrink-0` button beside the address it squeezes. */}
                       <button type="button" onClick={copy} className={cn(WALLET_CTA, "hidden shrink-0 gap-1.5 px-3.5 py-2 text-xs lg:flex")}>
                         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
@@ -161,13 +161,13 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                       {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                       {copied ? t("ui.copied") : t("wallet.copyAddress")}
                     </button>
-                    <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+                    <p className="flex items-center justify-center gap-1.5 text-center text-xs text-ink-soft">
                       {t("wallet.creditedAfterConfirmations", { n: address.min_confirmations ?? 0 })}
                       <TipAnchor anchor="wallet.deposit.min-confirmations" />
                     </p>
                   </>
                 ) : (
-                  <p className="text-center text-sm text-muted-foreground">{t("wallet.depositAddressUnavailable", { network: label })}</p>
+                  <p className="text-center text-sm text-ink-soft">{t("wallet.depositAddressUnavailable", { network: label })}</p>
                 )}
               </div>
 
@@ -176,14 +176,14 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                 <div className="flex min-w-0 flex-col gap-1">
                   {/* `wallet.deposit.rail-hazard` is a section-type tip (a descriptor block, not an
                       inline ⓘ) — this card already carries that copy, so it isn't anchored here. */}
-                  <p className="text-sm font-semibold text-foreground">{t("wallet.networkWarning")}</p>
+                  <p className="text-sm font-semibold text-ink">{t("wallet.networkWarning")}</p>
                   {/* One sentence per key. The `not` used to be a `<strong>` and the `0x` a
                       `<code>`, which meant the warning was three fragments a translator
                       could not reorder — and German and Russian both put the negation
                       somewhere else in this clause. The block already carries its own
                       alarm (amber border, warning glyph, bold heading), so the sentence is
                       whole and the emphasis lives on the card rather than inside the words. */}
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-ink-soft">
                     {t("wallet.railHazard", { network: label })}
                     {evmSiblings.length > 0 && ` ${t("wallet.evmSiblingHazard", { network: label, siblings: evmSiblings.join(" / "), siblingsOr: orList(evmSiblings, locale) })}`}
                   </p>

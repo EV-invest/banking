@@ -10,11 +10,11 @@ export function MoneyCard({ label, value, hint, loading, unavailable, emphasis }
   return (
     <Card>
       <CardContent className="space-y-1 py-5">
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-xs text-ink-soft">{label}</p>
         {loading ? (
           <Skeleton className="mt-1 h-8 w-28" />
         ) : unavailable ? (
-          <p className="text-3xl font-semibold tabular-nums text-muted-foreground">—</p>
+          <p className="text-3xl font-semibold tabular-nums text-ink-soft">—</p>
         ) : (
           // One step for every figure; the payable one carries the difference in colour,
           // not in size, so the row keeps a single baseline.

@@ -64,24 +64,24 @@ export function RevenueView() {
       {error && <ResourceError message={error} />}
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.revenue.earned")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.revenue.earned")}</p>
         <div className="grid gap-4 sm:grid-cols-3">
           <MoneyCard label={t("admin.revenue.earnedTotal")} value={data?.earned} hint={t("admin.revenue.earnedTotalHint")} loading={!data && !failed} unavailable={failed} />
           <MoneyCard label={t("admin.revenue.availableToPayOut")} value={data?.available} hint={t("admin.revenue.availableHint")} loading={!data && !failed} unavailable={failed} emphasis />
           <MoneyCard label={t("admin.revenue.pendingPayout")} value={data?.pending_payout} hint={t("admin.revenue.pendingHint")} loading={!data && !failed} unavailable={failed} />
         </div>
-        <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.revenue.ownMoneyNote")}</p>
+        <p className="max-w-3xl text-xs text-ink-soft">{t("admin.revenue.ownMoneyNote")}</p>
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.revenue.whereNext")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.revenue.whereNext")}</p>
         <WhereNext />
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.revenue.payouts")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.revenue.payouts")}</p>
         <PayoutHistory history={history} error={history ? null : payouts.error} onRetry={() => void payouts.refresh()} busy={busy} onCancel={(id) => void cancel(id)} />
-        <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.revenue.footnote")}</p>
+        <p className="max-w-3xl text-xs text-ink-soft">{t("admin.revenue.footnote")}</p>
       </StaggerItem>
     </AdminScreen>
   );

@@ -18,7 +18,7 @@ export function FeePolicyTerms({ terms }: { terms: ConsiliumFeePolicyTerms }) {
   return (
     <div className="flex flex-col gap-3">
       <FeeTermsDiff from={terms.from} to={terms.to} />
-      <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+      <div className="flex flex-col gap-1.5 text-xs text-ink-soft">
         <span className="tabular-nums">
           {t("consilium.feePolicy.effectiveFrom", {
             // "0" is "as soon as allowed": the 24h notice is counted from the owners'
@@ -29,9 +29,9 @@ export function FeePolicyTerms({ terms }: { terms: ConsiliumFeePolicyTerms }) {
         <span className="tabular-nums">{t("consilium.feePolicy.holders", { n: terms.holder_count })}</span>
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-muted-foreground">{t("consilium.feePolicy.reason")}</span>
+        <span className="text-xs font-medium text-ink-soft">{t("consilium.feePolicy.reason")}</span>
         {/* The requester's words, whole, set apart from the room's own. */}
-        <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-foreground">{terms.reason?.trim() || "—"}</blockquote>
+        <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
       </div>
     </div>
   );

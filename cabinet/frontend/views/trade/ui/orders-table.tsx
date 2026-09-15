@@ -15,7 +15,7 @@ import { cn } from "@/shared/lib/cn";
 import { formatUnits, formatUsdt, formatWhen } from "@/views/trade/lib/format";
 import { isResting, orderStateKey } from "@/views/trade/lib/order-state";
 
-const HEAD = "h-8 text-xs font-medium text-muted-foreground";
+const HEAD = "h-8 text-xs font-medium text-ink-soft";
 const CELL = "py-1.5 font-mono-tech text-xs tabular-nums";
 
 export function OrdersTable({ orders, busyId, onCancel }: { orders: Order[]; busyId?: string | null; onCancel?: (orderId: string) => void }) {
@@ -43,11 +43,11 @@ export function OrdersTable({ orders, busyId, onCancel }: { orders: Order[]; bus
           const stateKey = orderStateKey(order);
           return (
             <TableRow key={id}>
-              <TableCell className={cn(CELL, "text-muted-foreground")}>{formatWhen(order.created_at, locale)}</TableCell>
+              <TableCell className={cn(CELL, "text-ink-soft")}>{formatWhen(order.created_at, locale)}</TableCell>
               <TableCell className={cn(CELL, "font-semibold", order.side === "sell" ? "text-accent-error" : "text-positive")}>{t(order.side === "sell" ? "trade.form.sell" : "trade.form.buy")}</TableCell>
               <TableCell className={CELL}>
                 {t(order.kind === "market" ? "trade.form.market" : "trade.form.limit")}
-                {order.kind !== "market" && order.tif && <span className="ml-1 uppercase text-muted-foreground">{order.tif}</span>}
+                {order.kind !== "market" && order.tif && <span className="ml-1 uppercase text-ink-soft">{order.tif}</span>}
               </TableCell>
               <TableCell className={cn(CELL, "text-right")}>{formatUsdt(order.price)}</TableCell>
               <TableCell className={cn(CELL, "text-right")}>{formatUnits(order.size)}</TableCell>

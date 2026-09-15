@@ -42,7 +42,7 @@ export function IssuanceResult({ outcome, kind }: { outcome: IssuanceOutcome; ki
         {t(COPY[kind][applied ? "applied" : "queued"], args)}
         {/* The source the hub recorded, so a mint, a hand-over and a burn of the same figure
             on the same holder are told apart on screen and not only in the audit log. */}
-        <span className="text-muted-foreground"> · {t(SOURCE[outcome.issuance.source])}</span>
+        <span className="text-ink-soft"> · {t(SOURCE[outcome.issuance.source])}</span>
       </span>
     </p>
   );

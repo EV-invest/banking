@@ -21,8 +21,8 @@ import { labelOf } from "@/views/settings/lib/form";
 export function SectionHeader({ title, sub }: { title: string; sub: string }) {
   return (
     <header className="mb-4">
-      <h2 className="text-sm font-semibold tracking-normal text-foreground">{title}</h2>
-      <p className="text-xs text-muted-foreground">{sub}</p>
+      <h2 className="text-sm font-semibold tracking-normal text-ink">{title}</h2>
+      <p className="text-xs text-ink-soft">{sub}</p>
     </header>
   );
 }
@@ -31,7 +31,7 @@ export function Field({ label, trailing, children }: { label: string; trailing?:
   return (
     <div className="flex min-w-65 flex-1 flex-col">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="text-xs text-ink-soft">{label}</span>
         {trailing}
       </div>
       {children}
@@ -72,7 +72,7 @@ export function ThemedSelect({
         <SelectTrigger className="w-full border-border bg-main-surface">
           {/* Not `SelectValue`: the uikit's renders the raw stored value, so the trigger
               read "en" / "Asia/Ho_Chi_Minh" instead of the option label the design shows. */}
-          <span className={cn("truncate", !value && "text-muted-foreground")}>{value ? labelOf(options, value) : placeholder}</span>
+          <span className={cn("truncate", !value && "text-ink-soft")}>{value ? labelOf(options, value) : placeholder}</span>
         </SelectTrigger>
         <SelectContent>
           {options.map((o) => (

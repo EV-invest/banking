@@ -64,12 +64,12 @@ export function GrantsPanel({ allocation, onClose, className }: { allocation: Al
         )}
 
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.alloc.grants.raise")}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.grants.raise")}</p>
           <GrantForm busy={busy?.startsWith("grant:") ?? false} onSubmit={grant} />
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.alloc.grants.roster")}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.grants.roster")}</p>
           <Settled loading={!read.data} skeleton={<Skeleton className="h-24 w-full" />}>
             <GrantsTable grants={grants} busyUserId={busy?.startsWith("revoke:") ? busy.slice("revoke:".length) : null} onRevoke={revoke} />
           </Settled>

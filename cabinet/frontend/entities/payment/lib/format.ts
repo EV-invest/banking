@@ -39,7 +39,7 @@ export function paymentStateTone(state: string): string {
     case "execution_failed":
       return "text-destructive";
     default:
-      return "text-muted-foreground";
+      return "text-ink-soft";
   }
 }
 

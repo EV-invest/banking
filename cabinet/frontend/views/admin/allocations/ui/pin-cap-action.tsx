@@ -72,7 +72,7 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
           {t("admin.alloc.pinCap.action")}
         </Button>
       )}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-xs text-ink-soft">{hint}</p>}
       {error && (
         <p className="flex items-center gap-2 text-xs text-destructive">
           <TriangleAlert className="size-3.5" /> {error}

@@ -87,11 +87,11 @@ export function UserSearch({ value, onChange }: { value: string; onChange: (id: 
                 }}
                 className={cn(
                   "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm outline-none transition-colors",
-                  "hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring",
+                  "hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring",
                 )}
               >
                 <span className="min-w-0 truncate">{u.email || u.user_id}</span>
-                <span className="shrink-0 font-mono-tech text-xs text-muted-foreground">{u.user_id.slice(0, 8)}</span>
+                <span className="shrink-0 font-mono-tech text-xs text-ink-soft">{u.user_id.slice(0, 8)}</span>
               </button>
             </li>
           ))}

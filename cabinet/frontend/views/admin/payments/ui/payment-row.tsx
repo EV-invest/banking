@@ -26,7 +26,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
   return (
     <tr className="align-top">
       <td className="px-5 py-3">
-        <p className="text-xs tabular-nums text-muted-foreground">{formatMoment(payment.created_at, locale)}</p>
+        <p className="text-xs tabular-nums text-ink-soft">{formatMoment(payment.created_at, locale)}</p>
         <p className="truncate text-xs" title={payment.initiator_email}>
           {payment.initiator_email}
         </p>
@@ -34,7 +34,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
       <td className="px-5 py-3">
         <div className="flex flex-col gap-1.5 text-sm">
           <PaymentEndSummary end={payment.source} />
-          <ArrowDown aria-hidden className="size-3 text-muted-foreground" />
+          <ArrowDown aria-hidden className="size-3 text-ink-soft" />
           <PaymentEndSummary end={payment.destination} />
         </div>
       </td>
@@ -54,7 +54,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
             {payment.consent.invalidation_reason && (
               <InfoTip>
                 <InfoTipTrigger label={t("tips.a11y.about", { title: consentLabel(payment.consent, t) })} />
-                <InfoTipContent className="text-muted-foreground">{payment.consent.invalidation_reason}</InfoTipContent>
+                <InfoTipContent className="text-ink-soft">{payment.consent.invalidation_reason}</InfoTipContent>
               </InfoTip>
             )}
           </p>
@@ -62,7 +62,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
       </td>
       <td className="px-5 py-3 text-xs">
         <span className={cn("font-medium", paymentStateTone(payment.state))}>{paymentStateLabel(payment.state, t)}</span>
-        {open && <p className="tabular-nums text-muted-foreground">{expiresIn(payment.expires_at, t)}</p>}
+        {open && <p className="tabular-nums text-ink-soft">{expiresIn(payment.expires_at, t)}</p>}
         {payment.failure_reason && <p className="break-words text-destructive">{payment.failure_reason}</p>}
       </td>
       <td className="px-5 py-3">
@@ -73,7 +73,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
               {t("ui.cancel")}
             </Button>
           ) : (
-            <span className="text-xs text-muted-foreground">—</span>
+            <span className="text-xs text-ink-soft">—</span>
           )}
         </div>
       </td>

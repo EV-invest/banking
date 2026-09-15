@@ -167,7 +167,7 @@ export function Sidebar() {
                     // rail's own background rather than behind the label.
                     "relative isolate flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                     NAV_FOCUS,
-                    active ? "font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
+                    active ? "font-semibold text-on-primary" : "font-medium text-ink hover:bg-ink/5",
                   )}
                 >
                   {active && <ActivePill section="products" appear={crossed} />}
@@ -208,7 +208,7 @@ export function Sidebar() {
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1 pl-1">
-      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{label}</p>
       {children}
     </div>
   );
@@ -295,7 +295,7 @@ function NavLink({ item, active, section, appear, trailing }: { item: NavItem; a
         // rail's own background, which is where it would land otherwise.
         "relative isolate flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
         NAV_FOCUS,
-        active ? "font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
+        active ? "font-semibold text-on-primary" : "font-medium text-ink hover:bg-ink/5",
       )}
     >
       {active && <ActivePill section={section} appear={appear} />}
@@ -327,7 +327,7 @@ function UnreadPill({ count, active }: { count: number; active: boolean }) {
       aria-label={t("notif.unreadCount", { n: count })}
       className={cn(
         "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-        active ? "bg-main-black text-foreground" : "bg-main-accent-t1/15 text-main-accent-t1",
+        active ? "bg-main-black text-ink" : "bg-main-accent-t1/15 text-main-accent-t1",
       )}
     >
       {count > 99 ? "99+" : count}

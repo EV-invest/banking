@@ -87,7 +87,7 @@ export function ProductView({ service }: { service: string }) {
       <div className="container max-w-4xl space-y-6 py-12">
         <BackLink />
         <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
+          <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-ink-soft">
             <TriangleAlert className="size-6" />
             <p className="text-sm">{error ?? t("invest.notRegistered", { service })}</p>
             <p className="max-w-sm text-xs">{t("invest.notRegisteredHint")}</p>
@@ -126,8 +126,8 @@ export function ProductView({ service }: { service: string }) {
             <ProductBadges closed={closed} locked={locked} stale={stale} />
             {inKind && <InKindBadge />}
           </div>
-          <p className="font-mono-tech text-xs text-muted-foreground">{product.service}</p>
-          {product.summary && <p className="max-w-xl pt-1 text-sm text-muted-foreground">{product.summary}</p>}
+          <p className="font-mono-tech text-xs text-ink-soft">{product.service}</p>
+          {product.summary && <p className="max-w-xl pt-1 text-sm text-ink-soft">{product.summary}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           {/* The secondary market, beside the primary one: trading units with other holders
@@ -190,7 +190,7 @@ export function ProductView({ service }: { service: string }) {
 function BackLink() {
   const t = useT();
   return (
-    <Link href="/invest" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+    <Link href="/invest" className="inline-flex items-center gap-1.5 text-sm text-ink-soft transition-colors hover:text-ink">
       <ArrowLeft className="size-4" />
       {t("invest.allProducts")}
     </Link>
@@ -225,13 +225,13 @@ function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: boolean }
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-4 py-6">
         <div className="space-y-1">
-          <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-ink-soft">
             {t("invest.navPerUnit")}
             <TipAnchor anchor="invest.position.nav" />
           </p>
           <p className="text-2xl font-semibold tabular-nums">{nav ? `${formatUsdt(nav.nav)} USDT` : "—"}</p>
         </div>
-        <p className="max-w-sm text-sm text-muted-foreground">{t(unmarked ? "invest.notYetValuedHint" : "invest.noUnitsInFund")}</p>
+        <p className="max-w-sm text-sm text-ink-soft">{t(unmarked ? "invest.notYetValuedHint" : "invest.noUnitsInFund")}</p>
       </CardContent>
     </Card>
   );

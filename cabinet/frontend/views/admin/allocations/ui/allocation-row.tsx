@@ -38,14 +38,14 @@ export function AllocationRow({ row, busy, editing, onEdit, onSave, onToggle, on
               investor sees in the rail, so an operator must be able to check it without
               opening a form that could then be saved by accident. */}
           <div className="flex items-center gap-2.5">
-            <ProductIcon icon={row.icon} className="size-4 shrink-0 text-muted-foreground" />
+            <ProductIcon icon={row.icon} className="size-4 shrink-0 text-ink-soft" />
             <div className="min-w-0">
               <p className="font-medium">{row.title}</p>
-              {row.summary && <p className="text-xs text-muted-foreground">{row.summary}</p>}
+              {row.summary && <p className="text-xs text-ink-soft">{row.summary}</p>}
             </div>
           </div>
         </td>
-        <td className="px-5 py-3 font-mono-tech text-xs text-muted-foreground">{row.service}</td>
+        <td className="px-5 py-3 font-mono-tech text-xs text-ink-soft">{row.service}</td>
         <td className="px-5 py-3">
           {/* The backing rides in the State cell: `in_kind` is a fact about how the product
               exits, like `closed` is, and it is the exception — `cash` draws nothing. */}
@@ -60,13 +60,13 @@ export function AllocationRow({ row, busy, editing, onEdit, onSave, onToggle, on
         {/* Read-only here: resizing the supply is a money decision and lives on the
             Valuation screen and the issuance panel's "pin cap", next to the issued figure
             it has to be judged against. */}
-        <td className="px-5 py-3 tabular-nums text-muted-foreground">{compactUnits(row.unit_cap)}</td>
+        <td className="px-5 py-3 tabular-nums text-ink-soft">{compactUnits(row.unit_cap)}</td>
         <td className="px-5 py-3">
           <AllocationRowActions state={row.state} busy={busy} editing={editing} onOpenPanel={onOpenPanel} onEdit={onEdit} onToggle={onToggle} />
         </td>
       </tr>
       {editing && (
-        <tr className="bg-foreground/[0.03]">
+        <tr className="bg-ink/[0.03]">
           <td colSpan={6} className="px-5 py-4">
             <AllocationEditor row={row} busy={busy} onSave={onSave} />
           </td>

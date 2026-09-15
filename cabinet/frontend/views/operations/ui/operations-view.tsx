@@ -145,8 +145,8 @@ export function OperationsView() {
     <Stagger step={SECTION_STAGGER} className="px-4 pb-8 pt-6 lg:px-8">
       <StaggerItem as="header" className="mb-6 space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">{t("ui.operations")}</p>
-        <h1 className="text-2xl font-semibold text-foreground">{t("ui.operations")}</h1>
-        <p className="text-sm text-muted-foreground">{t("ops.subtitle")}</p>
+        <h1 className="text-2xl font-semibold text-ink">{t("ui.operations")}</h1>
+        <p className="text-sm text-ink-soft">{t("ops.subtitle")}</p>
       </StaggerItem>
 
       {error && <ResourceError variant="alert" title={t("err.opsLoad")} message={error} className="mb-6" />}
@@ -252,7 +252,7 @@ export function OperationsView() {
                 {pending.length > 0 && <InProgress operations={pending} titleOf={titleOf} />}
                 {groups.map((group) => (
                   <section key={group.label} className="space-y-2">
-                    <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.label}</h2>
+                    <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-ink-soft">{group.label}</h2>
                     <Card>
                       {/* The rows carry the inset instead of the card, so a hover (and the separator
                           between rows) reaches the card's edges rather than stopping 24px short. */}
@@ -274,7 +274,7 @@ export function OperationsView() {
 
             {/* Says only what is true: the page is capped. There is no statements export to
                 point at yet, and promising one here would be inventing a feature. */}
-            {truncated && <p className="text-xs text-muted-foreground">{t("ops.truncatedNote")}</p>}
+            {truncated && <p className="text-xs text-ink-soft">{t("ops.truncatedNote")}</p>}
           </div>
         )}
         </Settled>
@@ -353,7 +353,7 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
         </ItemActions>
         {/* Every row opens a panel now, so every row carries the same disclosure — not
             only the in-flight ones that used to link out to their managing surface. */}
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <ChevronRight className="size-4 shrink-0 text-ink-soft" aria-hidden />
       </button>
     </Item>
   );

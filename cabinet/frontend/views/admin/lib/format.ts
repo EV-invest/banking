@@ -193,7 +193,7 @@ export function statusTone(status: string): string {
     case "error":
       return "text-destructive";
     default:
-      return "text-muted-foreground";
+      return "text-ink-soft";
   }
 }
 

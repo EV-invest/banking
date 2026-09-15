@@ -110,9 +110,9 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
         <div className="flex min-w-0 flex-col gap-1">
           {/* The kind leads, because it is what the reader is being asked to agree to and
               the vote words below deliberately do not say it. */}
-          <p className="text-base font-semibold text-foreground">{proposalKindLabel(kind, t)}</p>
-          <p className="truncate text-sm text-foreground">{t("consilium.proposals.subject")}: {proposal.subject_email || proposal.subject_user_id}</p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-base font-semibold text-ink">{proposalKindLabel(kind, t)}</p>
+          <p className="truncate text-sm text-ink">{t("consilium.proposals.subject")}: {proposal.subject_email || proposal.subject_user_id}</p>
+          <p className="text-sm text-ink-soft">
             {t("consilium.proposals.openedBy", { initiator: proposal.initiator_email, at: formatMoment(proposal.created_at, locale) })}
           </p>
         </div>
@@ -123,18 +123,18 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
 
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("consilium.removal.reason")}</span>
-          <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-foreground">
+          <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">{t("consilium.removal.reason")}</span>
+          <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-ink">
             {proposal.reason?.trim() || t("consilium.removal.noReason")}
           </p>
         </div>
 
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <span className="text-sm font-medium tabular-nums text-foreground">
+            <span className="text-sm font-medium tabular-nums text-ink">
               {t("consilium.proposals.tally", { n: tally.forVotes, threshold: tally.threshold })}
             </span>
-            <span className="text-xs tabular-nums text-muted-foreground">
+            <span className="text-xs tabular-nums text-ink-soft">
               {t("consilium.proposals.tallyDetail", { against: tally.againstVotes, waiting: tally.waiting })}
             </span>
           </div>
@@ -147,7 +147,7 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
           <Progress value={tally.threshold === 0 ? 0 : Math.min(100, (tally.forVotes / tally.threshold) * 100)} />
 
           {!tally.stillReachable && <p className="text-xs text-destructive">{t("consilium.proposals.unreachable")}</p>}
-          <p className="text-xs leading-relaxed text-muted-foreground">{t("consilium.proposals.majorityNote")}</p>
+          <p className="text-xs leading-relaxed text-ink-soft">{t("consilium.proposals.majorityNote")}</p>
 
           <ItemGroup>
             {peers.map((peer, i) => (
@@ -165,7 +165,7 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
         </div>
 
         {!settled && (
-          <p className="text-xs tabular-nums text-muted-foreground">
+          <p className="text-xs tabular-nums text-ink-soft">
             {t("consilium.proposals.expires", { at: formatMoment(proposal.expires_at, locale), left: expiresIn(proposal.expires_at, t) })}
           </p>
         )}
@@ -197,7 +197,7 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
                 </Button>
               </div>
             ) : (
-              <p className="text-sm leading-relaxed text-muted-foreground">
+              <p className="text-sm leading-relaxed text-ink-soft">
                 <WhyNoVote standing={standing} kind={kind} />
               </p>
             )}

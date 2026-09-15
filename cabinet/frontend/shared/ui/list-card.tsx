@@ -26,8 +26,8 @@ export function ListCard({ className, children }: { className?: string; children
 export function ListCardTitle({ sub, children }: { sub?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-px pb-2 pt-3">
-      <h2 className="text-sm font-semibold tracking-normal text-foreground">{children}</h2>
-      {sub && <p className="text-xs font-medium text-muted-foreground">{sub}</p>}
+      <h2 className="text-sm font-semibold tracking-normal text-ink">{children}</h2>
+      {sub && <p className="text-xs font-medium text-ink-soft">{sub}</p>}
     </div>
   );
 }
@@ -44,8 +44,8 @@ export function Row({ className, children }: { className?: string; children: Rea
 export function RowLabel({ title, sub }: { title: ReactNode; sub?: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="text-sm font-medium text-foreground">{title}</span>
-      {sub && <span className="text-xs leading-snug text-muted-foreground">{sub}</span>}
+      <span className="text-sm font-medium text-ink">{title}</span>
+      {sub && <span className="text-xs leading-snug text-ink-soft">{sub}</span>}
     </div>
   );
 }
@@ -56,27 +56,27 @@ export function RowLabel({ title, sub }: { title: ReactNode; sub?: ReactNode }) 
  * keep the label reading ahead of its value.
  */
 export function RowValue({ className, children }: { className?: string; children: ReactNode }) {
-  return <span className={cn("min-w-0 truncate text-right text-sm text-muted-foreground", className)}>{children}</span>;
+  return <span className={cn("min-w-0 truncate text-right text-sm text-ink-soft", className)}>{children}</span>;
 }
 
 /** A stacked label-over-value row (Figma `card-Personal`). */
 export function StackRow({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 py-3">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-xs font-medium text-ink-soft">{label}</span>
       {children}
     </div>
   );
 }
 
 export function Chevron({ className }: { className?: string }) {
-  return <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground", className)} aria-hidden />;
+  return <ChevronRight className={cn("size-4 shrink-0 text-ink-soft", className)} aria-hidden />;
 }
 
 const PILL_TONE = {
   positive: "bg-main-accent-t1/15 text-main-accent-t1",
   pending: "bg-main-accent-t3/15 text-main-accent-t3",
-  neutral: "bg-foreground/5 text-muted-foreground",
+  neutral: "bg-ink/5 text-ink-soft",
 } as const;
 
 export type PillTone = keyof typeof PILL_TONE;
@@ -95,7 +95,7 @@ export function Pill({ tone = "positive", icon: Icon, className, children }: { t
 export function InitialsAvatar({ initials, className }: { initials: string; className?: string }) {
   return (
     <Avatar className={className} aria-hidden>
-      <AvatarFallback className="bg-primary font-semibold text-primary-foreground">{initials}</AvatarFallback>
+      <AvatarFallback className="bg-primary font-semibold text-on-primary">{initials}</AvatarFallback>
     </Avatar>
   );
 }

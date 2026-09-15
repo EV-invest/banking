@@ -25,10 +25,10 @@ export function ValuationOverrideTerms({ terms }: { terms: ValuationOverride }) 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-muted-foreground">{t("consilium.valuation.product")}</span>
-        <span className="text-sm font-medium text-foreground">{product}</span>
+        <span className="text-xs font-medium text-ink-soft">{t("consilium.valuation.product")}</span>
+        <span className="text-sm font-medium text-ink">{product}</span>
       </div>
-      <p className="text-xs text-muted-foreground">{t("consilium.valuation.executes")}</p>
+      <p className="text-xs text-ink-soft">{t("consilium.valuation.executes")}</p>
     </div>
   );
 }

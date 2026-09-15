@@ -79,7 +79,7 @@ export function UsersView() {
         {/* The count is an ICU plural, not `${n} users`: the noun has to agree with the
             number in most locales, and `#` groups the digits in the reader's own
             convention — which is also what retires the hard-coded `en-US` here. */}
-        <span className="ml-auto text-sm text-muted-foreground">{t("admin.users.count", { n: Number(total) })}</span>
+        <span className="ml-auto text-sm text-ink-soft">{t("admin.users.count", { n: Number(total) })}</span>
       </StaggerItem>
 
       {/* Table and drawer are one section: the drawer's open/close already owns the
@@ -97,7 +97,7 @@ export function UsersView() {
               }
             >
               {!users ? null : users.length === 0 ? (
-                <p className="p-8 text-center text-sm text-muted-foreground">{t("admin.users.noMatch")}</p>
+                <p className="p-8 text-center text-sm text-ink-soft">{t("admin.users.noMatch")}</p>
               ) : (
                 // `table-fixed` is load-bearing, not tidiness. Under the default
                 // auto layout a column is as wide as its content, so `truncate` on
@@ -113,7 +113,7 @@ export function UsersView() {
                     {/* i18n-max: 8 per header — `table-fixed` sizes the columns from this
                         row, so a header that does not fit wraps instead of widening, and
                         the three right-hand columns share what User leaves. */}
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
                       <th className="w-1/2 px-5 py-3 font-medium">{t("admin.col.user")}</th>
                       <th className="px-5 py-3 font-medium">{t("admin.users.role")}</th>
                       <th className="px-5 py-3 font-medium">{t("admin.users.kyc")}</th>
@@ -125,7 +125,7 @@ export function UsersView() {
                       <tr
                         key={u.user_id}
                         onClick={() => setSelected(u)}
-                        className={cn("cursor-pointer transition-colors hover:bg-foreground/5", selected?.user_id === u.user_id && "bg-main-accent-t1/10")}
+                        className={cn("cursor-pointer transition-colors hover:bg-ink/5", selected?.user_id === u.user_id && "bg-main-accent-t1/10")}
                       >
                         <td className="px-5 py-3">
                           {/* The row is clickable for the mouse, but the identity cell carries the
@@ -150,7 +150,7 @@ export function UsersView() {
                             {u.role_is_break_glass && <BreakGlassMark />}
                           </div>
                         </td>
-                        <td className="px-5 py-3 text-muted-foreground">{t("admin.users.kycLevelShort", { n: u.kyc_level })}</td>
+                        <td className="px-5 py-3 text-ink-soft">{t("admin.users.kycLevelShort", { n: u.kyc_level })}</td>
                         <td className="px-5 py-3">
                           <StatusDot status={u.status} label={statusLabel(u.status, t)} />
                         </td>
@@ -221,7 +221,7 @@ function FilterSelect({
   const t = useT();
   return (
     <div className="inline-flex items-center gap-2 text-sm">
-      <span className="text-muted-foreground">{label}:</span>
+      <span className="text-ink-soft">{label}:</span>
       <Select value={value ?? ""} onValueChange={(v) => onChange(v || undefined)}>
         <SelectTrigger size="sm" className="border-border bg-main-surface">
           <span className="truncate">{value === undefined ? t("ui.all") : optionLabel(value)}</span>
@@ -297,13 +297,13 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate font-semibold">{summary.email || summary.user_id.slice(0, 12)}</p>
-            <p className="truncate text-xs text-muted-foreground">{summary.user_id}</p>
+            <p className="truncate text-xs text-ink-soft">{summary.user_id}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label={t("ui.close")}
-            className="rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-md text-ink-soft outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="size-4" />
           </button>
@@ -321,7 +321,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
             for the mark. The page-level notice above the table says the same thing about
             the READER; this says it about the account they are looking at, which is a
             different fact and can be true when the other is not. */}
-        {breakGlass && <p className="text-xs leading-relaxed text-muted-foreground">{t("admin.users.breakGlassExplainer")}</p>}
+        {breakGlass && <p className="text-xs leading-relaxed text-ink-soft">{t("admin.users.breakGlassExplainer")}</p>}
 
         {error && (
           <p className="flex items-center gap-2 text-xs text-destructive">
@@ -350,7 +350,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
             {busy === "revoke" ? <Loader2 className="size-3.5 animate-spin" /> : null}
             {t("admin.users.revokeAllSessions")}
           </Button>
-          <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+          <p className="flex items-center gap-1.5 pt-1 text-xs text-ink-soft">
             {t("admin.users.revokeNote")}
             <TipAnchor anchor="admin.users.access.revoke-sessions" />
           </p>
@@ -413,7 +413,7 @@ function KycField({ level, busy, onSave }: { level: number; busy: boolean; onSav
       {/* A `div` and not a `label`, for the reason `FilterSelect` gives: the uikit trigger
           is a button, which a label has nothing to bind to. */}
       <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="flex items-center gap-1.5 text-muted-foreground">
+        <span className="flex items-center gap-1.5 text-ink-soft">
           {t("ui.kycLevel")}
           <TipAnchor anchor="admin.users.access.kyc-level" />
         </span>
@@ -454,7 +454,7 @@ function KycField({ level, busy, onSave }: { level: number; busy: boolean; onSav
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="space-y-1 border-t border-border pt-4">
-      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{title}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{title}</p>
       {children}
     </div>
   );
@@ -463,7 +463,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function Row({ label, value, tip }: { label: string; value: string; tip?: TipKey }) {
   return (
     <div className="flex items-center justify-between py-1 text-sm">
-      <span className="flex items-center gap-1.5 text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-ink-soft">
         {label}
         {tip && <TipAnchor anchor={tip} />}
       </span>
@@ -473,7 +473,7 @@ function Row({ label, value, tip }: { label: string; value: string; tip?: TipKey
 }
 
 function Chip({ children }: { children: ReactNode }) {
-  return <span className="rounded-full bg-foreground/5 px-2 py-0.5 font-medium text-foreground">{children}</span>;
+  return <span className="rounded-full bg-ink/5 px-2 py-0.5 font-medium text-ink">{children}</span>;
 }
 
 /**

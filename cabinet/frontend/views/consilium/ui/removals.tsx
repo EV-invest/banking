@@ -136,8 +136,8 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-base font-semibold text-foreground">{t("consilium.removal.heading", { target: removal.target_email })}</p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-base font-semibold text-ink">{t("consilium.removal.heading", { target: removal.target_email })}</p>
+          <p className="text-sm text-ink-soft">
             {t("consilium.removal.openedBy", { initiator: removal.initiator_email, at: formatMoment(removal.created_at, locale) })}
           </p>
         </div>
@@ -148,8 +148,8 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
 
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("consilium.removal.reason")}</span>
-          <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-foreground">
+          <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">{t("consilium.removal.reason")}</span>
+          <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-ink">
             {removal.reason?.trim() || t("consilium.removal.noReason")}
           </p>
         </div>
@@ -161,10 +161,10 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
 
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <span className="text-sm font-medium tabular-nums text-foreground">
+            <span className="text-sm font-medium tabular-nums text-ink">
               {t("consilium.removal.peerTally", { removed: tally.toRemove, total: tally.total })}
             </span>
-            <span className="text-xs text-muted-foreground">{t("consilium.removal.unanimityNote")}</span>
+            <span className="text-xs text-ink-soft">{t("consilium.removal.unanimityNote")}</span>
           </div>
 
           {tally.total === 0 ? (
@@ -191,7 +191,7 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
         </div>
 
         {!settled && (
-          <p className="text-xs text-muted-foreground tabular-nums">
+          <p className="text-xs text-ink-soft tabular-nums">
             {t("consilium.removal.expires", { at: formatMoment(removal.expires_at, locale), left: expiresIn(removal.expires_at, t) })}
           </p>
         )}
@@ -223,7 +223,7 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
                 </Button>
               </div>
             ) : (
-              <p className="text-sm leading-relaxed text-muted-foreground">
+              <p className="text-sm leading-relaxed text-ink-soft">
                 <WhyNoVote standing={standing} removal={removal} />
               </p>
             )}
@@ -257,7 +257,7 @@ function TargetAnswer({ removal }: { removal: OwnerRemoval }) {
     return <p className="text-sm text-main-accent-t3">{t("consilium.removal.targetRefused", { target: removal.target_email })}</p>;
   }
   return (
-    <p className="text-sm text-muted-foreground">
+    <p className="text-sm text-ink-soft">
       {t(removal.target_notified ? "consilium.removal.targetPending" : "consilium.removal.targetNotYetTold", { target: removal.target_email })}
     </p>
   );
@@ -398,14 +398,14 @@ export function ProposeRemoval({
                 />
                 {/* The reason is emailed to the person it is about, in these words. Saying so
                     before it is written is worth more than any amount of moderation after. */}
-                <p className="text-xs text-muted-foreground">{t("consilium.propose.reasonHint")}</p>
+                <p className="text-xs text-ink-soft">{t("consilium.propose.reasonHint")}</p>
               </div>
 
               {/* Stated unconditionally, because it is the rule rather than a verdict about
                   this roster. Re-deriving "would this breach the floor?" in the browser means
                   a client that can disagree with the server — and the direction it would be
                   wrong in is blocking a removal the fund is entitled to make. */}
-              <p className="text-xs text-muted-foreground">{t("consilium.propose.floorWarning")}</p>
+              <p className="text-xs text-ink-soft">{t("consilium.propose.floorWarning")}</p>
 
               {error !== null && <ResourceError message={errorMessage(error, t)} />}
               {opened && (

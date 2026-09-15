@@ -96,7 +96,7 @@ function ProductSelect({ value, onChange }: { value: string; onChange: (id: stri
             <span className="flex items-center gap-2">
               <ProductIcon icon={p.icon} className="size-4 shrink-0" />
               {p.title}
-              <span className="font-mono-tech text-xs text-muted-foreground">{p.service}</span>
+              <span className="font-mono-tech text-xs text-ink-soft">{p.service}</span>
             </span>
           </SelectItem>
         ))}

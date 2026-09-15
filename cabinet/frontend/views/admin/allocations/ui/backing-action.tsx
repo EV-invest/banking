@@ -48,8 +48,8 @@ export function BackingAction({ allocation }: { allocation: Allocation }) {
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.alloc.backing.title")}</p>
-          <p className="text-xs text-muted-foreground">{t(backingHintKey(backing))}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.backing.title")}</p>
+          <p className="text-xs text-ink-soft">{t(backingHintKey(backing))}</p>
         </div>
         <BackingBadge backing={backing} verbose className="shrink-0" />
       </div>

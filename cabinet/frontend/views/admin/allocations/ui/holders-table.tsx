@@ -49,7 +49,7 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
   return (
     <dl className="space-y-3 text-sm">
       <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2">
-        <dt className="text-muted-foreground">{t("admin.alloc.holders.outstanding")}</dt>
+        <dt className="text-ink-soft">{t("admin.alloc.holders.outstanding")}</dt>
         <dd className="font-semibold tabular-nums">{formatUnits(outstanding)}</dd>
       </div>
       {classes.map((c) => {
@@ -57,10 +57,10 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
         return (
           <div key={c.key} className="space-y-1.5">
             <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-muted-foreground">{c.label}</dt>
+              <dt className="text-ink-soft">{c.label}</dt>
               <dd className="tabular-nums">
                 <span className="font-medium">{pct(bps)}</span>
-                <span className="text-xs text-muted-foreground"> · {formatUnits(c.units)}</span>
+                <span className="text-xs text-ink-soft"> · {formatUnits(c.units)}</span>
               </dd>
             </div>
             <Progress value={bps / 100} className="h-1.5" aria-hidden />
@@ -71,8 +71,8 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
         // No share bar: a queued mint is not part of the outstanding figure it would be
         // measured against, so a percentage here would be a lie either way.
         <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2">
-          <dt className="text-muted-foreground">{t("admin.alloc.holders.queued")}</dt>
-          <dd className="tabular-nums text-muted-foreground">{formatUnits(holders.queued_units)}</dd>
+          <dt className="text-ink-soft">{t("admin.alloc.holders.queued")}</dt>
+          <dd className="tabular-nums text-ink-soft">{formatUnits(holders.queued_units)}</dd>
         </div>
       )}
     </dl>

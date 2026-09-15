@@ -23,7 +23,7 @@ import { NetworkSegments } from "@/views/wallet/ui/network-segments";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
 const FIELD =
-  "w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
+  "w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-soft focus-visible:ring-2 focus-visible:ring-ring";
 
 // What the user reviewed, frozen at the "Review" click — Confirm submits exactly this
 // even if a wallet refetch changes the live selection underneath the open confirm.
@@ -115,7 +115,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
         // Only the send is closed, and this says so and offers the one way to open it.
         <VerificationRequired title={t("wallet.withdrawVerifyTitle")} description={t("wallet.withdrawVerifyBody")} className="lg:max-w-140" />
       ) : networks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{error ?? t("wallet.noWithdrawRails")}</p>
+        <p className="text-sm text-ink-soft">{error ?? t("wallet.noWithdrawRails")}</p>
       ) : (
         // Form 560 + review 400 side by side is the Figma at 1440; below that the content
         // column can't hold both, so the review wraps under the form rather than overflowing.
@@ -155,7 +155,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             <label className="flex flex-col gap-2">
               <span className="flex items-center justify-between gap-2">
                 <FieldLabel>{t("wallet.amountCaps")}</FieldLabel>
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5 text-xs text-ink-soft">
                   {t("wallet.availPrefix", { amount: formatUsdt(opts?.withdrawable) })}
                   <TipAnchor anchor="wallet.withdraw.available" />
                 </span>
@@ -171,7 +171,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   }}
                   inputMode="decimal"
                   placeholder="0.00"
-                  className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-soft"
                 />
                 <button
                   type="button"
@@ -179,7 +179,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                     setAmount(opts?.withdrawable ?? "0");
                     setConfirming(null);
                   }}
-                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-main-accent-t1 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring"
+                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-main-accent-t1 outline-none transition-colors hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {t("ui.max")}
                 </button>
@@ -197,7 +197,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             {queuedUnits > 0n && amountUnits > 0n && (
               <p className="text-xs text-main-accent-t3">{t("wallet.exceedsInstant", { amount: formatUsdt(fromBaseUnits(queuedUnits)), network: label })}</p>
             )}
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-ink-soft">
               {t("wallet.minInstantQueued", { min: formatUsdt(opts?.min_withdrawal), network: label, instant: formatUsdt(opts?.instant) })}
             </p>
 
@@ -221,8 +221,8 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 <Panel key="receipt" from="bottom" className={cn(WALLET_CARD, "flex gap-3 p-4.5 lg:p-5")}>
                   <Clock className="mt-0.5 size-4 shrink-0 text-main-accent-t3" />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">{t(done.state === "queued" ? "wallet.withdrawalQueued" : "wallet.withdrawalSubmitted")}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm font-semibold text-ink">{t(done.state === "queued" ? "wallet.withdrawalQueued" : "wallet.withdrawalSubmitted")}</p>
+                    <p className="text-xs text-ink-soft">
                       {done.state === "queued"
                         ? t("wallet.receiptQueued", { amount: formatUsdt(done.net_amount), address: shortAddress(done.address), network: networkLabel(done.network) })
                         : t("wallet.receiptSubmitted", { amount: formatUsdt(done.net_amount), address: shortAddress(done.address) })}
@@ -235,15 +235,15 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 <Panel key="error" from="bottom" className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-5")}>
                   <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">{t("wallet.withdrawalFailed")}</p>
-                    <p className="text-xs text-muted-foreground">{error}</p>
+                    <p className="text-sm font-semibold text-ink">{t("wallet.withdrawalFailed")}</p>
+                    <p className="text-xs text-ink-soft">{error}</p>
                   </div>
                 </Panel>
               )}
 
               {confirming && (
                 <Panel key="review" from="bottom" className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:p-5")}>
-                  <p className="text-sm font-semibold text-foreground">{t("wallet.reviewWithdrawal")}</p>
+                  <p className="text-sm font-semibold text-ink">{t("wallet.reviewWithdrawal")}</p>
                   <div className="flex flex-col gap-2.5">
                     <Row
                       label={t("ui.network")}
@@ -260,7 +260,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                     <div className="h-px w-full bg-border" />
                     <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-main-accent-t2" />
                   </div>
-                  <p className="break-all font-mono-tech text-xs text-muted-foreground">{t("wallet.toAddressLine", { address: confirming.address })}</p>
+                  <p className="break-all font-mono-tech text-xs text-ink-soft">{t("wallet.toAddressLine", { address: confirming.address })}</p>
                   {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
                     <p className="text-xs text-main-accent-t3">
                       {t("wallet.exceedsInstant", {
@@ -280,7 +280,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                       {t("ui.back")}
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground">{t("wallet.acceptedInstantly", { network: networkLabel(confirming.network) })}</p>
+                  <p className="text-xs text-ink-soft">{t("wallet.acceptedInstantly", { network: networkLabel(confirming.network) })}</p>
                 </Panel>
               )}
             </PanelPresence>
@@ -298,11 +298,11 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
 function Row({ label, value, tone, tip }: { label: string; value: ReactNode; tone?: string; tip?: TipKey }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-xs text-ink-soft">
         {label}
         {tip && <TipAnchor anchor={tip} />}
       </span>
-      <span className={cn("text-sm font-medium tabular-nums", tone ?? "text-foreground")}>{value}</span>
+      <span className={cn("text-sm font-medium tabular-nums", tone ?? "text-ink")}>{value}</span>
     </div>
   );
 }

@@ -58,7 +58,7 @@ const KINDS: Record<string, KindMeta> = {
   fee: { icon: Percent, labelKey: "ops.kind.fee", direction: "out", tone: "bg-destructive/15 text-destructive" },
 };
 
-const UNKNOWN_KIND: KindMeta = { icon: null, labelKey: null, direction: "move", tone: "bg-muted text-muted-foreground" };
+const UNKNOWN_KIND: KindMeta = { icon: null, labelKey: null, direction: "move", tone: "bg-muted text-ink-soft" };
 
 /** An unrecognised kind renders neutrally rather than disappearing — a new hub kind is
  *  visible as an unstyled row instead of a silent gap in someone's history. */
@@ -89,7 +89,7 @@ export function kindLabel(kind: string | undefined, t: Translate): string {
 export function amountTone(direction: Direction): string {
   if (direction === "in") return "text-main-accent-t2";
   if (direction === "out") return "text-destructive";
-  return "text-foreground";
+  return "text-ink";
 }
 
 // `partly_deferred` is settled too: the charge itself completed, and what it could not
@@ -147,7 +147,7 @@ export function stateTone(state: string | undefined): string {
     case "failed":
       return "bg-destructive/15 text-destructive";
     default:
-      return "bg-muted text-muted-foreground";
+      return "bg-muted text-ink-soft";
   }
 }
 

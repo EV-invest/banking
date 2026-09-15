@@ -59,7 +59,7 @@ export function PayoutHistory({
               <table className="w-full min-w-140 text-sm">
                 <thead>
                   {/* i18n-max: 14 per header — a long header widens the scroll, not a cell. */}
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
                     <th className="px-5 py-3 font-medium">{t("ui.destination")}</th>
                     <th className="px-5 py-3 font-medium">{t("ui.amount")}</th>
                     <th className="px-5 py-3 font-medium">{t("admin.col.state")}</th>
@@ -87,7 +87,7 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
   return (
     <tr>
       <td className="px-5 py-3">
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <p className="flex items-center gap-1.5 text-xs text-ink-soft">
           <NetworkMark network={payout.network} className="size-3.5 shrink-0" />
           {networkLabel(payout.network)}
         </p>
@@ -99,7 +99,7 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
       <td className="px-5 py-3">
         <span className={stateTone(payout.state)}>{stateLabel(payout.state, t)}</span>
       </td>
-      <td className="px-5 py-3 font-mono-tech text-xs text-muted-foreground" title={payout.tx_ref || undefined}>
+      <td className="px-5 py-3 font-mono-tech text-xs text-ink-soft" title={payout.tx_ref || undefined}>
         {payout.tx_ref ? shortAddress(payout.tx_ref) : "—"}
       </td>
       <td className="px-5 py-3">
@@ -110,7 +110,7 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
               {t("ui.cancel")}
             </Button>
           ) : (
-            <span className="text-xs text-muted-foreground">{open ? t("admin.revenue.inFlight") : "—"}</span>
+            <span className="text-xs text-ink-soft">{open ? t("admin.revenue.inFlight") : "—"}</span>
           )}
         </div>
       </td>
@@ -128,6 +128,6 @@ function stateTone(state: string): string {
     case "failed":
       return "text-destructive";
     default:
-      return "text-muted-foreground";
+      return "text-ink-soft";
   }
 }

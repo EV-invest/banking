@@ -55,10 +55,10 @@ export function PaymentTermsBlock({
     <>
       <div className="flex flex-col gap-1.5">
         <FieldCaption>{t("approval.amount")}</FieldCaption>
-        <p className="text-4xl font-semibold leading-none tabular-nums text-foreground">
+        <p className="text-4xl font-semibold leading-none tabular-nums text-ink">
           {/* The wire string, digit for digit — `payload_hash` covers the exact decimal. */}
           {formatExactUsdt(terms.amount)}
-          <span className="ml-2 text-base font-medium text-muted-foreground">USDT</span>
+          <span className="ml-2 text-base font-medium text-ink-soft">USDT</span>
         </p>
       </div>
 
@@ -80,7 +80,7 @@ export function PaymentTermsBlock({
       <div className="flex flex-col gap-1.5">
         <FieldCaption>{reasonLabel}</FieldCaption>
         {/* The initiator's own words, whole and unsummarised, set apart from the page's. */}
-        <blockquote className="whitespace-pre-line rounded-lg border-l-2 border-main-accent-t3/60 bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-foreground">
+        <blockquote className="whitespace-pre-line rounded-lg border-l-2 border-main-accent-t3/60 bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-ink">
           {terms.reason?.trim() || "—"}
         </blockquote>
       </div>
@@ -89,7 +89,7 @@ export function PaymentTermsBlock({
         <DetailRow label={t("approval.payment.tier")} value={tierAs === "hint" ? tierHint(terms.tier, t) : tierLabel(terms.tier, t)} />
         <DetailRow label={t("approval.payloadHash")} value={hashPrefix(payloadHash)} mono />
       </div>
-      <p className="text-xs text-muted-foreground">{t("approval.payment.payloadHashHint")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.payment.payloadHashHint")}</p>
 
       <Separator />
     </>

@@ -37,25 +37,25 @@ export function Showcase({ bps }: { bps: Record<RateField, number | null> }) {
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
-      <p className="text-xs font-medium text-muted-foreground">{t("admin.fees.showcase.title")}</p>
+      <p className="text-xs font-medium text-ink-soft">{t("admin.fees.showcase.title")}</p>
       <dl className="grid gap-3 sm:grid-cols-3">
         {RATE_FIELDS.map((field) => (
           <div key={field} className="space-y-0.5">
-            <dt className="text-xs text-muted-foreground">{t(FIELD_LABEL_KEY[field])}</dt>
+            <dt className="text-xs text-ink-soft">{t(FIELD_LABEL_KEY[field])}</dt>
             <dd className="text-sm tabular-nums">
               {bps[field] === null ? (
-                <span className="text-muted-foreground">—</span>
+                <span className="text-ink-soft">—</span>
               ) : (
                 <>
                   <span className="font-medium">{pct(bps[field])}</span>{" "}
-                  <span className="text-xs text-muted-foreground">{t("admin.fees.showcase.bps", { n: bps[field] })}</span>
+                  <span className="text-xs text-ink-soft">{t("admin.fees.showcase.bps", { n: bps[field] })}</span>
                 </>
               )}
             </dd>
           </div>
         ))}
       </dl>
-      {example && <p className="text-xs text-muted-foreground">{example}</p>}
+      {example && <p className="text-xs text-ink-soft">{example}</p>}
     </div>
   );
 }

@@ -139,10 +139,10 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-base font-semibold text-foreground">
+          <p className="text-base font-semibold text-ink">
             {t("consilium.admission.heading", { candidate: admission.candidate_email || admission.candidate_user_id })}
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-ink-soft">
             {t("consilium.admission.openedBy", { initiator: admission.initiator_email, at: formatMoment(admission.created_at, locale) })}
           </p>
         </div>
@@ -153,8 +153,8 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
 
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("consilium.admission.reason")}</span>
-          <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-foreground">
+          <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">{t("consilium.admission.reason")}</span>
+          <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-ink">
             {admission.reason?.trim() || t("consilium.admission.noReason")}
           </p>
         </div>
@@ -166,10 +166,10 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
                 path through the target's mailbox, and will read a partial count here as
                 progress toward a majority. There is no majority here and no second path:
                 one reject ends it. */}
-            <span className="text-sm font-medium tabular-nums text-foreground">
+            <span className="text-sm font-medium tabular-nums text-ink">
               {t("consilium.admission.peerTally", { admitted: tally.toAdmit, total: tally.total })}
             </span>
-            <span className="text-xs text-muted-foreground">{t("consilium.admission.unanimityNote")}</span>
+            <span className="text-xs text-ink-soft">{t("consilium.admission.unanimityNote")}</span>
           </div>
 
           {tally.total === 0 ? (
@@ -201,7 +201,7 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
         </div>
 
         {!settled && (
-          <p className="text-xs tabular-nums text-muted-foreground">
+          <p className="text-xs tabular-nums text-ink-soft">
             {t("consilium.admission.expires", { at: formatMoment(admission.expires_at, locale), left: expiresIn(admission.expires_at, t) })}
           </p>
         )}
@@ -231,7 +231,7 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
                 </Button>
               </div>
             ) : (
-              <p className="text-sm leading-relaxed text-muted-foreground">
+              <p className="text-sm leading-relaxed text-ink-soft">
                 <WhyNoVote standing={standing} admission={admission} />
               </p>
             )}
@@ -352,7 +352,7 @@ export function ProposeAdmission({
                   direct-grant route beside it at any roster size: `SetRole` refuses
                   `owner` unconditionally (docs/CONSILIUM.md, § Genesis, policy 21). */}
               {seated !== null && seated < 2 && (
-                <p className="rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/10 px-3.5 py-3 text-sm leading-relaxed text-foreground">
+                <p className="rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/10 px-3.5 py-3 text-sm leading-relaxed text-ink">
                   {t("consilium.admit.genesis", { n: seated })}
                 </p>
               )}
@@ -395,7 +395,7 @@ export function ProposeAdmission({
                   this roster — and because it is STRICTER than the removal rule a reader
                   has just met further up the page. Assuming a majority is enough is the
                   natural mistake, so it is the one the copy pre-empts. */}
-              <p className="text-xs text-muted-foreground">{t("consilium.admit.unanimityWarning")}</p>
+              <p className="text-xs text-ink-soft">{t("consilium.admit.unanimityWarning")}</p>
 
               {error !== null && <ResourceError message={errorMessage(error, t)} />}
               {opened && (

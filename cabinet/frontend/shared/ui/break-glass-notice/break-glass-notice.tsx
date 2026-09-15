@@ -59,7 +59,7 @@ export function BreakGlassNotice({ className }: { className?: string }) {
     <Alert className={cn("border-main-accent-t3/40 bg-main-accent-t3/10", className)}>
       <KeyRound className="size-4 text-main-accent-t3" />
       <AlertTitle>{t("session.breakGlass.title")}</AlertTitle>
-      <AlertDescription className="text-foreground">{t("session.breakGlass.body")}</AlertDescription>
+      <AlertDescription className="text-ink">{t("session.breakGlass.body")}</AlertDescription>
     </Alert>
   );
 }

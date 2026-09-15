@@ -59,7 +59,7 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
 
   return (
     <div className="space-y-2 border-t border-border pt-4">
-      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-ink-soft">
         {t("admin.users.standing")}
         <TipAnchor anchor="admin.users.status.suspend" />
       </p>
@@ -67,7 +67,7 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
       {/* What is true NOW, before any button. The sentence differs per case because the
           cases differ in what happens if nobody acts: a hold releases itself, a verdict
           does not, and a pre-split suspension does not either but can be lifted here. */}
-      <p className="text-xs leading-relaxed text-muted-foreground">
+      <p className="text-xs leading-relaxed text-ink-soft">
         {standing.kind === "active" && t("admin.users.standingActive")}
         {standing.kind === "hold" && `${t("admin.users.standingHold")} ${t("admin.users.standingHoldLapses", { when: formatMoment(standing.expiresAt, locale) })}`}
         {standing.kind === "governance" && t("admin.users.standingGovernance")}
@@ -141,9 +141,9 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
       )}
 
       {standing.kind !== "active" && (
-        <p className="text-xs leading-relaxed text-muted-foreground">
+        <p className="text-xs leading-relaxed text-ink-soft">
           {t("admin.users.standingOpened")}{" "}
-          <Link href="/consilium" className="rounded-xs underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+          <Link href="/consilium" className="rounded-xs underline underline-offset-2 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
             {t("nav.consilium")}
           </Link>
           .

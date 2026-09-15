@@ -54,7 +54,7 @@ export function OrderFormFields({
 
       {!market && (
         <div className="space-y-1">
-          <Label htmlFor="order-price" className="text-xs text-muted-foreground">
+          <Label htmlFor="order-price" className="text-xs text-ink-soft">
             {t("trade.form.price")}
           </Label>
           <Input id="order-price" inputMode="decimal" placeholder="0.00" value={draft.price} disabled={disabled} onChange={(e) => onChange((d) => ({ ...d, price: e.target.value }))} className="w-full font-mono-tech tabular-nums" />
@@ -64,7 +64,7 @@ export function OrderFormFields({
 
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <Label htmlFor="order-size" className="text-xs text-muted-foreground">
+          <Label htmlFor="order-size" className="text-xs text-ink-soft">
             {t("trade.form.size")}
           </Label>
           {!buying && position?.units && !isZero(position.units) && (
@@ -80,7 +80,7 @@ export function OrderFormFields({
 
       {!market && (
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">{t("trade.form.tif")}</Label>
+          <Label className="text-xs text-ink-soft">{t("trade.form.tif")}</Label>
           <Select value={draft.tif} onValueChange={(v) => onChange((d) => ({ ...d, tif: ORDER_TIFS.find((x) => x === v) ?? d.tif }))}>
             <SelectTrigger className="w-full text-xs" disabled={disabled}>
               <span className="truncate">{t(`trade.form.tifLabel.${draft.tif}`)}</span>

@@ -33,7 +33,7 @@ export function Stat({
   return (
     <div className="rounded-lg border border-border bg-main-surface p-3">
       <div className="flex items-center gap-1.5">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="text-xs uppercase tracking-wide text-ink-soft">{label}</p>
         {tip && <TipAnchor anchor={tip} />}
       </div>
       <p className={cn("flex items-center gap-1 tabular-nums", emphasis ? "text-xl font-semibold" : "text-base", tone)}>
@@ -52,8 +52,8 @@ export function Note({ tone, children }: { tone: "amber" | "muted" | "accent"; c
       className={cn(
         "rounded-lg border px-3 py-2 text-xs leading-relaxed",
         tone === "amber" && "border-main-accent-t3/30 bg-main-accent-t3/5 text-main-accent-t3",
-        tone === "muted" && "border-border bg-foreground/5 text-muted-foreground",
-        tone === "accent" && "border-main-accent-t1/40 bg-main-accent-t1/10 text-foreground",
+        tone === "muted" && "border-border bg-ink/5 text-ink-soft",
+        tone === "accent" && "border-main-accent-t1/40 bg-main-accent-t1/10 text-ink",
       )}
     >
       {children}
@@ -77,8 +77,8 @@ export function SupplyBar({ issued, cap, className }: { issued: string | undefin
   return (
     <div className={cn("space-y-1.5", className)}>
       <div className="flex items-baseline justify-between gap-3 text-xs">
-        <span className="text-muted-foreground">{t("invest.unitsIssued")}</span>
-        <span className={cn("tabular-nums", near ? "font-medium text-main-accent-t3" : "text-muted-foreground")}>
+        <span className="text-ink-soft">{t("invest.unitsIssued")}</span>
+        <span className={cn("tabular-nums", near ? "font-medium text-main-accent-t3" : "text-ink-soft")}>
           {compactUnits(issued)} / {compactUnits(cap)}
         </span>
       </div>
@@ -111,7 +111,7 @@ export function ProductBadges({ closed, locked, stale }: { closed: boolean; lock
         </Badge>
       )}
       {locked && (
-        <Badge variant="outline" className="gap-1 border-border text-muted-foreground">
+        <Badge variant="outline" className="gap-1 border-border text-ink-soft">
           <Lock className="size-3" /> {t("invest.badge.locked")}
         </Badge>
       )}

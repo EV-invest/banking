@@ -98,7 +98,7 @@ export function BottomNavbar() {
               // The offset is what earns its keep here: the active tab's fill is the same
               // teal as the ring, so without a gap the ring reads as the pill growing.
               "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-main-surface",
-              isActive ? "text-main-accent-t1" : "text-muted-foreground hover:text-foreground",
+              isActive ? "text-main-accent-t1" : "text-ink-soft hover:text-ink",
             )}
           >
             <Icon className="size-5 shrink-0" />

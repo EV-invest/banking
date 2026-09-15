@@ -55,9 +55,9 @@ export function ReadFailure({ title, body, onRetry, retrying = false, className 
           <CloudOff />
         </EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
-        {/* `text-foreground`, not the muted default: muted on a tinted ground is the
+        {/* `text-ink`, not the muted default: muted on a tinted ground is the
             contrast failure AGENTS.md names, and it is measured under AA here. */}
-        <EmptyDescription className="text-foreground">{body}</EmptyDescription>
+        <EmptyDescription className="text-ink">{body}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         {/* i18n-max: 16 — the uikit Button is shrink-0. */}

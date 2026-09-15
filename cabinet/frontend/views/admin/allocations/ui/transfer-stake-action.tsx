@@ -98,7 +98,7 @@ export function TransferStakeAction({ allocation, holders }: { allocation: Alloc
           </div>
         </div>
       )}
-      {nothingHeld && step === "closed" && <p className="text-xs text-muted-foreground">{t("admin.alloc.transfer.nothingHeld")}</p>}
+      {nothingHeld && step === "closed" && <p className="text-xs text-ink-soft">{t("admin.alloc.transfer.nothingHeld")}</p>}
       {last && <IssuanceResult outcome={last} kind="transfer" />}
       {error && (
         <p className="flex items-center gap-2 text-xs text-destructive">

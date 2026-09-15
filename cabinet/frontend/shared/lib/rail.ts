@@ -36,7 +36,7 @@ const RAILS: Record<string, RailMeta> = {
 
 export function railMeta(network: string | undefined): RailMeta {
   const id = network ?? "";
-  return RAILS[id] ?? { label: id.toUpperCase(), chainKey: "wallet.chain.unknown", badge: (id[0] ?? "?").toUpperCase(), tone: "bg-muted text-muted-foreground" };
+  return RAILS[id] ?? { label: id.toUpperCase(), chainKey: "wallet.chain.unknown", badge: (id[0] ?? "?").toUpperCase(), tone: "bg-muted text-ink-soft" };
 }
 
 export function networkLabel(network: string | undefined): string {

@@ -81,7 +81,7 @@ export function ValuationActions({
         <Alert role="status" className="border-main-accent-t2/40 bg-main-accent-t2/10">
           <CheckCircle2 className="size-4 text-main-accent-t2" />
           <AlertTitle>{t("admin.valuation.proposedTitle")}</AlertTitle>
-          <AlertDescription className="gap-3 text-foreground">
+          <AlertDescription className="gap-3 text-ink">
             <p className="leading-relaxed tabular-nums">
               {t("admin.valuation.proposedBody", { service: proposed.service, aum: formatExactUsdt(proposed.aum) })}
             </p>
@@ -98,7 +98,7 @@ export function ValuationActions({
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <p className="min-w-48 flex-1 text-xs text-muted-foreground">{t("admin.valuation.proposeHint")}</p>
+        <p className="min-w-48 flex-1 text-xs text-ink-soft">{t("admin.valuation.proposeHint")}</p>
         {/* i18n-max: 24 per verb — both Buttons are `shrink-0` in a wrapping row. */}
         <span className="inline-flex shrink-0 items-center gap-1.5">
           <Button type="button" variant="outline" disabled={disabled || busy !== null} onClick={() => void run("propose")}>

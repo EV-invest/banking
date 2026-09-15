@@ -98,7 +98,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
         </Button>
       </div>
 
-      <p className={cn("text-xs", dust || overCap ? "text-destructive" : "text-muted-foreground")}>
+      <p className={cn("text-xs", dust || overCap ? "text-destructive" : "text-ink-soft")}>
         {dust
           ? t("invest.dustHint", { nav: formatUsdt(nav?.nav) })
           : overCap
@@ -205,7 +205,7 @@ export function RedeemPanel({ service, position, nav, inKind = false }: { servic
         </div>
       )}
 
-      <p className={cn("text-xs", overdraw ? "text-destructive" : "text-muted-foreground")}>
+      <p className={cn("text-xs", overdraw ? "text-destructive" : "text-ink-soft")}>
         {overdraw
           ? t("invest.youHoldUnits", { n: Number(position.units ?? 0), units: formatUnits(position.units) })
           : estimate !== null
@@ -247,7 +247,7 @@ export function QueuedList({ items }: { items: Redemption[] }) {
         <div key={r.id ?? ""} className="flex items-center justify-between gap-3 text-sm">
           <span>
             <span className="font-medium">{t("dash.unitsAmount", { n: Number(r.units ?? 0), units: formatUnits(r.units) })}</span>{" "}
-            <span className="text-muted-foreground">{t("invest.reservedPricedAtSettle")}</span>
+            <span className="text-ink-soft">{t("invest.reservedPricedAtSettle")}</span>
           </span>
           <span className="flex items-center gap-2">
             <Button type="button" variant="outline" size="sm" disabled={busy === (r.id ?? "")} onClick={() => cancel(r.id ?? "")}>

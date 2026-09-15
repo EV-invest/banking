@@ -31,10 +31,10 @@ export function ValuationTermsBlock({ terms, payloadHash }: { terms: ValuationOv
     <>
       <div className="flex flex-col gap-1.5">
         <FieldCaption>{t("approval.valuation.aum")}</FieldCaption>
-        <p className="text-4xl font-semibold leading-none tabular-nums text-foreground">
+        <p className="text-4xl font-semibold leading-none tabular-nums text-ink">
           {/* The wire string, digit for digit — `payload_hash` covers the exact decimal. */}
           {formatExactUsdt(terms.aum)}
-          <span className="ml-2 text-base font-medium text-muted-foreground">USDT</span>
+          <span className="ml-2 text-base font-medium text-ink-soft">USDT</span>
         </p>
       </div>
 
@@ -43,8 +43,8 @@ export function ValuationTermsBlock({ terms, payloadHash }: { terms: ValuationOv
         <DetailRow label={t("approval.payloadHash")} value={hashPrefix(payloadHash)} mono />
       </div>
 
-      <p className="text-xs text-muted-foreground">{t("approval.valuation.executes")}</p>
-      <p className="text-xs text-muted-foreground">{t("approval.valuation.payloadHashHint")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.valuation.executes")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.valuation.payloadHashHint")}</p>
 
       <Separator />
     </>

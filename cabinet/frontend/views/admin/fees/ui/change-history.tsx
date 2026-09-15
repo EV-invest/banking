@@ -20,7 +20,7 @@ import { WaiverNote } from "@/views/admin/fees/ui/notice-waiver";
 
 // The house table idiom (`views/trade/ui/fills-table.tsx`): uikit's `Table` carries the
 // borders, the cell padding and the scroll wrapper; only the header treatment is ours.
-const HEAD = "h-8 text-xs font-medium uppercase tracking-wide text-muted-foreground";
+const HEAD = "h-8 text-xs font-medium uppercase tracking-wide text-ink-soft";
 
 export function ChangeHistory({ service }: { service: string }) {
   const t = useT();
@@ -72,10 +72,10 @@ export function ChangeHistory({ service }: { service: string }) {
                   <TableCell className="align-top tabular-nums">{termsSummary(c, t)}</TableCell>
                   {/* "0" while a change awaits the owners: the moment is not known until
                       they carry it, and a dash says so better than 1 Jan 1970 would. */}
-                  <TableCell className="align-top tabular-nums text-muted-foreground">{hasStamp(c.effective_from) ? formatMoment(c.effective_from, locale) : "—"}</TableCell>
+                  <TableCell className="align-top tabular-nums text-ink-soft">{hasStamp(c.effective_from) ? formatMoment(c.effective_from, locale) : "—"}</TableCell>
                   {/* The one free-text column: it wraps (uikit cells default to nowrap) so a
                       long reason costs height, not a sideways scroll of the whole table. */}
-                  <TableCell className="max-w-xs align-top whitespace-normal text-muted-foreground">{c.reason.trim() || "—"}</TableCell>
+                  <TableCell className="max-w-xs align-top whitespace-normal text-ink-soft">{c.reason.trim() || "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -124,7 +124,7 @@ export function OverviewView() {
           <CardContent className="space-y-4 py-5">
             <div>
               <h2 className="text-base font-semibold">{t("admin.overview.fleetHealth")}</h2>
-              <p className="text-xs text-muted-foreground">{t("admin.overview.fleetHealthSub")}</p>
+              <p className="text-xs text-ink-soft">{t("admin.overview.fleetHealthSub")}</p>
             </div>
             {!overview ? (
               <Skeleton className="h-48 w-full" />
@@ -133,7 +133,7 @@ export function OverviewView() {
                 <thead>
                   {/* i18n-max: 14 per header — an auto-layout table; a long header widens
                       its column at the expense of the two beside it. */}
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
                     <th className="py-2 font-medium">{t("admin.overview.col.service")}</th>
                     <th className="py-2 font-medium">{t("admin.overview.col.kind")}</th>
                     <th className="py-2 font-medium">{t("admin.col.status")}</th>
@@ -143,7 +143,7 @@ export function OverviewView() {
                   {overview.services.map((s) => (
                     <tr key={s.name}>
                       <td className="py-2.5 font-medium">{s.name}</td>
-                      <td className="py-2.5 capitalize text-muted-foreground">{s.kind}</td>
+                      <td className="py-2.5 capitalize text-ink-soft">{s.kind}</td>
                       <td className="py-2.5">
                         <StatusDot status={s.status} label={statusLabel(s.status, t)} />
                       </td>
@@ -173,7 +173,7 @@ export function OverviewView() {
         <CardContent className="space-y-4 py-5">
           <div>
             <h2 className="text-base font-semibold">{t("admin.overview.parkedEvents")}</h2>
-            <p className="text-xs text-muted-foreground">{t("admin.overview.parkedEventsSub")}</p>
+            <p className="text-xs text-ink-soft">{t("admin.overview.parkedEventsSub")}</p>
           </div>
           {unparkError && (
             <p className="flex items-center gap-2 text-xs text-destructive">
@@ -188,15 +188,15 @@ export function OverviewView() {
           {!parked ? (
             <Skeleton className="h-16 w-full" />
           ) : parkedHint ? (
-            <p className="text-sm text-muted-foreground">{parkedHint}</p>
+            <p className="text-sm text-ink-soft">{parkedHint}</p>
           ) : parked.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("admin.overview.noParkedEvents")}</p>
+            <p className="text-sm text-ink-soft">{t("admin.overview.noParkedEvents")}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 {/* i18n-max: 14 per header — auto-layout table; the Reason cell is the one
                     that gives width back, and it is already `truncate`d. */}
-                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
                   <th className="py-2 font-medium">{t("admin.overview.col.seq")}</th>
                   <th className="py-2 font-medium">{t("admin.overview.col.event")}</th>
                   <th className="py-2 font-medium">
@@ -212,24 +212,24 @@ export function OverviewView() {
               <tbody className="divide-y divide-border">
                 {parked.map((e) => (
                   <tr key={e.seq}>
-                    <td className="py-2.5 font-mono-tech text-xs text-muted-foreground">{e.seq}</td>
+                    <td className="py-2.5 font-mono-tech text-xs text-ink-soft">{e.seq}</td>
                     <td className="py-2.5">
                       <p className="font-medium">{e.kind}</p>
-                      <p className="font-mono-tech text-xs text-muted-foreground">
+                      <p className="font-mono-tech text-xs text-ink-soft">
                         {e.aggregate} · {e.aggregate_id}
                       </p>
                     </td>
-                    <td className="py-2.5 text-muted-foreground">
+                    <td className="py-2.5 text-ink-soft">
                       <div className="max-w-70 truncate" title={e.reason}>
                         {e.reason || "—"}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap py-2.5 text-muted-foreground">{ago(e.parked_at, t)}</td>
+                    <td className="whitespace-nowrap py-2.5 text-ink-soft">{ago(e.parked_at, t)}</td>
                     <td className="py-2.5 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {/* i18n-max: 12 per badge — three chips and a button share this cell. */}
                         {e.compensated && (
-                          <span className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-foreground/5 px-2 py-0.5 text-xs font-medium text-foreground">
+                          <span className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-ink/5 px-2 py-0.5 text-xs font-medium text-ink">
                             {t("admin.overview.compensated")}
                             <TipAnchor anchor="admin.overview.parked.compensated" />
                           </span>
@@ -266,11 +266,11 @@ function Kpi({ label, value, hint, tone, tip }: { label: string; value: string |
     <Card>
       <CardContent className="space-y-1 py-5">
         <div className="flex items-center gap-1.5">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="text-xs uppercase tracking-wide text-ink-soft">{label}</p>
           {tip && <TipAnchor anchor={tip} />}
         </div>
         {value === undefined ? <Skeleton className="mt-1 h-8 w-20" /> : <p className={`text-3xl font-semibold tabular-nums ${tone ?? ""}`}>{value}</p>}
-        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+        {hint && <p className="text-xs text-ink-soft">{hint}</p>}
       </CardContent>
     </Card>
   );
@@ -279,8 +279,8 @@ function Kpi({ label, value, hint, tone, tip }: { label: string; value: string |
 function ObsPanel({ label, hint }: { label: string; hint: string }) {
   return (
     <div className="rounded-lg border border-dashed border-border p-3">
-      <p className="text-xs font-semibold text-foreground">{label}</p>
-      <p className="text-xs text-muted-foreground">{hint}</p>
+      <p className="text-xs font-semibold text-ink">{label}</p>
+      <p className="text-xs text-ink-soft">{hint}</p>
     </div>
   );
 }

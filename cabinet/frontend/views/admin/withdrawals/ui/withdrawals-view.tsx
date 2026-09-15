@@ -67,7 +67,7 @@ export function WithdrawalsView() {
       {error && <ResourceError message={error} />}
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
           {t("admin.withdrawals.awaitingAction")}
           {/* The count pill lands on the same step as the label it trails, so its fill and
               accent colour — not a smaller size — are what set it apart. */}
@@ -88,13 +88,13 @@ export function WithdrawalsView() {
               }
             >
               {!queue ? null : queue.length === 0 ? (
-                <p className="p-8 text-center text-sm text-muted-foreground">{t("admin.withdrawals.empty")}</p>
+                <p className="p-8 text-center text-sm text-ink-soft">{t("admin.withdrawals.empty")}</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     {/* i18n-max: 14 per header — auto-layout table with no scroll wrapper;
                         the address cell is the one that gives width back. */}
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
                       <th className="px-5 py-3 font-medium">{t("admin.col.user")}</th>
                       <th className="px-5 py-3 font-medium">
                         <span className="flex items-center gap-1.5">
@@ -145,7 +145,7 @@ export function WithdrawalsView() {
             </Settled>
           </CardContent>
         </Card>
-        <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.withdrawals.footnote")}</p>
+        <p className="max-w-3xl text-xs text-ink-soft">{t("admin.withdrawals.footnote")}</p>
       </StaggerItem>
     </AdminScreen>
   );
@@ -190,7 +190,7 @@ function WithdrawalRow({
           ) : (
             <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
           )}
-          <p className="font-mono-tech text-xs text-muted-foreground">{item.withdrawal_id.slice(0, 8)}</p>
+          <p className="font-mono-tech text-xs text-ink-soft">{item.withdrawal_id.slice(0, 8)}</p>
         </td>
         <td className="px-5 py-3">
           {/* Was the bare wire id under a `uppercase` class. The rail's short mark comes
@@ -198,7 +198,7 @@ function WithdrawalRow({
               chain is not named two different ways in two consoles, and `Polygon` keeps
               the casing it is actually written with. The console's long prose form
               (`railLabel`, "BEP20 · BNB Chain") is for cards, not this dense cell. */}
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <p className="flex items-center gap-1.5 text-xs text-ink-soft">
             <NetworkMark network={item.network} className="size-3.5 shrink-0" />
             {networkLabel(item.network)}
           </p>
@@ -208,12 +208,12 @@ function WithdrawalRow({
         </td>
         <td className="px-5 py-3 tabular-nums">
           <p>{formatUsd(item.amount)}</p>
-          <p className="text-xs text-muted-foreground">{t("admin.withdrawals.netSuffix", { amount: formatUsd(item.net_amount) })}</p>
+          <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", { amount: formatUsd(item.net_amount) })}</p>
         </td>
         <td className="px-5 py-3">
           <span className={queued ? "text-main-accent-t3" : "text-main-accent-t2"}>{stateLabel(item.state, t)}</span>
         </td>
-        <td className="px-5 py-3 text-muted-foreground">{ago(item.created_at, t)}</td>
+        <td className="px-5 py-3 text-ink-soft">{ago(item.created_at, t)}</td>
         <td className="px-5 py-3">
           {/* i18n-max: 12 per verb — up to two `shrink-0` Buttons share this cell. */}
           <div className="flex justify-end gap-2">
@@ -243,7 +243,7 @@ function WithdrawalRow({
         </td>
       </tr>
       {panel && (
-        <tr className="bg-foreground/5">
+        <tr className="bg-ink/5">
           <td colSpan={6} className="px-5 py-3">
             {panel.kind === "settle" ? (
               <div className="flex items-center gap-3">

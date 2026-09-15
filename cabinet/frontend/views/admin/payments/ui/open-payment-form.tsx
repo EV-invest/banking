@@ -80,7 +80,7 @@ export function OpenPaymentForm() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">{t("admin.payments.formNote")}</p>
+      <p className="text-xs text-ink-soft">{t("admin.payments.formNote")}</p>
       {refusal && <RefusalNotice refusal={refusal.detail} liftsAt={refusal.liftsAt} />}
       {opened && <OpenedReceipt payment={opened} onDismiss={() => setOpened(null)} />}
       {error !== null && <ResourceError message={errorMessage(error, t)} />}

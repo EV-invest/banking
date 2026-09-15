@@ -45,7 +45,7 @@ export function BookForm({ allocation, policy, busy, saved, onSubmit }: { alloca
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{t("admin.alloc.book.field.open")}</p>
-          <p className="text-xs text-muted-foreground">{t(draft.open ? "admin.alloc.book.openHint" : "admin.alloc.book.closedHint")}</p>
+          <p className="text-xs text-ink-soft">{t(draft.open ? "admin.alloc.book.openHint" : "admin.alloc.book.closedHint")}</p>
         </div>
         <Switch checked={draft.open} onCheckedChange={(open) => edit({ open })} disabled={busy} aria-label={t("admin.alloc.book.field.open")} />
       </div>
@@ -55,7 +55,7 @@ export function BookForm({ allocation, policy, busy, saved, onSubmit }: { alloca
       <BookUnbackedAck checked={draft.allowUnbackedTrading} onChange={(allowUnbackedTrading) => edit({ allowUnbackedTrading })} backing={backingOf(allocation)} required={unacknowledged} disabled={busy} />
 
       <Collapsible open={advanced} onOpenChange={setAdvanced}>
-        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md py-1 text-xs font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md py-1 text-xs font-medium text-ink-soft outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
           {t("admin.alloc.book.advanced")}
           <ChevronDown className={cn("size-3.5 transition-transform", advanced && "rotate-180")} />
         </CollapsibleTrigger>
@@ -82,9 +82,9 @@ export function BookForm({ allocation, policy, busy, saved, onSubmit }: { alloca
 function Field({ label, value, onChange, problem, hint }: { label: string; value: string; onChange: (value: string) => void; problem: string | null; hint: string }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs text-ink-soft">{label}</span>
       <Input inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="w-full tabular-nums" />
-      <span className={cn("text-xs", problem ? "text-destructive" : "text-muted-foreground")}>{problem ?? hint}</span>
+      <span className={cn("text-xs", problem ? "text-destructive" : "text-ink-soft")}>{problem ?? hint}</span>
     </label>
   );
 }

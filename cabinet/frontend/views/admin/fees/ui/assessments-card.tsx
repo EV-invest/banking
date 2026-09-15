@@ -16,7 +16,7 @@ import { ago, formatUnits, formatUsdt } from "@/views/admin/lib/format";
 
 // The house table idiom (`views/trade/ui/fills-table.tsx`): uikit's `Table` carries the
 // borders, the cell padding and the scroll wrapper; only the header treatment is ours.
-const HEAD = "h-8 text-xs font-medium uppercase tracking-wide text-muted-foreground";
+const HEAD = "h-8 text-xs font-medium uppercase tracking-wide text-ink-soft";
 
 export function AssessmentsCard({ service }: { service: string }) {
   const t = useT();
@@ -60,7 +60,7 @@ export function AssessmentsCard({ service }: { service: string }) {
             <TableBody>
               {rows.map((a, i) => (
                 <TableRow key={`${a.assessed_at}-${i}`}>
-                  <TableCell className="text-muted-foreground">{ago(a.assessed_at, t)}</TableCell>
+                  <TableCell className="text-ink-soft">{ago(a.assessed_at, t)}</TableCell>
                   <TableCell>{triggerLabel(a.trigger, t)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatUsdt(a.management)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatUsdt(a.performance)}</TableCell>
@@ -68,7 +68,7 @@ export function AssessmentsCard({ service }: { service: string }) {
                   {/* Non-zero means the holding could not cover the charge and the rest
                       rides to the next one. Worth its own column: it is the only reason
                       a charge collects less than it assessed. */}
-                  <TableCell className={cn("text-right tabular-nums", Number(a.debt_carried) > 0 ? "text-main-accent-t3" : "text-muted-foreground")}>
+                  <TableCell className={cn("text-right tabular-nums", Number(a.debt_carried) > 0 ? "text-main-accent-t3" : "text-ink-soft")}>
                     {formatUsdt(a.debt_carried)}
                   </TableCell>
                 </TableRow>

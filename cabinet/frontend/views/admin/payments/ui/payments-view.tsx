@@ -26,7 +26,7 @@ export function PaymentsView() {
       <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.payments")} subtitle={t("admin.payments.subtitle")} />
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.payments.open")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.payments.open")}</p>
         <Card>
           <CardContent className="py-5">
             <OpenPaymentForm />

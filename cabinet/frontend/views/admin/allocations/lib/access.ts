@@ -31,6 +31,6 @@ export function accessTone(level: AllocationAccessLevel): string {
     case "view":
       return "border-main-accent-t3/40 bg-main-accent-t3/10 text-main-accent-t3";
     case "hidden":
-      return "border-border text-muted-foreground";
+      return "border-border text-ink-soft";
   }
 }

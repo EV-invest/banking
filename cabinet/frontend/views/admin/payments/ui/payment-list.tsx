@@ -46,9 +46,9 @@ export function PaymentList() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.payments.list")}</span>
+        <span className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.payments.list")}</span>
         <div className="ml-auto inline-flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">{t("admin.col.state")}:</span>
+          <span className="text-ink-soft">{t("admin.col.state")}:</span>
           <Select value={state} onValueChange={setState}>
             <SelectTrigger size="sm" className="border-border bg-main-surface">
               <span className="truncate">{state ? paymentStateLabel(state, t) : t("ui.all")}</span>
@@ -94,7 +94,7 @@ export function PaymentList() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-200 text-sm">
                     <thead>
-                      <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
                         <th className="px-5 py-3 font-medium">{t("admin.payments.col.opened")}</th>
                         <th className="px-5 py-3 font-medium">{t("admin.payments.col.ends")}</th>
                         <th className="px-5 py-3 font-medium">{t("admin.payments.col.amountUsdt")}</th>

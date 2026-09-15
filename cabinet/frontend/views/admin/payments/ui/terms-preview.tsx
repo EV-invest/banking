@@ -22,14 +22,14 @@ export function TermsPreview({ source, destination }: { source: EndDraft; destin
   return (
     <dl className="grid gap-3 rounded-lg border border-border bg-main-surface p-3 sm:grid-cols-2">
       <div className="min-w-0 space-y-0.5">
-        <dt className="text-xs text-muted-foreground">{t("admin.payments.tier")}</dt>
-        <dd className="text-sm font-medium text-foreground">{tierLabel(tier, t)}</dd>
-        <dd className="text-xs text-muted-foreground">{t(`payment.tier.hint.${tier}`)}</dd>
+        <dt className="text-xs text-ink-soft">{t("admin.payments.tier")}</dt>
+        <dd className="text-sm font-medium text-ink">{tierLabel(tier, t)}</dd>
+        <dd className="text-xs text-ink-soft">{t(`payment.tier.hint.${tier}`)}</dd>
       </div>
       <div className="min-w-0 space-y-0.5">
-        <dt className="text-xs text-muted-foreground">{t("admin.payments.requirement")}</dt>
-        <dd className="text-sm font-medium text-foreground">{requirementLabel(requirement, t)}</dd>
-        <dd className="text-xs text-muted-foreground">{t(`payment.requirement.hint.${requirement}`)}</dd>
+        <dt className="text-xs text-ink-soft">{t("admin.payments.requirement")}</dt>
+        <dd className="text-sm font-medium text-ink">{requirementLabel(requirement, t)}</dd>
+        <dd className="text-xs text-ink-soft">{t(`payment.requirement.hint.${requirement}`)}</dd>
       </div>
     </dl>
   );
@@ -72,8 +72,8 @@ export function ReviewPanel({
         })}
       </p>
       {/* The operator's own words, set apart: this is what the approvers will read. */}
-      <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-foreground">{reason.trim()}</blockquote>
-      <p className="text-xs text-muted-foreground">{t(`admin.payments.reviewNote.${requirement}`)}</p>
+      <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-ink">{reason.trim()}</blockquote>
+      <p className="text-xs text-ink-soft">{t(`admin.payments.reviewNote.${requirement}`)}</p>
       <div className="flex gap-2">
         <Button type="button" size="sm" disabled={busy} aria-busy={busy} onClick={onConfirm}>
           {busy ? <Spinner aria-hidden /> : null}

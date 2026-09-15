@@ -25,11 +25,11 @@ export function AllocationCard({ row, busy, editing, onEdit, onSave, onToggle, o
   return (
     <div className="space-y-3 px-4 py-4">
       <div className="flex items-start gap-2.5">
-        <ProductIcon icon={row.icon} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <ProductIcon icon={row.icon} className="mt-0.5 size-4 shrink-0 text-ink-soft" />
         <div className="min-w-0 flex-1">
           <p className="font-medium">{row.title}</p>
-          {row.summary && <p className="text-xs text-muted-foreground">{row.summary}</p>}
-          <p className="font-mono-tech text-xs text-muted-foreground">{row.service}</p>
+          {row.summary && <p className="text-xs text-ink-soft">{row.summary}</p>}
+          <p className="font-mono-tech text-xs text-ink-soft">{row.service}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <AllocationStateCell state={row.state} />
@@ -38,19 +38,19 @@ export function AllocationCard({ row, busy, editing, onEdit, onSave, onToggle, o
       </div>
       <dl className="space-y-2 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <dt className="text-xs text-muted-foreground">{t("admin.alloc.col.access")}</dt>
+          <dt className="text-xs text-ink-soft">{t("admin.alloc.col.access")}</dt>
           <dd>
             <AllocationAccessCell access={access} onChange={onSetAccess} />
           </dd>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <dt className="text-xs text-muted-foreground">{t("admin.alloc.col.unitCap")}</dt>
-          <dd className="tabular-nums text-muted-foreground">{compactUnits(row.unit_cap)}</dd>
+          <dt className="text-xs text-ink-soft">{t("admin.alloc.col.unitCap")}</dt>
+          <dd className="tabular-nums text-ink-soft">{compactUnits(row.unit_cap)}</dd>
         </div>
       </dl>
       <AllocationRowActions state={row.state} busy={busy} editing={editing} onOpenPanel={onOpenPanel} onEdit={onEdit} onToggle={onToggle} className="justify-start" />
       {editing && (
-        <div className="rounded-lg bg-foreground/[0.03] p-3">
+        <div className="rounded-lg bg-ink/[0.03] p-3">
           <AllocationEditor row={row} busy={busy} onSave={onSave} />
         </div>
       )}

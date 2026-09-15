@@ -83,13 +83,13 @@ export function InvestView() {
           <PortfolioBand invested={totals.value} cost={totals.cost} funds={held.length} available={available} queued={queued.length} />
 
           <StaggerItem as="section" className="space-y-3">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
               {t("invest.products")}
               {products.length > 0 &&<span className="rounded-full bg-main-accent-t1/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t1">{products.length}</span>}
             </p>
             {products.length === 0 ? (
               <Card>
-                <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
+                <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-ink-soft">
                   <Sparkles className="size-6" />
                   <p className="text-sm">{t("invest.noFunds")}</p>
                   <p className="max-w-sm text-xs">{t("invest.noFundsHint")}</p>
@@ -138,7 +138,7 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
           <p className="text-xs font-semibold uppercase tracking-widest text-main-accent-t1">{t("invest.investedValue")}</p>
           <div className="flex flex-wrap items-baseline gap-2.5">
             <span className="text-3xl font-semibold leading-none tabular-nums">{formatUsdt(fromBaseUnits(invested))}</span>
-            <span className="text-sm text-muted-foreground">USDT</span>
+            <span className="text-sm text-ink-soft">USDT</span>
             {!flat && (
               <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", loss ? "bg-main-accent-t4/15 text-main-accent-t4" : "bg-main-accent-t2/15 text-main-accent-t2")}>
                 {formatSignedUsdt(fromBaseUnits(pnl))}
@@ -146,7 +146,7 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">{funds === 0 ? t("invest.noUnitsHeld") : t("invest.acrossFunds", { n: funds })}</p>
+          <p className="text-xs text-ink-soft">{funds === 0 ? t("invest.noUnitsHeld") : t("invest.acrossFunds", { n: funds })}</p>
         </div>
 
         <div className="flex flex-wrap gap-8 md:border-l md:border-border md:px-7">
@@ -160,7 +160,7 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
         </div>
 
         <div className="space-y-2 md:border-l md:border-border md:pl-7">
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <p className="flex items-center gap-1.5 text-xs text-ink-soft">
             <Wallet className="size-3.5" /> {t("invest.availableToInvest")}
           </p>
           <p className="text-xl font-semibold tabular-nums">{available === null ? "—" : `${formatUsdt(available)} USDT`}</p>
@@ -176,7 +176,7 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
 function BandStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="space-y-1">
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-xs text-ink-soft">{label}</p>
       <p className={cn("text-sm font-semibold tabular-nums", tone)}>{value}</p>
     </div>
   );
@@ -216,11 +216,11 @@ function ProductCard({ product }: { product: Product }) {
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold">{product.title}</p>
-            <p className="truncate font-mono-tech text-xs text-muted-foreground">{product.service}</p>
+            <p className="truncate font-mono-tech text-xs text-ink-soft">{product.service}</p>
           </div>
           {/* A non-shrinking sibling of the `min-w-0 flex-1` title column, so a long badge
               is taken straight out of the fund's name. i18n-max: 12. */}
-          <Badge variant="outline" className={cn(closed ? "border-main-accent-t3/40 text-main-accent-t3" : locked ? "border-border text-muted-foreground" : "border-main-accent-t2/40 text-main-accent-t2")}>
+          <Badge variant="outline" className={cn(closed ? "border-main-accent-t3/40 text-main-accent-t3" : locked ? "border-border text-ink-soft" : "border-main-accent-t2/40 text-main-accent-t2")}>
             {closed ? t("invest.badge.redeemOnly") : locked ? t("invest.badge.locked") : t("invest.badge.open")}
           </Badge>
         </div>
@@ -240,8 +240,8 @@ function ProductCard({ product }: { product: Product }) {
             </>
           ) : (
             <div className="ml-auto space-y-1 text-right">
-              <p className="text-xs text-muted-foreground">{t("invest.yourPosition")}</p>
-              <p className="text-sm text-muted-foreground">{t("invest.notInvestedYet")}</p>
+              <p className="text-xs text-ink-soft">{t("invest.yourPosition")}</p>
+              <p className="text-sm text-ink-soft">{t("invest.notInvestedYet")}</p>
             </div>
           )}
         </div>
@@ -264,7 +264,7 @@ function ProductCard({ product }: { product: Product }) {
 function CardStat({ label, value, large, tone, icon }: { label: string; value: string; large?: boolean; tone?: string; icon?: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-xs text-ink-soft">{label}</p>
       <p className={cn("flex items-center gap-1 font-semibold tabular-nums", large ? "text-xl" : "text-sm", tone)}>
         {icon}
         {value}
