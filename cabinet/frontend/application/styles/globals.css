@@ -2,6 +2,13 @@
 @import "tw-animate-css";
 @import "@evinvest/uikit/styles/tokens.css";
 
+/* Token values are the kit's. A fix that has to ship before lib republishes is mirrored
+   between these two markers and nowhere else — `shared/config/token-override.test.ts`
+   rejects a kit token redeclared outside them, and fails the block itself once the
+   installed uikit carries the same value, so the mirror cannot outlive its bump. */
+/* BEGIN temporary token override */
+/* END temporary token override */
+
 /* The shared UI kit ships compiled; point Tailwind at its dist so the classes
    baked into @evinvest/uikit components are generated. Deps hoist to the REPO
    ROOT node_modules (npm workspaces) — four levels up from this file, not
