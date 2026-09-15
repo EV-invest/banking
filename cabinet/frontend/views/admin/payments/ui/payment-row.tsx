@@ -63,7 +63,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
       <td className="px-5 py-3 text-xs">
         <span className={cn("font-medium", paymentStateTone(payment.state))}>{paymentStateLabel(payment.state, t)}</span>
         {open && <p className="tabular-nums text-ink-soft">{expiresIn(payment.expires_at, t)}</p>}
-        {payment.failure_reason && <p className="break-words text-destructive">{payment.failure_reason}</p>}
+        {payment.failure_reason && <p className="break-words text-accent-error">{payment.failure_reason}</p>}
       </td>
       <td className="px-5 py-3">
         <div className="flex justify-end">

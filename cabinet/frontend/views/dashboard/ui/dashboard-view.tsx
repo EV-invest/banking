@@ -225,7 +225,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
             {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={formatUsd} /></p>}
             {allTimePct !== null && (
-              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", down ? "border-destructive/40 text-destructive" : "border-main-accent-t3/40 text-main-accent-t3")}>
+              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", down ? "border-accent-error/40 text-accent-error" : "border-main-accent-t3/40 text-main-accent-t3")}>
                 {down ? <TrendingDown /> : <TrendingUp />}
                 {t("dash.allTimeSuffix", { pct: formatPct(allTimePct) })}
                 <TipAnchor anchor="dashboard.performance.all-time-return" />
@@ -373,8 +373,8 @@ function WhatIOwn({ allocations, total, loading, className }: { allocations: { n
 // `format` has to be a stable reference (all of these are module functions from
 // shared/lib/money) or the count restarts on every parent render.
 function Stat({ label, value, format, tone, hint, tip }: { label: string; value: number | null; format: (n: number) => string; tone?: "gain" | "loss"; hint: string; tip?: TipKey }) {
-  const valueClass = tone === "gain" ? "text-main-accent-t2" : tone === "loss" ? "text-destructive" : "text-ink";
-  const hintClass = tone === "gain" ? "text-main-accent-t2/80" : tone === "loss" ? "text-destructive/80" : "text-ink-soft";
+  const valueClass = tone === "gain" ? "text-main-accent-t2" : tone === "loss" ? "text-accent-error" : "text-ink";
+  const hintClass = tone === "gain" ? "text-main-accent-t2/80" : tone === "loss" ? "text-accent-error/80" : "text-ink-soft";
   return (
     // Its own tile on mobile, a cell of the shared strip from `lg`.
     <Card className="min-w-0 flex-1 gap-1 px-3.5 py-3 lg:min-w-30 lg:gap-1.5 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">

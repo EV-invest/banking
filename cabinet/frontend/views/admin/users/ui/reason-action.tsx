@@ -63,7 +63,7 @@ export function ReasonAction({
         type="button"
         variant="outline"
         size="sm"
-        className={destructive ? "w-full border-destructive/40 text-destructive hover:bg-destructive/10" : "w-full"}
+        className={destructive ? "w-full border-accent-error/40 text-accent-error hover:bg-accent-error/10" : "w-full"}
         disabled={busy}
         onClick={onOpen}
       >

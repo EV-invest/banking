@@ -84,7 +84,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
         <p className="text-xs text-ink-soft">{t("admin.fees.pending.requested", { when: ago(change.requested_at, t) })}</p>
         <NoticeWaiver change={change} />
 
-        {problem && <p className="text-xs text-destructive">{problem}</p>}
+        {problem && <p className="text-xs text-accent-error">{problem}</p>}
 
         {confirming ? (
           <Alert variant="destructive" role="status">

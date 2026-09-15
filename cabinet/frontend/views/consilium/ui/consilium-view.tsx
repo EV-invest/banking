@@ -567,7 +567,7 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
         // Cancelling voids every approval collected so far — votes are not carried over
         // when a request is reopened (policy 12), so this is not the reversible click its
         // single ghost button made it look like.
-        <div className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3.5">
+        <div className="flex flex-col gap-3 rounded-lg border border-accent-error/40 bg-accent-error/10 p-3.5">
           <p className="text-sm leading-relaxed text-ink">{t("consilium.payout.cancelWarning", { approvals })}</p>
           <div className="flex flex-col gap-2.5 sm:flex-row">
             <Button variant="destructive" size="sm" disabled={busy} onClick={() => void cancel()}>

@@ -77,7 +77,7 @@ export function CollectCard({ service }: { service: string }) {
 
         <p className="text-xs text-ink-soft">{t("admin.fees.settleNote")}</p>
 
-        {problem && <p className="text-xs text-destructive">{problem}</p>}
+        {problem && <p className="text-xs text-accent-error">{problem}</p>}
         {/* Two independently complete sentences, so the settlement line and the pointer to
             the payout screen stay separate keys; the screen's own name is interpolated so it
             tracks whatever the nav calls it. The emphasis on that name is the one casualty

@@ -52,10 +52,10 @@ const KINDS: Record<string, KindMeta> = {
   // verb ("deposit funds"). English spells both "Deposit" and hid the difference; German
   // and Russian each have to pick one, and both translators raised it independently.
   deposit: { icon: ArrowDownLeft, labelKey: "ops.kind.deposit", direction: "in", tone: "bg-main-accent-t2/15 text-main-accent-t2" },
-  withdrawal: { icon: ArrowUpRight, labelKey: "ops.kind.withdrawal", direction: "out", tone: "bg-destructive/15 text-destructive" },
+  withdrawal: { icon: ArrowUpRight, labelKey: "ops.kind.withdrawal", direction: "out", tone: "bg-accent-error/15 text-accent-error" },
   subscription: { icon: Plus, labelKey: "ops.kind.subscription", direction: "move", tone: "bg-main-accent-t1/15 text-main-accent-t1" },
   redemption: { icon: Minus, labelKey: "ops.kind.redemption", direction: "move", tone: "bg-main-accent-t3/15 text-main-accent-t3" },
-  fee: { icon: Percent, labelKey: "ops.kind.fee", direction: "out", tone: "bg-destructive/15 text-destructive" },
+  fee: { icon: Percent, labelKey: "ops.kind.fee", direction: "out", tone: "bg-accent-error/15 text-accent-error" },
 };
 
 const UNKNOWN_KIND: KindMeta = { icon: null, labelKey: null, direction: "move", tone: "bg-muted text-ink-soft" };
@@ -88,7 +88,7 @@ export function kindLabel(kind: string | undefined, t: Translate): string {
 /** The amount colour that goes with a direction. Neutral moves keep the body colour. */
 export function amountTone(direction: Direction): string {
   if (direction === "in") return "text-main-accent-t2";
-  if (direction === "out") return "text-destructive";
+  if (direction === "out") return "text-accent-error";
   return "text-ink";
 }
 
@@ -145,7 +145,7 @@ export function stateTone(state: string | undefined): string {
     case "partly_deferred":
       return "bg-main-accent-t3/15 text-main-accent-t3";
     case "failed":
-      return "bg-destructive/15 text-destructive";
+      return "bg-accent-error/15 text-accent-error";
     default:
       return "bg-muted text-ink-soft";
   }

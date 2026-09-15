@@ -56,7 +56,7 @@ export function OrdersTable({ orders, busyId, onCancel }: { orders: Order[]; bus
               <TableCell className={cn(CELL, "text-right")}>{formatUsdt(order.fee_paid)}</TableCell>
               {/* An unmapped state falls back to the wire word — a value the hub added that
                   this build has no word for, shown rather than swallowed. */}
-              <TableCell className={cn(CELL, order.state === "rejected" && "text-destructive")} title={order.reject_reason || undefined}>
+              <TableCell className={cn(CELL, order.state === "rejected" && "text-accent-error")} title={order.reject_reason || undefined}>
                 {stateKey ? t(stateKey) : (order.state ?? "—")}
               </TableCell>
               {onCancel && (

@@ -150,8 +150,8 @@ export function PolicyCard({
         />
 
         {blocked && <p className="text-xs text-ink-soft">{t("admin.fees.pendingBlocks")}</p>}
-        {rateProblem && !blocked && <p className="text-xs text-destructive">{rateProblem}</p>}
-        {problem && <p className="text-xs text-destructive">{problem}</p>}
+        {rateProblem && !blocked && <p className="text-xs text-accent-error">{rateProblem}</p>}
+        {problem && <p className="text-xs text-accent-error">{problem}</p>}
 
         <Button type="button" onClick={schedule} disabled={busy || blocked || invalid}>
           {busy && <Loader2 className="size-4 animate-spin" />}

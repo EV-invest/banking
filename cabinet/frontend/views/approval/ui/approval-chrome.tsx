@@ -270,7 +270,7 @@ export function ApprovalBurned({ description }: { description?: string }) {
   return (
     <ApprovalOutcome
       icon={<ShieldX />}
-      tone="text-destructive"
+      tone="text-accent-error"
       title={t("approval.burned.title")}
       description={description ?? t("approval.burned.body")}
     />

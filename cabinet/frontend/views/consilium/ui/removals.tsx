@@ -214,7 +214,7 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
                 </Button>
                 <Button
                   variant="outline"
-                  className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive sm:flex-1"
+                  className="border-accent-error/40 text-accent-error hover:bg-accent-error/10 hover:text-accent-error sm:flex-1"
                   disabled={busy !== null}
                   onClick={() => void act("remove")}
                 >
@@ -416,7 +416,7 @@ export function ProposeRemoval({
 
               <Button
                 variant="outline"
-                className="self-start border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="self-start border-accent-error/40 text-accent-error hover:bg-accent-error/10 hover:text-accent-error"
                 disabled={busy || !target || reason.trim().length === 0}
                 onClick={() => void submit()}
               >

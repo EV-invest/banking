@@ -232,8 +232,8 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
               )}
 
               {error && (
-                <Panel key="error" from="bottom" className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-5")}>
-                  <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
+                <Panel key="error" from="bottom" className={cn(WALLET_CARD, "flex gap-3 border-accent-error/50 p-4.5 lg:p-5")}>
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0 text-accent-error" />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-ink">{t("wallet.withdrawalFailed")}</p>
                     <p className="text-xs text-ink-soft">{error}</p>

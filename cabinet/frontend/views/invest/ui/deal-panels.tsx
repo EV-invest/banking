@@ -98,7 +98,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
         </Button>
       </div>
 
-      <p className={cn("text-xs", dust || overCap ? "text-destructive" : "text-ink-soft")}>
+      <p className={cn("text-xs", dust || overCap ? "text-accent-error" : "text-ink-soft")}>
         {dust
           ? t("invest.dustHint", { nav: formatUsdt(nav?.nav) })
           : overCap
@@ -205,7 +205,7 @@ export function RedeemPanel({ service, position, nav, inKind = false }: { servic
         </div>
       )}
 
-      <p className={cn("text-xs", overdraw ? "text-destructive" : "text-ink-soft")}>
+      <p className={cn("text-xs", overdraw ? "text-accent-error" : "text-ink-soft")}>
         {overdraw
           ? t("invest.youHoldUnits", { n: Number(position.units ?? 0), units: formatUnits(position.units) })
           : estimate !== null
@@ -242,7 +242,7 @@ export function QueuedList({ items }: { items: Redemption[] }) {
         {t("invest.awaitingSettlement")}
         <TipAnchor anchor="invest.activity.status" />
       </p>
-      {!!error && <p className="text-xs text-destructive">{errorMessage(error, t)}</p>}
+      {!!error && <p className="text-xs text-accent-error">{errorMessage(error, t)}</p>}
       {items.map((r) => (
         <div key={r.id ?? ""} className="flex items-center justify-between gap-3 text-sm">
           <span>

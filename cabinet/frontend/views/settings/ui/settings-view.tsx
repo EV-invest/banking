@@ -221,7 +221,7 @@ export function SettingsView() {
         </StaggerItem>
 
         {error && (
-          <StaggerItem as="p" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
             {error}
           </StaggerItem>
         )}

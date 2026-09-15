@@ -195,7 +195,7 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
           </p>
 
           {state.error && (
-            <p className="flex items-center gap-2 text-sm text-destructive">
+            <p className="flex items-center gap-2 text-sm text-accent-error">
               <TriangleAlert className="size-4 shrink-0" /> {state.error}
             </p>
           )}

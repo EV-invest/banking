@@ -58,7 +58,7 @@ export function NotificationsSection() {
   }
 
   if (error && !settings) {
-    return <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>;
+    return <p className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">{error}</p>;
   }
 
   return (
@@ -156,7 +156,7 @@ export function NotificationsSection() {
             ))}
       </ListCard>
 
-      {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      {error && <p className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">{error}</p>}
       <p className="text-xs leading-relaxed text-ink-soft">{t("notif.channelsFootnote")}</p>
     </div>
   );

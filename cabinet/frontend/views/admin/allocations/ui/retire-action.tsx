@@ -110,7 +110,7 @@ export function RetireAction({ allocation, holders }: { allocation: Allocation; 
       )}
       {last && <IssuanceResult outcome={last} kind="retire" />}
       {error && (
-        <p className="flex items-center gap-2 text-xs text-destructive">
+        <p className="flex items-center gap-2 text-xs text-accent-error">
           <TriangleAlert className="size-3.5" /> {error}
         </p>
       )}

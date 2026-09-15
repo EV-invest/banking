@@ -204,7 +204,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
             <DetailRow
               label={t("approval.expires")}
               value={t("approval.expiresValue", { at: formatMoment(invitation.expires_at, locale), left: expiresIn(invitation.expires_at, t) })}
-              tone={expired ? "text-destructive" : undefined}
+              tone={expired ? "text-accent-error" : undefined}
             />
           </div>
 
@@ -277,7 +277,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
               <Button
                 size="lg"
                 variant="outline"
-                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive sm:shrink-0"
+                className="border-accent-error/40 text-accent-error hover:bg-accent-error/10 hover:text-accent-error sm:shrink-0"
                 disabled={code.trim().length === 0 || pending !== null}
                 onClick={() => void decide("reject")}
               >

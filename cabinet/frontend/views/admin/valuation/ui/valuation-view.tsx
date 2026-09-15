@@ -287,7 +287,7 @@ export function ValuationView() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                  className="border-accent-error/40 text-accent-error hover:bg-accent-error/10"
                                   disabled={busy === item.redemption_id}
                                   onClick={() => act(failRedemption, item.redemption_id)}
                                 >
@@ -405,7 +405,7 @@ function SupplyCapCard({
               {t("ui.reset")}
             </Button>
           )}
-          <p className={cn("min-w-48 flex-1 text-xs", invalid ? "text-destructive" : belowIssued ? "text-main-accent-t3" : "text-ink-soft")}>
+          <p className={cn("min-w-48 flex-1 text-xs", invalid ? "text-accent-error" : belowIssued ? "text-main-accent-t3" : "text-ink-soft")}>
             {invalid
               ? t("admin.valuation.capInvalid")
               : belowIssued

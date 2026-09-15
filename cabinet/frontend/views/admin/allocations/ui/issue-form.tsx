@@ -72,12 +72,12 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.units")}</span>
           <Input inputMode="decimal" value={draft.units} onChange={(e) => setDraft((d) => ({ ...d, units: e.target.value }))} className="w-full tabular-nums" />
-          {problem === "units" && draft.units.trim() !== "" && <span className="text-xs text-destructive">{t("admin.alloc.issue.problem.units")}</span>}
+          {problem === "units" && draft.units.trim() !== "" && <span className="text-xs text-accent-error">{t("admin.alloc.issue.problem.units")}</span>}
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.costBasis")}</span>
           <Input inputMode="decimal" value={draft.costBasis} onChange={(e) => setDraft((d) => ({ ...d, costBasis: e.target.value }))} className="w-full tabular-nums" />
-          <span className={cn("text-xs", problem === "costBasis" ? "text-destructive" : "text-ink-soft")}>
+          <span className={cn("text-xs", problem === "costBasis" ? "text-accent-error" : "text-ink-soft")}>
             {t(problem === "costBasis" ? "admin.alloc.issue.problem.costBasis" : "admin.alloc.issue.costBasisHint")}
           </span>
         </label>

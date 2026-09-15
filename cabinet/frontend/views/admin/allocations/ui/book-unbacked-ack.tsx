@@ -30,7 +30,7 @@ export function BookUnbackedAck({ checked, onChange, backing, required, disabled
       <p className={cn("flex items-start gap-2 text-xs", inKind ? "text-main-accent-t3" : "text-ink-soft")}>
         <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.book.unbacked.warning")}
       </p>
-      {required && <p className="text-xs text-destructive">{t("admin.alloc.book.unbacked.required")}</p>}
+      {required && <p className="text-xs text-accent-error">{t("admin.alloc.book.unbacked.required")}</p>}
     </div>
   );
 }

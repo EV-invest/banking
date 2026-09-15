@@ -324,7 +324,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
         {breakGlass && <p className="text-xs leading-relaxed text-ink-soft">{t("admin.users.breakGlassExplainer")}</p>}
 
         {error && (
-          <p className="flex items-center gap-2 text-xs text-destructive">
+          <p className="flex items-center gap-2 text-xs text-accent-error">
             <TriangleAlert className="size-3.5" /> {error}
           </p>
         )}
@@ -346,7 +346,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
             busy={busy === "kyc"}
             onSave={(next) => run("kyc", () => setKycLevel(summary.user_id, next))}
           />
-          <Button type="button" variant="outline" size="sm" className="mt-2 w-full border-destructive/40 text-destructive hover:bg-destructive/10" disabled={busy === "revoke"} onClick={() => run("revoke", () => revokeSessions(summary.user_id))}>
+          <Button type="button" variant="outline" size="sm" className="mt-2 w-full border-accent-error/40 text-accent-error hover:bg-accent-error/10" disabled={busy === "revoke"} onClick={() => run("revoke", () => revokeSessions(summary.user_id))}>
             {busy === "revoke" ? <Loader2 className="size-3.5 animate-spin" /> : null}
             {t("admin.users.revokeAllSessions")}
           </Button>

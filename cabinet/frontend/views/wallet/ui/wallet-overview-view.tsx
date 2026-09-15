@@ -58,8 +58,8 @@ export function WalletOverviewView() {
       }
     >
       {error && (
-        <StaggerItem className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-6")}>
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
+        <StaggerItem className={cn(WALLET_CARD, "flex gap-3 border-accent-error/50 p-4.5 lg:p-6")}>
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-accent-error" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-ink">{t("err.walletLoad")}</p>
             <p className="text-xs text-ink-soft">{error}</p>

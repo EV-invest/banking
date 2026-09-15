@@ -146,7 +146,7 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
               than the head count. */}
           <Progress value={tally.threshold === 0 ? 0 : Math.min(100, (tally.forVotes / tally.threshold) * 100)} />
 
-          {!tally.stillReachable && <p className="text-xs text-destructive">{t("consilium.proposals.unreachable")}</p>}
+          {!tally.stillReachable && <p className="text-xs text-accent-error">{t("consilium.proposals.unreachable")}</p>}
           <p className="text-xs leading-relaxed text-ink-soft">{t("consilium.proposals.majorityNote")}</p>
 
           <ItemGroup>
@@ -184,7 +184,7 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
               <div className="flex flex-col gap-2.5 sm:flex-row">
                 <Button
                   variant="outline"
-                  className={cn("sm:flex-1", kind === "suspension" && "border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive")}
+                  className={cn("sm:flex-1", kind === "suspension" && "border-accent-error/40 text-accent-error hover:bg-accent-error/10 hover:text-accent-error")}
                   disabled={busy !== null}
                   onClick={() => void act("for")}
                 >

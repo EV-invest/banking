@@ -125,7 +125,7 @@ export function OpenPaymentForm() {
         </Field>
       </div>
 
-      {endsProblem && <p className="text-xs text-destructive">{t(endsProblem)}</p>}
+      {endsProblem && <p className="text-xs text-accent-error">{t(endsProblem)}</p>}
 
       {confirming ? (
         <ReviewPanel source={source} destination={destination} amount={amount} reason={reason} busy={busy} onConfirm={() => void submit()} onBack={() => setConfirming(false)} />

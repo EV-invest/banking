@@ -38,7 +38,7 @@ export function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCa
             {/* The two placeholders are format examples, not prose — a slug and a proper
                 noun — so they stay as they are in every locale. */}
             <Input value={service} onChange={(e) => setService(e.target.value.trim())} placeholder="quy-nhon-fund" spellCheck={false} className="w-full font-mono-tech" />
-            <span className={cn("text-xs", service && !slugOk ? "text-destructive" : "text-ink-soft")}>
+            <span className={cn("text-xs", service && !slugOk ? "text-accent-error" : "text-ink-soft")}>
               {service && !slugOk ? t("admin.alloc.slugInvalid") : t("admin.alloc.slugHint")}
             </span>
           </label>

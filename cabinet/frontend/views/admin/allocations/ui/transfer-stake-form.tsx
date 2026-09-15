@@ -32,14 +32,14 @@ export function TransferStakeForm({ draft, companyUnits, onChange, onReview, onC
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.units")}</span>
           <Input inputMode="decimal" value={draft.units} onChange={(e) => onChange({ ...draft, units: e.target.value })} className="w-full tabular-nums" />
-          <span className={cn("text-xs tabular-nums", unitsProblem ? "text-destructive" : "text-ink-soft")}>
+          <span className={cn("text-xs tabular-nums", unitsProblem ? "text-accent-error" : "text-ink-soft")}>
             {unitsProblem === "units" ? t("admin.alloc.issue.problem.units") : t("admin.alloc.transfer.available", { units: formatUnits(companyUnits) })}
           </span>
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.costBasis")}</span>
           <Input inputMode="decimal" value={draft.costBasis} onChange={(e) => onChange({ ...draft, costBasis: e.target.value })} className="w-full tabular-nums" />
-          <span className={cn("text-xs", problem === "costBasis" ? "text-destructive" : "text-ink-soft")}>
+          <span className={cn("text-xs", problem === "costBasis" ? "text-accent-error" : "text-ink-soft")}>
             {t(problem === "costBasis" ? "admin.alloc.issue.problem.costBasis" : "admin.alloc.issue.costBasisHint")}
           </span>
         </label>

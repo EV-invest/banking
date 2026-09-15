@@ -37,7 +37,7 @@ export function paymentStateTone(state: string): string {
       return "text-main-accent-t1";
     case "rejected":
     case "execution_failed":
-      return "text-destructive";
+      return "text-accent-error";
     default:
       return "text-ink-soft";
   }
@@ -73,9 +73,9 @@ export function consentLabel(consent: PaymentConsent, t: Translate): string {
 }
 
 export function consentTone(consent: PaymentConsent): string {
-  if (consent.invalidated) return "text-destructive";
+  if (consent.invalidated) return "text-accent-error";
   const settled = settledConsent(consent.decision);
   if (settled === "approve") return "text-main-accent-t2";
-  if (settled === "reject") return "text-destructive";
+  if (settled === "reject") return "text-accent-error";
   return "text-main-accent-t1";
 }

@@ -75,7 +75,7 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
             <p className="text-sm text-ink-soft">{t("auth.signInSub")}</p>
           </div>
 
-          {message && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{message}</p>}
+          {message && <p className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">{message}</p>}
 
           <a
             href={href}

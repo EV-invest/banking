@@ -100,7 +100,7 @@ export function OverviewView() {
           label={t("admin.overview.kpi.parkedRows")}
           value={overview?.parked_rows}
           hint={t("admin.overview.kpi.parkedRowsHint")}
-          tone={overview && overview.parked_rows !== "0" ? "text-destructive" : undefined}
+          tone={overview && overview.parked_rows !== "0" ? "text-accent-error" : undefined}
           tip="admin.overview.kpi.parked-rows"
         />
         <Kpi label={t("admin.overview.kpi.dispatchBacklog")} value={overview?.backlog} hint={t("admin.overview.kpi.dispatchBacklogHint")} tip="admin.overview.kpi.dispatch-backlog" />
@@ -114,7 +114,7 @@ export function OverviewView() {
           label={t("admin.overview.kpi.deadKeySignings")}
           value={overview?.unseal_failures}
           hint={t("admin.overview.kpi.deadKeySigningsHint")}
-          tone={overview && overview.unseal_failures !== "0" ? "text-destructive" : undefined}
+          tone={overview && overview.unseal_failures !== "0" ? "text-accent-error" : undefined}
           tip="admin.overview.kpi.dead-key-signings"
         />
       </StaggerItem>
@@ -176,7 +176,7 @@ export function OverviewView() {
             <p className="text-xs text-ink-soft">{t("admin.overview.parkedEventsSub")}</p>
           </div>
           {unparkError && (
-            <p className="flex items-center gap-2 text-xs text-destructive">
+            <p className="flex items-center gap-2 text-xs text-accent-error">
               <TriangleAlert className="size-3.5" /> {unparkError}
             </p>
           )}

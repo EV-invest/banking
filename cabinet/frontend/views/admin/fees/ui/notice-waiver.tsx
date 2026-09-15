@@ -110,7 +110,7 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
               : t("admin.fees.notices.alreadyWaivedAnon", { at: formatMoment(waiver.at, locale), n: waiver.holders })}
           </p>
         )}
-        {problem && <p className="text-xs text-destructive">{problem}</p>}
+        {problem && <p className="text-xs text-accent-error">{problem}</p>}
         {confirming ? (
           <>
             <p className="text-sm leading-relaxed">

@@ -62,7 +62,7 @@ export function CabinetView() {
       <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.cabinet")} subtitle={t("admin.cabinet.subtitle")} />
 
       {error && (
-        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
+        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-accent-error">
           <TriangleAlert className="size-4" /> {error}
         </StaggerItem>
       )}

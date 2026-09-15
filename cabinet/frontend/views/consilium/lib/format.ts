@@ -112,7 +112,7 @@ export function stateTone(state: string | undefined): string {
   const key = normalise(state);
   if (key === "approved" || key === "executed" || key === "removed") return "text-main-accent-t2";
   if (key === "open" || key === "pending") return "text-main-accent-t1";
-  if (key === "rejected" || key === "failed" || key === "executionfailed" || key === "void") return "text-destructive";
+  if (key === "rejected" || key === "failed" || key === "executionfailed" || key === "void") return "text-accent-error";
   return "text-ink-soft";
 }
 
@@ -218,7 +218,7 @@ export function admissionVoteLabel(vote: string | null | undefined, t: Translate
 export function admissionVoteTone(vote: string | null | undefined): string {
   const cast = admissionVote(vote);
   if (cast === "admit") return "text-main-accent-t2";
-  if (cast === "reject") return "text-destructive";
+  if (cast === "reject") return "text-accent-error";
   return "text-ink-soft";
 }
 
@@ -314,7 +314,7 @@ export function proposalVoteLabel(kind: string, direction: ProposalVote, t: Tran
 export function proposalVoteTone(vote: string | null | undefined): string {
   const cast = proposalVote(vote);
   if (cast === "for") return "text-main-accent-t2";
-  if (cast === "against") return "text-destructive";
+  if (cast === "against") return "text-accent-error";
   return "text-ink-soft";
 }
 

@@ -156,7 +156,7 @@ export function ProfileView() {
         </StaggerItem>
 
         {error && (
-          <StaggerItem as="p" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
             {error}
           </StaggerItem>
         )}
@@ -222,9 +222,9 @@ export function ProfileView() {
                         <Input
                           value={form[key]}
                           onChange={(e) => set(key, e.target.value)}
-                          className={fieldErrors[key] ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
+                          className={fieldErrors[key] ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"}
                         />
-                        {fieldErrors[key] && <p className="mt-1 text-xs text-destructive">{fieldErrors[key]}</p>}
+                        {fieldErrors[key] && <p className="mt-1 text-xs text-accent-error">{fieldErrors[key]}</p>}
                       </div>
                     )
                   ) : (
@@ -265,9 +265,9 @@ export function ProfileView() {
                         <Input
                           value={form[key]}
                           onChange={(e) => set(key, e.target.value)}
-                          className={fieldErrors[key] ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
+                          className={fieldErrors[key] ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"}
                         />
-                        {fieldErrors[key] && <p className="mt-1 text-xs text-destructive">{fieldErrors[key]}</p>}
+                        {fieldErrors[key] && <p className="mt-1 text-xs text-accent-error">{fieldErrors[key]}</p>}
                       </div>
                     )
                   ) : (
@@ -432,8 +432,8 @@ function PhoneField({ initial, onChange, error }: { initial: string; onChange: (
 
   return (
     <div className="min-w-0 flex-1">
-      <Input {...inputProps} className={error ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
-      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+      <Input {...inputProps} className={error ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"} />
+      {error && <p className="mt-1 text-xs text-accent-error">{error}</p>}
     </div>
   );
 }

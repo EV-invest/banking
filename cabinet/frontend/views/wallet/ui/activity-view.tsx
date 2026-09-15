@@ -84,7 +84,7 @@ export function ActivityView() {
   return (
     <WalletScreen title={t("ui.activity")} subtitle={t("wallet.activitySub")} back="/wallet">
       {error && (
-        <StaggerItem as="p" className="text-sm text-destructive">
+        <StaggerItem as="p" className="text-sm text-accent-error">
           {error}
         </StaggerItem>
       )}

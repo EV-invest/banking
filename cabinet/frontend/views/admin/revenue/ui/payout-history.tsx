@@ -126,7 +126,7 @@ function stateTone(state: string): string {
     case "processing":
       return "text-main-accent-t3";
     case "failed":
-      return "text-destructive";
+      return "text-accent-error";
     default:
       return "text-ink-soft";
   }

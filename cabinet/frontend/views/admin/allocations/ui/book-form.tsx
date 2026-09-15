@@ -84,7 +84,7 @@ function Field({ label, value, onChange, problem, hint }: { label: string; value
     <label className="flex flex-col gap-1.5">
       <span className="text-xs text-ink-soft">{label}</span>
       <Input inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="w-full tabular-nums" />
-      <span className={cn("text-xs", problem ? "text-destructive" : "text-ink-soft")}>{problem ?? hint}</span>
+      <span className={cn("text-xs", problem ? "text-accent-error" : "text-ink-soft")}>{problem ?? hint}</span>
     </label>
   );
 }

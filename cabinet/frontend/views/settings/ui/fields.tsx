@@ -82,7 +82,7 @@ export function ThemedSelect({
           ))}
         </SelectContent>
       </Select>
-      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+      {error && <p className="mt-1 text-xs text-accent-error">{error}</p>}
     </div>
   );
 }
@@ -105,8 +105,8 @@ export function PhoneField({ initial, onChange, error }: { initial: string; onCh
 
   return (
     <div className="min-w-0 flex-1">
-      <Input {...inputProps} className={error ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
-      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+      <Input {...inputProps} className={error ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"} />
+      {error && <p className="mt-1 text-xs text-accent-error">{error}</p>}
     </div>
   );
 }

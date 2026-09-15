@@ -197,7 +197,7 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
 
           {/* Only once someone has actually refused. Said while every peer is still to
               answer it would read as a warning about a proposal that is going fine. */}
-          {tally.toReject > 0 && !settled && <p className="text-xs text-destructive">{t("consilium.admission.oneRejectEnds")}</p>}
+          {tally.toReject > 0 && !settled && <p className="text-xs text-accent-error">{t("consilium.admission.oneRejectEnds")}</p>}
         </div>
 
         {!settled && (
@@ -218,7 +218,7 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
               <div className="flex flex-col gap-2.5 sm:flex-row">
                 <Button
                   variant="outline"
-                  className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive sm:flex-1"
+                  className="border-accent-error/40 text-accent-error hover:bg-accent-error/10 hover:text-accent-error sm:flex-1"
                   disabled={busy !== null}
                   onClick={() => void act("reject")}
                 >

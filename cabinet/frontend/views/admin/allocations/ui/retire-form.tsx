@@ -50,14 +50,14 @@ export function RetireForm({ draft, companyUnits, onChange, onReview, onCancel }
           <Input inputMode="decimal" value={draft.units} onChange={(e) => onChange({ ...draft, units: e.target.value })} className="w-full tabular-nums" />
           {/* The company's settled stake is the one figure this form can cap against; an
               investor's available units are the hub's to know, and its refusal names them. */}
-          <span className={cn("text-xs tabular-nums", unitsProblem ? "text-destructive" : "text-ink-soft")}>
+          <span className={cn("text-xs tabular-nums", unitsProblem ? "text-accent-error" : "text-ink-soft")}>
             {unitsProblem === "units" ? t("admin.alloc.issue.problem.units") : kind === "company" ? t("admin.alloc.transfer.available", { units: formatUnits(companyUnits) }) : t("admin.alloc.retire.investorHint")}
           </span>
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.costBasis")}</span>
           <Input inputMode="decimal" value={draft.costBasis} onChange={(e) => onChange({ ...draft, costBasis: e.target.value })} className="w-full tabular-nums" />
-          <span className={cn("text-xs", problem === "costBasis" ? "text-destructive" : "text-ink-soft")}>
+          <span className={cn("text-xs", problem === "costBasis" ? "text-accent-error" : "text-ink-soft")}>
             {t(problem === "costBasis" ? "admin.alloc.issue.problem.costBasis" : "admin.alloc.retire.costBasisHint")}
           </span>
         </label>

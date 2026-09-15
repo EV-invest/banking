@@ -91,7 +91,7 @@ export function ConsentApprovalView({ token }: { token: string }) {
             <DetailRow
               label={t("approval.expires")}
               value={t("approval.expiresValue", { at: formatMoment(invitation.expires_at, locale), left: expiresIn(invitation.expires_at, t) })}
-              tone={expired ? "text-destructive" : undefined}
+              tone={expired ? "text-accent-error" : undefined}
             />
           </div>
         </CardContent>

@@ -157,7 +157,7 @@ export function RemovalApprovalView({ token }: { token: string }) {
             <DetailRow
               label={t("approval.expires")}
               value={t("approval.expiresValue", { at: formatMoment(invitation.expires_at, locale), left: expiresIn(invitation.expires_at, t) })}
-              tone={expired ? "text-destructive" : undefined}
+              tone={expired ? "text-accent-error" : undefined}
             />
           </div>
         </CardContent>
@@ -194,7 +194,7 @@ export function RemovalApprovalView({ token }: { token: string }) {
               // The second step. It restates the consequence in full rather than asking
               // "are you sure?" — a reader who has already decided is not helped by being
               // asked again, only by being told exactly what is about to happen.
-              <div className="flex flex-col gap-3.5 rounded-lg border border-destructive/40 bg-destructive/10 p-4">
+              <div className="flex flex-col gap-3.5 rounded-lg border border-accent-error/40 bg-accent-error/10 p-4">
                 <div className="flex flex-col gap-1.5">
                   <p className="text-sm font-semibold text-ink">{t("approval.removal.confirmTitle")}</p>
                   <p className="text-sm leading-relaxed text-ink">{t("approval.removal.confirmBody")}</p>

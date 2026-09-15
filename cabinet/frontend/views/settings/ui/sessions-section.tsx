@@ -44,7 +44,7 @@ export function SessionsSection({
         <p className="pb-2 pt-3 text-xs font-medium text-ink-soft">{t("settings.sessionsSub")}</p>
       )}
 
-      {error && <p className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      {error && <p className="mb-2 rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">{error}</p>}
 
       {loading ? (
         [0, 1].map((i) => (

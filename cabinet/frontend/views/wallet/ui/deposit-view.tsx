@@ -139,7 +139,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                   <TipAnchor anchor="wallet.deposit.address" />
                 </p>
 
-                {error && !shown && <p className="text-sm text-destructive">{error}</p>}
+                {error && !shown && <p className="text-sm text-accent-error">{error}</p>}
 
                 {addressLoading ? (
                   <>

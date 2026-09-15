@@ -191,7 +191,7 @@ export function statusTone(status: string): string {
     case "blocked":
     case "disabled":
     case "error":
-      return "text-destructive";
+      return "text-accent-error";
     default:
       return "text-ink-soft";
   }

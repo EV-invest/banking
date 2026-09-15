@@ -231,7 +231,7 @@ function WithdrawalRow({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                  className="border-accent-error/40 text-accent-error hover:bg-accent-error/10"
                   disabled={busy}
                   onClick={() => onOpen({ id: item.withdrawal_id, kind: "fail" })}
                 >
@@ -262,7 +262,7 @@ function WithdrawalRow({
               </div>
             ) : (
               <div className="space-y-2">
-                <p className="flex items-center gap-2 text-xs text-destructive">
+                <p className="flex items-center gap-2 text-xs text-accent-error">
                   <TriangleAlert className="size-4" /> {t("admin.withdrawals.failWarning")}
                 </p>
                 <div className="flex items-center gap-3">
@@ -271,7 +271,7 @@ function WithdrawalRow({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                    className="border-accent-error/40 text-accent-error hover:bg-accent-error/10"
                     disabled={busy}
                     onClick={onFail}
                   >
