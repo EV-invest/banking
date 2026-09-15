@@ -363,10 +363,12 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// pool clone so its polling reads don't compete with request traffic on the
 	// relay pool.
 	let bridge = {
-		let endpoint = Endpoint::from_shared(config.concierge_bridge_addr.clone())
-			.context("CONCIERGE_BRIDGE_ADDR must be a valid URL, e.g. http://127.0.0.1:50061")?
-			.connect_timeout(Duration::from_secs(3))
-			.timeout(Duration::from_secs(10));
+		// Say it out loud when production pulls this stream from a peer it cannot
+		// authenticate. A WARN and not a refusal: production runs on h2c inside the cluster
+		// today, and refusing to boot would take the money plane down to fix a seam that is
+		// currently guarded by network reachability (#199, phase 1).
+		config::warn_if_bridge_is_unauthenticated(&config.app_env, &config.concierge_bridge_addr);
+		let endpoint = bridge_endpoint(&config.concierge_bridge_addr)?;
 		let channel = endpoint.connect_lazy();
 		Some(BridgeConsumer::new(
 			pool.clone(),
@@ -680,10 +682,10 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 fn governance_mail_adapter(config: &config::AppConfig) -> Option<Arc<dyn piggybank_core::ports::GovernanceMailer>> {
 	#[cfg(feature = "concierge_governance_mail")]
 	{
-		let endpoint = Endpoint::from_shared(config.concierge_bridge_addr.clone())
-			.ok()?
-			.connect_timeout(Duration::from_secs(3))
-			.timeout(Duration::from_secs(10));
+		// The SAME endpoint builder as the lifecycle bridge, TLS included: one address, one
+		// trust relationship. Building it separately is how an `https://` bridge would have
+		// quietly left the mail seam on a channel that never negotiates TLS.
+		let endpoint = bridge_endpoint(&config.concierge_bridge_addr).ok()?;
 		Some(Arc::new(governance_mail::wired::ConciergeGovernanceMailer::new(
 			endpoint.connect_lazy(),
 			config.bridge_service_token.clone(),
@@ -831,6 +833,43 @@ async fn await_signal(shutdown: CancellationToken) {
 	}
 	tracing::info!("shutdown signal received — draining");
 	shutdown.cancel();
+}
+
+/// The concierge endpoint both cross-plane seams dial — the lifecycle bridge and the
+/// governance-mail relay, which share one address and one shared secret.
+///
+/// Explicit deadlines so a half-open concierge surfaces as a bounded error instead of
+/// stalling a poll. An `https://` address is the operator saying the peer is off-host (or
+/// behind a mesh that terminates TLS), so the channel authenticates the server rather than
+/// trusting service discovery — the same rule the signer seam already applies. Cleartext
+/// stays permitted: production is h2c inside the cluster today (#199).
+fn bridge_endpoint(addr: &str) -> color_eyre::Result<Endpoint> {
+	let endpoint = Endpoint::from_shared(addr.to_string())
+		.context("CONCIERGE_BRIDGE_ADDR must be a valid URL, e.g. http://127.0.0.1:50061")?
+		.connect_timeout(Duration::from_secs(3))
+		.timeout(Duration::from_secs(10));
+	if addr.starts_with("https://") {
+		return endpoint.tls_config(bridge_client_tls()?).context("failed to configure bridge TLS");
+	}
+	Ok(endpoint)
+}
+
+/// TLS for the hub's client side of the concierge seam. Trust anchors come from a pinned CA
+/// (`BRIDGE_TLS_CA_PEM_FILE`) when set — the private-CA case a cluster-internal concierge
+/// needs, and the thing that makes the channel prove *which* concierge answered — else the
+/// public webpki roots.
+///
+/// No client identity here, unlike the signer: the hub already proves itself with
+/// `BRIDGE_SERVICE_TOKEN`, and mTLS on this seam belongs with phase 2 of #199, once
+/// concierge terminates TLS at all.
+fn bridge_client_tls() -> color_eyre::Result<ClientTlsConfig> {
+	match std::env::var("BRIDGE_TLS_CA_PEM_FILE").ok().filter(|s| !s.is_empty()) {
+		Some(ca_file) => {
+			let ca = std::fs::read_to_string(&ca_file).with_context(|| format!("failed to read BRIDGE_TLS_CA_PEM_FILE at {ca_file}"))?;
+			Ok(ClientTlsConfig::new().ca_certificate(Certificate::from_pem(ca)))
+		}
+		None => Ok(ClientTlsConfig::new().with_enabled_roots()),
+	}
 }
 
 /// TLS for the hub's client side of an off-host signer seam. Trust anchors come from a

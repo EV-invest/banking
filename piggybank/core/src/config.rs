@@ -597,6 +597,72 @@ pub struct TonSweepConfig {
 	pub poll_secs: u64,
 }
 
+/// What a `CONCIERGE_BRIDGE_ADDR` proves about the party on the other end.
+///
+/// The lifecycle bridge carries strictly more authority than any other seam this binary
+/// dials: a `KYC_CHANGED` it applies is the single gate on both directions of money
+/// movement, and a `ROLE_CHANGED` mirrors an operator role onto the money plane. The
+/// shared `BRIDGE_SERVICE_TOKEN` only proves banking to concierge — it says nothing about
+/// who answered — so the transport is the whole of the reverse proof (EV-invest/banking#199).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BridgeTransport {
+	/// `https://` — the channel authenticates the server, against the public roots or the
+	/// CA pinned by `BRIDGE_TLS_CA_PEM_FILE`.
+	Tls,
+	/// Cleartext, but the peer is this host: the stream never reaches a network where
+	/// another party could answer or read it. The documented single-host exception, the
+	/// same one the signer seam makes.
+	Loopback,
+	/// Cleartext to a name or address off-host. Whatever answers to that name is believed.
+	Cleartext,
+}
+
+/// Classify a bridge address without pulling in a URL parser: scheme first, then the host
+/// out of the authority (userinfo dropped, port dropped, IPv6 literal unwrapped).
+///
+/// Anything that is not `https` and does not resolve *syntactically* to loopback is
+/// [`BridgeTransport::Cleartext`] — an unparseable address included. Classification only
+/// ever decides whether to WARN, so the uncertain reading is the loud one.
+pub fn bridge_transport(addr: &str) -> BridgeTransport {
+	let (scheme, rest) = match addr.split_once("://") {
+		Some((scheme, rest)) => (scheme.to_ascii_lowercase(), rest),
+		None => (String::new(), addr),
+	};
+	if scheme == "https" {
+		return BridgeTransport::Tls;
+	}
+	let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+	// `user:pass@host` — the host is what follows the LAST `@`.
+	let authority = authority.rsplit_once('@').map_or(authority, |(_, host)| host);
+	let host = if let Some(inside) = authority.strip_prefix('[') {
+		// `[::1]:55670` — the brackets exist precisely because the address holds colons.
+		inside.split(']').next().unwrap_or_default()
+	} else {
+		authority.split(':').next().unwrap_or_default()
+	};
+	let host = host.to_ascii_lowercase();
+	let loopback = host == "localhost" || host.ends_with(".localhost") || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback());
+	if loopback { BridgeTransport::Loopback } else { BridgeTransport::Cleartext }
+}
+
+/// Say it out loud at boot when production pulls the lifecycle stream in cleartext from a
+/// peer it cannot authenticate.
+///
+/// A WARN and not a refusal, deliberately: production runs on `http://concierge:55670`
+/// today (h2c, inside the cluster), and a hub that refuses to start would take the money
+/// plane down to fix a seam that is currently guarded by network reachability. The refusal
+/// is phase 2, once concierge terminates TLS and the CA is pinned here — the signer seam's
+/// non-loopback-requires-TLS check (`piggybank/signer/src/config.rs`) is the shape it takes.
+pub fn warn_if_bridge_is_unauthenticated(app_env: &str, addr: &str) {
+	if app_env != "production" || bridge_transport(addr) != BridgeTransport::Cleartext {
+		return;
+	}
+	tracing::warn!(
+		bridge_addr = %addr,
+		"CONCIERGE_BRIDGE_ADDR is cleartext to a non-loopback peer in production: the lifecycle stream is neither encrypted nor server-authenticated, so anything that can answer to that name can mirror a KYC tier or an operator role onto the money plane (EV-invest/banking#199). Terminate TLS at concierge and set an https:// address (pin its CA with BRIDGE_TLS_CA_PEM_FILE); until then keep the seam behind a NetworkPolicy."
+	);
+}
+
 /// A boolean env var: `true`/`1` ⇒ true, anything else ⇒ false, unset/empty ⇒ `default`.
 fn bool_env(key: &str, default: bool) -> bool {
 	match env::var(key).ok().filter(|s| !s.is_empty()) {
@@ -641,6 +707,55 @@ mod tests {
 		for raw in [Some("false"), Some("False"), Some("0"), Some(" false ")] {
 			assert_eq!(KycGate::read(raw), KycGate::LIFTED, "{raw:?} must lift the gate");
 		}
+	}
+
+	/// The classification decides whether production says anything at all about the seam
+	/// that can rewrite a KYC tier, so each family is pinned: `https` is the only scheme
+	/// that proves the peer, loopback is the only cleartext exemption, and everything else
+	/// — a bare host, a cluster DNS name, a public address, a value nobody can parse —
+	/// lands on the loud side.
+	#[test]
+	fn only_https_or_loopback_makes_the_bridge_seam_something_other_than_cleartext() {
+		for addr in ["https://concierge:55670", "HTTPS://concierge", "https://concierge.apps.svc.cluster.local/"] {
+			assert_eq!(bridge_transport(addr), BridgeTransport::Tls, "{addr} is TLS");
+		}
+		for addr in [
+			"http://127.0.0.1:55670",
+			"http://localhost:55670",
+			"http://LOCALHOST",
+			"http://[::1]:55670",
+			"http://127.9.9.9:55670",
+			"http://user:pass@localhost:55670",
+			"localhost:55670",
+		] {
+			assert_eq!(bridge_transport(addr), BridgeTransport::Loopback, "{addr} never leaves the host");
+		}
+		for addr in [
+			"http://concierge:55670",
+			"http://concierge.apps.svc.cluster.local:55670",
+			"http://10.42.0.7:55670",
+			"http://[2001:db8::1]:55670",
+			"http://user@concierge:55670",
+			"",
+			"not a url",
+		] {
+			assert_eq!(bridge_transport(addr), BridgeTransport::Cleartext, "{addr} is believed on the strength of a name");
+		}
+	}
+
+	/// The WARN is production-only and cleartext-only — it must not fire in dev (where the
+	/// address is loopback anyway) nor once the seam is https, or it stops being read.
+	#[test]
+	fn the_bridge_warning_is_scoped_to_production_cleartext() {
+		// The function logs and returns nothing; what is asserted here is the predicate it
+		// is built from, at the same four corners.
+		assert_eq!(bridge_transport("http://concierge:55670"), BridgeTransport::Cleartext);
+		assert_eq!(bridge_transport("https://concierge:55670"), BridgeTransport::Tls);
+		assert_eq!(bridge_transport("http://127.0.0.1:55670"), BridgeTransport::Loopback);
+		// Smoke: neither call may panic, in either environment.
+		warn_if_bridge_is_unauthenticated("production", "http://concierge:55670");
+		warn_if_bridge_is_unauthenticated("development", "http://concierge:55670");
+		warn_if_bridge_is_unauthenticated("production", "https://concierge:55670");
 	}
 
 	#[test]
