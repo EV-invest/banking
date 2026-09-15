@@ -144,7 +144,7 @@ magnitude. `state` is `queued` until the hub's relay posts the leg, then `applie
 
 | Route | Query / body | Answer | Gates |
 | ----- | ------------ | ------ | ----- |
-| `GET /api/admin/allocations/holders` | `service` | `UnitHolders` — `units_outstanding`, `company_units`, `fee_units`, `investor_units` | admin |
+| `GET /api/admin/allocations/holders` | `service` | `UnitHolders` — `units_outstanding`, `company_units`, `fee_units`, `investor_units`, `queued_units` (mints not yet posted — do not pin the cap while non-zero) | admin |
 | `POST /api/admin/allocations/issue` | `{ service, units, idempotency_key, cost_basis?, user_id \| company: true }` | `UnitIssuance` (`source: "mint"`) | admin + CSRF |
 | `POST /api/admin/allocations/transfer-stake` | `{ service, user_id, units, idempotency_key, cost_basis? }` | `UnitIssuance` (`source: "company"`, `holder_kind: "user"`) | admin + CSRF |
 | `POST /api/admin/allocations/retire` | `{ service, units, idempotency_key, cost_basis?, force?, user_id \| company: true }` | `UnitIssuance` (`source: "retire"`, positive `units`) | admin + CSRF |

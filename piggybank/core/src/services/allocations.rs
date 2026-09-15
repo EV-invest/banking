@@ -359,7 +359,7 @@ impl AllocationsService for AllocationsSvc {
 	async fn list_unit_holders(&self, request: Request<pb::ListUnitHoldersRequest>) -> Result<Response<pb::UnitHolders>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
-		let view = issuance_app::unit_holders(self.state.allocations.as_ref(), self.state.ledger.as_ref(), service)
+		let view = issuance_app::unit_holders(self.state.allocations.as_ref(), self.state.ledger.as_ref(), self.state.issuances.as_ref(), service)
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(holders_to_proto(&view)))
@@ -389,6 +389,7 @@ fn holders_to_proto(view: &UnitHoldersView) -> pb::UnitHolders {
 		company_units: view.company_units.to_decimal_string(),
 		fee_units: view.fee_units.to_decimal_string(),
 		investor_units: view.investor_units.to_decimal_string(),
+		queued_units: view.queued_units.to_decimal_string(),
 	}
 }
 
