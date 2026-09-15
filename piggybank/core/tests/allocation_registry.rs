@@ -1710,15 +1710,17 @@ async fn a_row_written_by_a_pod_that_predates_the_backing_column_reads_as_cash()
 /// Drain the outbox to quiescence. `Relay::drain` applies one pass and answers `true` when
 /// a transient failure told it to back off — `Relay::run` sleeps and comes back, so a test
 /// that took one pass for "everything landed" read the ledger before its own rows did
-/// (#294). A few passes cover a real hiccup; a backlog still standing after them is a
-/// finding, named by the outbox's own reasons instead of surfacing as a wrong balance later.
+/// (#294). A few passes, each after a short pause, cover a real hiccup — a ledger that is
+/// away for tens of milliseconds, not microseconds; a backlog still standing after them is
+/// a finding, named by the outbox's own reasons instead of surfacing as a wrong balance later.
 async fn drain(h: &Harness) {
 	const PASSES: usize = 5;
+	const BACKOFF: std::time::Duration = std::time::Duration::from_millis(100);
 	for _ in 0..PASSES {
 		if !h.relay.drain().await {
 			return;
 		}
-		tokio::task::yield_now().await;
+		tokio::time::sleep(BACKOFF).await;
 	}
 	let backlog: Vec<(i64, String, Option<String>)> = sqlx::query_as("SELECT seq, kind, last_error FROM outbox WHERE dispatched_at IS NULL AND parked_at IS NULL ORDER BY seq")
 		.fetch_all(&h.pool)
