@@ -4,11 +4,13 @@ import type { AllocationWrite } from "@/entities/admin/api/admin-client";
 import type { Allocation, AllocationAccessLevel } from "@/shared/contracts/admin";
 import { ProductIcon } from "@/shared/ui/icons/products";
 import { compactUnits } from "@/views/admin/lib/format";
+import { backingOf } from "@/views/admin/allocations/lib/backing";
 import type { AllocationPanelKind } from "@/views/admin/allocations/lib/panel";
 import { AllocationAccessCell } from "@/views/admin/allocations/ui/allocation-access-cell";
 import { AllocationEditor } from "@/views/admin/allocations/ui/allocation-editor";
 import { AllocationRowActions } from "@/views/admin/allocations/ui/allocation-row-actions";
 import { AllocationStateCell } from "@/views/admin/allocations/ui/allocation-state-cell";
+import { BackingBadge } from "@/views/admin/allocations/ui/backing-badge";
 
 /** One registry row's worth of data and callbacks — the same contract under both of its
  *  presentations, the table row here and the phone card in `AllocationCard`. */
@@ -45,7 +47,12 @@ export function AllocationRow({ row, busy, editing, onEdit, onSave, onToggle, on
         </td>
         <td className="px-5 py-3 font-mono-tech text-xs text-muted-foreground">{row.service}</td>
         <td className="px-5 py-3">
-          <AllocationStateCell state={row.state} />
+          {/* The backing rides in the State cell: `in_kind` is a fact about how the product
+              exits, like `closed` is, and it is the exception — `cash` draws nothing. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <AllocationStateCell state={row.state} />
+            <BackingBadge backing={backingOf(row)} />
+          </div>
         </td>
         <td className="px-5 py-3">
           <AllocationAccessCell access={access} onChange={onSetAccess} />

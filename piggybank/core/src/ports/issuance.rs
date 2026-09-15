@@ -19,6 +19,7 @@ use domain::{
 	balance::ServiceId,
 	error::DomainError,
 	issuance::{IdempotencyKey, UnitIssuance, UnitIssuanceId},
+	money::Shares,
 };
 
 #[async_trait]
@@ -35,6 +36,11 @@ pub trait UnitIssuanceRepository: Repository<Aggregate = UnitIssuance> {
 
 	/// One issuance by id.
 	async fn find_by_id(&self, id: UnitIssuanceId) -> Result<Option<UnitIssuanceRecord>, DomainError>;
+
+	/// Units of `mint` issuances on `service` still `queued` — what the supply will grow
+	/// by once the relay posts them. `company` hand-overs are left out: they move units
+	/// between holders and change no supply.
+	async fn queued_mint_units(&self, service: &ServiceId) -> Result<Shares, DomainError>;
 }
 
 /// What [`UnitIssuanceRepository::issue`] did: wrote the caller's aggregate, or found

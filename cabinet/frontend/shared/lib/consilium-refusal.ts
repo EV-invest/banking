@@ -1,4 +1,4 @@
-// Reading the three refusals that stop a payout consilium being opened.
+// Reading the three refusals that stop a consilium — of any kind — being opened.
 //
 // The money plane raises all three as `DomainError::Conflict`, which reaches the browser as
 // one status with the plane's own prose in the body. `shared/lib/api-client.ts` passes prose
@@ -26,9 +26,9 @@ export type ConsiliumRefusal =
    */
   | { kind: "mail-not-configured" }
   /**
-   * The owner roster changed within the last 48 hours and payouts are paused until it
-   * settles. The delay exists to make a roster seizure and a payout two visible events
-   * rather than one motion (docs/CONSILIUM.md).
+   * The owner roster changed within the last 48 hours and no consilium of any kind opens
+   * until it settles. The delay exists to make a roster seizure and a payout two visible
+   * events rather than one motion (docs/CONSILIUM.md).
    */
   | { kind: "cooling-off"; hours: number; minutes: number }
   /** Below three owners the threshold is arithmetically unreachable. */
@@ -42,7 +42,8 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * Classify a failed `POST /api/consilium/revenue-payout`.
+ * Classify a refused attempt to open a consilium — a payout, a payment, any kind: the
+ * money plane words the three refusals the same way for each, save for the noun.
  *
  * Returns null for anything not recognised — including every ordinary failure (offline, a
  * 500, a bad amount). The caller renders those the way it always has.

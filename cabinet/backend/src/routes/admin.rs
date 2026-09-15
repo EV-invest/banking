@@ -1,10 +1,13 @@
 //! Admin-console routes — the operator surface behind `/api/admin/*`.
 //!
-//! Every handler is coarse-gated by [`require_admin`] (a non-investor session) and then
-//! forwards the correct plane token — the concierge identity token for identity/platform
-//! RPCs, the banking money token for money/treasury RPCs — which the owning plane
-//! re-checks against the specific permission (defense in depth; an insufficient role
-//! surfaces as 403). Mutations verify CSRF first, exactly like the money routes.
+//! Every handler is role-gated first — coarsely by [`require_admin`] (a non-investor
+//! session), and the `/api/admin/fees/*` routes by the narrower [`require_fee_admin`]
+//! (`admin` or `owner`, the roles the money plane actually lets administer fees) — and
+//! then forwards the correct plane token — the concierge identity token for
+//! identity/platform RPCs, the banking money token for money/treasury RPCs — which the
+//! owning plane re-checks against the specific permission (defense in depth; an
+//! insufficient role surfaces as 403). Mutations verify CSRF right after the gate,
+//! exactly like the money routes.
 
 use axum::{
 	Json,
@@ -14,7 +17,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::CookieJar;
 use evbanking_contracts::{
-	allocation::{access as wire_access, icon as wire_icon},
+	allocation::{access as wire_access, backing as wire_backing, icon as wire_icon},
 	banking::v1 as bk,
 };
 use evconcierge_contracts::concierge::v1 as cc;
@@ -24,7 +27,7 @@ use serde_json::{Value, json};
 use crate::{
 	dto,
 	error::ApiError,
-	routes::{editable, parse_body, require_admin, require_money_token, require_token, required, required_u32, verify_csrf},
+	routes::{editable, parse_body, require_admin, require_fee_admin, require_money_token, require_token, required, required_u32, verify_csrf},
 	state::AppState,
 };
 
@@ -331,7 +334,7 @@ pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar,
 
 /// `GET /api/admin/fees/policies` — every fund's fee terms, for the fees table.
 pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::FeePolicyList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let list = st.grpc.fee_policies(&token).await.map_err(|s| ApiError::read(s, "fee policies unavailable"))?;
 	Ok(Json(list.into()))
@@ -346,7 +349,7 @@ pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Re
 /// or 0 = as soon as the notice allows) and `reason` (required by the hub when the change
 /// needs the owners) travel as given; the hub decides the requirement and the moment.
 pub async fn schedule_fee_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -387,7 +390,7 @@ pub async fn schedule_fee_policy(State(st): State<AppState>, jar: CookieJar, hea
 
 /// `POST /api/admin/fees/policy/cancel` — withdraw a pending change of terms.
 pub async fn cancel_fee_policy_change(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -419,7 +422,7 @@ pub async fn acknowledge_undelivered_notices(State(st): State<AppState>, jar: Co
 
 /// `GET /api/admin/fees/changes?service=` — a fund's whole history of terms, newest first.
 pub async fn list_fee_policy_changes(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeePolicyChangeList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -434,7 +437,7 @@ pub async fn list_fee_policy_changes(State(st): State<AppState>, jar: CookieJar,
 
 /// `GET /api/admin/fees/shares?service=` — uncollected fee units in one fund, and their value.
 pub async fn fee_shares(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeeShares>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -449,7 +452,7 @@ pub async fn fee_shares(State(st): State<AppState>, jar: CookieJar, Query(q): Qu
 /// Refused rather than queued when the fund's claim cannot cover it on top of its queued
 /// redemptions — the manager is paid last.
 pub async fn settle_fee_shares(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeeSettlement>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -464,7 +467,7 @@ pub async fn settle_fee_shares(State(st): State<AppState>, jar: CookieJar, heade
 
 /// `GET /api/admin/fees/assessments?service=` — every charge this fund has made.
 pub async fn fund_fee_assessments(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeeAssessmentList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -640,20 +643,86 @@ pub async fn set_allocation_access(State(st): State<AppState>, jar: CookieJar, h
 	Ok(Json(st.grpc.set_allocation_access(&token, req).await?.into()))
 }
 
+/// `POST /api/admin/allocations/backing` — declare what stands behind a product's units
+/// (`cash` | `in_kind`). Orthogonal to `/state` and `/access`: this decides only whether
+/// `Redeem` may pay cash out for the units. The hub flips a product to `in_kind` on its
+/// own at the first mint; this is how an operator says the fund now holds cash for the
+/// units — or corrects a product back. Idempotent. The vocabulary is checked here, like
+/// an access level, so a typo is refused before a money-plane token is minted for it.
+pub async fn set_allocation_backing(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let Some(service) = required(&v, "service") else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let Some(backing) = required(&v, "backing") else {
+		return Err(ApiError::BadRequest(format!("backing is required — one of {}", wire_backing::ALL.join(", "))));
+	};
+	if !wire_backing::is_known(&backing) {
+		return Err(ApiError::BadRequest(format!("unknown backing '{backing}' — expected one of {}", wire_backing::ALL.join(", "))));
+	}
+	let token = require_money_token(&st, &jar).await?;
+	Ok(Json(st.grpc.set_allocation_backing(&token, &service, &backing).await?.into()))
+}
+
 /// `GET /api/admin/allocations/grants?service=` — every investor raised above the
-/// product's default, with who granted it and when.
+/// product's default, with who granted it and when, each carrying the investor's email.
+///
+/// The money plane names the investor by the id the console carries but stores no
+/// email, so it is looked up here on the identity plane — one `GetUser` per grant,
+/// fanned out under a small bound, with the concierge token (`GetUser` is an identity
+/// RPC; the money token stays on the hub call). The lookup is best-effort: an id the
+/// directory cannot name — a banking-only mirror, a lapsed account, an outage — lists
+/// with `email: null` rather than hiding a grant that stands (banking#252).
 pub async fn list_allocation_access_grants(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::AllocationAccessGrantList>, ApiError> {
+	use std::sync::Arc;
+
+	use tokio::{sync::Semaphore, task::JoinSet};
+
+	/// A product's grant list is short, but the bound is what keeps one console page
+	/// from turning into a burst against the identity plane if it ever is not.
+	const LOOKUPS_IN_FLIGHT: usize = 8;
+
 	require_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
-	let token = require_money_token(&st, &jar).await?;
-	let grants = st
+	let money_token = require_money_token(&st, &jar).await?;
+	let identity_token: Arc<str> = require_token(&st, &jar).await?.into();
+	let mut list: dto::AllocationAccessGrantList = st
 		.grpc
-		.list_allocation_access_grants(&token, &service)
+		.list_allocation_access_grants(&money_token, &service)
 		.await
-		.map_err(|s| ApiError::read(s, "allocation access grants unavailable"))?;
-	Ok(Json(grants.into()))
+		.map_err(|s| ApiError::read(s, "allocation access grants unavailable"))?
+		.into();
+
+	// The permit is taken BEFORE the spawn and moved into the task, so the loop itself
+	// blocks at the bound; the `JoinSet` aborts whatever is still in flight if the
+	// caller goes away mid-page.
+	let lookups = Arc::new(Semaphore::new(LOOKUPS_IN_FLIGHT));
+	let mut set = JoinSet::new();
+	for (index, grant) in list.grants.iter().enumerate() {
+		let permit = lookups.clone().acquire_owned().await.expect("the lookup semaphore is never closed");
+		let (grpc, token, user_id) = (st.grpc.clone(), identity_token.clone(), grant.user_id.clone());
+		set.spawn(async move {
+			let looked_up = grpc.admin_get_user(&token, &user_id).await;
+			drop(permit);
+			(index, looked_up)
+		});
+	}
+	while let Some(joined) = set.join_next().await {
+		match joined {
+			Ok((index, Ok(profile))) => list.grants[index].email = Some(profile.email).filter(|email| !email.is_empty()),
+			Ok((index, Err(status))) => {
+				tracing::debug!(code = ?status.code(), user_id = %list.grants[index].user_id, "grant holder not resolvable in the directory; listing without email");
+			}
+			Err(join) => tracing::warn!(error = %join, "a grant email lookup task ended abnormally; listing without email"),
+		}
+	}
+	Ok(Json(list))
 }
 
 /// `POST /api/admin/allocations/grants/grant` — raise one investor to `view` | `invest`
@@ -767,6 +836,44 @@ pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query
 	Ok(Json(holders.into()))
 }
 
+/// `POST /api/admin/allocations/retire` — burn a holder's units with no cash leg, the
+/// reverse of `/allocations/issue`: the units leave the holder's account and the supply
+/// shrinks by the same amount. Body: `service`, `units`, `idempotency_key`, exactly one
+/// of `user_id` (resolved hub-side like `/allocations/issue`) or `company: true`;
+/// `cost_basis` is optional and defaults hub-side to `units × NAV`; `force` (default
+/// `false`) is the operator's explicit override to burn units out of a live product —
+/// without it the hub answers 412 unless the allocation is `closed`. Answers the same
+/// `UnitIssuance` shape as a mint, with `source: "retire"` and positive `units`. The key
+/// is the same retry contract, in the same per-product key space as `/allocations/issue`.
+pub async fn retire_units(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::UnitIssuance>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(service), Some(units), Some(idempotency_key)) = (required(&v, "service"), required(&v, "units"), required(&v, "idempotency_key")) else {
+		return Err(ApiError::BadRequest("service, units and idempotency_key are required".into()));
+	};
+	// Same shape and same reason as the mint: a burn of nobody's units is a form the
+	// console never filled in, and refusing it here spares the hub a money-plane token.
+	let holder = match (required(&v, "user_id"), bool_field(&v, "company")) {
+		(Some(_), true) => return Err(ApiError::BadRequest("user_id and company are mutually exclusive".into())),
+		(Some(user_id), false) => bk::retire_units_request::Holder::UserId(user_id),
+		(None, true) => bk::retire_units_request::Holder::Company(true),
+		(None, false) => return Err(ApiError::BadRequest("a holder is required: user_id, or company = true".into())),
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::RetireUnitsRequest {
+		service,
+		holder: Some(holder),
+		units,
+		cost_basis: editable(&v, "cost_basis"),
+		idempotency_key,
+		force: bool_field(&v, "force"),
+	};
+	Ok(Json(st.grpc.retire_units(&token, req).await?.into()))
+}
+
 /// `POST /api/admin/allocations/book` — replace a product's trading terms: whether its
 /// secondary book is open, the taker fee, the price tick, the lot size and how far past
 /// the best quote a market order may fill. Closing the book stops new orders; resting
@@ -778,6 +885,9 @@ pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query
 /// at nothing while the console answers "saved". `price_tick` and `lot_size` may be left
 /// out (the hub's defaults, `0.01` and `0.0001`); `market_slippage_bps` may be left out
 /// and is then zero, but if it is sent it has to be a whole number of bps.
+/// `allow_unbacked_trading` may be left out and is then `false` — the operator's
+/// acknowledgement that the book trades units the fund holds no cash for is given, never
+/// presumed; the hub refuses to open an `in_kind` product's book without it.
 pub async fn set_book_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::BookPolicy>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
@@ -805,6 +915,7 @@ pub async fn set_book_policy(State(st): State<AppState>, jar: CookieJar, headers
 		price_tick: editable(&v, "price_tick"),
 		lot_size: editable(&v, "lot_size"),
 		market_slippage_bps,
+		allow_unbacked_trading: bool_field(&v, "allow_unbacked_trading"),
 	};
 	Ok(Json(st.grpc.set_book_policy(&token, req).await?.into()))
 }
@@ -1171,6 +1282,11 @@ mod admin_route_tests {
 	const SERVICE: &str = "quy-nhon";
 	/// What the stub's exchange seam mints. The fees RPCs accept nothing else.
 	const MONEY_TOKEN: &str = "banking-access-token";
+	/// The one investor the stub directory can name, and how it names them.
+	const KNOWN_INVESTOR: &str = "investor-7";
+	const KNOWN_INVESTOR_EMAIL: &str = "investor7@example.test";
+	/// A grant holder the directory has never heard of — a banking-only mirror.
+	const UNMIRRORED_INVESTOR: &str = "investor-9";
 
 	// ── the stub hub ────────────────────────────────────────────────────────────
 
@@ -1233,12 +1349,14 @@ mod admin_route_tests {
 		set_access: Option<bk::SetAllocationAccessRequest>,
 		grant: Option<bk::GrantAllocationAccessRequest>,
 		revoke: Option<bk::RevokeAllocationAccessRequest>,
+		set_backing: Option<bk::SetAllocationBackingRequest>,
+		retire: Option<bk::RetireUnitsRequest>,
 		money_tokens_issued: usize,
 	}
 
 	#[derive(Clone)]
 	struct Hub {
-		/// The role `GetMe` reports — what [`require_admin`] gates on.
+		/// The role `GetMe` reports — what [`require_admin`] and [`require_fee_admin`] gate on.
 		role: String,
 		/// When set, every fees RPC fails with this code (the upstream-refusal cases).
 		fail_with: Option<Code>,
@@ -1372,8 +1490,21 @@ mod admin_route_tests {
 			Err(Status::unimplemented("not reached by the fees routes"))
 		}
 
-		async fn get_user(&self, _: GrpcRequest<cc::GetUserRequest>) -> Result<GrpcResponse<cc::UserProfile>, Status> {
-			Err(Status::unimplemented("not reached by the fees routes"))
+		/// The directory knows exactly one investor. The grants route asks here for each
+		/// grant holder's email, and an id it cannot name must come back NOT_FOUND, the way
+		/// the identity plane answers a banking-only mirror.
+		async fn get_user(&self, request: GrpcRequest<cc::GetUserRequest>) -> Result<GrpcResponse<cc::UserProfile>, Status> {
+			self.guard()?;
+			let user_id = request.into_inner().user_id;
+			if user_id != KNOWN_INVESTOR {
+				return Err(Status::not_found("user"));
+			}
+			Ok(GrpcResponse::new(cc::UserProfile {
+				user_id,
+				email: KNOWN_INVESTOR_EMAIL.into(),
+				role: "investor".into(),
+				..Default::default()
+			}))
 		}
 
 		async fn set_role(&self, _: GrpcRequest<cc::SetRoleRequest>) -> Result<GrpcResponse<cc::SetRoleResponse>, Status> {
@@ -1567,6 +1698,7 @@ mod admin_route_tests {
 			icon: "real_estate".into(),
 			access: access.into(),
 			caller_access: "view".into(),
+			backing: "cash".into(),
 		}
 	}
 
@@ -1598,16 +1730,19 @@ mod admin_route_tests {
 			Ok(GrpcResponse::new(bk::RevokeAllocationAccessResponse {}))
 		}
 
+		/// Two standing grants: one holder the directory knows, one it does not.
 		async fn list_allocation_access_grants(&self, request: GrpcRequest<bk::ListAllocationAccessGrantsRequest>) -> Result<GrpcResponse<bk::AllocationAccessGrantList>, Status> {
 			self.guard_money_plane(&request)?;
+			let service = request.into_inner().service;
+			let grant = |user_id: &str| bk::AllocationAccessGrant {
+				service: service.clone(),
+				user_id: user_id.into(),
+				level: "invest".into(),
+				granted_by: "user-1".into(),
+				granted_at: 1_750_000_400,
+			};
 			Ok(GrpcResponse::new(bk::AllocationAccessGrantList {
-				grants: vec![bk::AllocationAccessGrant {
-					service: request.into_inner().service,
-					user_id: "investor-7".into(),
-					level: "invest".into(),
-					granted_by: "user-1".into(),
-					granted_at: 1_750_000_400,
-				}],
+				grants: vec![grant(KNOWN_INVESTOR), grant(UNMIRRORED_INVESTOR)],
 			}))
 		}
 
@@ -1633,6 +1768,38 @@ mod admin_route_tests {
 
 		async fn set_allocation_unit_cap(&self, _: GrpcRequest<bk::SetAllocationUnitCapRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
 			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
+		async fn set_allocation_backing(&self, request: GrpcRequest<bk::SetAllocationBackingRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
+			self.guard_money_plane(&request)?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().set_backing = Some(req.clone());
+			Ok(GrpcResponse::new(bk::Allocation {
+				backing: req.backing,
+				..stub_allocation("view")
+			}))
+		}
+
+		async fn retire_units(&self, request: GrpcRequest<bk::RetireUnitsRequest>) -> Result<GrpcResponse<bk::UnitIssuance>, Status> {
+			self.guard_money_plane(&request)?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().retire = Some(req.clone());
+			let (holder_kind, holder_id) = match req.holder {
+				Some(bk::retire_units_request::Holder::UserId(id)) => ("user", id),
+				Some(bk::retire_units_request::Holder::Company(_)) | None => ("company", String::new()),
+			};
+			Ok(GrpcResponse::new(bk::UnitIssuance {
+				id: "9e2f".into(),
+				service: req.service,
+				holder_kind: holder_kind.into(),
+				holder_id,
+				units: req.units,
+				nav: "1.25".into(),
+				cost_basis: if req.cost_basis.is_empty() { "16250".into() } else { req.cost_basis },
+				state: "queued".into(),
+				created_at: 1_750_000_500,
+				source: "retire".into(),
+			}))
 		}
 
 		async fn issue_units(&self, _: GrpcRequest<bk::IssueUnitsRequest>) -> Result<GrpcResponse<bk::UnitIssuance>, Status> {
@@ -1804,6 +1971,59 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not price a fund");
 
 		assert!(seen.lock().unwrap().set_policy.is_none(), "a refused caller must never reach the hub");
+	}
+
+	/// An `operator` passes the coarse console gate but not the fee one. The money plane
+	/// refuses every fee call from an operator, so before this gate the console showed
+	/// the fees screen and then answered 403 to everything on it. The refusal has to be
+	/// decided at the BFF, before the CSRF check and before a money token is minted — the
+	/// hub must not see the request at all, and the message must name the roles that do
+	/// get through, so the screen can say so instead of a bare "request failed".
+	#[tokio::test]
+	async fn an_operator_is_refused_the_fees_routes_but_not_the_console() {
+		let hub = Hub::new("operator");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, response) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "an operator must not read the fees table");
+		assert_eq!(response["error"], "fee administration requires the admin or owner role");
+
+		let body = r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#;
+		let (status, response) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "an operator must not price a fund");
+		assert_eq!(response["error"], "fee administration requires the admin or owner role");
+
+		// The same session is still an operator elsewhere on the console: the narrower gate
+		// is on the fee routes alone, not a demotion of the role.
+		let (status, _) = send(&app, signed("POST", "/api/admin/users/kyc", Some(r#"{"user_id":"u1","kyc_level":2}"#), true)).await;
+		assert_eq!(status, StatusCode::OK, "an operator keeps the rest of the console");
+
+		let seen = seen.lock().unwrap();
+		assert!(seen.set_policy.is_none(), "the fee refusal must be decided before the hub is called");
+		assert_eq!(seen.money_tokens_issued, 0, "a caller refused on role must not cost a money-token mint");
+		assert!(seen.set_kyc.is_some(), "the operator's KYC call must still have reached the hub");
+	}
+
+	/// The two roles the fee gate admits, both reading and writing. `owner` is here on
+	/// purpose: a gate written as `role == "admin"` would lock the fund's owners out of
+	/// their own fee terms, and nothing else on this seam would notice.
+	#[tokio::test]
+	async fn admins_and_owners_administer_fees() {
+		for role in ["admin", "owner"] {
+			let hub = Hub::new(role);
+			let seen = hub.seen.clone();
+			let app = app(serve(hub).await);
+
+			let (status, _) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+			assert_eq!(status, StatusCode::OK, "{role} must read the fees table");
+
+			let body = r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#;
+			let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+			assert_eq!(status, StatusCode::OK, "{role} must be able to price a fund");
+
+			assert!(seen.lock().unwrap().set_policy.is_some(), "{role}'s change of terms must reach the hub");
+		}
 	}
 
 	/// The double-submit gate on the two mutations. A valid session is not enough: a
@@ -2339,6 +2559,8 @@ mod admin_route_tests {
 				"/api/admin/allocations/transfer-stake",
 				r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000","idempotency_key":"k"}"#,
 			),
+			("/api/admin/allocations/retire", r#"{"service":"quy-nhon","company":true,"units":"13000","idempotency_key":"k"}"#),
+			("/api/admin/allocations/backing", r#"{"service":"quy-nhon","backing":"cash"}"#),
 		] {
 			let (status, _) = send(&app, signed("POST", uri, Some(body), true)).await;
 			assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not change access or holdings: {uri}");
@@ -2368,7 +2590,7 @@ mod admin_route_tests {
 		for seen in [seen, admin_seen] {
 			let seen = seen.lock().unwrap();
 			assert!(
-				seen.set_access.is_none() && seen.grant.is_none() && seen.revoke.is_none(),
+				seen.set_access.is_none() && seen.grant.is_none() && seen.revoke.is_none() && seen.retire.is_none() && seen.set_backing.is_none(),
 				"a refused caller must never reach the hub"
 			);
 			assert_eq!(seen.money_tokens_issued, 0, "a refused request must not mint a money-plane token");
@@ -2493,6 +2715,143 @@ mod admin_route_tests {
 		assert_eq!((forwarded.service.as_str(), forwarded.user_id.as_str()), (SERVICE, "investor-7"));
 	}
 
+	/// A retirement forwards the holder in the request's `oneof` shape — the company here,
+	/// which has no id to carry — together with the `force` override, and relays the row
+	/// the hub wrote with `source: "retire"` and POSITIVE units: the row is the magnitude,
+	/// the source is the direction, and a console summing the history must not be handed a
+	/// negative number to guess at.
+	#[tokio::test]
+	async fn retiring_forwards_the_company_holder_and_the_force_flag_and_relays_the_row() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(
+			&app,
+			signed(
+				"POST",
+				"/api/admin/allocations/retire",
+				Some(r#"{"service":"quy-nhon","company":true,"units":"13000","idempotency_key":"k-retire","force":true}"#),
+				true,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!(body["service"], SERVICE);
+		assert_eq!(body["source"], "retire");
+		assert_eq!(body["holder_kind"], "company");
+		assert_eq!(body["holder_id"], "", "the company has no user id to resolve");
+		assert_eq!(body["units"], "13000", "the magnitude, never signed");
+		assert_eq!(body["cost_basis"], "16250", "the hub's `units × NAV` default when the body named none");
+		assert_eq!(body["state"], "queued");
+		assert_eq!(body["created_at"], "1750000500", "int64s cross as strings");
+
+		let forwarded = seen.lock().unwrap().retire.clone().expect("the hub saw the retirement");
+		assert_eq!(forwarded.service, SERVICE);
+		assert_eq!(forwarded.holder, Some(bk::retire_units_request::Holder::Company(true)));
+		assert_eq!((forwarded.units.as_str(), forwarded.idempotency_key.as_str()), ("13000", "k-retire"));
+		assert!(forwarded.cost_basis.is_empty(), "an absent cost_basis crosses empty so the hub applies its default");
+		assert!(forwarded.force, "the operator's override must reach the hub as given");
+	}
+
+	/// The other holder shape — a named user — crosses as `user_id`, and `force` left out of
+	/// the body is `false`: the console must not be able to burn units out of a live product
+	/// by forgetting a field. A `cost_basis` the operator typed is forwarded verbatim.
+	#[tokio::test]
+	async fn retiring_a_user_defaults_force_to_false_and_keeps_the_typed_cost_basis() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(
+			&app,
+			signed(
+				"POST",
+				"/api/admin/allocations/retire",
+				Some(r#"{"service":"quy-nhon","user_id":"investor-7","units":"100","cost_basis":"120","idempotency_key":"k2"}"#),
+				true,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!((body["holder_kind"].as_str(), body["holder_id"].as_str()), (Some("user"), Some("investor-7")));
+		assert_eq!(body["cost_basis"], "120");
+
+		let forwarded = seen.lock().unwrap().retire.clone().expect("the hub saw the retirement");
+		assert_eq!(forwarded.holder, Some(bk::retire_units_request::Holder::UserId("investor-7".into())));
+		assert_eq!(forwarded.cost_basis, "120");
+		assert!(!forwarded.force, "force absent from the body must cross as false");
+	}
+
+	/// A retirement names an amount, a retry key and exactly one holder, or it is not a
+	/// request — and none of these malformed bodies may cost a money-token mint.
+	#[tokio::test]
+	async fn a_malformed_retirement_is_refused_before_the_hub_is_called() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for body in [
+			r#"{"service":"quy-nhon","company":true,"idempotency_key":"k"}"#,
+			r#"{"service":"quy-nhon","company":true,"units":"1"}"#,
+			r#"{"company":true,"units":"1","idempotency_key":"k"}"#,
+			// Nobody's units, and two holders at once, are both forms nobody filled in.
+			r#"{"service":"quy-nhon","units":"1","idempotency_key":"k"}"#,
+			r#"{"service":"quy-nhon","company":false,"units":"1","idempotency_key":"k"}"#,
+			r#"{"service":"quy-nhon","user_id":"investor-7","company":true,"units":"1","idempotency_key":"k"}"#,
+		] {
+			let (status, response) = send(&app, signed("POST", "/api/admin/allocations/retire", Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "must be refused before the hub is called: {body}");
+			assert!(response["error"].is_string(), "the refusal says why: {response}");
+		}
+
+		let seen = seen.lock().unwrap();
+		assert!(seen.retire.is_none(), "a malformed retirement must never reach the hub");
+		assert_eq!(seen.money_tokens_issued, 0, "a body we are going to refuse must not cost a money-token mint");
+	}
+
+	/// Setting the backing forwards the word verbatim and the row comes back carrying it —
+	/// the field the client draws the redeem control off. A word outside `cash | in_kind`
+	/// is refused here, naming what was expected, before a money token is minted for it.
+	#[tokio::test]
+	async fn setting_the_backing_forwards_it_and_the_allocation_carries_it() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(
+			&app,
+			signed("POST", "/api/admin/allocations/backing", Some(r#"{"service":"quy-nhon","backing":"in_kind"}"#), true),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!(body["service"], SERVICE);
+		assert_eq!(body["backing"], "in_kind", "the backing as the hub applied it");
+		assert_eq!(body["access"], "view", "the rest of the row rides along untouched");
+		let forwarded = seen.lock().unwrap().set_backing.clone().expect("the hub saw the write");
+		assert_eq!((forwarded.service.as_str(), forwarded.backing.as_str()), (SERVICE, "in_kind"));
+
+		let minted_before = seen.lock().unwrap().money_tokens_issued;
+		for body in [
+			r#"{"service":"quy-nhon","backing":"asset"}"#,
+			r#"{"service":"quy-nhon","backing":"InKind"}"#,
+			r#"{"service":"quy-nhon","backing":""}"#,
+			r#"{"service":"quy-nhon"}"#,
+			r#"{"backing":"cash"}"#,
+		] {
+			let (status, response) = send(&app, signed("POST", "/api/admin/allocations/backing", Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "must be refused before the hub is called: {body}");
+			let reason = response["error"].as_str().unwrap_or_default();
+			assert!(
+				reason.contains("service") || (reason.contains("cash") && reason.contains("in_kind")),
+				"the refusal names what was expected: {reason}"
+			);
+		}
+		let seen = seen.lock().unwrap();
+		assert_eq!(seen.set_backing.as_ref().map(|r| r.backing.as_str()), Some("in_kind"), "no malformed write reached the hub");
+		assert_eq!(seen.money_tokens_issued, minted_before, "a body we are going to refuse must not cost a money-token mint");
+	}
+
 	/// The grant list names its fund in the query string; a missing one is decided here.
 	#[tokio::test]
 	async fn the_grant_list_names_its_fund_and_keeps_every_column() {
@@ -2514,10 +2873,31 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::OK);
 		let row = &body["grants"][0];
 		assert_eq!(row["service"], SERVICE);
-		assert_eq!(row["user_id"], "investor-7");
+		assert_eq!(row["user_id"], KNOWN_INVESTOR);
 		assert_eq!(row["level"], "invest");
 		assert_eq!(row["granted_by"], "user-1");
 		assert_eq!(row["granted_at"], "1750000400");
+	}
+
+	/// The grants table showed a raw id where the operator expected a person (banking#252).
+	/// The email comes from the identity plane, per holder; a holder the directory cannot
+	/// name keeps their row — with `email: null`, never a dropped grant or a failed page.
+	#[tokio::test]
+	async fn the_grant_list_names_each_holder_by_email_when_the_directory_can() {
+		let app = app(serve(Hub::new("admin")).await);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/allocations/grants?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+		let grants = body["grants"].as_array().expect("a list of grants");
+		assert_eq!(grants.len(), 2, "an unresolvable holder must not drop out of the list");
+		let known = grants.iter().find(|g| g["user_id"] == KNOWN_INVESTOR).expect("the mirrored investor lists");
+		assert_eq!(known["email"], KNOWN_INVESTOR_EMAIL);
+		let unmirrored = grants.iter().find(|g| g["user_id"] == UNMIRRORED_INVESTOR).expect("the banking-only investor lists too");
+		assert!(
+			unmirrored["email"].is_null(),
+			"an id the directory cannot name has no email to show, not a made-up one: {unmirrored}"
+		);
+		assert!(unmirrored.get("email").is_some(), "the key is present so the client can tell 'unknown' from 'not asked'");
 	}
 
 	/// The hub re-checks `AllocationManage` and answers its own codes; a grant for a user

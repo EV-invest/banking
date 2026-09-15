@@ -236,8 +236,10 @@ The company is a holder in its own right rather than a user with a well-known id
 `users` row, no `fund_positions` projection and no P&L, and a synthetic user would drag
 every investor-facing read into special-casing one UUID. `ListUnitHolders` reports the
 split — `company_units`, `fee_units`, `investor_units = outstanding − company − fee` —
-read straight from TB; `FundNav.company_units` shows an investor the company's share on
-the card. The mint posts under its own `TransferCode::UnitIssue` (46), not `ShareMint`,
+read straight from TB — plus `queued_units`, the `mint` rows still `queued` in
+`unit_issuances`, because `ensure_capacity` reads the settled supply and an operator
+pinning the cap to it while a mint is in flight pins it below where the supply is about
+to land; `FundNav.company_units` shows an investor the company's share on the card. The mint posts under its own `TransferCode::UnitIssue` (47), not `ShareMint`,
 so supply growth the fund's cash never paid for is distinguishable from a subscription's
 on the Share ledger alone.
 
@@ -294,6 +296,51 @@ not a second one, because from the recipient's side it *is* an issuance — unit
 not pay cash for — and the console lists mints and hand-overs as one history
 (`UnitIssuance.source` on the wire).
 
+**Retiring units (`RetireUnits`).** The mint's mirror: units burnt out of a holder's
+account — a user's or the company's — with no cash leg, for units that should never have
+been minted or that stand for an asset the holder no longer owns. Same `unit_issuances`
+row with `source = 'retire'` (migration `0039` widens the CHECK), `units` **positive** —
+every row carries the magnitude and the source carries the direction, so the 0034 digit
+CHECK never learns a sign and the console reads one history of mints, hand-overs and
+retirements. Same key contract, same key space (a mint's key reused for a retirement is
+`Conflict`). Gates: key first; the allocation registered **and `closed`** — burning a
+holder's units out of a live product is a decision that deserves a closed door first,
+and `force` is the operator's explicit override (`Precondition` → FAILED_PRECONDITION
+without it); a user holder exists; fresh NAV (recorded, default basis `units × NAV` — the
+book value written off, not cash that moves); and a Read-First that the holder's
+`shares_key(svc).available() ≥ units` — units resting on the book or reserved by a queued
+redemption are spoken for and stay (`Validation`). No cap check: supply only shrinks. The
+relay posts `Dr SharesOutstanding / Cr <holder shares>` under `TransferCode::UnitRetire`
+(53, its own code beside `ShareBurn` for the reason `UnitIssue` sits beside `ShareMint`: a
+`ShareBurn` is always paired with a `Redeem` payout, a retirement never is) with its own
+transfer id (`tid(issuance, "issue:retire")`); the holder's debit-normal account with the
+non-negative flag parks an over-retire that races the read. The `applied` stamp is the
+same; for a user holder the projection runs the **seller's** side of a trade — `units −=`,
+`cost_basis` shed pro rata and clamped at zero — and the high-water mark is untouched,
+because nothing was realised at any price. The company has no projection to reduce.
+
+**Backing — cash vs in_kind.** Every unit a subscription mints has cash behind it: the
+investor's claim moved into the fund's, and a redemption pays that cash back out. Units
+minted in kind have **none**, so a redemption on such a product asks the fund to pay cash
+it does not hold — it queues forever or, once the fund holds cash for some other reason,
+pays out money that belongs to someone else. `Allocation.backing` (`domain::allocations::
+AllocationBacking`, migration `0039`: `cash` default, `in_kind`) names the distinction,
+orthogonal to state and access. The **first in-kind mint flips a `cash` product to
+`in_kind`** inside `issue_units`, after every gate and before the row is written
+(idempotent; the order is deliberate — a flip with no mint behind it is one operator
+command to undo, a mint on a product still `cash` lets the next redemption price units
+the fund cannot pay for); `TransferCompanyStake` and `RetireUnits` leave it alone.
+Nothing automatic ever flips it back: an operator declares the fund holds cash for the
+units with `SetAllocationBacking` (`AllocationManage`, idempotent, either value, audited
+as `BackingChanged`). The redeem gate (`allocations_app::require_redeemable`) now runs
+both checks off one load — state first, so a draft answers "never open", then
+`Allocation::ensure_cash_backed`, which refuses an `in_kind` product as a `Precondition`
+(FAILED_PRECONDITION, "units of '<svc>' are not backed by fund cash — sell them on the
+book instead of redeeming"). Access is still never consulted on the way out. The
+migration backfills by data, not by name: a product with at least one `source = 'mint'`
+row is `in_kind` (in production `service_arb` and `test_book`); a pod that predates the
+column inserts without it and lands on `cash`.
+
 ## The book — holders trading units with each other (`domain::book`, `BookService`)
 
 A subscription is a dealing *with the fund* at NAV; a redemption is the reverse. The
@@ -312,8 +359,28 @@ closes only by its own policy (`book_policies.book_open`, opt-in per product lik
 no row is a closed book). Placing is also refused under the read-only kill-switch and for a
 frozen owner (the [`OutflowPolicy`] facts, checked in the use case as they are at dispatch);
 cancelling never is. The policy — `book_open`, `taker_fee_bps`, `price_tick` (default
-`0.01`), `lot_size` (default `0.0001`), `market_slippage_bps` (default 500) — is set by
-`AllocationManage`.
+`0.01`), `lot_size` (default `0.0001`), `market_slippage_bps` (default 500),
+`allow_unbacked_trading` (default `false`) — is set by `AllocationManage`.
+
+**Unbacked trading acknowledgement.** On an `in_kind` product (see
+[In-kind issuance](#in-kind-issuance--the-companys-stake-domainissuance-allocationsserviceissueunits))
+a redemption is refused and the book is the holders' only exit — which makes the book the
+place a buyer pays cash for a claim on an asset the fund holds no cash for, one they cannot
+redeem. That is a decision an operator makes knowingly, so the policy carries
+`allow_unbacked_trading` and one domain check, `BookPolicy::ensure_tradable_for(service,
+backing)`, runs at **two** gates: `set_policy` refuses to open the book on an `in_kind`
+product without the flag (`Precondition`, nothing written — the console's early, legible
+refusal), and `place_order` refuses every order on an `in_kind` product's open book without
+it (the backstop). The second gate is not redundant: the backing flips `cash → in_kind` on
+the first in-kind mint, which can land *after* the book opened, and a book that kept
+trading would then sell unbacked units nobody acknowledged — so the order is refused with
+the reason rather than filled quietly. The flag is harmless on a `cash` product (it
+acknowledges in advance) and the terminal shows buyers a notice when it is set. Migration
+`0040` backfills it `true` for every book that was open on an `in_kind` product at the
+deploy (`service_arb` in production): those were trading unbacked units with the operator's
+knowledge, and a deploy must not close a book nobody decided to close. A pre-0040 pod that
+UPSERTs a policy mid-rollout resets the flag; the new pod then refuses that product's orders
+with the reason and the operator sets it again — short and recoverable.
 
 **An order is an escrow in the ledger.** Two per-user accounts hold what an order has
 committed: `BookShares(service, user)` (64, debit-normal, Share ledger,
@@ -469,25 +536,41 @@ properties follow, and each is pinned by a test in
 What cannot be collected — the holder's units are locked by a queued redemption or
 escrowed by a resting sell order on the book, or the charge floors below one base unit of
 share — is carried as `fund_positions.fee_debt` and taken on the next assessment. It is
-never written off and never becomes a negative balance. When **nothing** is collectable
-the assessment persists nothing at all and leaves both clocks where they are, so the
-accrual simply continues into the next sweep (`FeeCharge::is_empty`).
+never written off and never becomes a negative balance. Only a charge that is not **owed**
+at all (a zero policy, a clock that did not run, a residue flooring to nothing) persists
+nothing and leaves both clocks where they are, so the accrual simply continues into the
+next sweep (`FeeCharge::is_empty` is `due.is_zero()`, not "nothing collected").
 
-The cap is the holding's **available** balance on `UserShares`, and both escrows already
-fall outside it: a queued redemption is a pending debit (`locked`), a resting sell has
-moved its units into `BookShares` outright (`posted`). So an order changes *which* road
-the fee takes but not the rule — with some units free, the charge takes those and carries
-the rest as debt; with every unit in an order, nothing is charged, nothing is recorded,
-and the elapsed window is still owed: the next assessment after the order ends charges it
-in full, which is the same money as debt would have been (management is a function of
-elapsed time on the basis, and the basis did not move). The escrow itself is never drawn
-on — it belongs to the order until the book releases it — and the holding cannot go
-negative, because the cap floors at what it has. Pinned by the two escrow tests in
-[`tests/fee_policy.rs`](tests/fee_policy.rs). The residual window is the few milliseconds
-between a placement being recorded and the relay applying its lock, during which an
-assessment still sees the units as free: a clawback landing there makes the lock park on
-the non-negative flag and the order is marked `rejected` — the designed backstop, not a
-negative balance.
+**The fee is owed on the whole position and collected from the free holding** (#255).
+`PositionSnapshot` carries two unit figures: `units`, the position the fee is measured on
+— `UserShares.posted + BookShares(svc, user).posted`, so a resting sell's escrow and a
+queued redemption's reserve both count, because an order or a pending exit changes where
+the units sit and not who owns them (and `MarketValue` management is priced on all of
+them) — and `collectable`, the holding's **available** balance, which caps the clawback.
+Both escrows fall outside the cap: a queued redemption is a pending debit (`locked`), a
+resting sell has moved its units into `BookShares` outright. So an order changes *which*
+road the fee takes but not the amount — with some units free, the charge takes those and
+carries the rest as debt; with every unit in an order, the charge is still recorded, with
+`charged_units = 0` (`0041` widened the audit row's CHECK for exactly this), the whole
+amount lands in `fee_debt`, the clocks move, and the next assessment after the order ends
+collects the debt plus only the seconds since. `FeeAssessment::record` raises `Charged`
+only when `charged_units > 0`, so the relay never sees a zero transfer; the audit row, the
+debt and the clocks commit either way. The escrow itself is never drawn on — it belongs to
+the order until the book releases it — and the holding cannot go negative, because the cap
+floors at what it has. Pinned by the three escrow tests in
+[`tests/fee_policy.rs`](tests/fee_policy.rs).
+
+The alternative — pausing the clock while the units are escrowed, and telling the holder
+— was rejected because it *is* the hole this closes: a holder who keeps an ask resting
+defers their fee for as long as they like and is billed the whole stretch in one blow the
+day it comes off, while the fund carried their capital the entire time. The debt road
+already existed (`0023`, [`fee_accrual`](src/infrastructure/fee_accrual.rs)) and adds no
+new state.
+
+The residual window is the few milliseconds between a placement being recorded and the
+relay applying its lock, during which an assessment still sees the units as free: a
+clawback landing there makes the lock park on the non-negative flag and the order is
+marked `rejected` — the designed backstop, not a negative balance.
 
 ### Ordering, clocks, and the atomic write
 
@@ -501,7 +584,8 @@ mid-period charge cannot silently restart the period.
 `PgFeeAssessments::charge` commits four things in one transaction under the
 `fund_positions` row lock: the `fee_assessments` audit row, the new debt/mark/clocks,
 the projection's `units` **decremented by the clawback**, and the `Charged` event into
-`event_log` + `outbox`. The `units` decrement is load-bearing and easy to miss: the
+`event_log` + `outbox` (absent when nothing was collected — the first three still
+commit). The `units` decrement is load-bearing and easy to miss: the
 redemption settle reduces cost basis by `(units − redeemed) / units` against the
 *projection's* count (`0010`), so a clawback that took units without telling the
 projection would leave that denominator permanently too large and every later settle
@@ -1012,12 +1096,59 @@ auto-cancelled (refunded) at 24h — the de-facto rail top-up SLA.
 
 ## Tests
 
+### Bring-up
+
+Every suite under `piggybank/core/tests` runs against a **real** Postgres and TigerBeetle
+through `tests/common/mod.rs` — no suite opens its own connection. `DATABASE_URL` names the
+*base* database; the harness never migrates it. On a binary's first `pool()` it takes a
+session advisory lock on the base, ensures `<base>_template` exists and carries exactly this
+build's migrations, then `DROP … IF EXISTS` / `CREATE DATABASE <base>_<binary> TEMPLATE
+<base>_template` — one database per test binary (`banking_allocation_registry`,
+`banking_relay_shutdown`, …), so the outbox relay's per-database advisory lock is never
+shared between binaries and a parallel runner (nextest, two `cargo test --test …` side by
+side) cannot race for it. `pool()` hands each test its own pool on that clone;
+`database_url()` returns the clone's URL for the two suites that size their own pool;
+`seeded_ledger()` connects to `TIGERBEETLE_ADDRESS` / `TIGERBEETLE_CLUSTER_ID` (default
+`127.0.0.1:3033`, cluster `0`) and seeds the singleton accounts. Clones are not dropped at
+exit (a test binary has no end-of-process hook); the next run of the same binary replaces
+its clone. Locally:
+
+```bash
+nix run .#db          # the shared postgres cluster; ensures the `banking` database
+nix run .#tb          # a single-replica ledger on :3033
+DATABASE_URL=postgres://postgres@localhost:5432/banking cargo test -p piggybank-core --tests
+```
+
+A template migrated by another build — a migration file edited on this branch
+(`VersionMismatch`) or a version this build does not know after switching branches
+(`VersionMissing`) — is recreated from scratch with a notice on stderr (`--nocapture` to
+see it), instead of failing every suite with `migration N was previously applied but has
+been modified`. The base database itself is never touched, so it can no longer go stale
+through the tests.
+
+A missing service is a **skip locally and a failure under CI**. Without `DATABASE_URL`
+(or with a replica that does not answer) a suite prints a notice and returns early — the
+counters still read `N passed`, so the signature of a run that executed nothing is
+`finished in 0.00s`, not a zero. Under `CI=true` — GitHub Actions exports it, and
+`nix run .#check-rust` exports it too — the same condition panics with
+`integration services required in CI`, so a green tick means the money plane was actually
+exercised (#259). `check-rust` brings up its own throwaway Postgres (`:54329`) and
+TigerBeetle (`:3039`) from the flake apps, runs the workspace against them and tears them
+down on exit; move the ports with `CHECK_POSTGRES_PORT` / `CHECK_TIGERBEETLE_PORT`.
+
+Your own base database, when several checkouts share the cluster:
+`PGDATABASES="banking_<name>" nix run .#db` creates it; point `DATABASE_URL` at it and the
+template and clones follow as `banking_<name>_template`, `banking_<name>_<binary>`. The base
+name must be plain `[a-z0-9_]` — it is spliced into DDL. A second ledger next to the default
+one: `TIGERBEETLE_PORT=3034 TBCLUSTER=1 nix run .#tb`, then
+`TIGERBEETLE_ADDRESS=127.0.0.1:3034 TIGERBEETLE_CLUSTER_ID=1`.
+
 `domain` unit tests cover the money + NAV math (incl. the `mul_div` overflow bound and the
 share-key ledger sides), the subscription/redemption aggregates, the withdrawal
 transitions, the allocation registry's state machine, and the fee arithmetic (the flat-year
 2%, the 20% taken net of management, the mark refusing to charge a mere recovery, the
-hurdle, the deferral of an uncollectable charge into debt, and a backwards clock charging
-nothing);
+hurdle, the deferral of an uncollectable charge into debt — recorded, not skipped, and
+raising no clawback event — and a backwards clock charging nothing);
 `piggybank/core/tests/allocation_registry.rs` covers the gate against real Postgres +
 TigerBeetle (an unregistered service refused *before* any money moves, a draft taking
 nothing, a closed allocation still redeeming, double registration as a conflict, the
@@ -1031,7 +1162,18 @@ the relay as its own kind) and the hand-over out of the company's stake (the 13 
 moving company → user with `SharesOutstanding` unchanged and `ListUnitHolders` showing
 the shift, the recipient's basis and mark, the shared key space refusing a mint's key
 and returning a repeat, more than the company holds refused before anything is written,
-and an unregistered service refused);
+and an unregistered service refused), the retirement (units burnt out of an investor and
+the company on a closed product with the supply, `ListUnitHolders` and the investor's
+`fund_positions` units and basis shrinking and the mark untouched, a live product refusing
+without `force` and burning with it, the shared key space returning a repeat and refusing
+a mint's key, more than the holder has **available** refused before anything is written —
+including units a queued redemption has reserved — and the widened `source` CHECK), and
+the backing (a registration landing on `cash`, the first mint flipping it to `in_kind`
+with one `BackingChanged` fact and a second mint or a hand-over leaving none, the
+operator's `set_backing` idempotent and the next mint flipping again, `Redeem` refused as
+a precondition on an `in_kind` product before any redemption is recorded and passing
+once the operator declares cash — on a closed product too — and a row written by the
+pre-0039 INSERT reading as `cash` with the column CHECK refusing anything else);
 `piggybank/core/tests/balance_allocations.rs` and
 `piggybank/core/tests/wallet_withdrawals.rs` hit **real** Postgres + TigerBeetle
 (deposit idempotency, the non-negative backstop, transfer-id idempotency; the Share-ledger
@@ -1066,11 +1208,12 @@ untouched, `SharesOutstanding` is unchanged so no other holder pays, and two inv
 the same NAV owe different fees when they entered at different prices — plus the bulk
 settlement (the only moment a fee becomes cash), its refusal when the fund's claim is
 short, the sweeper end to end, a fund with no policy never being charged, and the book's
-escrow against the clawback — every unit in a resting sell charges nothing and moves no
-clock, the year being collected once the order is cancelled; most units in one caps the
-charge at the free holding, carries the rest as debt, and collects it on the next
-assessment after the cancel, with the holding exactly empty and the escrow untouched
-either way. Note that
+escrow against the clawback — every unit in a resting sell is charged as debt with nothing
+collected, the audit row written with `charged_units = 0`, the clocks moved and the ledger
+untouched, the debt (and only the seconds since, never the year again) being collected
+once the order is cancelled; most units in one caps the charge at the free holding,
+carries the rest as debt, and collects it on the next assessment after the cancel, with
+the holding exactly empty and the escrow untouched either way. Note that
 the accrual clocks are DB-stamped while `now` is caller-supplied, so those tests overshoot
 a period boundary by an hour and compare amounts with a tolerance rather than for equality;
 the sub-second jitter is 3e-8 of a year's fee and never accumulates. `piggybank/core/tests/kyc_gating.rs` covers the verification floor against real Postgres +

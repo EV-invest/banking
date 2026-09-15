@@ -27,17 +27,7 @@ use domain::{
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
 	config::KycGate,
-	infrastructure::{
-		custody::StubCustody,
-		db,
-		deposits::PgDeposits,
-		ledger::{self, TbLedger},
-		outflow::PgOutflowPolicy,
-		relay::Relay,
-		tigerbeetle::TigerBeetle,
-		users::PgUsers,
-		withdrawals::PgWithdrawals,
-	},
+	infrastructure::{custody::StubCustody, deposits::PgDeposits, outflow::PgOutflowPolicy, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
 	ports::{
 		UserRepository, WithdrawalRepository,
 		custody::{BroadcastRequest, Custody, CustodyError},
@@ -78,18 +68,8 @@ struct Harness {
 }
 
 async fn harness() -> Option<Harness> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-
-	let address = std::env::var("TIGERBEETLE_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3033".to_owned());
-	let cluster = std::env::var("TIGERBEETLE_CLUSTER_ID").ok().and_then(|s| s.parse().ok()).unwrap_or(0u128);
-	let tigerbeetle = Arc::new(TigerBeetle::connect(cluster, &address).expect("connect to TigerBeetle"));
-	let ledger: Arc<dyn Ledger> = Arc::new(TbLedger::new(tigerbeetle, pool.clone()));
-	if ledger::seed_singletons(ledger.as_ref()).await.is_err() {
-		eprintln!("TigerBeetle unreachable — skipping broadcast guard test");
-		return None;
-	}
+	let pool = common::pool().await?;
+	let ledger = common::seeded_ledger(&pool, "broadcast guard test").await?;
 
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));

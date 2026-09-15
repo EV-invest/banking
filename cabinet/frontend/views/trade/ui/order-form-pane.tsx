@@ -114,7 +114,7 @@ export function OrderFormPane({
         </Tabs>
       </TerminalPaneHeader>
       <TerminalPaneBody>
-        <OrderGate closed={closed} locked={locked} />
+        <OrderGate closed={closed} locked={locked} unbacked={policy?.allow_unbacked_trading === true} />
         <OrderFormFields draft={draft} context={context} position={position} disabled={disabled} busy={busy} onChange={setDraft} onSubmit={submit} />
         {outcome && <OrderOutcome outcome={outcome} />}
       </TerminalPaneBody>

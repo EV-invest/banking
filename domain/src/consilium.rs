@@ -91,6 +91,18 @@ impl ConsiliumKind {
 		}
 	}
 
+	/// The word a refusal message calls this kind by — "a payout consilium", "a fee-policy
+	/// consilium". Kept apart from [`Self::as_str`] because that one is the wire and storage
+	/// spelling and must never move, while this one is prose and may.
+	pub fn noun(self) -> &'static str {
+		match self {
+			Self::RevenuePayout => "payout",
+			Self::Payment => "payment",
+			Self::ValuationOverride => "valuation-override",
+			Self::FeePolicy => "fee-policy",
+		}
+	}
+
 	pub fn parse(raw: &str) -> Result<Self, DomainError> {
 		match raw {
 			"revenue_payout" => Ok(Self::RevenuePayout),
@@ -455,8 +467,11 @@ impl Consilium {
 		}
 		let owner_count = roster.len() as u32;
 		if owner_count < MIN_OWNERS {
+			// "needs at least", "owners" and "this fund has N" are what the cabinet's
+			// `consilium-refusal.ts` classifies this refusal by; only the noun varies.
+			let noun = terms.kind().noun();
 			return Err(DomainError::Validation(format!(
-				"a payout consilium needs at least {MIN_OWNERS} owners; this fund has {owner_count}, so the threshold can never be reached"
+				"a {noun} consilium needs at least {MIN_OWNERS} owners; this fund has {owner_count}, so the threshold can never be reached"
 			)));
 		}
 		let eligible: Vec<UserId> = roster.into_iter().filter(|owner| *owner != initiator).collect();
@@ -955,6 +970,32 @@ mod tests {
 			let roster = owners(n);
 			let err = Consilium::open(ConsiliumId::new(), terms(), [0u8; 32], roster[0], &roster, NOW).unwrap_err();
 			assert!(matches!(err, DomainError::Validation(_)), "N={n} must be refused, not stored");
+		}
+		// The payout wording is pinned byte-for-byte: `consilium-refusal.test.ts` carries the
+		// same literal, and the classifier's substrings must survive every kind (banking#250).
+		let roster = owners(2);
+		let refusal = |kind_terms: ConsiliumTerms| -> String {
+			match Consilium::open(ConsiliumId::new(), kind_terms, [0u8; 32], roster[0], &roster, NOW).unwrap_err() {
+				DomainError::Validation(message) => message,
+				other => panic!("expected Validation, got {other:?}"),
+			}
+		};
+		assert_eq!(
+			refusal(terms()),
+			"a payout consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached"
+		);
+		let by_kind: [(ConsiliumTerms, &str); 4] = [
+			(terms(), "a payout consilium"),
+			(ConsiliumTerms::Payment(payment_subject()), "a payment consilium"),
+			(ConsiliumTerms::ValuationOverride(valuation_override("16250")), "a valuation-override consilium"),
+			(ConsiliumTerms::FeePolicy(fee_policy_subject()), "a fee-policy consilium"),
+		];
+		for (kind_terms, want_noun) in by_kind {
+			let kind = kind_terms.kind();
+			let message = refusal(kind_terms);
+			assert!(message.contains(want_noun), "{kind:?}: {message}");
+			assert!(message.contains("needs at least") && message.contains("owners"), "{kind:?}: {message}");
+			assert!(message.contains("this fund has 2"), "{kind:?}: {message}");
 		}
 		// N=3 is the smallest roster that CAN open — pinned here so the refusal above is
 		// known to be about the roster size and not about some unrelated gate. (This line

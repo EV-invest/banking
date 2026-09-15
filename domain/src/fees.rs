@@ -482,12 +482,19 @@ impl FeePolicySubject {
 }
 
 /// Everything an assessment needs to know about one holding, read at assessment time.
-/// `units` is the **available** unit balance (posted minus anything a queued redemption
-/// has locked) — the clawback is capped by it, so a locked holding defers rather than
-/// fails.
+///
+/// Two unit figures, because a fee is *owed* on one and *taken* from the other. `units` is
+/// the holder's whole position — the holding plus whatever a resting sell has escrowed
+/// and whatever a queued redemption has reserved but not yet burned. The fee accrues on
+/// all of it: an order or a pending exit changes where the units sit, not who owns them.
+/// `collectable` is the part a clawback may touch right now (the holding's available
+/// balance), so a locked or escrowed position defers into debt rather than failing — and
+/// never charges less for being locked.
 #[derive(Clone, Copy, Debug)]
 pub struct PositionSnapshot {
 	pub units: Shares,
+	/// Units the clawback may take: at most `units`, less whatever is escrowed or reserved.
+	pub collectable: Shares,
 	/// Net cash invested (average cost) — the invested-capital base.
 	pub cost_basis: Usdt,
 	/// The NAV this investor last crystallized at (or entered at). Their own mark.
@@ -541,7 +548,7 @@ pub struct FeeCharge {
 	pub debt_opening: Usdt,
 	/// `management + performance + debt_opening`.
 	pub due: Usdt,
-	/// Units clawed back — `min(due / NAV, units held)`.
+	/// Units clawed back — `min(due / NAV, collectable)`.
 	pub charged_units: Shares,
 	/// The cash value of `charged_units` at this NAV.
 	pub charged_cash: Usdt,
@@ -554,10 +561,15 @@ pub struct FeeCharge {
 }
 
 impl FeeCharge {
-	/// Nothing was collectable — the caller should persist nothing and leave every clock
-	/// where it is, so the accrual simply continues into the next sweep.
+	/// Nothing is owed — the caller should persist nothing and leave every clock where it
+	/// is. This is about what is *due*, not what was *collected*: a charge that is owed but
+	/// cannot be taken right now (every unit escrowed by a resting sell, or locked by a
+	/// queued redemption) is not empty. It must still be recorded, its whole amount carried
+	/// as debt and the accrual clock moved, or a holder with an ask on the book would defer
+	/// their fee for as long as the ask rests and be billed the whole stretch in one blow
+	/// the day it comes off.
 	pub fn is_empty(&self) -> bool {
-		self.charged_units.is_zero()
+		self.due.is_zero()
 	}
 }
 
@@ -603,9 +615,10 @@ pub fn assess(policy: &FeePolicy, snapshot: &PositionSnapshot, nav: Nav, trigger
 		.and_then(|sum| sum.checked_add(snapshot.debt))
 		.ok_or_else(|| DomainError::Validation("fee total overflows".into()))?;
 
-	// Collect in units, capped by the holding. `from_cash` floors, so the sub-unit
-	// residue falls into the carried debt rather than being rounded onto the investor.
-	let charged_units = Shares::from_cash(due, nav)?.min(snapshot.units);
+	// Collect in units, capped by what the holding can give up right now — not by the
+	// position the fee was measured on. `from_cash` floors, so the sub-unit residue falls
+	// into the carried debt rather than being rounded onto the investor.
+	let charged_units = Shares::from_cash(due, nav)?.min(snapshot.collectable);
 	let charged_cash = nav.value(charged_units)?;
 	let debt_carried = due.checked_sub(charged_cash).unwrap_or(Usdt::ZERO);
 
@@ -688,8 +701,9 @@ pub type FeeSettlementId = Id<FeeSettlementTag>;
 pub struct FeeSettlementTag;
 
 /// One charge against one holding — an immutable record, like a subscription. Built from
-/// an [`assess`] result that actually collected something; an empty charge is not an
-/// assessment and must not be recorded (see [`FeeCharge::is_empty`]).
+/// an [`assess`] result that found something owed; an empty charge is not an assessment
+/// and must not be recorded (see [`FeeCharge::is_empty`]). A charge owed but not
+/// collectable IS recorded — that is how the debt and the moved clock get their audit row.
 #[derive(Clone, Debug)]
 pub struct FeeAssessment {
 	id: FeeAssessmentId,
@@ -702,8 +716,10 @@ pub struct FeeAssessment {
 }
 
 impl FeeAssessment {
-	/// Record the charge, raising `Charged`. The relay claws the units back
-	/// (`Dr FeeShares / Cr UserShares`).
+	/// Record the charge, raising `Charged` when any units were collected. The relay claws
+	/// those back (`Dr FeeShares / Cr UserShares`). A charge that deferred entirely into
+	/// debt raises nothing: no units moved, so there is no ledger fact to post — a zero
+	/// transfer would only be noise in the outbox and on the Share ledger.
 	pub fn record(id: FeeAssessmentId, user: UserId, service: ServiceId, nav: Nav, trigger: Trigger, charge: FeeCharge) -> Result<Self, DomainError> {
 		if charge.is_empty() {
 			return Err(DomainError::Validation("nothing to charge".into()));
@@ -717,16 +733,18 @@ impl FeeAssessment {
 			charge,
 			pending: Vec::new(),
 		};
-		assessment.pending.push(FeeEvent::Charged {
-			assessment_id: id,
-			user,
-			service,
-			units: charge.charged_units,
-			nav,
-			management: charge.management,
-			performance: charge.performance,
-			cash: charge.charged_cash,
-		});
+		if !charge.charged_units.is_zero() {
+			assessment.pending.push(FeeEvent::Charged {
+				assessment_id: id,
+				user,
+				service,
+				units: charge.charged_units,
+				nav,
+				management: charge.management,
+				performance: charge.performance,
+				cash: charge.charged_cash,
+			});
+		}
 		Ok(assessment)
 	}
 
@@ -933,6 +951,7 @@ mod tests {
 	fn snapshot() -> PositionSnapshot {
 		PositionSnapshot {
 			units: shares("1000"),
+			collectable: shares("1000"),
 			cost_basis: usdt("1000"),
 			high_water_mark: nav("1"),
 			debt: Usdt::ZERO,
@@ -1036,22 +1055,25 @@ mod tests {
 
 	#[test]
 	fn a_locked_holding_defers_the_whole_charge_instead_of_failing() {
-		// Every unit is reserved by a queued redemption, so `units` (available) is zero.
+		// Every unit is reserved by a queued redemption or parked in a resting sell, so
+		// nothing is collectable — but the position is still the holder's, and the year
+		// is still owed on all of it.
 		let mut snap = snapshot();
-		snap.units = Shares::ZERO;
+		snap.collectable = Shares::ZERO;
 		let charge = assess(&FeePolicy::HOUSE, &snap, nav("1"), Trigger::Period, YEAR).unwrap();
 		assert_eq!(charge.due, usdt("20"));
 		assert_eq!(charge.charged_units, Shares::ZERO);
 		// Nothing is written off — it all carries to the next assessment.
 		assert_eq!(charge.debt_carried, usdt("20"));
-		assert!(charge.is_empty());
+		// And nothing is skipped: the charge is owed, so it is recorded and the clock moves.
+		assert!(!charge.is_empty());
 	}
 
 	#[test]
 	fn a_partly_collectable_charge_carries_only_the_shortfall() {
-		// The holding covers 5 USDT of a 20 USDT year at NAV 1.0.
+		// The holding can give up 5 USDT of a 20 USDT year at NAV 1.0; the rest is escrowed.
 		let mut snap = snapshot();
-		snap.units = shares("5");
+		snap.collectable = shares("5");
 		let charge = assess(&FeePolicy::HOUSE, &snap, nav("1"), Trigger::Period, YEAR).unwrap();
 		assert_eq!(charge.charged_units, shares("5"));
 		assert_eq!(charge.charged_cash, usdt("5"));
@@ -1318,10 +1340,24 @@ mod tests {
 
 	#[test]
 	fn an_empty_charge_cannot_become_an_assessment() {
-		let mut snap = snapshot();
-		snap.units = Shares::ZERO;
-		let charge = assess(&FeePolicy::HOUSE, &snap, nav("1"), Trigger::Period, YEAR).unwrap();
+		// Empty means nothing OWED — a zero policy, not a locked holding.
+		let none = FeePolicy::new(0, 0, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual).unwrap();
+		let charge = assess(&none, &snapshot(), nav("1"), Trigger::Period, YEAR).unwrap();
+		assert!(charge.is_empty());
 		assert!(FeeAssessment::record(FeeAssessmentId::new(), UserId::new(), svc(), nav("1"), Trigger::Period, charge).is_err());
+	}
+
+	#[test]
+	fn a_charge_deferred_entirely_into_debt_is_recorded_but_moves_no_units() {
+		// Owed but not collectable: the assessment exists (it carries the debt and the
+		// clock), yet there is no clawback for the relay to post — a zero transfer is not
+		// a transfer.
+		let mut snap = snapshot();
+		snap.collectable = Shares::ZERO;
+		let charge = assess(&FeePolicy::HOUSE, &snap, nav("1"), Trigger::Period, YEAR).unwrap();
+		let mut assessment = FeeAssessment::record(FeeAssessmentId::new(), UserId::new(), svc(), nav("1"), Trigger::Period, charge).unwrap();
+		assert_eq!(assessment.charge().debt_carried, usdt("20"));
+		assert!(assessment.drain_events().is_empty());
 	}
 
 	#[test]

@@ -93,6 +93,10 @@ const ISSUE_MINT: &[u8] = b"issue:mint";
 /// / Cr company shares`. A different salt from the mint so a reconciler reading the
 /// transfer id alone knows which leg the row posted.
 const ISSUE_TRANSFER: &[u8] = b"issue:transfer";
+/// The same, for a retirement: the burn `Dr shares-outstanding / Cr <holder shares>`.
+/// Its own salt for the same reason — the transfer id alone must say which way the row
+/// moved the supply.
+const ISSUE_RETIRE: &[u8] = b"issue:retire";
 
 /// Salts for a redemption's saga: the reservation locks the units as a pending burn;
 /// settle posts the burn and pays the cash out of the fund's claim; fail/cancel void the
@@ -660,13 +664,16 @@ async fn project_trade(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error
 /// projection carries the issuance's `nav` as the high-water mark blend, exactly as a
 /// subscription at that NAV would: an investor handed units in kind is measured for
 /// performance fees from the price they were handed them at. The company holder gets no
-/// projection — there is no investor to report P&L or charge fees to. The `source` does
-/// not matter here: whether the units were minted or came out of the company's stake,
-/// the recipient's position gains the same units and basis.
+/// projection — there is no investor to report P&L or charge fees to. Whether the units
+/// were minted or came out of the company's stake, the recipient's position gains the
+/// same units and basis; a **retirement** runs the seller's side of a trade instead —
+/// units off, basis down pro rata (clamped at zero, for the reasons [`project_trade`]
+/// gives), high-water mark untouched, because nothing was realised at any price.
 async fn project_issuance(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error> {
 	const PROJECTION_LEG: i32 = 100;
 	let IssuanceEvent::Issued {
 		holder,
+		source,
 		service,
 		units,
 		nav,
@@ -693,21 +700,42 @@ async fn project_issuance(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Er
 			fee_accrual::carry_accrual(&mut tx, user.raw(), service.as_str(), now_unix_i64())
 				.await
 				.map_err(|err| sqlx::Error::Protocol(format!("carry fee accrual before issuance basis change: {err}")))?;
-			sqlx::query(
-				"INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5) \
-				 ON CONFLICT (user_id, service) DO UPDATE SET \
-				 cost_basis = (fund_positions.cost_basis::numeric + EXCLUDED.cost_basis::numeric)::text, \
-				 units = (fund_positions.units::numeric + EXCLUDED.units::numeric)::text, \
-				 high_water_mark = GREATEST(fund_positions.high_water_mark::numeric, EXCLUDED.high_water_mark::numeric)::text, \
-				 updated_at = now()",
-			)
-			.bind(user.raw())
-			.bind(service.as_str())
-			.bind(cost_basis.base_units().to_string())
-			.bind(units.base_units().to_string())
-			.bind(nav.base_units().to_string())
-			.execute(&mut *tx)
-			.await?;
+			match source {
+				IssuanceSource::Mint | IssuanceSource::Company => {
+					sqlx::query(
+						"INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5) \
+						 ON CONFLICT (user_id, service) DO UPDATE SET \
+						 cost_basis = (fund_positions.cost_basis::numeric + EXCLUDED.cost_basis::numeric)::text, \
+						 units = (fund_positions.units::numeric + EXCLUDED.units::numeric)::text, \
+						 high_water_mark = GREATEST(fund_positions.high_water_mark::numeric, EXCLUDED.high_water_mark::numeric)::text, \
+						 updated_at = now()",
+					)
+					.bind(user.raw())
+					.bind(service.as_str())
+					.bind(cost_basis.base_units().to_string())
+					.bind(units.base_units().to_string())
+					.bind(nav.base_units().to_string())
+					.execute(&mut *tx)
+					.await?;
+				}
+				// The row's own `cost_basis` is the book value the operator wrote off for the
+				// record; the projection sheds its basis pro rata to the units retired, exactly
+				// as a seller's does, so a holder who retires half keeps half of what they paid.
+				IssuanceSource::Retire => {
+					sqlx::query(
+						"UPDATE fund_positions SET \
+						 cost_basis = CASE WHEN units::numeric > $3::numeric THEN trunc(cost_basis::numeric * (units::numeric - $3::numeric) / units::numeric)::text ELSE '0' END, \
+						 units = GREATEST(units::numeric - $3::numeric, 0)::text, \
+						 updated_at = now() \
+						 WHERE user_id = $1 AND service = $2",
+					)
+					.bind(user.raw())
+					.bind(service.as_str())
+					.bind(units.base_units().to_string())
+					.execute(&mut *tx)
+					.await?;
+				}
+			}
 		}
 	}
 	tx.commit().await?;
@@ -948,6 +976,11 @@ fn plan_subscription(event: SubscriptionEvent, aggregate_id: Uuid, reference: u1
 ///   `SharesOutstanding` is not touched. `CompanyShares` is debit-normal with the
 ///   non-negative flag, so a hand-over of more than the company holds is refused by
 ///   TigerBeetle and parks — the backstop under the use case's Read-First.
+/// - **Retire** — the mint reversed, `Dr shares-outstanding / Cr <holder shares>` under
+///   [`TransferCode::UnitRetire`]: supply shrinks by `units`, no cash moves. The
+///   holder's account (`UserShares` or `CompanyShares`) is debit-normal with the
+///   non-negative flag, so retiring more than it holds parks — the backstop under the
+///   use case's Read-First on `available()`.
 ///
 /// A `Company` source naming the company as its holder is unplannable rather than a
 /// same-account transfer TigerBeetle would refuse anyway: the aggregate cannot build
@@ -974,6 +1007,13 @@ fn plan_issuance(event: IssuanceEvent, aggregate_id: Uuid, reference: u128) -> R
 				TransferCode::CompanyStakeTransfer,
 			)
 		}
+		IssuanceSource::Retire => (
+			"issue_retire",
+			ISSUE_RETIRE,
+			LedgerAccountKey::SharesOutstanding(service.clone()),
+			holder.shares_key(&service),
+			TransferCode::UnitRetire,
+		),
 	};
 	Ok(PlannedOp {
 		role,
@@ -1554,6 +1594,22 @@ mod tests {
 
 		// The company handing units to itself is not a leg the ledger should even see.
 		assert!(plan(UnitHolder::Company, IssuanceSource::Company).is_err());
+
+		// A retirement is the mint reversed — same two accounts, swapped sides — for either
+		// holder, under its own code and its own transfer id.
+		for holder in [UnitHolder::User(user), UnitHolder::Company] {
+			let retire = plan(holder, IssuanceSource::Retire).unwrap();
+			let LedgerAction::Post(leg) = &retire.action else { panic!("a retirement is one posted leg") };
+			assert_eq!(
+				(leg.debit.clone(), leg.credit.clone()),
+				(LedgerAccountKey::SharesOutstanding(service.clone()), holder.shares_key(&service))
+			);
+			assert_eq!(leg.code, TransferCode::UnitRetire);
+			assert_eq!(leg.amount, Shares::parse_decimal("13000").unwrap().base_units(), "the row's units are the magnitude");
+			assert_eq!(retire.role, "issue_retire");
+			assert_eq!(retire.transfer_id, tid(issuance_id.raw(), ISSUE_RETIRE));
+			assert_ne!(retire.transfer_id, mint.transfer_id, "a burn must never alias the mint it reverses");
+		}
 	}
 
 	// A fill is delivery versus payment or nothing: units, cash and the taker's fee are

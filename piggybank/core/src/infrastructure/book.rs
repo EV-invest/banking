@@ -458,6 +458,7 @@ fn policy_from_row(row: &sqlx::postgres::PgRow) -> Result<BookPolicyRecord, Doma
 		Price::from_base_units(parse_units(&price_tick, "price tick")?),
 		Shares::from_base_units(parse_units(&lot_size, "lot size")?),
 		u32::try_from(market_slippage_bps).map_err(|_| DomainError::Repository("malformed market slippage".into()))?,
+		row.try_get("allow_unbacked_trading").map_err(repo_err)?,
 	)?;
 	Ok(BookPolicyRecord {
 		service: ServiceId::parse(&service)?,
@@ -470,7 +471,8 @@ fn policy_from_row(row: &sqlx::postgres::PgRow) -> Result<BookPolicyRecord, Doma
 impl BookStore for PgBook {
 	async fn policy(&self, service: &ServiceId) -> Result<Option<BookPolicyRecord>, DomainError> {
 		let row = sqlx::query(
-			"SELECT service, book_open, taker_fee_bps, price_tick, lot_size, market_slippage_bps, EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
+			"SELECT service, book_open, taker_fee_bps, price_tick, lot_size, market_slippage_bps, allow_unbacked_trading, \
+			 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 			 FROM book_policies WHERE service = $1",
 		)
 		.bind(service.as_str())
@@ -482,10 +484,13 @@ impl BookStore for PgBook {
 
 	async fn set_policy(&self, service: &ServiceId, policy: &BookPolicy) -> Result<BookPolicyRecord, DomainError> {
 		let row = sqlx::query(
-			"INSERT INTO book_policies (service, book_open, taker_fee_bps, price_tick, lot_size, market_slippage_bps) VALUES ($1, $2, $3, $4, $5, $6) \
+			"INSERT INTO book_policies (service, book_open, taker_fee_bps, price_tick, lot_size, market_slippage_bps, allow_unbacked_trading) \
+			 VALUES ($1, $2, $3, $4, $5, $6, $7) \
 			 ON CONFLICT (service) DO UPDATE SET book_open = EXCLUDED.book_open, taker_fee_bps = EXCLUDED.taker_fee_bps, price_tick = EXCLUDED.price_tick, \
-			 lot_size = EXCLUDED.lot_size, market_slippage_bps = EXCLUDED.market_slippage_bps, updated_at = now() \
-			 RETURNING service, book_open, taker_fee_bps, price_tick, lot_size, market_slippage_bps, EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at",
+			 lot_size = EXCLUDED.lot_size, market_slippage_bps = EXCLUDED.market_slippage_bps, allow_unbacked_trading = EXCLUDED.allow_unbacked_trading, \
+			 updated_at = now() \
+			 RETURNING service, book_open, taker_fee_bps, price_tick, lot_size, market_slippage_bps, allow_unbacked_trading, \
+			 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at",
 		)
 		.bind(service.as_str())
 		.bind(policy.book_open())
@@ -493,6 +498,7 @@ impl BookStore for PgBook {
 		.bind(policy.price_tick().base_units().to_string())
 		.bind(policy.lot_size().base_units().to_string())
 		.bind(i32::try_from(policy.market_slippage_bps()).map_err(|_| DomainError::Validation("market slippage out of range".into()))?)
+		.bind(policy.allow_unbacked_trading())
 		.fetch_one(&self.pool)
 		.await
 		.map_err(|err| match err.as_database_error().and_then(|db| db.constraint()) {

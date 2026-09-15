@@ -101,9 +101,10 @@ fn requests(state: AppState) -> Router {
 		.route("/api/book/orders/cancel", post(book::cancel_order))
 		.route("/api/book/orders/history", get(book::list_order_history))
 		.route("/api/book/fills", get(book::list_fills))
-		// Admin console — role-gated at the BFF (coarse) AND re-checked per-permission by the
-		// owning plane (defense in depth). Identity/platform routes hit concierge; money/
-		// treasury routes hit the piggybank money plane.
+		// Admin console — role-gated at the BFF (coarse: any non-investor; the fee routes
+		// narrower: admin or owner) AND re-checked per-permission by the owning plane
+		// (defense in depth). Identity/platform routes hit concierge; money/treasury routes
+		// hit the piggybank money plane.
 		.route("/api/admin/overview", get(admin::overview))
 		.route("/api/admin/users", get(admin::list_users))
 		.route("/api/admin/users/detail", get(admin::get_user))
@@ -128,6 +129,8 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/allocations/grants/revoke", post(admin::revoke_allocation_access))
 		.route("/api/admin/allocations/issue", post(admin::issue_units))
 		.route("/api/admin/allocations/transfer-stake", post(admin::transfer_company_stake))
+		.route("/api/admin/allocations/retire", post(admin::retire_units))
+		.route("/api/admin/allocations/backing", post(admin::set_allocation_backing))
 		.route("/api/admin/allocations/holders", get(admin::list_unit_holders))
 		.route("/api/admin/allocations/book", post(admin::set_book_policy))
 		.route("/api/admin/fees/policies", get(admin::list_fee_policies))
@@ -273,12 +276,38 @@ pub async fn require_money_token(state: &AppState, jar: &CookieJar) -> Result<St
 /// concierge directory per admin request (admin traffic is low; the lookup is one
 /// local-plane RPC).
 pub async fn require_admin(state: &AppState, jar: &CookieJar) -> Result<(), ApiError> {
-	let (token, _claims) = require_identity(state, jar).await?;
-	let me = state.grpc.get_me(&token).await.map_err(|_| ApiError::Unauthenticated)?;
-	if me.role.is_empty() || me.role == "investor" {
+	let role = caller_role(state, jar).await?;
+	if role.is_empty() || role == "investor" {
 		return Err(ApiError::Grpc(Status::permission_denied("admin access required")));
 	}
 	Ok(())
+}
+
+/// The roles the money plane lets administer fees (`/api/admin/fees/*`). Spelled as the
+/// concierge directory reports them (`UserProfile.role`, snake_case:
+/// investor/operator/admin/owner).
+const FEE_ADMIN_ROLES: &[&str] = &["admin", "owner"];
+
+/// The narrower gate for the fee routes: `admin` or `owner` only. [`require_admin`]
+/// would let an `operator` through to `/api/admin/fees/*`, where the money plane refuses
+/// every call — so the console showed a fees screen that answered 403 to everything it
+/// tried. Refusing here, before the CSRF check and before a money token is minted, keeps
+/// the plane's rule but answers it at the BFF where the screen can act on it. Same
+/// defense in depth as the coarse gate: the money plane still re-checks the permission.
+pub async fn require_fee_admin(state: &AppState, jar: &CookieJar) -> Result<(), ApiError> {
+	let role = caller_role(state, jar).await?;
+	if !FEE_ADMIN_ROLES.contains(&role.as_str()) {
+		return Err(ApiError::Grpc(Status::permission_denied("fee administration requires the admin or owner role")));
+	}
+	Ok(())
+}
+
+/// The verified caller's platform role, read from the concierge directory. Shared by the
+/// role gates so each one is a comparison and not a second copy of the lookup.
+async fn caller_role(state: &AppState, jar: &CookieJar) -> Result<String, ApiError> {
+	let (token, _claims) = require_identity(state, jar).await?;
+	let me = state.grpc.get_me(&token).await.map_err(|_| ApiError::Unauthenticated)?;
+	Ok(me.role)
 }
 
 /// CSRF double-submit: the `x-ev-csrf` header must equal the readable `ev_csrf` cookie.

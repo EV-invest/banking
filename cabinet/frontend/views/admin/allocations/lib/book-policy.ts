@@ -6,9 +6,11 @@
 // OPTIONAL on the wire: absent means "keep the hub's value", so an untouched field is left
 // out of the body rather than sent as an empty string the hub would refuse.
 
+import type { Allocation } from "@/shared/contracts/admin";
 import type { BookPolicy, SetBookPolicyBody } from "@/shared/contracts/book";
 
 import { toBps, toPercentInput } from "../../../../shared/lib/rate.ts";
+import { backingOf } from "./backing.ts";
 
 export interface BookPolicyDraft {
   open: boolean;
@@ -20,6 +22,8 @@ export interface BookPolicyDraft {
   lot: string;
   /** Percent; empty = leave as is. */
   slippagePct: string;
+  /** The operator's tick that units the fund holds no cash for may trade anyway. */
+  allowUnbackedTrading: boolean;
 }
 
 /** A decimal the hub spells "unset" as `"0"`, shown as the empty field it means. */
@@ -35,7 +39,17 @@ export function bookPolicyDraft(policy: BookPolicy | null): BookPolicyDraft {
     tick: orEmpty(policy?.price_tick),
     lot: orEmpty(policy?.lot_size),
     slippagePct: policy?.market_slippage_bps ? toPercentInput(policy.market_slippage_bps) : "",
+    // Absent reads as `false`, like `backingOf`: a policy row persisted before the field
+    // existed was never acknowledged.
+    allowUnbackedTrading: policy?.allow_unbacked_trading ?? false,
   };
+}
+
+/** Whether the hub would answer this draft with a 412: an open book on a product held
+ *  `in_kind` needs the acknowledgement. Decided here so the form can say so before the
+ *  submit, beside the tick that clears it, instead of relaying the refusal afterwards. */
+export function needsAcknowledgement(draft: Pick<BookPolicyDraft, "open" | "allowUnbackedTrading">, allocation: Pick<Allocation, "backing">): boolean {
+  return draft.open && backingOf(allocation) === "in_kind" && !draft.allowUnbackedTrading;
 }
 
 /** Whether any advanced term is actually set. The hub spells "unset" as `"0"` for the
@@ -73,6 +87,7 @@ export function setBookPolicyBody(service: string, draft: BookPolicyDraft): SetB
     service,
     book_open: draft.open,
     taker_fee_bps: bps(draft.takerFeePct) ?? 0,
+    allow_unbacked_trading: draft.allowUnbackedTrading,
     ...(draft.tick.trim() === "" ? {} : { price_tick: draft.tick.trim() }),
     ...(draft.lot.trim() === "" ? {} : { lot_size: draft.lot.trim() }),
     ...(slippage === undefined ? {} : { market_slippage_bps: slippage }),

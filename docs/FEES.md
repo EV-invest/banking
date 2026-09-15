@@ -47,9 +47,37 @@ moves. Three properties follow, and they are the reason for the design.
    unchanged. The charge is a transfer *between holders*, not a dilution of everyone —
    which is what makes the per-investor mark honest.
 
-Whatever cannot be collected — the holder's units are locked by a queued redemption, or the
-residue falls below one base unit of share — is carried as `fee_debt` and collected on the
-next assessment. It is never written off and never becomes a negative balance.
+Whatever cannot be collected — the holder's units are locked by a queued redemption or
+escrowed by a resting sell, or the residue falls below one base unit of share — is carried
+as `fee_debt` and collected on the next assessment. It is never written off and never
+becomes a negative balance.
+
+## Escrowed units: owed on the whole position, taken from the free holding
+
+A resting sell order moves a holder's units into the book's escrow (`BookShares`); a queued
+redemption reserves them against the holding until the burn lands. Neither makes the units
+somebody else's, and neither stops the fund from carrying the capital. So the fee is
+**owed on the whole position** — the holding plus the escrow, reserved units included — and
+**collected from what the holding can spare** right now, its available balance. The
+shortfall goes to `fee_debt` like any other uncollectable amount.
+
+The edge that made this a rule (#255): with *every* unit in a resting sell, nothing is
+collectable. The assessment is still written — a `fee_assessments` row with
+`charged_units = 0`, the whole charge in `fee_debt`, the accrual clock (and, if the period
+closed, the crystallization clock and the mark) moved. No ledger transfer is posted, because
+there is nothing to post. The next assessment after the order comes off collects the debt
+plus the days since, and never the same window twice.
+
+The alternative — pausing the clock while the units are escrowed and telling the holder —
+was rejected, because it is the hole itself: a holder who kept an ask on the book deferred
+their fee for as long as it rested and was billed the whole stretch in one blow the day it
+came off, while the fund carried their capital the entire time. The debt road already
+existed and adds no state.
+
+Where the cap lives: `PositionSnapshot.units` is the position (`UserShares.posted +
+BookShares.posted`), `PositionSnapshot.collectable` is the holding's available balance;
+`assess` measures on the first and caps the clawback by the second. `FeeCharge::is_empty`
+means "nothing owed", not "nothing collected" — the only case that persists nothing.
 
 ## The elapsed clock, and the obligation it places on everyone else
 
@@ -103,6 +131,16 @@ hidden from the caller is `NOT_FOUND` (and absent from `ListFeePolicies`), unles
   units simply shrink with nothing to explain it.
 - **The operation detail panel** breaks the charge into its two legs, the units taken, and
   the price they were taken at.
+
+An **operator** sees none of the console side of this. Every `/api/admin/fees/*` route is
+gated at the BFF to the `admin` and `owner` roles (`require_fee_admin` beside
+`require_admin` in `cabinet/backend/src/routes/mod.rs`), the `Fees` entry is absent from
+their rail, and opening `/admin/fees` by URL lands on a "not available to your role" notice
+rather than a page of silent 403s. This is the coarse gate only: the money plane still
+decides `AllocationManage` per call, and what an operator could always read as an
+investor — one fund's terms and its pending change through `GET /api/funds/fee-policy` —
+they still can. `/admin/allocations` is still a partial page for an
+operator — some of its reads answer, the management calls do not — and is out of scope here.
 
 ## Settlement
 
@@ -305,6 +343,6 @@ performance half is the remaining work.
 | Settling the accrual before a basis moves | `piggybank/core/src/infrastructure/fee_accrual.rs` |
 | The periodic worker | `piggybank/core/src/infrastructure/fee_sweeper.rs` |
 | Changing the terms: history, notice, promotion | `piggybank/core/src/infrastructure/fee_policy_changes.rs` |
-| Schema | `piggybank/core/migrations/0023_fee_policy.sql`, `0036_fee_policy_changes.sql`, `0042_fee_policy_notice_waiver.sql` |
+| Schema | `piggybank/core/migrations/0023_fee_policy.sql`, `0036_fee_policy_changes.sql`, `0041_fee_assessment_deferred_charge.sql`, `0042_fee_policy_notice_waiver.sql` |
 | Wire contract | `contracts/proto/banking/v1/fees.proto` |
 | Integration tests (real PG + TigerBeetle) | `piggybank/core/tests/fee_policy.rs` |

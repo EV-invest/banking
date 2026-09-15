@@ -2,11 +2,14 @@
 //! collects into cash.
 //!
 //! Every write here is the same shape: read the policy, read the holding's *live* unit
-//! balance from TigerBeetle, ask [`domain::fees::assess`] what is owed, and persist only
-//! if something is actually collectable. Nothing is charged when the fund has no policy,
-//! when the policy is all zeros, when the investor has no position, or when the charge
-//! floors to nothing — and in the last case the clocks are deliberately left alone so
-//! the accrual simply continues into the next sweep.
+//! balances from TigerBeetle, ask [`domain::fees::assess`] what is owed, and persist only
+//! if something is actually owed. Nothing is charged when the fund has no policy, when
+//! the policy is all zeros, when the investor has no position, or when the charge floors
+//! to nothing — and in the last case the clocks are deliberately left alone so the
+//! accrual simply continues into the next sweep. A charge that is owed but cannot be
+//! collected right now (the units are escrowed by a resting sell or reserved by a queued
+//! redemption) is NOT one of those cases: it is recorded, carried whole as debt, and the
+//! clock moves — see [`domain::fees::FeeCharge::is_empty`].
 //!
 //! **The NAV a fee is charged at is the dealing NAV**, staleness guard included. That is
 //! a safety property, not an accident: if an operator stops posting marks, fees stop
@@ -18,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 
 use domain::{
 	balance::{LedgerAccountKey, ServiceId},
-	consilium::{Consilium, ConsiliumId, ConsiliumTerms},
+	consilium::{Consilium, ConsiliumId, ConsiliumKind, ConsiliumTerms},
 	error::DomainError,
 	fees::{self, ChangeRequirement, FeeAssessment, FeeAssessmentId, FeeCharge, FeePolicy, FeePolicyChangeId, FeePolicySubject, FeeSettlement, FeeSettlementId, PositionSnapshot, Trigger},
 	money::{Nav, Shares, Usdt},
@@ -60,7 +63,8 @@ pub struct AccruedFees {
 	pub high_water_mark: Nav,
 }
 
-/// Assess one holding and charge it if anything is collectable.
+/// Assess one holding and charge it if anything is owed — collecting what the free
+/// holding can give up and carrying the rest as debt.
 ///
 /// Returns `None` — not an error — for every "nothing to do" case, because the sweeper
 /// walks thousands of positions and a fund without a policy is normal, not exceptional.
@@ -133,11 +137,16 @@ fn disclose(charge: &FeeCharge, high_water_mark: Nav) -> AccruedFees {
 /// The three reads every assessment needs. `None` whenever there is nothing to assess:
 /// no policy, a policy that charges nothing, or no position.
 ///
-/// `units` is the **available** balance from TigerBeetle, not the projection's copy: the
-/// projection lags the relay, and a cap computed from a stale figure could try to claw
-/// back units the holder no longer has (which TigerBeetle's non-negative flag would then
-/// park). Available, not posted, so units already reserved by a queued redemption are
-/// left alone and the charge defers into debt instead of racing the burn.
+/// Both unit figures come from TigerBeetle, not the projection's copy: the projection
+/// lags the relay, and a cap computed from a stale figure could try to claw back units
+/// the holder no longer has (which TigerBeetle's non-negative flag would then park).
+///
+/// The fee is owed on the whole position — the holding's **posted** balance plus what a
+/// resting sell has moved into the book's escrow. Posted, not available, because units a
+/// queued redemption has reserved are still the holder's until the burn lands. The
+/// clawback, by contrast, may only take the holding's **available** balance: the escrow
+/// belongs to the order until the book releases it, and the reserve to the redemption,
+/// so the charge defers into debt instead of racing either.
 async fn load_assessment_inputs(
 	policies: &dyn FeePolicies,
 	accruals: &dyn PositionAccruals,
@@ -157,9 +166,14 @@ async fn load_assessment_inputs(
 		return Ok(None);
 	};
 	let price = dealing_nav(nav, service, now_unix).await?;
-	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?.available());
+	let holding = ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?;
+	let escrowed = ledger.balance(&LedgerAccountKey::BookShares(service.clone(), user)).await?.posted;
+	let units = Shares::from_base_units(holding.posted)
+		.checked_add(Shares::from_base_units(escrowed))
+		.ok_or_else(|| DomainError::Validation("position units overflow".into()))?;
 	let snapshot = PositionSnapshot {
 		units,
+		collectable: Shares::from_base_units(holding.available()),
 		cost_basis: accrual.cost_basis,
 		high_water_mark: accrual.high_water_mark,
 		debt: accrual.debt,
@@ -235,7 +249,7 @@ pub async fn schedule_policy(ports: &FeePolicyPorts<'_>, requester: UserId, requ
 		ChangeRequirement::Admin => ports.changes.schedule(&change, None).await,
 		ChangeRequirement::OwnerConsilium => {
 			require_governance_mail(ports.governance_mail_wired)?;
-			require_settled_roster(ports.consilia, now).await?;
+			require_settled_roster(ports.consilia, ConsiliumKind::FeePolicy, now).await?;
 			let owners = ports.consilia.owner_roster().await?;
 			// Said in the fee plane's words before the aggregate says it in its own: an
 			// administrator who is not an owner needs to know WHY this particular change is

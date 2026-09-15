@@ -20,12 +20,12 @@
 
 use async_trait::async_trait;
 use domain::{
-	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId, AllocationSnapshot, AllocationState},
+	allocations::{Allocation, AllocationAccess, AllocationBacking, AllocationIcon, AllocationId, AllocationSnapshot, AllocationState},
 	architecture::{EmitsEvents, Reader, Repository},
 	balance::ServiceId,
 	error::DomainError,
 	money::Shares,
-	users::UserId,
+	users::{ConciergeUserId, UserId},
 };
 use sqlx::{PgConnection, PgPool};
 use tracing::warn;
@@ -38,16 +38,16 @@ use crate::{
 
 /// sqlx 0.9 accepts only `&'static str` SQL (its injection guardrail), so the shared
 /// column list is spelled out per query rather than interpolated.
-const SELECT_BY_SERVICE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, \
+const SELECT_BY_SERVICE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, backing, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM allocations WHERE service = $1";
-const SELECT_BY_SERVICE_FOR_UPDATE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, \
+const SELECT_BY_SERVICE_FOR_UPDATE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, backing, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM allocations WHERE service = $1 FOR UPDATE";
 /// `$2` is the caller: their grant, if any, rides along as `grant_level`.
-const SELECT_BY_SERVICE_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summary, a.state, a.unit_cap, a.icon, a.access, \
+const SELECT_BY_SERVICE_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summary, a.state, a.unit_cap, a.icon, a.access, a.backing, \
 	 g.level AS grant_level, \
 	 EXTRACT(EPOCH FROM a.created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM a.updated_at)::bigint AS updated_at \
@@ -57,7 +57,7 @@ const SELECT_BY_SERVICE_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.s
 /// `$1` is the caller, `$2` is `include_unlisted`. The visibility filter needs no
 /// ranking: a grant can only carry `view` or `invest`, so its mere presence is "may
 /// view", and the product's own default does the rest.
-const SELECT_CATALOG_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summary, a.state, a.unit_cap, a.icon, a.access, \
+const SELECT_CATALOG_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summary, a.state, a.unit_cap, a.icon, a.access, a.backing, \
 	 g.level AS grant_level, \
 	 EXTRACT(EPOCH FROM a.created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM a.updated_at)::bigint AS updated_at \
@@ -65,12 +65,24 @@ const SELECT_CATALOG_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summ
 	 LEFT JOIN allocation_access_grants g ON g.service = a.service AND g.user_id = $1 \
 	 WHERE $2 OR (a.state = 'open' AND (a.access <> 'hidden' OR g.level IS NOT NULL)) \
 	 ORDER BY a.service";
-const SELECT_GRANTS: &str = "SELECT service, user_id, level, granted_by, \
-	 EXTRACT(EPOCH FROM granted_at)::bigint AS granted_at \
-	 FROM allocation_access_grants WHERE service = $1 ORDER BY user_id";
-const SELECT_GRANT: &str = "SELECT service, user_id, level, granted_by, \
-	 EXTRACT(EPOCH FROM granted_at)::bigint AS granted_at \
-	 FROM allocation_access_grants WHERE service = $1 AND user_id = $2";
+/// Both user columns are joined back to `users` for their concierge mirror in the same
+/// read: the console names people by that id, and a lookup per row would be an N+1
+/// against the very table this one already references. `LEFT` because the mirror is
+/// nullable — the bridge fills it, and a row provisioned before it ran has none.
+const SELECT_GRANTS: &str = "SELECT g.service, g.user_id, g.level, g.granted_by, \
+	 u.concierge_user_id, b.concierge_user_id AS granted_by_concierge_id, \
+	 EXTRACT(EPOCH FROM g.granted_at)::bigint AS granted_at \
+	 FROM allocation_access_grants g \
+	 LEFT JOIN users u ON u.id = g.user_id \
+	 LEFT JOIN users b ON b.id = g.granted_by \
+	 WHERE g.service = $1 ORDER BY g.user_id";
+const SELECT_GRANT: &str = "SELECT g.service, g.user_id, g.level, g.granted_by, \
+	 u.concierge_user_id, b.concierge_user_id AS granted_by_concierge_id, \
+	 EXTRACT(EPOCH FROM g.granted_at)::bigint AS granted_at \
+	 FROM allocation_access_grants g \
+	 LEFT JOIN users u ON u.id = g.user_id \
+	 LEFT JOIN users b ON b.id = g.granted_by \
+	 WHERE g.service = $1 AND g.user_id = $2";
 /// The `WHERE` on the conflict arm makes a repeat grant at the same level touch no row,
 /// which is how the caller knows there is no fact to log. `granted_at` moves on a real
 /// change so the operator's list dates the level that stands, not the first contact.
@@ -121,6 +133,7 @@ struct AllocationRow {
 	unit_cap: String,
 	icon: String,
 	access: String,
+	backing: String,
 	created_at: i64,
 	updated_at: i64,
 }
@@ -138,8 +151,10 @@ struct AllocationForCallerRow {
 struct GrantRow {
 	service: String,
 	user_id: Uuid,
+	concierge_user_id: Option<Uuid>,
 	level: String,
 	granted_by: Uuid,
+	granted_by_concierge_id: Option<Uuid>,
 	granted_at: i64,
 }
 
@@ -163,8 +178,9 @@ impl AllocationRow {
 			warn!(service = %self.service, icon = %self.icon, "allocations: stored icon is outside this build's vocabulary — rendering the default");
 			AllocationIcon::default()
 		});
-		// `access` gets no such leniency: it gates money, and a value this build cannot
-		// rank cannot be shown to be below `invest`. Failing the read is the safe answer.
+		// `access` and `backing` get no such leniency: both gate money, and a value this
+		// build cannot rank cannot be shown to be below `invest` — or shown to be cash the
+		// fund actually holds. Failing the read is the safe answer.
 		Ok(Allocation::rehydrate(AllocationSnapshot {
 			id: AllocationId::from_raw(self.id),
 			service: ServiceId::parse(&self.service)?,
@@ -174,6 +190,7 @@ impl AllocationRow {
 			unit_cap,
 			icon,
 			access: AllocationAccess::parse(&self.access)?,
+			backing: AllocationBacking::parse(&self.backing)?,
 		}))
 	}
 }
@@ -197,8 +214,10 @@ impl GrantRow {
 		Ok(AllocationAccessGrant {
 			service: ServiceId::parse(&self.service)?,
 			user_id: UserId::from_raw(self.user_id),
+			concierge_user_id: self.concierge_user_id.map(ConciergeUserId::from_raw),
 			level: AllocationAccess::parse(&self.level)?,
 			granted_by: UserId::from_raw(self.granted_by),
+			granted_by_concierge_id: self.granted_by_concierge_id.map(ConciergeUserId::from_raw),
 			granted_at: self.granted_at,
 		})
 	}
@@ -228,7 +247,7 @@ async fn load_for_update(conn: &mut PgConnection, service: &ServiceId) -> Result
 /// Persist the mutable fields. We hold the row lock, so exactly one row must update.
 /// `service` and `id` are immutable and deliberately absent from the SET list.
 async fn update_row(conn: &mut PgConnection, allocation: &Allocation) -> Result<(), DomainError> {
-	let result = sqlx::query("UPDATE allocations SET title = $2, summary = $3, state = $4, unit_cap = $5, icon = $6, access = $7, updated_at = now() WHERE id = $1")
+	let result = sqlx::query("UPDATE allocations SET title = $2, summary = $3, state = $4, unit_cap = $5, icon = $6, access = $7, backing = $8, updated_at = now() WHERE id = $1")
 		.bind(allocation.id().raw())
 		.bind(allocation.title())
 		.bind(allocation.summary())
@@ -236,6 +255,7 @@ async fn update_row(conn: &mut PgConnection, allocation: &Allocation) -> Result<
 		.bind(allocation.unit_cap().base_units().to_string())
 		.bind(allocation.icon().as_str())
 		.bind(allocation.access().as_str())
+		.bind(allocation.backing().as_str())
 		.execute(&mut *conn)
 		.await
 		.map_err(repo_err)?;
@@ -249,20 +269,22 @@ async fn update_row(conn: &mut PgConnection, allocation: &Allocation) -> Result<
 impl AllocationRegistry for PgAllocations {
 	async fn register(&self, allocation: &mut Allocation) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		let inserted =
-			sqlx::query("INSERT INTO allocations (id, service, title, summary, state, unit_cap, icon, access) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (service) DO NOTHING")
-				.bind(allocation.id().raw())
-				.bind(allocation.service().as_str())
-				.bind(allocation.title())
-				.bind(allocation.summary())
-				.bind(allocation.state().as_str())
-				.bind(allocation.unit_cap().base_units().to_string())
-				.bind(allocation.icon().as_str())
-				.bind(allocation.access().as_str())
-				.execute(&mut *tx)
-				.await
-				.map_err(repo_err)?
-				.rows_affected();
+		let inserted = sqlx::query(
+			"INSERT INTO allocations (id, service, title, summary, state, unit_cap, icon, access, backing) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (service) DO NOTHING",
+		)
+		.bind(allocation.id().raw())
+		.bind(allocation.service().as_str())
+		.bind(allocation.title())
+		.bind(allocation.summary())
+		.bind(allocation.state().as_str())
+		.bind(allocation.unit_cap().base_units().to_string())
+		.bind(allocation.icon().as_str())
+		.bind(allocation.access().as_str())
+		.bind(allocation.backing().as_str())
+		.execute(&mut *tx)
+		.await
+		.map_err(repo_err)?
+		.rows_affected();
 		if inserted != 1 {
 			return Err(DomainError::Conflict(format!("allocation '{}' is already registered", allocation.service())));
 		}
@@ -298,6 +320,14 @@ impl AllocationRegistry for PgAllocations {
 	async fn set_access(&self, service: &ServiceId, access: AllocationAccess) -> Result<Allocation, DomainError> {
 		self.transition(service, |allocation| {
 			allocation.set_access(access);
+			Ok(())
+		})
+		.await
+	}
+
+	async fn set_backing(&self, service: &ServiceId, backing: AllocationBacking) -> Result<Allocation, DomainError> {
+		self.transition(service, |allocation| {
+			allocation.set_backing(backing);
 			Ok(())
 		})
 		.await

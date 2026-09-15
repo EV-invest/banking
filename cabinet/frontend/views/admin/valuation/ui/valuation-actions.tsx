@@ -18,6 +18,7 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { formatExactUsdt } from "@/shared/lib/money";
 import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
+import { PostedMark } from "@/views/admin/valuation/ui/posted-mark";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 
@@ -44,15 +45,22 @@ export function ValuationActions({
   // What was proposed, captured at the click: the caller clears the AUM field on success,
   // so the receipt cannot read it back from the form.
   const [proposed, setProposed] = useState<{ service: string; aum: string } | null>(null);
+  // The mark as the hub answered it. Kept whole (it names its own `service`) so switching
+  // funds hides it by comparison instead of an effect that races the select.
+  const [posted, setPosted] = useState<FundNav | null>(null);
 
   const run = async (route: Route) => {
     setBusy(route);
     onError(null);
     try {
       if (route === "post") {
-        await onPosted(await postValuation({ service, aum }));
+        const mark = await postValuation({ service, aum });
+        setProposed(null);
+        setPosted(mark);
+        await onPosted(mark);
       } else {
         await proposeValuationOverride({ service, aum });
+        setPosted(null);
         setProposed({ service, aum });
         onProposed();
       }
@@ -65,6 +73,8 @@ export function ValuationActions({
 
   return (
     <div className="flex flex-col gap-4">
+      {posted?.service === service && <PostedMark mark={posted} onClose={() => setPosted(null)} />}
+
       {proposed && (
         // Leads with PROPOSED, not "done": nothing is marked until the vote carries, and
         // the room with the live tally is one link away (same receipt as a payment).

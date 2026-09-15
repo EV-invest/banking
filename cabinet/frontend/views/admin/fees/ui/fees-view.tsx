@@ -15,15 +15,17 @@
 // existing pipeline with its own rail liquidity and dispatch gates. Duplicating a payout
 // form here would give an operator two doors to the same money.
 
-import { Landmark } from "lucide-react";
+import { Landmark, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
+import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
 
 import { adminAllocationsResource, feePoliciesResource } from "@/entities/admin/model/admin-resource";
 import type { FeePolicyChange } from "@/shared/contracts/admin";
+import { RequestError } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
+import { Link } from "@/shared/ui/cabinet-link";
 import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { isPendingChange } from "@/views/admin/fees/lib/format";
@@ -35,6 +37,8 @@ import { PendingCard } from "@/views/admin/fees/ui/pending-card";
 import { PolicyCard } from "@/views/admin/fees/ui/policy-card";
 import { ScheduledReceipt } from "@/views/admin/fees/ui/scheduled-receipt";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
+
+const isForbidden = (error: unknown): boolean => error instanceof RequestError && error.status === 403;
 
 export function FeesView() {
   const t = useT();
@@ -66,12 +70,33 @@ export function FeesView() {
   const catalogFailed = !catalog.data && Boolean(catalog.error);
   const policiesFailed = !policies.data && Boolean(policies.error);
   const failed = catalogFailed ? catalog : policiesFailed ? policies : null;
+  // A verdict, not a failure: `/api/admin/fees/*` admits only admins and owners, so an
+  // operator who typed the URL (the rail no longer offers it — banking#269) gets told whose
+  // screen this is instead of a retry button over a 403 that will never turn into a 200.
+  // Decided ahead of the cards below, each of which would otherwise open its own refused
+  // read against the same gate.
+  const forbidden = isForbidden(catalog.error) || isForbidden(policies.error);
 
   return (
     <AdminScreen className="space-y-6">
       <AdminHeader eyebrow={t("nav.fees")} title={t("admin.fees.title")} subtitle={t("admin.fees.subtitle")} />
 
-      {failed ? (
+      {forbidden ? (
+        <StaggerItem as={Empty} className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ShieldAlert />
+            </EmptyMedia>
+            <EmptyTitle>{t("admin.fees.forbidden.title")}</EmptyTitle>
+            <EmptyDescription>{t("admin.fees.forbidden.body")}</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild variant="outline">
+              <Link href="/admin/overview">{t("nav.overview")}</Link>
+            </Button>
+          </EmptyContent>
+        </StaggerItem>
+      ) : failed ? (
         <ResourceError error={failed.error} onRetry={() => void failed.refresh()} retrying={failed.isValidating} />
       ) : loading ? (
         <StaggerItem>

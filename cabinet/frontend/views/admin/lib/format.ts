@@ -11,7 +11,7 @@ import type { Translate } from "@evinvest/i18n";
 
 /** `formatAmount` is a decimal amount → grouped display with no currency symbol; the
  *  admin tables spell the unit out in the header instead. */
-export { compactUnits, formatAmount as amount, formatNav, formatUnits, formatUsd, fractionOfCap, toBaseUnits } from "@/shared/lib/money";
+export { compactUnits, formatAmount as amount, formatNav, formatUnits, formatUsd, formatUsdt, fractionOfCap, toBaseUnits } from "@/shared/lib/money";
 
 /** A unix-seconds string → a coarse "3h ago" age (for queue/session rows).
  *

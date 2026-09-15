@@ -2,11 +2,13 @@
 
 // The Holders section's one write: close the cap at exactly what is out. Two clicks,
 // because it is a money policy — the first shows the exact move ("cap 100M → 16,250.00"),
-// the second sends it. The rules that disable it live in `lib/pin-cap.ts`, tested.
+// the second sends it. The rules that disable it — including "wait, a mint is still in
+// the relay" — live in `lib/pin-cap.ts`, tested.
 
 import { Loader2, Pin, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { Button } from "@evinvest/uikit";
 
@@ -17,7 +19,7 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { compactUnits, formatUnits } from "@/shared/lib/money";
 import { revalidateTag } from "@/shared/lib/resource";
-import { pinCapVerdict } from "@/views/admin/allocations/lib/pin-cap";
+import { pinCapVerdict, type PinCapVerdict } from "@/views/admin/allocations/lib/pin-cap";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 
@@ -26,7 +28,7 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const verdict = pinCapVerdict(allocation.unit_cap, holders.units_outstanding);
+  const verdict = pinCapVerdict(allocation.unit_cap, holders.units_outstanding, holders.queued_units);
 
   const pin = async () => {
     if (verdict.kind !== "pinnable") return;
@@ -47,7 +49,7 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
     }
   };
 
-  const hint = verdict.kind === "nothingIssued" ? t("admin.alloc.pinCap.nothingIssued") : verdict.kind === "alreadyPinned" ? t("admin.alloc.pinCap.alreadyPinned") : null;
+  const hint = disabledReason(verdict, t);
 
   return (
     <div className="space-y-2">
@@ -78,4 +80,18 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
       )}
     </div>
   );
+}
+
+/** Why the button is greyed out — one sentence per non-pinnable verdict, none otherwise. */
+function disabledReason(verdict: PinCapVerdict, t: Translate): string | null {
+  switch (verdict.kind) {
+    case "queuedPending":
+      return t("admin.alloc.pinCap.queued", { units: formatUnits(verdict.queued) });
+    case "nothingIssued":
+      return t("admin.alloc.pinCap.nothingIssued");
+    case "alreadyPinned":
+      return t("admin.alloc.pinCap.alreadyPinned");
+    case "pinnable":
+      return null;
+  }
 }

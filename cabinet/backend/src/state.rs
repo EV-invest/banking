@@ -290,6 +290,18 @@ impl Grpc {
 		Ok(self.allocations().transfer_company_stake(bearer(token, req)?).await?.into_inner())
 	}
 
+	pub async fn retire_units(&self, token: &str, req: bk::RetireUnitsRequest) -> Result<bk::UnitIssuance, Status> {
+		Ok(self.allocations().retire_units(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn set_allocation_backing(&self, token: &str, service: &str, backing: &str) -> Result<bk::Allocation, Status> {
+		let req = bk::SetAllocationBackingRequest {
+			service: service.to_string(),
+			backing: backing.to_string(),
+		};
+		Ok(self.allocations().set_allocation_backing(bearer(token, req)?).await?.into_inner())
+	}
+
 	pub async fn list_unit_holders(&self, token: &str, service: &str) -> Result<bk::UnitHolders, Status> {
 		let req = bk::ListUnitHoldersRequest { service: service.to_string() };
 		Ok(self.allocations().list_unit_holders(bearer(token, req)?).await?.into_inner())

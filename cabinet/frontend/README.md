@@ -26,7 +26,11 @@ the React / Rust-WASM producer recipes.
 Five locales (`en` `ru` `vi` `fr` `de`) through `@evinvest/i18n`, under the same
 translation policy as the public site: English is canonical, and a translation
 whose English source has since changed is refused and falls back to English. Run
-`npm run i18n:check` — it fails on drift, not on untranslated keys.
+`npm run i18n:check` — it fails on drift, not on untranslated keys. The checker
+runs under `tsx` rather than node's `--experimental-strip-types` (which the unit
+tests use) because it imports `shared/config/i18n.ts`, and that module loads the
+catalogues through the `@/messages/...` tsconfig path alias, which bare node
+does not resolve.
 
 **The locale is a cookie here, not a URL segment.** That asymmetry with the
 conductor is deliberate. The public site prefixes every non-default locale

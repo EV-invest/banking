@@ -7,10 +7,10 @@
 import { PieChart } from "lucide-react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Progress } from "@evinvest/uikit";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Progress } from "@evinvest/uikit";
 
 import type { UnitHolders } from "@/shared/contracts/admin";
-import { formatUnits, shareBps } from "@/shared/lib/money";
+import { formatUnits, isZero, shareBps } from "@/shared/lib/money";
 import { pct } from "@/shared/lib/rate";
 
 export function HoldersTable({ holders }: { holders: UnitHolders }) {
@@ -27,6 +27,15 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
           <EmptyTitle>{t("admin.alloc.holders.empty")}</EmptyTitle>
           <EmptyDescription>{t("admin.alloc.holders.emptyHint")}</EmptyDescription>
         </EmptyHeader>
+        {!isZero(holders.queued_units) && (
+          // The one fact the zero state can report: a mint is recorded and waiting on the
+          // relay — the same figure that keeps "Pin cap" disabled next door.
+          <EmptyContent>
+            <p className="text-sm tabular-nums">
+              {t("admin.alloc.holders.queued")} · {formatUnits(holders.queued_units)}
+            </p>
+          </EmptyContent>
+        )}
       </Empty>
     );
   }
@@ -58,6 +67,14 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
           </div>
         );
       })}
+      {!isZero(holders.queued_units) && (
+        // No share bar: a queued mint is not part of the outstanding figure it would be
+        // measured against, so a percentage here would be a lie either way.
+        <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2">
+          <dt className="text-muted-foreground">{t("admin.alloc.holders.queued")}</dt>
+          <dd className="tabular-nums text-muted-foreground">{formatUnits(holders.queued_units)}</dd>
+        </div>
+      )}
     </dl>
   );
 }

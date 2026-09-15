@@ -25,6 +25,14 @@
 //! high-water mark at the mark) and a transfer from the ledger's, which is why it is a
 //! variant of this aggregate and not a second one.
 //!
+//! The third [`IssuanceSource`] is the mirror of the first: units **retired**
+//! ([`UnitIssuance::retire`]) — burnt out of a holder's account with no cash leg, the
+//! way they were minted with none. The relay posts `Dr SharesOutstanding / Cr <holder
+//! shares>`, so supply shrinks by exactly what the holder gave up and the invariant
+//! holds as before. `units` is the magnitude on every row; the source says which way
+//! the supply moved, so the console reads one history — mint, hand-over, retire — and
+//! the positive-digits column CHECK never has to learn a sign.
+//!
 //! Idempotent by an operator-supplied [`IdempotencyKey`], unique per service: an admin
 //! console that retries a timed-out request must land one mint, never two. The
 //! aggregate is an immutable record with one relay-driven transition, `Queued` →
@@ -137,9 +145,10 @@ impl IssuanceState {
 	}
 }
 
-/// Where an issuance's units come from. `Mint` grows supply; `Company` moves units the
-/// company already holds and leaves supply alone — the ledger leg differs, the record
-/// and the recipient's projection do not.
+/// Where an issuance's units come from — or go. `Mint` grows supply; `Company` moves
+/// units the company already holds and leaves supply alone; `Retire` shrinks supply by
+/// burning a holder's units. The ledger leg differs, the record does not, and `units`
+/// is always the magnitude.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IssuanceSource {
@@ -149,6 +158,9 @@ pub enum IssuanceSource {
 	/// Out of the company's stake: `Dr UserShares / Cr CompanyShares`. The holder is
 	/// always a user — the company handing units to itself is not a request.
 	Company,
+	/// Burnt with no cash leg: `Dr SharesOutstanding / Cr <holder shares>`. The mirror
+	/// of `Mint` — supply shrinks by `units`.
+	Retire,
 }
 
 impl IssuanceSource {
@@ -159,6 +171,7 @@ impl IssuanceSource {
 		match self {
 			Self::Mint => "mint",
 			Self::Company => "company",
+			Self::Retire => "retire",
 		}
 	}
 
@@ -169,6 +182,7 @@ impl IssuanceSource {
 		match raw {
 			"mint" => Ok(Self::Mint),
 			"company" => Ok(Self::Company),
+			"retire" => Ok(Self::Retire),
 			other => Err(DomainError::Validation(format!("unknown issuance source: {other}"))),
 		}
 	}
@@ -208,10 +222,11 @@ pub struct UnitIssuanceSnapshot {
 	pub state: IssuanceState,
 }
 
-/// The issuance aggregate — one in-kind mint, or one hand-over out of the company's
-/// stake. Construct via [`UnitIssuance::issue`] / [`UnitIssuance::transfer_company_stake`]
-/// (both raise [`IssuanceEvent::Issued`]) or [`UnitIssuance::rehydrate`] (load from the
-/// store, no events).
+/// The issuance aggregate — one in-kind mint, one hand-over out of the company's
+/// stake, or one retirement. Construct via [`UnitIssuance::issue`] /
+/// [`UnitIssuance::transfer_company_stake`] / [`UnitIssuance::retire`] (all raise
+/// [`IssuanceEvent::Issued`]) or [`UnitIssuance::rehydrate`] (load from the store, no
+/// events).
 #[derive(Clone, Debug)]
 pub struct UnitIssuance {
 	id: UnitIssuanceId,
@@ -262,7 +277,26 @@ impl UnitIssuance {
 		Self::record(id, service, UnitHolder::User(user), IssuanceSource::Company, units, nav, cost_basis, idempotency_key)
 	}
 
-	// One private constructor behind two typed doors; a builder would only rename the
+	/// Burn `units` of `service` out of `holder`'s account at `nav`, with no cash leg —
+	/// the reverse of [`Self::issue`]. `cost_basis` follows the same rule as a mint's
+	/// (`None` is `units × nav`): it is the book value the operator is writing off, an
+	/// accounting note on the row, not cash that moves. Whether the holder actually has
+	/// `units` free is a ledger fact the use case reads first (Read-First) and
+	/// TigerBeetle's non-negative flag on the holder's account backstops; the aggregate
+	/// cannot know it. Rejects zero `units`. Raises `Issued` with `source = Retire`.
+	pub fn retire(
+		id: UnitIssuanceId,
+		service: ServiceId,
+		holder: UnitHolder,
+		units: Shares,
+		nav: Nav,
+		cost_basis: Option<Usdt>,
+		idempotency_key: IdempotencyKey,
+	) -> Result<Self, DomainError> {
+		Self::record(id, service, holder, IssuanceSource::Retire, units, nav, cost_basis, idempotency_key)
+	}
+
+	// One private constructor behind three typed doors; a builder would only rename the
 	// same eight facts.
 	#[allow(clippy::too_many_arguments)]
 	fn record(
@@ -385,10 +419,11 @@ impl AggregateRoot for UnitIssuance {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum IssuanceEvent {
-	/// Units handed to a holder with no cash leg (relay, by `source`: `Mint` → `Dr
-	/// <holder shares> / Cr SharesOutstanding`, `Company` → `Dr UserShares / Cr
-	/// CompanyShares`, for `units`; then, for a user holder, `fund_positions.cost_basis
-	/// += cost_basis`).
+	/// Units handed to — or, for `Retire`, taken from — a holder with no cash leg
+	/// (relay, by `source`: `Mint` → `Dr <holder shares> / Cr SharesOutstanding`,
+	/// `Company` → `Dr UserShares / Cr CompanyShares`, `Retire` → `Dr SharesOutstanding
+	/// / Cr <holder shares>`, for `units`; then, for a user holder, `fund_positions`
+	/// gains the basis and units, or for a retire sheds them pro rata).
 	Issued {
 		issuance_id: UnitIssuanceId,
 		service: ServiceId,
@@ -460,11 +495,13 @@ mod tests {
 		// Wire contract: these must match `evbanking_contracts::allocation::issuance_source`.
 		assert_eq!(IssuanceSource::Mint.as_str(), "mint");
 		assert_eq!(IssuanceSource::Company.as_str(), "company");
-		for source in [IssuanceSource::Mint, IssuanceSource::Company] {
+		assert_eq!(IssuanceSource::Retire.as_str(), "retire");
+		for source in [IssuanceSource::Mint, IssuanceSource::Company, IssuanceSource::Retire] {
 			assert_eq!(IssuanceSource::parse(source.as_str()).unwrap(), source);
 			assert_eq!(serde_json::to_string(&source).unwrap(), format!("\"{}\"", source.as_str()));
 		}
 		assert!(IssuanceSource::parse("transfer").is_err());
+		assert!(IssuanceSource::parse("burn").is_err());
 	}
 
 	#[test]
@@ -535,6 +572,48 @@ mod tests {
 	fn zero_units_are_rejected() {
 		assert!(UnitIssuance::issue(UnitIssuanceId::new(), svc(), UnitHolder::Company, Shares::ZERO, Nav::SEED, None, key()).is_err());
 		assert!(UnitIssuance::transfer_company_stake(UnitIssuanceId::new(), svc(), UserId::new(), Shares::ZERO, Nav::SEED, None, key()).is_err());
+		assert!(UnitIssuance::retire(UnitIssuanceId::new(), svc(), UnitHolder::Company, Shares::ZERO, Nav::SEED, None, key()).is_err());
+	}
+
+	#[test]
+	fn a_retirement_is_the_mirror_of_a_mint_with_the_units_as_a_magnitude() {
+		let user = UserId::new();
+		for holder in [UnitHolder::User(user), UnitHolder::Company] {
+			let mut retire = UnitIssuance::retire(
+				UnitIssuanceId::new(),
+				svc(),
+				holder,
+				Shares::parse_decimal("500").unwrap(),
+				Nav::parse_decimal("1.25").unwrap(),
+				None,
+				key(),
+			)
+			.unwrap();
+			assert_eq!(retire.holder(), holder, "either holder can be retired from");
+			assert_eq!(retire.source(), IssuanceSource::Retire);
+			// Positive on the row; the source carries the direction.
+			assert_eq!(retire.units(), Shares::parse_decimal("500").unwrap());
+			assert_eq!(
+				retire.cost_basis(),
+				Usdt::parse_decimal("625").unwrap(),
+				"the written-off basis defaults to units × NAV like a mint"
+			);
+			assert_eq!(retire.state(), IssuanceState::Queued);
+			let events = retire.drain_events();
+			assert!(matches!(
+				events.as_slice(),
+				[IssuanceEvent::Issued {
+					source: IssuanceSource::Retire,
+					holder: h,
+					..
+				}] if *h == holder
+			));
+		}
+		// A retirement under a mint's key is a different request, not a retry — one
+		// grows supply, the other shrinks it.
+		let units = Shares::parse_decimal("500").unwrap();
+		let mint = UnitIssuance::issue(UnitIssuanceId::new(), svc(), UnitHolder::Company, units, Nav::SEED, None, key()).unwrap();
+		assert!(!mint.matches_request(UnitHolder::Company, IssuanceSource::Retire, units));
 	}
 
 	#[test]
