@@ -18,13 +18,22 @@ test("a scheduled change every holder was told about has nothing to say", () => 
   assert.deepEqual(noticeSummary(change()), { kind: "none" });
 });
 
-test("undelivered notices on a scheduled change are counted, given-up ones alongside", () => {
-  assert.deepEqual(noticeSummary(change({ undelivered_notices: 3, notices_given_up: 1 })), { kind: "undelivered", undelivered: 3, givenUp: 1 });
-  assert.deepEqual(noticeSummary(change({ undelivered_notices: 2 })), { kind: "undelivered", undelivered: 2, givenUp: 0 });
+test("notices the mailer is still trying are queued, not holders who could not be told", () => {
+  assert.deepEqual(noticeSummary(change({ undelivered_notices: 2 })), { kind: "queued", queued: 2 });
+  assert.deepEqual(noticeSummary(change({ undelivered_notices: 5, notices_given_up: 0 })), { kind: "queued", queued: 5 });
+});
+
+test("once the mailer has given up on one, the act is offered over the given-up ones only", () => {
+  assert.deepEqual(noticeSummary(change({ undelivered_notices: 3, notices_given_up: 1 })), { kind: "givenUp", givenUp: 1, queued: 2 });
+  assert.deepEqual(noticeSummary(change({ undelivered_notices: 3, notices_given_up: 3 })), { kind: "givenUp", givenUp: 3, queued: 0 });
 });
 
 test("the given-up figure never exceeds the undelivered one it is a part of", () => {
-  assert.deepEqual(noticeSummary(change({ undelivered_notices: 1, notices_given_up: 4 })), { kind: "undelivered", undelivered: 1, givenUp: 1 });
+  assert.deepEqual(noticeSummary(change({ undelivered_notices: 1, notices_given_up: 4 })), { kind: "givenUp", givenUp: 1, queued: 0 });
+});
+
+test("a negative given-up figure is a wire fault and reads as none given up", () => {
+  assert.deepEqual(noticeSummary(change({ undelivered_notices: 2, notices_given_up: -1 })), { kind: "queued", queued: 2 });
 });
 
 test("the count is read only while scheduled — no button on a change that is past that", () => {
@@ -55,6 +64,6 @@ test("the waiver is told by its moment even when the author is blanked for the r
 });
 
 test("a missing moment is not a waiver", () => {
-  assert.deepEqual(noticeSummary(change({ notices_waived_at: "", undelivered_notices: 1 })), { kind: "undelivered", undelivered: 1, givenUp: 0 });
+  assert.deepEqual(noticeSummary(change({ notices_waived_at: "", undelivered_notices: 1, notices_given_up: 1 })), { kind: "givenUp", givenUp: 1, queued: 0 });
   assert.deepEqual(noticeSummary(change({ notices_waived_at: "0" })), { kind: "none" });
 });

@@ -6,6 +6,11 @@
 // never told, and the operator's name goes on the change for good. So the button opens a
 // second step in place, the same way cancelling does (`./pending-card.tsx`) — no
 // `window.confirm`, and focus lands on the safe answer.
+//
+// The act is offered only over notices the mailer has GIVEN UP on — the hub refuses it
+// otherwise — so a notice still in the queue is reported as exactly that, with nothing to
+// press: the half-minute after scheduling, when every notice is undelivered because none
+// has been tried yet, must not read as holders who could not be told.
 
 import { Loader2, MailWarning } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -24,24 +29,43 @@ import { noticeSummary } from "@/views/admin/fees/lib/notices";
 export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
   const t = useT();
   const locale = useLocale();
+  const summary = noticeSummary(change);
+  switch (summary.kind) {
+    case "none":
+      return null;
+    case "queued":
+      return <p className="text-xs text-muted-foreground">{t("admin.fees.notices.queued", { n: summary.queued })}</p>;
+    case "waived": {
+      const at = formatMoment(summary.at, locale);
+      return (
+        <p className="text-xs text-muted-foreground">
+          {summary.by
+            ? t("admin.fees.waiver.acknowledged", { by: summary.by, at, n: summary.holders })
+            : t("admin.fees.waiver.acknowledgedAnon", { at, n: summary.holders })}
+        </p>
+      );
+    }
+    case "givenUp":
+      return <GivenUpNotices change={change} givenUp={summary.givenUp} queued={summary.queued} />;
+  }
+}
+
+function GivenUpNotices({ change, givenUp, queued }: { change: FeePolicyChange; givenUp: number; queued: number }) {
+  const t = useT();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // Focus follows the step both ways: in, onto the safe answer (see `./pending-card.tsx`);
+  // out by "Keep waiting", back onto the button that opened it — which is remounted, so
+  // the browser would otherwise drop focus to `body`.
   const keepRef = useRef<HTMLButtonElement>(null);
+  const openRef = useRef<HTMLButtonElement>(null);
+  const wasConfirming = useRef(false);
   useEffect(() => {
     if (confirming) keepRef.current?.focus();
+    else if (wasConfirming.current) openRef.current?.focus();
+    wasConfirming.current = confirming;
   }, [confirming]);
-
-  const summary = noticeSummary(change);
-  if (summary.kind === "none") return null;
-
-  if (summary.kind === "waived") {
-    return (
-      <p className="text-xs text-muted-foreground">
-        {t("admin.fees.waiver.acknowledged", { by: summary.by || "—", at: formatMoment(summary.at, locale), n: summary.holders })}
-      </p>
-    );
-  }
 
   async function acknowledge() {
     setBusy(true);
@@ -49,11 +73,14 @@ export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
     try {
       await acknowledgeUndeliveredNotices({ service: change.service, change_id: change.id });
       // The pending change now carries the waiver and the history row shows it — both
-      // readers of the tag. A 409 means the figures moved under us (the notices arrived,
-      // or the change is no longer scheduled), so the same reread is the right answer.
+      // readers of the tag.
       revalidateTag(TAG.adminFees);
       setConfirming(false);
     } catch (e) {
+      // A 409 means the figures moved under us — the notices arrived, the mailer gave up
+      // on none after all, the change is no longer scheduled — or the change only loosens
+      // the terms and needs no act. The hub says which in a sentence of its own; the same
+      // reread that answers a success brings in the figures it refused on.
       if (e instanceof RequestError && e.status === 409) revalidateTag(TAG.adminFees);
       setProblem(waiverProblem(e, t));
     } finally {
@@ -62,18 +89,20 @@ export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
   }
 
   return (
-    <Alert role="status" className="border-main-accent-t3/40 bg-main-accent-t3/10">
-      <MailWarning className="size-4 text-main-accent-t3" />
-      <AlertTitle>{t("admin.fees.notices.undelivered", { n: summary.undelivered })}</AlertTitle>
+    // The tint sits on the root, not the icon: the uikit `Alert` paints its icon
+    // `currentColor` with a selector that outranks a colour class on the `svg` itself.
+    <Alert role="status" className="border-main-accent-t3/40 bg-main-accent-t3/10 text-main-accent-t3">
+      <MailWarning className="size-4" />
+      <AlertTitle className="text-foreground">{t("admin.fees.notices.givenUpTitle", { n: givenUp })}</AlertTitle>
       <AlertDescription className="gap-3 text-foreground">
         <p className="text-sm leading-relaxed">
-          {t("admin.fees.notices.waits")}
-          {summary.givenUp > 0 && <> {t("admin.fees.notices.givenUp", { n: summary.givenUp })}</>}
+          {t("admin.fees.notices.givenUpBody", { n: givenUp })}
+          {queued > 0 && <> {t("admin.fees.notices.moreQueued", { n: queued })}</>}
         </p>
         {problem && <p className="text-xs text-destructive">{problem}</p>}
         {confirming ? (
           <>
-            <p className="text-sm leading-relaxed">{t("admin.fees.notices.acknowledgeWarning", { n: summary.undelivered })}</p>
+            <p className="text-sm leading-relaxed">{t("admin.fees.notices.acknowledgeWarning", { n: givenUp })}</p>
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <Button variant="destructive" size="sm" disabled={busy} onClick={() => void acknowledge()}>
                 {busy && <Loader2 className="size-4 animate-spin" />}
@@ -85,8 +114,8 @@ export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
             </div>
           </>
         ) : (
-          <div>
-            <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
+          <div className="flex flex-wrap gap-2">
+            <Button ref={openRef} variant="outline" size="sm" onClick={() => setConfirming(true)}>
               {t("admin.fees.notices.acknowledge")}
             </Button>
           </div>
@@ -96,11 +125,11 @@ export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
   );
 }
 
-// The two refusals the hub raises on purpose, in words that say what happened; anything
-// else is a fault and reads as one.
+// The hub's refusals in its own words: a 409 names which figure moved (`errorMessage`
+// relays hub prose verbatim, see `api-client.ts`), and only a bare 403 — not the stale
+// page's `csrf`, which carries a key of its own — is the "not yours to acknowledge" one.
 function waiverProblem(e: unknown, t: (key: string) => string): string {
-  if (e instanceof RequestError && e.status === 403) return t("admin.fees.notices.err.forbidden");
-  if (e instanceof RequestError && e.status === 409) return t("admin.fees.notices.err.nothing");
+  if (e instanceof RequestError && e.status === 403 && !e.code) return t("admin.fees.notices.err.forbidden");
   return errorMessage(e, t);
 }
 
@@ -109,5 +138,9 @@ export function WaiverNote({ change }: { change: FeePolicyChange }) {
   const t = useT();
   const summary = noticeSummary(change);
   if (summary.kind !== "waived") return null;
-  return <p className="mt-1 text-xs text-muted-foreground">{t("admin.fees.waiver.row", { by: summary.by || "—", n: summary.holders })}</p>;
+  return (
+    <p className="mt-1 text-xs text-muted-foreground">
+      {summary.by ? t("admin.fees.waiver.row", { by: summary.by, n: summary.holders }) : t("admin.fees.waiver.rowAnon", { n: summary.holders })}
+    </p>
+  );
 }

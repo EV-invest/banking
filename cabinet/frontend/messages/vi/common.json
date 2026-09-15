@@ -967,29 +967,37 @@
     "en": "Only the requester of this change or an owner can take responsibility for it.",
     "t": "Chỉ người yêu cầu thay đổi này hoặc chủ sở hữu mới có thể nhận trách nhiệm."
   },
-  "admin.fees.notices.err.nothing": {
-    "en": "Nothing left to acknowledge: every holder has been told by now, or the change is no longer scheduled.",
-    "t": "Không còn gì để xác nhận: mọi người nắm giữ đã được thông báo, hoặc thay đổi không còn được lên lịch."
+  "admin.fees.notices.givenUpBody": {
+    "en": "The mailer has given up on {n, plural, one {this holder's notice} other {these # notices}}. A change that tightens the terms does not bind over a holder who was never told, so it is held up until somebody takes responsibility for them.",
+    "t": "Hệ thống gửi thư đã bỏ cuộc với {n, plural, other {# thông báo này}}. Thay đổi siết chặt điều khoản không có hiệu lực với người nắm giữ chưa từng được thông báo, nên nó bị giữ lại cho đến khi có người nhận trách nhiệm về họ."
   },
-  "admin.fees.notices.givenUp": {
-    "en": "The mailer has given up on {n, plural, one {# of them} other {# of them}}.",
-    "t": "Hệ thống gửi thư đã bỏ cuộc với {n, plural, other {# người trong số đó}}."
-  },
-  "admin.fees.notices.undelivered": {
+  "admin.fees.notices.givenUpTitle": {
     "en": "{n, plural, one {# holder} other {# holders}} could not be told",
     "t": "{n, plural, other {# người nắm giữ}} không thể được thông báo"
   },
-  "admin.fees.notices.waits": {
-    "en": "A change that tightens the terms does not bind over a holder whose notice is undelivered. The mailer keeps trying; a holder it can never reach holds the change up for good.",
-    "t": "Thay đổi siết chặt điều khoản không có hiệu lực với người nắm giữ chưa nhận được thông báo. Hệ thống gửi thư vẫn tiếp tục thử; một người không bao giờ liên lạc được sẽ giữ thay đổi lại mãi."
+  "admin.fees.notices.moreQueued": {
+    "en": "{n, plural, one {# more notice is still being delivered and is not covered by this act.} other {# more notices are still being delivered and are not covered by this act.}}",
+    "t": "{n, plural, other {# thông báo khác}} vẫn đang được gửi và không thuộc phạm vi này."
+  },
+  "admin.fees.notices.queued": {
+    "en": "{n, plural, one {# notice is} other {# notices are}} still being delivered. A change that tightens the terms waits for every holder to be told; there is nothing to do unless the mailer gives up on one.",
+    "t": "{n, plural, other {# thông báo}} vẫn đang được gửi. Thay đổi siết chặt điều khoản chờ đến khi mọi người nắm giữ được thông báo; không cần làm gì trừ khi hệ thống gửi thư bỏ cuộc với một người."
   },
   "admin.fees.waiver.acknowledged": {
     "en": "Notices waived by {by} on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
     "t": "Thông báo được miễn bởi {by} vào {at}, cho {n, plural, other {# người nắm giữ}} không thể được thông báo."
   },
+  "admin.fees.waiver.acknowledgedAnon": {
+    "en": "Notices waived on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
+    "t": "Thông báo được miễn vào {at}, cho {n, plural, other {# người nắm giữ}} không thể được thông báo."
+  },
   "admin.fees.waiver.row": {
     "en": "Notices waived by {by} · {n, plural, one {# holder} other {# holders}}",
     "t": "Thông báo được miễn bởi {by} · {n, plural, other {# người nắm giữ}}"
+  },
+  "admin.fees.waiver.rowAnon": {
+    "en": "Notices waived · {n, plural, one {# holder} other {# holders}}",
+    "t": "Thông báo được miễn · {n, plural, other {# người nắm giữ}}"
   },
   "admin.fundRevenue": {
     "en": "Fund revenue",

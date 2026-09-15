@@ -967,29 +967,37 @@
     "en": "Only the requester of this change or an owner can take responsibility for it.",
     "t": "Seul l'auteur de la demande ou un propriétaire peut en prendre la responsabilité."
   },
-  "admin.fees.notices.err.nothing": {
-    "en": "Nothing left to acknowledge: every holder has been told by now, or the change is no longer scheduled.",
-    "t": "Plus rien à confirmer : tous les détenteurs ont été prévenus entre-temps, ou le changement n'est plus planifié."
+  "admin.fees.notices.givenUpBody": {
+    "en": "The mailer has given up on {n, plural, one {this holder's notice} other {these # notices}}. A change that tightens the terms does not bind over a holder who was never told, so it is held up until somebody takes responsibility for them.",
+    "t": "L'envoi a renoncé pour {n, plural, one {l'avis de ce détenteur} many {ces # avis} other {ces # avis}}. Un changement qui durcit les conditions ne s'applique pas à un détenteur jamais prévenu ; il reste bloqué jusqu'à ce que quelqu'un en prenne la responsabilité."
   },
-  "admin.fees.notices.givenUp": {
-    "en": "The mailer has given up on {n, plural, one {# of them} other {# of them}}.",
-    "t": "L'envoi a renoncé pour {n, plural, one {# d'entre eux} many {# d'entre eux} other {# d'entre eux}}."
-  },
-  "admin.fees.notices.undelivered": {
+  "admin.fees.notices.givenUpTitle": {
     "en": "{n, plural, one {# holder} other {# holders}} could not be told",
     "t": "{n, plural, one {# détenteur n'a pas pu être prévenu} many {# détenteurs n'ont pas pu être prévenus} other {# détenteurs n'ont pas pu être prévenus}}"
   },
-  "admin.fees.notices.waits": {
-    "en": "A change that tightens the terms does not bind over a holder whose notice is undelivered. The mailer keeps trying; a holder it can never reach holds the change up for good.",
-    "t": "Un changement qui durcit les conditions ne s'applique pas à un détenteur dont l'avis n'a pas été remis. L'envoi continue d'essayer ; un détenteur injoignable bloque le changement indéfiniment."
+  "admin.fees.notices.moreQueued": {
+    "en": "{n, plural, one {# more notice is still being delivered and is not covered by this act.} other {# more notices are still being delivered and are not covered by this act.}}",
+    "t": "{n, plural, one {# autre avis est encore en cours de remise et n'est pas couvert par cela.} many {# autres avis sont encore en cours de remise et ne sont pas couverts par cela.} other {# autres avis sont encore en cours de remise et ne sont pas couverts par cela.}}"
+  },
+  "admin.fees.notices.queued": {
+    "en": "{n, plural, one {# notice is} other {# notices are}} still being delivered. A change that tightens the terms waits for every holder to be told; there is nothing to do unless the mailer gives up on one.",
+    "t": "{n, plural, one {# avis est} many {# avis sont} other {# avis sont}} encore en cours de remise. Un changement qui durcit les conditions attend que chaque détenteur soit prévenu ; il n'y a rien à faire tant que l'envoi n'a renoncé pour aucun."
   },
   "admin.fees.waiver.acknowledged": {
     "en": "Notices waived by {by} on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
     "t": "Avis levés par {by} le {at}, pour {n, plural, one {# détenteur} many {# détenteurs} other {# détenteurs}} qui n'ont pas pu être prévenus."
   },
+  "admin.fees.waiver.acknowledgedAnon": {
+    "en": "Notices waived on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
+    "t": "Avis levés le {at}, pour {n, plural, one {# détenteur} many {# détenteurs} other {# détenteurs}} qui n'ont pas pu être prévenus."
+  },
   "admin.fees.waiver.row": {
     "en": "Notices waived by {by} · {n, plural, one {# holder} other {# holders}}",
     "t": "Avis levés par {by} · {n, plural, one {# détenteur} many {# détenteurs} other {# détenteurs}}"
+  },
+  "admin.fees.waiver.rowAnon": {
+    "en": "Notices waived · {n, plural, one {# holder} other {# holders}}",
+    "t": "Avis levés · {n, plural, one {# détenteur} many {# détenteurs} other {# détenteurs}}"
   },
   "admin.fundRevenue": {
     "en": "Fund revenue",
