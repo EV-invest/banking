@@ -27,11 +27,48 @@ use domain::{
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{MigrateAddressToCustodianRequest, ProvisionAddressRequest, RotateAddressRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
-use tonic::{Request, transport::Channel};
+use tonic::{Code, Request, Status, transport::Channel};
 
 use crate::ports::deposit_addresses::{DepositAddresses, MigratedAddress};
 
 const KIND_DERIVED: &str = "derived";
+
+/// The trailer the signer attaches to a `FailedPrecondition` when the key custodian parked
+/// the activity for a human (`BackendError::RequiresApproval`). The hub does not depend on
+/// the signer crate, so this mirrors its `ACTIVITY_ID_METADATA_KEY` rather than importing it.
+const ACTIVITY_ID_METADATA_KEY: &str = "turnkey-activity-id";
+
+/// Classify a signer refusal of `op` (a rotation or a custody migration) into the domain
+/// vocabulary, so the operator's wire code tells the cases apart.
+///
+/// `FailedPrecondition` is the signer saying "not in this state" — a healthy key that must
+/// not be rotated, a row that is already custody-held, or the custodian holding the activity
+/// for human approval. Only the state stands in the way, which is exactly
+/// [`DomainError::Precondition`]; collapsing it into `Validation` (as this once did) told an
+/// operator to fix a request that was fine. The approval case carries the custodian's
+/// activity id in the `turnkey-activity-id` trailer; the domain error cannot carry metadata
+/// and the trailer is deliberately not forwarded to clients, so the id goes into the message,
+/// where the holder of `DepositAddressRotate`/`DepositAddressMigrate` can read it off the
+/// status and find the activity on the custodian's side.
+///
+/// `InvalidArgument` is a malformed request. `Aborted` is a lost race: the row moved under
+/// us, and the honest answer is "re-read and try again", not "the signer is broken".
+/// Anything else is an infrastructure fault.
+fn signer_refusal(op: &str, status: &Status) -> DomainError {
+	let message = status.message();
+	match status.code() {
+		Code::FailedPrecondition => match activity_id(status) {
+			Some(id) => DomainError::Precondition(format!("signer {op} requires custodian approval (activity {id}): {message}")),
+			None => DomainError::Precondition(format!("signer refused the {op}: {message}")),
+		},
+		Code::InvalidArgument | Code::Aborted => DomainError::Validation(format!("signer refused the {op}: {message}")),
+		_ => DomainError::Repository(format!("signer {op} failed: {message}")),
+	}
+}
+
+fn activity_id(status: &Status) -> Option<&str> {
+	status.metadata().get(ACTIVITY_ID_METADATA_KEY).and_then(|value| value.to_str().ok())
+}
 
 pub struct SignerDepositAddresses {
 	pool: PgPool,
@@ -142,12 +179,7 @@ impl DepositAddresses for SignerDepositAddresses {
 			.clone()
 			.rotate_address(request)
 			.await
-			.map_err(|status| match status.code() {
-				// The signer's refusals (healthy key / nothing to rotate) are operator
-				// input errors, not infrastructure faults.
-				tonic::Code::FailedPrecondition | tonic::Code::InvalidArgument => DomainError::Validation(format!("signer refused rotation: {}", status.message())),
-				_ => DomainError::Repository(format!("signer rotation failed: {}", status.message())),
-			})?
+			.map_err(|status| signer_refusal("rotation", &status))?
 			.into_inner();
 		let address = WalletAddress::parse(network, &response.address)?;
 		let derived = response.address_kind == KIND_DERIVED;
@@ -174,15 +206,7 @@ impl DepositAddresses for SignerDepositAddresses {
 			.clone()
 			.migrate_address_to_custodian(request)
 			.await
-			.map_err(|status| match status.code() {
-				// The signer's own gates (already custody-held, dead key, a different address
-				// than the one cleared) are operator input errors, not infrastructure faults —
-				// same split `rotate` makes. `Aborted` is a lost race: the row moved under us,
-				// and the honest answer is "re-read and try again", not "the signer is broken".
-				tonic::Code::FailedPrecondition | tonic::Code::InvalidArgument | tonic::Code::Aborted =>
-					DomainError::Validation(format!("signer refused the custody migration: {}", status.message())),
-				_ => DomainError::Repository(format!("signer custody migration failed: {}", status.message())),
-			})?
+			.map_err(|status| signer_refusal("custody migration", &status))?
 			.into_inner();
 		let new_address = WalletAddress::parse(network, &response.new_address)?;
 		let derived = response.address_kind == KIND_DERIVED;
@@ -202,4 +226,64 @@ impl DepositAddresses for SignerDepositAddresses {
 
 fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+	use tonic::metadata::MetadataValue;
+
+	use super::*;
+
+	const ACTIVITY_ID: &str = "0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b";
+
+	fn requires_approval() -> Status {
+		let mut status = Status::failed_precondition(format!("key custodian requires approval for activity {ACTIVITY_ID}"));
+		status.metadata_mut().insert(ACTIVITY_ID_METADATA_KEY, MetadataValue::try_from(ACTIVITY_ID).unwrap());
+		status
+	}
+
+	#[test]
+	fn requires_approval_is_a_precondition_that_names_the_activity() {
+		let err = signer_refusal("rotation", &requires_approval());
+		let DomainError::Precondition(message) = err else {
+			panic!("RequiresApproval must be a precondition, not validation: {err:?}");
+		};
+		assert!(message.contains(ACTIVITY_ID), "the activity id must survive into the message: {message}");
+		assert!(message.contains("approval"), "{message}");
+	}
+
+	#[test]
+	fn a_plain_failed_precondition_is_a_precondition_without_an_activity() {
+		let err = signer_refusal("rotation", &Status::failed_precondition("key is healthy under the current KEK — rotation refused"));
+		let DomainError::Precondition(message) = err else {
+			panic!("a signer precondition must not collapse into validation: {err:?}");
+		};
+		assert!(!message.contains("activity"), "no trailer ⇒ no invented activity id: {message}");
+		assert!(message.contains("rotation refused"), "{message}");
+	}
+
+	#[test]
+	fn bad_input_and_lost_races_stay_validation() {
+		assert!(matches!(
+			signer_refusal("custody migration", &Status::invalid_argument("user_id must be a UUID")),
+			DomainError::Validation(_)
+		));
+		assert!(matches!(
+			signer_refusal("custody migration", &Status::aborted("superseded concurrently")),
+			DomainError::Validation(_)
+		));
+	}
+
+	#[test]
+	fn everything_else_is_an_infrastructure_fault() {
+		for status in [
+			Status::unavailable("down"),
+			Status::deadline_exceeded("slow"),
+			Status::internal("signing failed"),
+			Status::permission_denied("refused"),
+		] {
+			let code = status.code();
+			assert!(matches!(signer_refusal("rotation", &status), DomainError::Repository(_)), "{code:?} must be a repository error");
+		}
+	}
 }
