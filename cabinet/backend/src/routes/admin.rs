@@ -1,10 +1,13 @@
 //! Admin-console routes — the operator surface behind `/api/admin/*`.
 //!
-//! Every handler is coarse-gated by [`require_admin`] (a non-investor session) and then
-//! forwards the correct plane token — the concierge identity token for identity/platform
-//! RPCs, the banking money token for money/treasury RPCs — which the owning plane
-//! re-checks against the specific permission (defense in depth; an insufficient role
-//! surfaces as 403). Mutations verify CSRF first, exactly like the money routes.
+//! Every handler is role-gated first — coarsely by [`require_admin`] (a non-investor
+//! session), and the `/api/admin/fees/*` routes by the narrower [`require_fee_admin`]
+//! (`admin` or `owner`, the roles the money plane actually lets administer fees) — and
+//! then forwards the correct plane token — the concierge identity token for
+//! identity/platform RPCs, the banking money token for money/treasury RPCs — which the
+//! owning plane re-checks against the specific permission (defense in depth; an
+//! insufficient role surfaces as 403). Mutations verify CSRF right after the gate,
+//! exactly like the money routes.
 
 use axum::{
 	Json,
@@ -24,7 +27,7 @@ use serde_json::{Value, json};
 use crate::{
 	dto,
 	error::ApiError,
-	routes::{editable, parse_body, require_admin, require_money_token, require_token, required, required_u32, verify_csrf},
+	routes::{editable, parse_body, require_admin, require_fee_admin, require_money_token, require_token, required, required_u32, verify_csrf},
 	state::AppState,
 };
 
@@ -331,7 +334,7 @@ pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar,
 
 /// `GET /api/admin/fees/policies` — every fund's fee terms, for the fees table.
 pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::FeePolicyList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let list = st.grpc.fee_policies(&token).await.map_err(|s| ApiError::read(s, "fee policies unavailable"))?;
 	Ok(Json(list.into()))
@@ -346,7 +349,7 @@ pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Re
 /// or 0 = as soon as the notice allows) and `reason` (required by the hub when the change
 /// needs the owners) travel as given; the hub decides the requirement and the moment.
 pub async fn schedule_fee_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -387,7 +390,7 @@ pub async fn schedule_fee_policy(State(st): State<AppState>, jar: CookieJar, hea
 
 /// `POST /api/admin/fees/policy/cancel` — withdraw a pending change of terms.
 pub async fn cancel_fee_policy_change(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -402,7 +405,7 @@ pub async fn cancel_fee_policy_change(State(st): State<AppState>, jar: CookieJar
 
 /// `GET /api/admin/fees/changes?service=` — a fund's whole history of terms, newest first.
 pub async fn list_fee_policy_changes(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeePolicyChangeList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -417,7 +420,7 @@ pub async fn list_fee_policy_changes(State(st): State<AppState>, jar: CookieJar,
 
 /// `GET /api/admin/fees/shares?service=` — uncollected fee units in one fund, and their value.
 pub async fn fee_shares(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeeShares>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -432,7 +435,7 @@ pub async fn fee_shares(State(st): State<AppState>, jar: CookieJar, Query(q): Qu
 /// Refused rather than queued when the fund's claim cannot cover it on top of its queued
 /// redemptions — the manager is paid last.
 pub async fn settle_fee_shares(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeeSettlement>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -447,7 +450,7 @@ pub async fn settle_fee_shares(State(st): State<AppState>, jar: CookieJar, heade
 
 /// `GET /api/admin/fees/assessments?service=` — every charge this fund has made.
 pub async fn fund_fee_assessments(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeeAssessmentList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -1326,7 +1329,7 @@ mod admin_route_tests {
 
 	#[derive(Clone)]
 	struct Hub {
-		/// The role `GetMe` reports — what [`require_admin`] gates on.
+		/// The role `GetMe` reports — what [`require_admin`] and [`require_fee_admin`] gate on.
 		role: String,
 		/// When set, every fees RPC fails with this code (the upstream-refusal cases).
 		fail_with: Option<Code>,
@@ -1924,6 +1927,59 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not price a fund");
 
 		assert!(seen.lock().unwrap().set_policy.is_none(), "a refused caller must never reach the hub");
+	}
+
+	/// An `operator` passes the coarse console gate but not the fee one. The money plane
+	/// refuses every fee call from an operator, so before this gate the console showed
+	/// the fees screen and then answered 403 to everything on it. The refusal has to be
+	/// decided at the BFF, before the CSRF check and before a money token is minted — the
+	/// hub must not see the request at all, and the message must name the roles that do
+	/// get through, so the screen can say so instead of a bare "request failed".
+	#[tokio::test]
+	async fn an_operator_is_refused_the_fees_routes_but_not_the_console() {
+		let hub = Hub::new("operator");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, response) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "an operator must not read the fees table");
+		assert_eq!(response["error"], "fee administration requires the admin or owner role");
+
+		let body = r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#;
+		let (status, response) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "an operator must not price a fund");
+		assert_eq!(response["error"], "fee administration requires the admin or owner role");
+
+		// The same session is still an operator elsewhere on the console: the narrower gate
+		// is on the fee routes alone, not a demotion of the role.
+		let (status, _) = send(&app, signed("POST", "/api/admin/users/kyc", Some(r#"{"user_id":"u1","kyc_level":2}"#), true)).await;
+		assert_eq!(status, StatusCode::OK, "an operator keeps the rest of the console");
+
+		let seen = seen.lock().unwrap();
+		assert!(seen.set_policy.is_none(), "the fee refusal must be decided before the hub is called");
+		assert_eq!(seen.money_tokens_issued, 0, "a caller refused on role must not cost a money-token mint");
+		assert!(seen.set_kyc.is_some(), "the operator's KYC call must still have reached the hub");
+	}
+
+	/// The two roles the fee gate admits, both reading and writing. `owner` is here on
+	/// purpose: a gate written as `role == "admin"` would lock the fund's owners out of
+	/// their own fee terms, and nothing else on this seam would notice.
+	#[tokio::test]
+	async fn admins_and_owners_administer_fees() {
+		for role in ["admin", "owner"] {
+			let hub = Hub::new(role);
+			let seen = hub.seen.clone();
+			let app = app(serve(hub).await);
+
+			let (status, _) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+			assert_eq!(status, StatusCode::OK, "{role} must read the fees table");
+
+			let body = r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#;
+			let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+			assert_eq!(status, StatusCode::OK, "{role} must be able to price a fund");
+
+			assert!(seen.lock().unwrap().set_policy.is_some(), "{role}'s change of terms must reach the hub");
+		}
 	}
 
 	/// The double-submit gate on the two mutations. A valid session is not enough: a

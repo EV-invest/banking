@@ -855,6 +855,14 @@
     "en": "Performance",
     "t": "Performance"
   },
+  "admin.fees.forbidden.body": {
+    "en": "Pricing a product changes what investors pay, so only an administrator or an owner can view and schedule fee terms. The rest of the console is yours as usual.",
+    "t": "Tarifer un produit change ce que paient les investisseurs ; seuls un administrateur ou un propriétaire peuvent donc consulter et programmer les conditions de frais. Le reste de la console vous reste accessible comme d’habitude."
+  },
+  "admin.fees.forbidden.title": {
+    "en": "Fee terms are set by administrators and owners",
+    "t": "Les conditions de frais sont fixées par les administrateurs et les propriétaires"
+  },
   "admin.fees.hint.ofTheGain": {
     "en": "of the gain",
     "t": "du gain"

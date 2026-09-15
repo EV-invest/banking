@@ -855,6 +855,14 @@
     "en": "Performance",
     "t": "Performance"
   },
+  "admin.fees.forbidden.body": {
+    "en": "Pricing a product changes what investors pay, so only an administrator or an owner can view and schedule fee terms. The rest of the console is yours as usual.",
+    "t": "Die Bepreisung eines Produkts ändert, was Anleger zahlen; deshalb können nur ein Administrator oder ein Eigentümer Gebührenbedingungen einsehen und festlegen. Der Rest der Konsole steht Ihnen wie gewohnt zur Verfügung."
+  },
+  "admin.fees.forbidden.title": {
+    "en": "Fee terms are set by administrators and owners",
+    "t": "Gebührenbedingungen legen Administratoren und Eigentümer fest"
+  },
   "admin.fees.hint.ofTheGain": {
     "en": "of the gain",
     "t": "des Gewinns"

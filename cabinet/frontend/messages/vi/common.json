@@ -855,6 +855,14 @@
     "en": "Performance",
     "t": "Phí hiệu suất"
   },
+  "admin.fees.forbidden.body": {
+    "en": "Pricing a product changes what investors pay, so only an administrator or an owner can view and schedule fee terms. The rest of the console is yours as usual.",
+    "t": "Định giá một sản phẩm làm thay đổi khoản nhà đầu tư phải trả, nên chỉ quản trị viên hoặc chủ sở hữu mới có thể xem và lên lịch điều khoản phí. Phần còn lại của bảng điều khiển vẫn dùng được như thường."
+  },
+  "admin.fees.forbidden.title": {
+    "en": "Fee terms are set by administrators and owners",
+    "t": "Điều khoản phí do quản trị viên và chủ sở hữu thiết lập"
+  },
   "admin.fees.hint.ofTheGain": {
     "en": "of the gain",
     "t": "của phần lãi"
