@@ -103,8 +103,11 @@ protos**, read from the `evconcierge_contracts` git checkout that `Cargo.toml` p
 of them are generated is listed once, in `contracts/concierge-protos.txt`; the same list is
 what `nix run .#concierge-pin-check` guards (pin is an ancestor of concierge `origin/main`;
 bytes equal at the pin, on main and in the local cargo checkout). Both run in CI from
-`.github/workflows/drift.yml`. Bumping the pin: `Cargo.toml` → `concierge-pin-check` →
-`gen-api`, all three sides in one commit.
+`.github/workflows/drift.yml`. Bumping the pin: `Cargo.toml` → `cargo update -p
+evconcierge_contracts` (so `Cargo.lock` takes the new rev — `drift-check` runs `cargo
+metadata --locked` and fails a PR whose lock still holds the old one) → `concierge-pin-check`
+→ `gen-api`; all four sides — `Cargo.toml`, `Cargo.lock`, `openapi.json`, `shared/contracts/gen`
+— in one commit.
 
 ## Auth
 
