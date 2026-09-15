@@ -262,18 +262,26 @@ next tick; for a holder who stays unreachable, an operator takes responsibility 
 requested the change or a fund owner — the same rule as withdrawing a consilium-gated
 change, so the holders' notice is never one administrator away from being waived on
 somebody else's change) records on the change who acknowledged, when, and the banking ids
-of exactly the holders whose notice was undelivered at that moment
+of exactly the holders whose notice the mailer had GIVEN UP on at that moment
 (`fee_policy_changes.notices_waived_by / notices_waived_at / notices_waived_users`,
-migration `0042`). `promote` then binds the tightening over those holders and logs a
-`warn!` naming them by id — and still refuses over anyone the record does not cover: a
-holder who had redeemed at the time and bought back in untold holds the change again, so an
-acknowledgement never widens by itself. The first acknowledgement stands (a repeat returns
-it unchanged); a change that is not `scheduled`, or whose every notice has been delivered,
-has nothing to acknowledge and is refused rather than silently stamped — an acknowledgement
-covering nobody would be a misleading line in the history, and the schema refuses one too.
-Every change carries `undelivered_notices` / `notices_given_up` on the wire (counted only
-while `scheduled`, operators only), which is what the admin console's "N holders could not
-be told" reads.
+migration `0042`). Given up on, not merely undelivered: a notice still in the queue may yet
+arrive, and its holder is then told — waiving it before the mailer has finished trying would
+take responsibility for holders nobody has failed to reach (the requester pressing "take
+responsibility" in the first minute after scheduling would otherwise name every holder).
+Such a holder keeps holding the change until their notice is delivered or given up on, and
+a later acknowledgement can name them. `promote` then binds the tightening over the named
+holders and logs a `warn!` naming them by id — and still refuses over anyone the record does
+not cover: a holder still in the queue at the time, or one who had redeemed and bought back
+in untold, holds the change again, so an acknowledgement never widens by itself. The first
+acknowledgement stands (a repeat returns it unchanged, and the service's audit `warn!` is
+written only by the call that recorded it); a change that is not `scheduled`, one that only
+loosens the terms (it binds by itself, so there is no protection to waive), or one with no
+notice given up on yet has nothing to acknowledge and is refused rather than silently
+stamped — an acknowledgement covering nobody would be a misleading line in the history, and
+the schema refuses one too. Every change carries `undelivered_notices` / `notices_given_up`
+on the wire (counted only while `scheduled`, operators only), which is what the admin
+console's "N holders could not be told" reads; the acknowledgement is offered only while
+`notices_given_up > 0`.
 
 ## Still open
 
