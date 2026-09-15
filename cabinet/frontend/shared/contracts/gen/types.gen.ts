@@ -6281,14 +6281,16 @@ export type ConciergeV1PayoutApprovalMail = {
 /**
  * PayoutOutcomeMail
  *
- * How a consilium ended — over a revenue payout OR over a payment — and, under
- * APPROVAL_TOKEN_BURNED, that one of its tokens burned.
+ * How a consilium ended — over a revenue payout, over a payment, or over a fund's fee
+ * terms — and, under APPROVAL_TOKEN_BURNED, that one of its tokens burned.
  *
- * ONE message for both subjects, additively. The burn notice already rides this shape
- * under its own kind, so a payment consilium's outcome and burn ride it too rather than
- * each growing a message of their own: `network` + `address` describe a payout,
- * `source` + `destination` (+ `tier`, `reason`) describe a payment, and the renderer
- * switches on which pair is filled. A caller sets one pair and leaves the other empty.
+ * ONE message for three subjects, additively. The burn notice already rides this shape
+ * under its own kind, so a payment consilium's outcome and burn ride it too, and so do a
+ * fee-policy consilium's, rather than each growing a message of their own: `network` +
+ * `address` describe a payout, `source` + `destination` (+ `tier`, `reason`) describe a
+ * payment, `fund` + `proposed` (+ `current`, `reason`) describe fee terms, and the
+ * renderer switches on which description is filled. A caller fills exactly one and
+ * leaves the other two empty.
  */
 export type ConciergeV1PayoutOutcomeMail = {
     /**
@@ -6341,6 +6343,24 @@ export type ConciergeV1PayoutOutcomeMail = {
      * reason
      */
     reason?: string;
+    /**
+     * fund
+     *
+     * The fee terms description. Empty for a payout and for a payment. Same rules as
+     * FeePolicyApprovalMail: `fund` is words a person recognises and may not carry a
+     * link, `current` is absent when the fund charged nothing (a real state, not a
+     * missing field), `proposed` is required, and `reason` — the operator's words, shown
+     * attributed — is empty under the burn kind.
+     */
+    fund?: string;
+    /**
+     * current
+     */
+    current?: ConciergeV1FeeTerms;
+    /**
+     * proposed
+     */
+    proposed?: ConciergeV1FeeTerms;
 };
 
 /**
