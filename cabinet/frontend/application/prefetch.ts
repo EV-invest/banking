@@ -136,8 +136,15 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
   {
     prefix: "/profile",
     warm: () => {
+      // The profile is read-only and summarises the account: the identity record, the
+      // holdings and balance behind its stat strip, the full timeline behind its activity
+      // counts (the same read `/operations` makes, so one cache entry serves both), and the
+      // session list its Access card counts.
       profileResource.prefetch();
       positionsResource.prefetch();
+      walletResource.prefetch();
+      operationsResource.prefetch(undefined);
+      sessionsResource.prefetch();
     },
   },
   {

@@ -12,6 +12,7 @@ import { LOCALES } from "@evinvest/i18n";
 
 import {
   cabinetPath,
+  isCabinetPage,
   isNonPagePath,
   localeRepairedPath,
   relocalise,
@@ -155,6 +156,42 @@ test("a path that is not a cabinet page is left for someone else", () => {
   assert.equal(localeRepairedPath("/", "ru"), null);
   assert.equal(localeRepairedPath("/cabinets/list", "ru"), null);
   assert.equal(localeRepairedPath("/zz/cabinets/list", "ru"), null);
+});
+
+// The account chip mounts on both origins and links to a different place from each: into
+// the cabinet home from the public site, to the profile from inside the cabinet. The
+// answer comes from `document.location.pathname`, so it has to be right for the real
+// shapes both hosts produce — locale-prefixed pages, the unprefixed mount, and the
+// conductor's own routes that merely share the origin.
+test("a cabinet page is a cabinet page, with or without its locale", () => {
+  for (const path of ["/cabinet", "/cabinet/", "/cabinet/wallet", "/en/cabinet", "/ru/cabinet/", "/de/cabinet/admin/revenue"]) {
+    assert.equal(isCabinetPage(path), true, path);
+  }
+  for (const locale of LOCALES) {
+    for (const path of ["/", "/wallet", "/profile"] as const) {
+      assert.equal(isCabinetPage(cabinetPath(locale, path)), true, `${locale} ${path}`);
+    }
+  }
+});
+
+test("the conductor's own routes are not cabinet pages", () => {
+  for (const path of ["/", "/en", "/en/about", "/ru/invest", "/zz/anything"]) {
+    assert.equal(isCabinetPage(path), false, path);
+  }
+});
+
+test("a sibling that merely starts with the zone name is not a cabinet page", () => {
+  for (const path of ["/cabinets", "/cabinets/list", "/en/cabinets/list", "/cabinetry"]) {
+    assert.equal(isCabinetPage(path), false, path);
+  }
+});
+
+test("assets and BFF calls under the prefix are not cabinet pages", () => {
+  // The chip never renders inside one of these, but the function is public and the
+  // proxy's distinction between pages and non-pages should hold here too.
+  for (const path of ["/cabinet/_next/static/chunks/x.css", "/cabinet/api/session", "/cabinet/mfe/account-chip.js", "/cabinet/favicon.ico"]) {
+    assert.equal(isCabinetPage(path), false, path);
+  }
 });
 
 test("repairing agrees with cabinetPath for every locale", () => {

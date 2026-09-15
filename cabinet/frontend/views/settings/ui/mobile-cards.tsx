@@ -1,9 +1,10 @@
 "use client";
 
-// The cards the mobile root screen stacks (Figma `cabinet/mobile/settings`): the profile
-// tap target, the editable account rows, and the entries into Security, Notifications and
-// sign-out. The two pushed screens they open — Sessions and Notifications — are the same
-// sections the desktop rail shows, so they live beside it rather than here.
+// The cards the mobile root screen stacks (Figma `cabinet/mobile/settings`), in its two
+// groups: Cabinet — the editable preference rows and the entry into Notifications; Profile
+// — the tap target into the profile page, the entries into Personal details and Security,
+// and sign-out. The pushed screens they open — Personal details, Sessions, Notifications —
+// are the same sections the desktop rail shows, so they live beside it rather than here.
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 
@@ -18,10 +19,14 @@ import type { Session } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
-import { formatEmail, formatPhone } from "@/views/settings/lib/contact";
+import { formatEmail } from "@/views/settings/lib/contact";
 import { CURRENCIES, type Form, labelOf, LANGUAGES, optionsOf, TIMEZONES } from "@/views/settings/lib/form";
 import { initialsOfName } from "@/views/settings/lib/format";
-import { PhoneField, ThemedSelect } from "@/views/settings/ui/fields";
+import { FieldHint, ThemedSelect } from "@/views/settings/ui/fields";
+
+// The tappable rows are hand-written buttons (uikit has no list-row control), so each
+// carries its own focus ring.
+const ROW_BUTTON = "flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** `card-ProfileSummary` — the tap target into the full profile. */
 export function ProfileSummaryCard({ loading, name, email, verified }: { loading: boolean; name: string; email: string | null; verified: boolean }) {
@@ -43,23 +48,23 @@ export function ProfileSummaryCard({ loading, name, email, verified }: { loading
           </div>
         )}
         {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-xs text-ink-soft">{formatEmail(email) || t("auth.notSignedIn")}</span>}
+        {/* Says where the tap goes: without it the card read as a header, not a destination. */}
+        <span className="text-xs font-medium text-accent-debug">{t("settings.viewProfile")}</span>
       </div>
       <Chevron className="size-5" />
     </Link>
   );
 }
 
-/** `card-Account` — one tappable row per editable preference; tapping expands the editor in place. */
-export function AccountRowsCard({
+/** `card-Preferences` — one tappable row per display preference; tapping expands the editor in place. */
+export function PreferencesCard({
   loading,
   form,
-  email,
   fieldErrors,
   onChange,
 }: {
   loading: boolean;
   form: Form | null;
-  email: string | null;
   fieldErrors: Record<string, string>;
   onChange: (key: keyof Form, value: string) => void;
 }) {
@@ -74,27 +79,33 @@ export function AccountRowsCard({
 
   return (
     <ListCard>
-      {/* Email is the IdP's — displayed, never editable here. */}
-      <Row>
-        <span className="shrink-0 text-sm font-medium text-ink">{t("ui.email")}</span>
-        {loading ? <Skeleton className="h-3.5 w-36" /> : <RowValue>{formatEmail(email) || "—"}</RowValue>}
-      </Row>
+      <ListCardTitle sub={t("settings.preferencesSub")}>{t("settings.nav.preferences")}</ListCardTitle>
       <Hairline />
-      <ExpandableRow label={t("settings.phone")} value={form ? formatPhone(form.phone) : ""} loading={!ready} open={open === "phone"} onToggle={() => toggle("phone")}>
-        {form && <PhoneField initial={form.phone} onChange={(v) => onChange("phone", v)} error={fieldErrors.phone} />}
-      </ExpandableRow>
-      <Hairline />
-      <ExpandableRow label={t("lang.switch")} value={form ? labelOf(LANGUAGES, form.language) : ""} loading={!ready} open={open === "language"} onToggle={() => toggle("language")}>
+      <ExpandableRow label={t("lang.switch")} value={form ? labelOf(LANGUAGES, form.language) : ""} hint={t("settings.hint.language")} loading={!ready} open={open === "language"} onToggle={() => toggle("language")}>
         {form && <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder={t("settings.selectLanguage")} error={fieldErrors.language} />}
       </ExpandableRow>
       <Hairline />
-      <ExpandableRow label={t("settings.baseCurrency")} value={form ? labelOf(currencies, form.base_currency) : ""} loading={!ready} open={open === "base_currency"} onToggle={() => toggle("base_currency")}>
+      <ExpandableRow label={t("settings.baseCurrency")} value={form ? labelOf(currencies, form.base_currency) : ""} hint={t("settings.hint.baseCurrency")} loading={!ready} open={open === "base_currency"} onToggle={() => toggle("base_currency")}>
         {form && <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={currencies} placeholder={t("settings.selectCurrency")} error={fieldErrors.base_currency} />}
       </ExpandableRow>
       <Hairline />
-      <ExpandableRow label={t("settings.timeZone")} value={form ? labelOf(timezones, form.timezone) : ""} loading={!ready} open={open === "timezone"} onToggle={() => toggle("timezone")}>
+      <ExpandableRow label={t("settings.timeZone")} value={form ? labelOf(timezones, form.timezone) : ""} hint={t("settings.hint.timeZone")} loading={!ready} open={open === "timezone"} onToggle={() => toggle("timezone")}>
         {form && <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={timezones} placeholder={t("settings.selectTimeZone")} error={fieldErrors.timezone} />}
       </ExpandableRow>
+    </ListCard>
+  );
+}
+
+/** `card-PersonalDetails` — the entry into the identity editor, which is its own pushed
+ *  screen. One row and no title, like the profile card above it: the row is the card. */
+export function PersonalDetailsCard({ onOpen }: { onOpen: () => void }) {
+  const t = useT();
+  return (
+    <ListCard>
+      <button type="button" onClick={onOpen} className={ROW_BUTTON}>
+        <RowLabel title={t("settings.nav.personal")} sub={t("settings.personalRowSub")} />
+        <Chevron />
+      </button>
     </ListCard>
   );
 }
@@ -102,6 +113,7 @@ export function AccountRowsCard({
 function ExpandableRow({
   label,
   value,
+  hint,
   loading,
   open,
   onToggle,
@@ -109,6 +121,8 @@ function ExpandableRow({
 }: {
   label: string;
   value: string;
+  /** Shown with the open editor, under the control — the same sentence the desktop field carries. */
+  hint: string;
   loading: boolean;
   open: boolean;
   onToggle: () => void;
@@ -116,20 +130,19 @@ function ExpandableRow({
 }) {
   return (
     <div className="flex min-w-0 flex-col">
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={loading}
-        aria-expanded={open}
-        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
+      <button type="button" onClick={onToggle} disabled={loading} aria-expanded={open} className={ROW_BUTTON}>
         <span className="shrink-0 text-sm font-medium text-ink">{label}</span>
         <span className="flex min-w-0 items-center gap-2">
           {loading ? <Skeleton className="h-3.5 w-28" /> : !open && <RowValue>{value || "—"}</RowValue>}
           <Chevron className={cn("transition-transform", open && "rotate-90")} />
         </span>
       </button>
-      {open && <div className="pb-3.5">{children}</div>}
+      {open && (
+        <div className="pb-3.5">
+          {children}
+          <FieldHint>{hint}</FieldHint>
+        </div>
+      )}
     </div>
   );
 }
@@ -160,7 +173,7 @@ export function MobileSecurityCard({
       <button
         type="button"
         onClick={onOpenSessions}
-        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={ROW_BUTTON}
       >
         <RowLabel title={t("ui.trustedSessions")} sub={t("settings.trustedSessionsSub")} />
         <span className="flex shrink-0 items-center gap-2">
@@ -185,7 +198,7 @@ export function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
       <button
         type="button"
         onClick={onOpen}
-        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={ROW_BUTTON}
       >
         <RowLabel title={t("ui.deliveryTopics")} sub={t("settings.deliveryTopicsSub")} />
         <Chevron />

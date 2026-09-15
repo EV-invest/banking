@@ -59,6 +59,12 @@ use tracing::{info, warn};
 /// (500), so this is the steady-state batch, not a hard bound.
 const PULL_LIMIT: u32 = 256;
 
+/// Ceiling on the retry delay after consecutive failed cycles (see [`BridgeConsumer::run`]).
+/// A minute is long enough to stop being load on a struggling concierge and short enough
+/// that a suspension or a tier change is not sitting unmirrored for an operator-visible
+/// stretch once the plane is back.
+const BACKOFF_MAX: Duration = Duration::from_secs(60);
+
 /// What [`BridgeConsumer::apply`] did with one event. `drain` reads this to decide whether
 /// the single global cursor may move past it — the cursor is the only delivery guarantee
 /// there is, so this is a consumed/not-consumed verdict, not a status log.
@@ -74,6 +80,22 @@ enum Outcome {
 	/// A kind this build's pinned contracts cannot name. The cursor must NOT pass: only a
 	/// re-pull by an upgraded binary can ever apply it.
 	Unreadable,
+}
+
+/// What one pull did, in the two terms its callers need.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Pull {
+	/// The cursor moved past this batch, so it is consumed and will not be re-delivered.
+	/// [`BridgeConsumer::run`] reads this as the cycle having done work even when a LATER
+	/// pull in the same drain fails.
+	progressed: bool,
+	/// A full batch came back, so more may be waiting behind it and `drain` should pull again.
+	more: bool,
+}
+
+impl Pull {
+	/// Nothing consumed, and no reason to pull again in this cycle.
+	const STOP: Self = Self { progressed: false, more: false };
 }
 
 /// Whether an event's PROFILE SNAPSHOT (email, verification flag) still describes the
@@ -114,24 +136,64 @@ impl BridgeConsumer {
 
 	/// Run until `shutdown` is cancelled. Each cycle drains the available backlog, then
 	/// waits the poll interval (or wakes on cancellation). A transient pull/apply failure is
-	/// logged and retried next cycle from the unchanged cursor — nothing is dropped.
+	/// logged and retried from the unchanged cursor — nothing is dropped.
+	///
+	/// A FAILING CYCLE BACKS OFF; A HEALTHY ONE DOES NOT. When concierge is down (or
+	/// restarting, or rejecting the token) the poll interval is a *retry* interval, and at
+	/// the production value of five seconds a concierge outage becomes a permanent 12 rpm
+	/// of failing connects per hub — noise in the logs of the plane that is already having
+	/// a bad day, and load on it exactly while it is trying to come back. The delay doubles
+	/// per consecutive failure up to [`BACKOFF_MAX`] and snaps back to the poll interval the
+	/// moment the cycle makes progress, so mirror latency in the ordinary case is unchanged.
+	/// PROGRESS, NOT A CLEAN CYCLE, IS WHAT COUNTS AS SUCCESS — see the `Err` arm.
 	pub async fn run(self, shutdown: CancellationToken) {
 		info!(every = ?self.poll_interval, "bridge: consuming concierge lifecycle events");
 		let mut client = UserEventsClient::new(self.channel.clone());
+		// The ceiling never shortens a deliberately slow poll: an operator who set
+		// BRIDGE_POLL_SECS above the cap asked for that interval, cap or no cap.
+		let ceiling = BACKOFF_MAX.max(self.poll_interval);
+		// `None` = the last cycle succeeded (or none has run yet).
+		let mut backoff: Option<Duration> = None;
 		loop {
-			if let Err(err) = self.drain(&mut client).await {
-				let hint = match err.downcast_ref::<tonic::Status>() {
-					Some(s) if s.code() == tonic::Code::Unavailable => " (is concierge running?)",
-					_ => "",
-				};
-				warn!("bridge: pull/apply cycle failed, retrying next poll{hint}: {err}");
-			}
+			// Set by `drain` as soon as a batch's cursor is committed, and never cleared within
+			// the cycle: a cycle that got that far mirrored something, whatever happened after.
+			let mut progressed = false;
+			let wait = match self.drain(&mut client, &mut progressed).await {
+				Ok(()) => {
+					backoff = None;
+					self.poll_interval
+				}
+				Err(err) => {
+					let hint = match err.downcast_ref::<tonic::Status>() {
+						Some(s) if s.code() == tonic::Code::Unavailable => " (is concierge running?)",
+						_ => "",
+					};
+					// A DRAIN THAT MOVED THE CURSOR IS NOT A FAILING CYCLE. `drain` pulls
+					// repeatedly, so a backlog of thousands fails on the Nth pull with N-1
+					// batches already applied and committed — the ordinary shape of a concierge
+					// that is rolling, spread over replicas one of which is not ready, or
+					// tripping the per-request timeout on some pulls. Backing off there would
+					// walk the delay up to a minute while the bridge is in fact draining, adding
+					// minutes to how long a freeze or a tier downgrade takes to reach the money
+					// gate. Only a cycle that achieved nothing is worth slowing down.
+					let next = if progressed {
+						backoff = None;
+						self.poll_interval
+					} else {
+						let next = backoff.map_or(self.poll_interval, |previous| previous.saturating_mul(2).min(ceiling));
+						backoff = Some(next);
+						next
+					};
+					warn!(retry_in = ?next, mirrored = progressed, "bridge: pull/apply cycle failed, retrying{hint}: {err}");
+					next
+				}
+			};
 			tokio::select! {
 				() = shutdown.cancelled() => {
 					info!("bridge: shutdown requested — stopping");
 					return;
 				},
-				() = tokio::time::sleep(self.poll_interval) => {},
+				() = tokio::time::sleep(wait) => {},
 			}
 		}
 	}
@@ -142,19 +204,23 @@ impl BridgeConsumer {
 	/// The parked backlog is swept after every pass, and once even when there was nothing to
 	/// pull: a row can appear from the *other* direction (first sign-in materializes a user
 	/// this bridge never provisioned), and that must not wait for the next concierge event.
-	async fn drain(&self, client: &mut UserEventsClient<Channel>) -> color_eyre::Result<()> {
+	///
+	/// `progressed` is an out-parameter rather than a return value because it has to survive
+	/// the `?`: the whole point of it is to tell [`BridgeConsumer::run`] how much this cycle
+	/// got done BEFORE the error that ended it.
+	async fn drain(&self, client: &mut UserEventsClient<Channel>, progressed: &mut bool) -> color_eyre::Result<()> {
 		loop {
-			let more = self.pull_and_apply(client).await?;
+			let pull = self.pull_and_apply(client).await?;
+			*progressed |= pull.progressed;
 			self.replay_deferred().await?;
-			if !more {
+			if !pull.more {
 				return Ok(());
 			}
 		}
 	}
 
-	/// Pull one batch from the stored cursor and apply it. Returns whether a full batch was
-	/// consumed, i.e. whether more may be waiting behind it.
-	async fn pull_and_apply(&self, client: &mut UserEventsClient<Channel>) -> color_eyre::Result<bool> {
+	/// Pull one batch from the stored cursor and apply it.
+	async fn pull_and_apply(&self, client: &mut UserEventsClient<Channel>) -> color_eyre::Result<Pull> {
 		let after = self.cursor().await?;
 		let mut request = Request::new(PullUserLifecycleRequest {
 			after_position: after,
@@ -165,7 +231,7 @@ impl BridgeConsumer {
 
 		let response = client.pull_user_lifecycle(request).await?.into_inner();
 		if response.events.is_empty() {
-			return Ok(false);
+			return Ok(Pull::STOP);
 		}
 		for event in &response.events {
 			if self.apply(event, Freshness::Live).await? == Outcome::Unreadable {
@@ -178,12 +244,42 @@ impl BridgeConsumer {
 				// per-user guard forever, reinstating exactly the loss the stop prevents.
 				// Everything already applied from this batch re-applies as a no-op when the
 				// unchanged cursor re-delivers it.
-				return Ok(false);
+				return Ok(Pull::STOP);
 			}
+		}
+		// THE CURSOR MUST MOVE, OR THIS DRAIN ENDS — BUT THE BATCH IS APPLIED FIRST.
+		//
+		// `drain` loops while a full batch comes back, and the only thing that makes the next
+		// pull ask for something different is `next_position` advancing. The server's contract
+		// (`position > after_position`) says it always does, so this cannot happen today — and
+		// that is exactly why it is worth a line: were the contract to change, or a position to
+		// be handed back unchanged for any other reason, the loop above would re-pull and
+		// re-apply the same batch as fast as the network allows, hammering the identity plane
+		// with a hot loop that reads, from the outside, as an unexplained load spike (#181).
+		// Ending the drain here degrades that into one batch and one WARN per poll.
+		//
+		// STOPPING BEFORE THE APPLY WOULD BE WORSE THAN THE HOT LOOP IT REPLACES. The batch is
+		// not lost either way — the cursor stays put, so concierge keeps re-delivering it until
+		// a build that can move past it pulls — but a SUSPENDED, a tier downgrade or a revoke
+		// floor that is never applied leaves the money gate running on rules the identity plane
+		// has already withdrawn, for as long as it takes to ship that build. Applying costs
+		// nothing: it is the same idempotent re-apply a redelivery performs, under the per-user
+		// sequence guard. So the events land and only the cursor stands still.
+		if response.next_position <= after {
+			warn!(
+				cursor = after,
+				next_position = response.next_position,
+				events = response.events.len(),
+				"bridge: server returned events but did not advance the cursor — applied this batch and ending the drain instead of re-pulling it"
+			);
+			return Ok(Pull::STOP);
 		}
 		self.advance_cursor(after, response.next_position).await?;
 		// A short batch (server gave back fewer than it caps) means we caught up.
-		Ok((response.events.len() as u32) >= PULL_LIMIT)
+		Ok(Pull {
+			progressed: true,
+			more: (response.events.len() as u32) >= PULL_LIMIT,
+		})
 	}
 
 	/// Replay parked events for every subject that now has a local row, oldest first.

@@ -1,7 +1,8 @@
 "use client";
 
-import { Bell, Check, Loader2, type LucideIcon, Monitor, Shield, User } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Check, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Button } from "@evinvest/uikit";
 
@@ -15,49 +16,75 @@ import { profileResource, saveProfile } from "@/entities/user/model/profile-reso
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
-import { cn } from "@/shared/lib/cn";
+import { useCabinetHref } from "@/shared/lib/cabinet-route";
 import { useResource } from "@/shared/lib/resource";
+import { Link } from "@/shared/ui/cabinet-link";
 import { InitialsAvatar } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
 import { Reveal, SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { EDITABLE, type Form, formFrom } from "@/views/settings/lib/form";
 import { displayName, initialsOfName, truncateName } from "@/views/settings/lib/format";
-import { GeneralSection } from "@/views/settings/ui/general-section";
-import { AccountRowsCard, MobileNotificationsCard, MobileSecurityCard, ProfileSummaryCard, SignOutButton } from "@/views/settings/ui/mobile-cards";
+import { DEFAULT_SECTION, EDITING, pushableOf, type Section } from "@/views/settings/lib/sections";
+import { MobileNotificationsCard, MobileSecurityCard, PersonalDetailsCard, PreferencesCard, ProfileSummaryCard, SignOutButton } from "@/views/settings/ui/mobile-cards";
 import { NotificationsSection } from "@/views/settings/ui/notifications-section";
+import { PersonalSection, PersonalStack } from "@/views/settings/ui/personal-section";
+import { PreferencesSection } from "@/views/settings/ui/preferences-section";
+import { SectionHeader } from "@/views/settings/ui/fields";
 import { SecuritySection } from "@/views/settings/ui/security-section";
+import { SettingsRail } from "@/views/settings/ui/settings-rail";
 import { SessionsSection } from "@/views/settings/ui/sessions-section";
 
 // The investor settings surface, wired to the backend over the BFF. Two Figma frames,
 // one component: `cabinet/mobile/settings` (node 498:259) below `lg` — an app bar over a
-// stack of row cards, with Sessions pushed as its own screen — and `cabinet/settings`
-// (node 481:250) above it, a section rail beside the editing form.
+// stack of row cards, with the editors pushed as their own screens — and `cabinet/settings`
+// (node 481:250) above it, a section rail beside the pane.
 //
-// General edits the same core user record as the Profile page (full-replace, so the form
-// carries every editable field even where a breakpoint only shows some); Security states
-// the real auth model (Google-managed) and surfaces live sessions; Sessions & devices
-// lists and revokes the real refresh-token families at the hub; Notifications is the real
-// delivery-preference store. Auth is Google-OAuth-only and there is no theme store, so the
-// mock's 2FA/biometric/password rows and its Preferences card have no backing here — they
-// are left out rather than faked.
+// Five sections in two groups. Cabinet: Preferences (language, currency, time zone) and
+// Notifications (the real delivery-preference store). Profile: Personal details (the
+// identity fields the fund records), Security (the real auth model — Google-managed —
+// with the live session count) and Sessions & devices (the refresh-token families at the
+// hub, listed and revocable). The split replaced one "General" pane that mixed how the
+// cabinet behaves with who the reader is, so nobody could say where a thing was changed.
+//
+// Preferences and Personal details edit the same core user record (full-replace, so the
+// one form carries every editable field whichever pane is open). Auth is Google-OAuth-only
+// and there is no theme store, so the mock's 2FA/biometric/password rows have no backing
+// here — they are left out rather than faked.
+//
+// The open section is in the URL (`?section=`), read by the server page and written back
+// on every change (`replace`, so the rail adds no history): `/settings?section=personal`
+// is the deep link the profile page sends a reader to, and a reload or a shared link
+// re-renders the same section. Leaving a pushed screen on mobile is the app bar's back
+// affordance, not the browser's.
 
-type Section = "general" | "security" | "sessions" | "notifications";
-
-// Module-scope, so the labels are catalogue keys rather than finished English — the rail
-// resolves them at render.
-const NAV: { id: Section; labelKey: string; icon: LucideIcon }[] = [
-  { id: "general", labelKey: "settings.nav.general", icon: User },
-  { id: "security", labelKey: "ui.security", icon: Shield },
-  { id: "sessions", labelKey: "ui.sessionsDevices", icon: Monitor },
-  { id: "notifications", labelKey: "nav.notifications", icon: Bell },
-];
-
-export function SettingsView() {
+export function SettingsView({ initialSection }: { initialSection: Section }) {
   const locale = useLocale();
   const t = useT();
-  const [section, setSection] = useState<Section>("general");
-  // The mobile stack: the root screen, or a section pushed on top of it.
-  const [pushed, setPushed] = useState<"sessions" | "notifications" | null>(null);
+  const router = useRouter();
+  const toHref = useCabinetHref();
+  const [section, setSection] = useState<Section>(initialSection);
+  // The URL stays the source of truth: the rail's Settings link is a navigation to the
+  // same page, so this instance survives it with the old section in state while the
+  // address bar already says `/settings`. Adjusted during render rather than in an
+  // effect so the pane is right on the frame the new prop arrives.
+  const [seen, setSeen] = useState(initialSection);
+  if (initialSection !== seen) {
+    setSeen(initialSection);
+    setSection(initialSection);
+  }
+  // The mobile stack: the root screen, or the section pushed on top of it. Derived from
+  // the one section state, so a deep link opens the same thing at both breakpoints.
+  const pushed = pushableOf(section);
+  function select(id: Section) {
+    setSection(id);
+    // `replace`, not `push`: the rail is a tab strip, and a history entry per tab would
+    // make Back walk through every one the reader glanced at.
+    router.replace(`${toHref("/settings")}?section=${id}`, { scroll: false });
+  }
+  function pop() {
+    setSection(DEFAULT_SECTION);
+    router.replace(toHref("/settings"), { scroll: false });
+  }
 
   const [form, setForm] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
@@ -177,12 +204,13 @@ export function SettingsView() {
   const sessionsPanel = (titled: boolean) => (
     <SessionsSection titled={titled} sessions={sessions} error={sessionsError} busy={busy} name={name} onRevoke={revoke} onRevokeOthers={revokeOthers} />
   );
+  const personalProps = { loading, form, email, verified: !!profile?.email_verified, onChange: set, fieldErrors };
 
   return (
     <>
       <MobileAppBar
-        title={t(pushed === "sessions" ? "ui.sessionsDevices" : pushed === "notifications" ? "nav.notifications" : "nav.settings")}
-        onBack={pushed ? () => setPushed(null) : undefined}
+        title={t(pushed ? PUSHED_TITLE[pushed] : "nav.settings")}
+        onBack={pushed ? pop : undefined}
         right={
           dirty ? (
             // i18n-max: 11 — a `shrink-0` Button in the app bar, beside the truncated title.
@@ -190,7 +218,11 @@ export function SettingsView() {
               {saving && <Loader2 className="size-3.5 animate-spin" />} {t("ui.save")}
             </Button>
           ) : pushed ? undefined : (
-            <InitialsAvatar initials={initialsOfName(name, email)} className="size-8.5 text-sm" />
+            // The in-cabinet account chip, on mobile: the avatar is the way to the profile
+            // here the same way the header chip is on desktop.
+            <Link href="/profile" aria-label={t("ui.profile")} className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <InitialsAvatar initials={initialsOfName(name, email)} className="size-8.5 text-sm" />
+            </Link>
           )
         }
       />
@@ -202,7 +234,9 @@ export function SettingsView() {
             <h1 className="text-2xl font-semibold text-ink">{t("nav.settings")}</h1>
             <p className="text-sm text-ink-soft">{t("settings.subtitle")}</p>
           </div>
-          {section === "general" && (
+          {/* Also while dirty on any other section: a language change followed by a
+              glance at Security must not leave the edit hanging with nowhere to save. */}
+          {(EDITING.includes(section) || dirty) && (
             // Both children are `shrink-0` beside a `min-w-0` heading column, so their
             // combined width comes straight out of the page title.
             <div className="flex shrink-0 items-center gap-3">
@@ -234,25 +268,31 @@ export function SettingsView() {
         )}
 
         {/* ── Mobile (Figma cabinet/mobile/settings) ───────────────────────── */}
-        {/* Pushing into Sessions or Notifications replaces the whole stack, so the `key`
-            remounts the reveal and the new screen arrives instead of appearing. It
-            repeats the column because a wrapper that did not would collapse the gap
-            between the five root cards. On the page's own first paint this reveal is
-            nested inside the entrance above it and fades without travelling — one
-            movement, not two (see shared/ui/motion/entrance). */}
+        {/* Pushing a section replaces the whole stack, so the `key` remounts the reveal
+            and the new screen arrives instead of appearing. It repeats the column because
+            a wrapper that did not would collapse the gap between the root cards. On the
+            page's own first paint this reveal is nested inside the entrance above it and
+            fades without travelling — one movement, not two (see shared/ui/motion/entrance). */}
         <StaggerItem className="lg:hidden">
-          <Reveal key={pushed ?? "root"} className="flex flex-col gap-4">
-            {pushed === "sessions" ? (
+          <Reveal key={pushed ?? "root"} className="flex flex-col gap-5">
+            {pushed === "personal" ? (
+              <PersonalStack {...personalProps} />
+            ) : pushed === "sessions" ? (
               sessionsPanel(false)
             ) : pushed === "notifications" ? (
               <NotificationsSection />
             ) : (
               <>
-                <ProfileSummaryCard loading={loading} name={name} email={email} verified={!!profile?.email_verified} />
-                <AccountRowsCard loading={loading} form={form} email={email} fieldErrors={fieldErrors} onChange={set} />
-                <MobileSecurityCard loading={loading} email={email} sessions={sessions} onOpenSessions={() => setPushed("sessions")} />
-                <MobileNotificationsCard onOpen={() => setPushed("notifications")} />
-                <SignOutButton />
+                <MobileGroup label={t("settings.group.cabinet")}>
+                  <PreferencesCard loading={loading} form={form} fieldErrors={fieldErrors} onChange={set} />
+                  <MobileNotificationsCard onOpen={() => select("notifications")} />
+                </MobileGroup>
+                <MobileGroup label={t("ui.profile")}>
+                  <ProfileSummaryCard loading={loading} name={name} email={email} verified={!!profile?.email_verified} />
+                  <PersonalDetailsCard onOpen={() => select("personal")} />
+                  <MobileSecurityCard loading={loading} email={email} sessions={sessions} onOpenSessions={() => select("sessions")} />
+                  <SignOutButton />
+                </MobileGroup>
               </>
             )}
           </Reveal>
@@ -260,41 +300,44 @@ export function SettingsView() {
 
         {/* ── Desktop (Figma cabinet/settings) ─────────────────────────────── */}
         <StaggerItem className="hidden gap-6 lg:flex">
-          {/* Hand-written rail — uikit has no section-nav component, so the items carry their own focus ring. */}
-          <nav aria-label={t("settings.a11y.sections")} className="flex w-53 shrink-0 flex-col gap-1">
-            {NAV.map((item) => {
-              const Icon = item.icon;
-              const active = section === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-current={active ? "page" : undefined}
-                  onClick={() => setSection(item.id)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                    active ? "bg-accent-debug/15 font-semibold text-accent-debug" : "text-ink hover:bg-ink/5",
-                  )}
-                >
-                  <Icon className="size-4.5" />
-                  {/* i18n-max: 20 — a 212px rail row less the icon and padding. */}
-                  <span className="truncate">{t(item.labelKey)}</span>
-                </button>
-              );
-            })}
-          </nav>
+          <SettingsRail section={section} onSelect={select} />
 
           {/* Keyed on the section, so choosing one from the rail brings its pane in
               rather than swapping it under the cursor. The rail beside it does not
               remount, which is the point — the marker slides, the pane arrives. */}
           <Reveal key={section} className="min-w-0 flex-1">
-            {section === "general" && <GeneralSection loading={loading} form={form} email={email} verified={!!profile?.email_verified} onChange={set} fieldErrors={fieldErrors} />}
-            {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => setSection("sessions")} />}
-            {section === "notifications" && <NotificationsSection />}
+            {section === "preferences" && <PreferencesSection loading={loading} form={form} onChange={set} fieldErrors={fieldErrors} />}
+            {section === "notifications" && (
+              <div>
+                {/* The section itself is shared with the mobile pushed screen, where the
+                    app bar titles it — the header is the desktop's alone. */}
+                <SectionHeader title={t("nav.notifications")} sub={t("settings.notificationsSub")} />
+                <NotificationsSection />
+              </div>
+            )}
+            {section === "personal" && <PersonalSection {...personalProps} />}
+            {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => select("sessions")} />}
             {section === "sessions" && sessionsPanel(true)}
           </Reveal>
         </StaggerItem>
       </Stagger>
     </>
+  );
+}
+
+// App bar titles for the pushed screens. The catalogue keys, not English — resolved at render.
+const PUSHED_TITLE = {
+  personal: "settings.nav.personal",
+  sessions: "ui.sessionsDevices",
+  notifications: "nav.notifications",
+} as const;
+
+/** A mobile root-screen group: the same eyebrow the desktop rail and the sidebar use, over its cards. */
+function MobileGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="px-1 text-xs font-semibold uppercase tracking-widest text-ink-soft">{label}</p>
+      {children}
+    </div>
   );
 }
