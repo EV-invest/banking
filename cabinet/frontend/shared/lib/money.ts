@@ -12,6 +12,17 @@
 //   fund units (shares)   2–8 dp        — fractional shares read clearly
 //   NAV per share         exactly 4 dp  — a NAV is a price; the day's move lives in the
 //                                         fourth decimal
+//
+// Separators follow the reader's locale; the precision policy does not. A German reader
+// sees "1.234,50" for the balance an English one sees as "1,234.50" — the same figure,
+// and reading "1,234.50" with German separators is off by three orders of magnitude. What
+// a locale is NOT allowed to touch is the unit: the "$" stays a bare "$" everywhere
+// (`currencyDisplay: "narrowSymbol"`, never "US$"/"$US"), the "%" is appended as-is, and
+// the sign column keeps its Unicode minus. Every display formatter takes the locale last
+// and defaults to English, so a server path or a test that has no reader gets exactly the
+// output this module has always produced.
+
+import type { Locale } from "@evinvest/i18n";
 
 /** A wire decimal parsed for on-screen arithmetic (sums, proportions). Display only. */
 export function num(value: string | undefined): number {
@@ -19,34 +30,66 @@ export function num(value: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** The locale a formatter falls back to when no reader is known: tests, server paths. */
+export const DEFAULT_MONEY_LOCALE: Locale = "en";
+
+// What `en` means to `Intl` here is `en-US`: that is the tag this module pinned before it
+// learnt about locales, so English output is byte-for-byte what it was. (Dates map `en` to
+// `en-GB` in `shared/lib/intl-locale.ts` — a different convention for a different unit.)
+function intlTag(locale: Locale): string {
+  return locale === "en" ? "en-US" : locale;
+}
+
+// `Intl.NumberFormat` is expensive to construct — hundreds of microseconds and a fresh
+// locale-data lookup each time — and the order book, the tape and the holders table call
+// these formatters per row on every tick. One instance per (locale, options) pair, built on
+// first use and kept for the life of the module; the key space is five locales times a
+// handful of option shapes, so the cache never needs eviction.
+const FORMATTERS = new Map<string, Intl.NumberFormat>();
+
+function numberFormat(locale: Locale, key: string, options: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const cacheKey = `${locale}|${key}`;
+  let f = FORMATTERS.get(cacheKey);
+  if (!f) {
+    f = new Intl.NumberFormat(intlTag(locale), options);
+    FORMATTERS.set(cacheKey, f);
+  }
+  return f;
+}
+
+/** The decimal separator the locale writes — "." for `en`, "," for the other four. */
+function decimalSeparator(locale: Locale): string {
+  return numberFormat(locale, "decimal-probe", { maximumFractionDigits: 1 }).formatToParts(1.1).find((p) => p.type === "decimal")?.value ?? ".";
+}
+
 // Summary money is shown to the cent, always — a trailing "$1,234.5" breaks the column
 // and a rounded "$85" loses the P&L.
 const CENTS = { minimumFractionDigits: 2, maximumFractionDigits: 2 } as const;
 
 /** Summary money: "$48,250.00", "$1,234.56". Dashboards, profile and the admin console. */
-export function formatUsd(value: string | number | undefined): string {
+export function formatUsd(value: string | number | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = typeof value === "number" ? value : num(value);
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", ...CENTS });
+  return numberFormat(locale, "usd", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", ...CENTS }).format(n);
 }
 
 /** The same figure without the currency symbol, for columns that name the unit elsewhere. */
-export function formatAmount(value: string | undefined): string {
+export function formatAmount(value: string | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = Number(value ?? "0");
   if (!Number.isFinite(n)) return value ?? "0";
-  return n.toLocaleString("en-US", CENTS);
+  return numberFormat(locale, "amount", CENTS).format(n);
 }
 
 // Signed summary money: "+$84.83" / "−$540.00". The Unicode minus (U+2212) is the plus
 // sign's mirror — a hyphen is narrower and the sign column stops lining up.
-export function formatSignedUsd(value: string | number | undefined): string {
+export function formatSignedUsd(value: string | number | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = typeof value === "number" ? value : num(value);
-  return `${n < 0 ? "−" : "+"}${formatUsd(Math.abs(n))}`;
+  return `${n < 0 ? "−" : "+"}${formatUsd(Math.abs(n), locale)}`;
 }
 
 /** NAV per share: "$1.0423" (Figma `cabinet/invest`). */
-export function formatNav(value: string | number | undefined): string {
+export function formatNav(value: string | number | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = typeof value === "number" ? value : num(value);
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  return numberFormat(locale, "nav", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(n);
 }
 
 /**
@@ -66,48 +109,51 @@ export function formatNav(value: string | number | undefined): string {
  *
  * No float anywhere: the integer part is grouped through `BigInt`, which has no precision
  * ceiling, and the fraction is passed through untouched apart from being padded to the two
- * decimals every money figure in this cabinet shows. Grouping is `en-US` for the same
- * reason the rest of this module pins it.
+ * decimals every money figure in this cabinet shows. The locale only chooses the separators
+ * — the digits themselves never pass through anything that could round them.
  */
-export function formatExactUsdt(value: string | undefined): string {
+export function formatExactUsdt(value: string | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const raw = (value ?? "").trim();
   // Anything that is not a plain decimal is returned as-is rather than coerced: a caller
   // showing an unrecognised value verbatim is honest, one showing "0.00" for it is not.
   if (!/^-?\d*\.?\d*$/.test(raw) || raw === "" || raw === "." || raw === "-" || raw === "-.") return raw || "—";
   const negative = raw.startsWith("-");
   const [intRaw = "", fracRaw = ""] = raw.replace(/^-/, "").split(".");
-  const grouped = BigInt(intRaw || "0").toLocaleString("en-US");
+  const grouped = numberFormat(locale, "exact-int", { maximumFractionDigits: 0 }).format(BigInt(intRaw || "0"));
   const frac = fracRaw.length < 2 ? fracRaw.padEnd(2, "0") : fracRaw;
-  return `${negative ? "\u2212" : ""}${grouped}.${frac}`;
+  return `${negative ? "\u2212" : ""}${grouped}${decimalSeparator(locale)}${frac}`;
 }
 
 /** Ledger USDT: "1,234.50", "0.000001". No currency symbol — the unit is spelled out. */
-export function formatUsdt(value: string | undefined): string {
+export function formatUsdt(value: string | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = Number(value ?? "0");
   if (!Number.isFinite(n)) return value ?? "0";
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+  return numberFormat(locale, "usdt", { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(n);
 }
 
 // Signed USDT (P&L): "+1,234.50" / "-5.00". Handles a leading "-" in the wire string and
 // keeps the sign explicit so gains/losses read at a glance.
-export function formatSignedUsdt(value: string | undefined): string {
+export function formatSignedUsdt(value: string | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const s = (value ?? "0").trim();
   const negative = s.startsWith("-");
-  const formatted = formatUsdt(negative ? s.slice(1) : s);
+  const formatted = formatUsdt(negative ? s.slice(1) : s, locale);
   return `${negative ? "-" : "+"}${formatted}`;
 }
 
 // Fund units (shares) — same dimension as USDT for display, but no currency suffix and a
 // touch more precision so fractional shares read clearly.
-export function formatUnits(value: string | undefined): string {
+export function formatUnits(value: string | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = Number(value ?? "0");
   if (!Number.isFinite(n)) return value ?? "0";
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 8 });
+  return numberFormat(locale, "units", { minimumFractionDigits: 2, maximumFractionDigits: 8 }).format(n);
 }
 
-/** Signed percentage: "+4.2%" / "−1.8%", same Unicode minus as the signed money. */
-export function formatPct(value: number): string {
-  return `${value < 0 ? "−" : "+"}${Math.abs(value).toFixed(1)}%`;
+/** Signed percentage: "+4.2%" / "−1.8%", same Unicode minus as the signed money. The "%"
+ *  is appended rather than left to `Intl`'s percent style, which pads it with a locale
+ *  space ("4,2 %") that the figures beside it do not use. */
+export function formatPct(value: number, locale: Locale = DEFAULT_MONEY_LOCALE): string {
+  const digits = numberFormat(locale, "pct", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(value));
+  return `${value < 0 ? "−" : "+"}${digits}%`;
 }
 
 // Whether a signed decimal P&L string is negative (a loss) — exact, no float.
@@ -154,16 +200,19 @@ export function subUsdt(a: string | undefined, b: string | undefined): string {
 // figure it is compared against has to be readable at the same glance. Compacts to 3
 // significant figures ("21.0M", "940K", "1.5B") and only above a thousand, so a fund
 // sized to 500 units still reads as "500".
-export function compactUnits(value: string | undefined): string {
+export function compactUnits(value: string | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = num(value);
-  if (!Number.isFinite(n) || n < 1000) return formatUnits(value);
+  if (!Number.isFinite(n) || n < 1000) return formatUnits(value, locale);
   for (const [scale, suffix] of [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]] as const) {
     if (n >= scale) {
       const scaled = n / scale;
-      return `${scaled >= 100 ? Math.round(scaled) : Number(scaled.toFixed(scaled >= 10 ? 1 : 2))}${suffix}`;
+      const rounded = scaled >= 100 ? Math.round(scaled) : Number(scaled.toFixed(scaled >= 10 ? 1 : 2));
+      // Up to two decimals with trailing zeros dropped — the `Number(toFixed)` above already
+      // did the rounding; the formatter only writes the locale's separator.
+      return `${numberFormat(locale, "compact", { maximumFractionDigits: 2 }).format(rounded)}${suffix}`;
     }
   }
-  return formatUnits(value);
+  return formatUnits(value, locale);
 }
 
 // What fraction of `cap` is taken by `issued`, 0–1, for a progress bar. Exact bigint
