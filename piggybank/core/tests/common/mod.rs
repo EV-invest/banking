@@ -23,6 +23,7 @@ use piggybank_core::{
 	infrastructure::{
 		db,
 		ledger::{self, TbLedger},
+		relay::Relay,
 		tigerbeetle::TigerBeetle,
 	},
 	ports::ledger::Ledger,
@@ -35,8 +36,9 @@ use tokio::sync::OnceCell;
 /// session-level outbox advisory lock (`acquire_outbox_lock`). The lock is one per
 /// database, so two such tests in one binary would block each other on it — a driver
 /// polling for "the relay applied my row" then times out while `run` is still queued
-/// behind the sibling's lock. A test that only calls the unfenced `drain()` does not
-/// take this: it never touches the lock.
+/// behind the sibling's lock. A test that only calls the unfenced `drain()` takes
+/// [`outbox_serial`] instead — it never touches the advisory lock, but it does share the
+/// outbox table, which is a race of its own.
 ///
 /// Scope: the outbox lock lives in this binary's own database (see [`database_url`]), so
 /// another binary — even one running at the same time — can never hold it. What remains to
@@ -47,6 +49,52 @@ static RELAY: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::M
 /// Hold for the duration of a test that runs `Relay::run` or takes the outbox lock.
 pub async fn relay_exclusive() -> tokio::sync::MutexGuard<'static, ()> {
 	RELAY.lock().await
+}
+
+/// Serializes the tests that drain the outbox *without* the advisory lock. `Relay::drain` —
+/// unlike `Relay::run` — never takes `OUTBOX_LOCK_KEY`, while the outbox is one table per
+/// test binary, so two of a binary's relays draining at once pick up the same row and both
+/// act on it. Two shapes have been observed. The loser's `saga_steps` insert trips the
+/// table's second unique key (`tb_transfer_id`), which its `ON CONFLICT (event_id, leg)`
+/// does not cover; the relay files that as a transient failure and `drain()` returns early,
+/// leaving the calling test's own rows queued, so it reads a balance the relay has not
+/// landed yet (#294/#298). And a row ends up with `dispatched_at` *and* `parked_at` set,
+/// each written by a different custody fake — the mechanism behind the `relay_recovery`
+/// flakes. Production has a single drainer under the advisory lock and needs none of this.
+///
+/// Hold it for the test's whole life, not just around the drain: rows are visible to a
+/// sibling's drain from the moment they commit, which is before the enqueuing test gets to
+/// its own `drain()`. Suites keep the guard in their harness so no test can forget it.
+static OUTBOX: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::Mutex::new(()));
+
+/// Hold for the whole life of a test that calls `Relay::drain`; see [`OUTBOX`].
+pub async fn outbox_serial() -> tokio::sync::MutexGuard<'static, ()> {
+	OUTBOX.lock().await
+}
+
+/// Drain the outbox to quiescence. `Relay::drain` applies one pass and answers `true` when
+/// a transient failure told it to back off — `Relay::run` sleeps and comes back, so a test
+/// that took one pass for "everything landed" read the ledger before its own rows did
+/// (#294). A few passes, each after a short pause, cover a real hiccup — a ledger that is
+/// away for tens of milliseconds, not microseconds; a backlog still standing after them is a
+/// finding, named by the outbox's own reasons instead of surfacing as a wrong balance later.
+///
+/// The caller holds [`outbox_serial`]: without it a sibling's relay is draining the same
+/// table, and the early return this loop retries past is exactly what that race produces.
+pub async fn drain_to_quiescence(relay: &Relay, pool: &PgPool) {
+	const PASSES: usize = 5;
+	const BACKOFF: std::time::Duration = std::time::Duration::from_millis(100);
+	for _ in 0..PASSES {
+		if !relay.drain().await {
+			return;
+		}
+		tokio::time::sleep(BACKOFF).await;
+	}
+	let backlog: Vec<(i64, String, Option<String>)> = sqlx::query_as("SELECT seq, kind, last_error FROM outbox WHERE dispatched_at IS NULL AND parked_at IS NULL ORDER BY seq")
+		.fetch_all(pool)
+		.await
+		.expect("read the outbox backlog");
+	panic!("the outbox still holds a backlog after {PASSES} relay passes: {backlog:?}");
 }
 
 /// True under CI: `CI` is set, non-empty and not `"0"`/`"false"`. GitHub Actions exports

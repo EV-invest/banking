@@ -45,25 +45,10 @@ use piggybank_core::{
 	ports::{DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
-use tokio::sync::{Mutex, MutexGuard, Notify};
+use tokio::sync::{MutexGuard, Notify};
 use uuid::Uuid;
 
 mod common;
-
-/// Every test here builds its own `Relay` and calls `drain()`, which — unlike `Relay::run` —
-/// never takes the outbox advisory lock, while the outbox is one table per test binary. Two
-/// relays draining at once pick up the same row and both dispatch it; the loser's
-/// `saga_steps` insert trips the table's second unique key (`tb_transfer_id`), which its
-/// `ON CONFLICT (event_id, leg)` does not cover, the relay files that as a transient failure
-/// and `drain()` returns early — leaving the calling test's own rows queued, so it reads a
-/// balance the relay has not landed yet. That is the race `allocation_registry` was cured of
-/// in #294/#298, and this suite is built the same way, so it is exposed the same way: every
-/// test here deposits and drains, and `a_revenue_payout_is_not_gated_on_kyc` drains five
-/// times. (It has not been caught in the act — 60 runs at eight threads came back green —
-/// so this closes the shape rather than a captured failure.) Production has a single drainer
-/// under the advisory lock and needs none of it. The guard lives in the [`Harness`] so no
-/// test can forget to take it.
-static SERIAL_DRAIN: Mutex<()> = Mutex::const_new(());
 
 /// A structurally-valid derived-grade address per network — the shape only has to survive
 /// `WalletAddress::parse`; nothing here signs or broadcasts.
@@ -103,12 +88,16 @@ struct Harness {
 	address_calls: Arc<AtomicUsize>,
 	relay: Relay,
 	notify: Arc<Notify>,
-	/// Held for the test's whole life — declared last so it is released after the relay.
+	/// This suite is exposed to the shared-outbox race the same way `allocation_registry`
+	/// was (#294/#298): every test deposits and drains, and `a_revenue_payout_is_not_gated_on_kyc`
+	/// drains five times. It has not been caught in the act here — 60 runs at eight threads
+	/// came back green — so the guard closes the shape rather than a captured failure. Held
+	/// for the test's whole life, declared last so it is released after the relay.
 	_serial: MutexGuard<'static, ()>,
 }
 
 async fn harness() -> Option<Harness> {
-	let serial = SERIAL_DRAIN.lock().await;
+	let serial = common::outbox_serial().await;
 	let pool = common::pool().await?;
 	let ledger = common::seeded_ledger(&pool, "KYC gating test").await?;
 
@@ -188,7 +177,7 @@ async fn deposit(h: &Harness, user: UserId, network: Network, amount: &str) {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt(amount))
 		.await
 		.unwrap();
-	drain(h).await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 }
 
 #[tokio::test]
@@ -316,7 +305,7 @@ async fn a_verified_user_can_withdraw() {
 	.await
 	.expect("a verified account withdraws");
 	assert_eq!(withdrawal.net_amount(), usdt("49"), "the flat 1 USDT fee is retained");
-	drain(&h).await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	let claim = h.ledger.balance(&LedgerAccountKey::UserClaim(user)).await.unwrap();
 	assert_eq!(Usdt::from_base_units(claim.locked), usdt("50"), "the gross is reserved into clearing");
@@ -350,11 +339,11 @@ async fn a_revenue_payout_is_not_gated_on_kyc() {
 		)
 		.await
 		.expect("fund the fee claim");
-		drain(&h).await;
+		common::drain_to_quiescence(&h.relay, &h.pool).await;
 		withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
 			.await
 			.expect("settle");
-		drain(&h).await;
+		common::drain_to_quiescence(&h.relay, &h.pool).await;
 	}
 	let retained = Usdt::from_base_units(h.ledger.balance(&fee_account).await.unwrap().available());
 	assert!(retained >= usdt("2"), "the two settles retained the fees the payout spends, got {retained}");
@@ -365,7 +354,7 @@ async fn a_revenue_payout_is_not_gated_on_kyc() {
 		.await
 		.expect("a revenue payout is never gated on a user's KYC tier");
 	assert_eq!(payout.net_amount(), usdt("2"), "a payout charges no fee");
-	drain(&h).await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 }
 
 /// The switch in its other position — `KYC_GATE_ENABLED=false`. It is not a third
@@ -439,7 +428,7 @@ async fn a_lifted_gate_both_admits_and_dispatches_an_unverified_withdrawal() {
 	)
 	.await
 	.expect("a lifted gate admits an unverified withdrawal");
-	drain(&h).await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	let policy = PgOutflowPolicy::new(h.pool.clone());
 	let refused = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy, KycGate::ENFORCED, &h.notify, withdrawal.id())
@@ -453,26 +442,4 @@ async fn a_lifted_gate_both_admits_and_dispatches_an_unverified_withdrawal() {
 	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy, KycGate::LIFTED, &h.notify, withdrawal.id())
 		.await
 		.expect("a lifted gate pays the same withdrawal out");
-}
-
-/// Drain the outbox to quiescence. `Relay::drain` applies one pass and answers `true` when
-/// a transient failure told it to back off — `Relay::run` sleeps and comes back, so a test
-/// that took one pass for "everything landed" read the ledger before its own rows did
-/// (#294). A few passes, each after a short pause, cover a real hiccup — a ledger that is
-/// away for tens of milliseconds, not microseconds; a backlog still standing after them is
-/// a finding, named by the outbox's own reasons instead of surfacing as a wrong balance later.
-async fn drain(h: &Harness) {
-	const PASSES: usize = 5;
-	const BACKOFF: std::time::Duration = std::time::Duration::from_millis(100);
-	for _ in 0..PASSES {
-		if !h.relay.drain().await {
-			return;
-		}
-		tokio::time::sleep(BACKOFF).await;
-	}
-	let backlog: Vec<(i64, String, Option<String>)> = sqlx::query_as("SELECT seq, kind, last_error FROM outbox WHERE dispatched_at IS NULL AND parked_at IS NULL ORDER BY seq")
-		.fetch_all(&h.pool)
-		.await
-		.unwrap();
-	panic!("the outbox still holds a backlog after {PASSES} relay passes: {backlog:?}");
 }
