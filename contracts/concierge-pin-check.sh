@@ -78,6 +78,8 @@ if [ -z "$cc_manifest" ] || [ ! -f "$cc_manifest" ]; then
 	exit 1
 fi
 cc_dir="$(dirname "$cc_manifest")"
+# The checkout root cargo extracted from its git db: ~/.cargo/git/checkouts/concierge-*/<sha>.
+cc_root="$(dirname "$cc_dir")"
 echo "local checkout -> $cc_dir"
 for p in "${protos[@]}"; do
 	local_file="$cc_dir/proto/$p"
@@ -87,7 +89,9 @@ for p in "${protos[@]}"; do
 	fi
 	pinned="$(git -C "$work" show "$pin_commit:contracts/proto/$p")"
 	if [ "$pinned" != "$(cat "$local_file")" ]; then
-		echo "::error::$local_file differs from contracts/proto/$p at the pin — the checkout is stale or edited; 'cargo update -p evconcierge_contracts' or restore it" >&2
+		# `cargo update -p` is a no-op on a fixed rev and never re-extracts an existing
+		# checkout; only removing the directory makes cargo re-extract it from its git db.
+		echo "::error::$local_file differs from contracts/proto/$p at the pin — the checkout is stale or edited; remove it ('rm -rf $cc_root') and rerun: cargo re-extracts it on the next 'cargo metadata'" >&2
 		exit 1
 	fi
 done
