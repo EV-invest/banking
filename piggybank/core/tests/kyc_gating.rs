@@ -448,4 +448,16 @@ async fn a_lifted_gate_both_admits_and_dispatches_an_unverified_withdrawal() {
 	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy, KycGate::LIFTED, &h.notify, withdrawal.id())
 		.await
 		.expect("a lifted gate pays the same withdrawal out");
+
+	// Accepting the dispatch only queues it. Drain so the claim that it was *paid* is
+	// actually proven, and so this test does not hand its undrained row to whichever test
+	// takes the guard next — the outbox is one table per binary and the relay works it in
+	// `seq` order, so a backlog left here would be reported against a stranger.
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
+	let queued: i64 = sqlx::query_scalar("SELECT count(*) FROM outbox WHERE aggregate_id = $1 AND dispatched_at IS NULL")
+		.bind(withdrawal.id().raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(queued, 0, "both of the withdrawal's events reached the relay, the payout included");
 }
