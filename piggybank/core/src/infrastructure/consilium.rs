@@ -397,16 +397,13 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 	}
 }
 
-/// Whether a consilium's verdicts are announced by mail. A fee-policy consilium's are NOT:
-/// concierge has no outcome template for the kind, and rendering it through the payout one
-/// would mail every owner a sentence about revenue leaving on-chain. The owners read the
-/// verdict in the consilium room; the holders learn of a carried change from their notice.
-// TODO(#233): send an outcome (and a burn notice) for the fee-policy kind once concierge
-// ships a template for it.
+/// Whether a consilium's verdicts — and a token burned on one of its seats — are announced
+/// to its audience by mail. Every kind's are, since concierge v0.8.0 renders the fee-terms
+/// description of an outcome (#72); the match has no `_` arm so a further kind has to say
+/// whether its owners hear how it ended, and through which template.
 fn announces_by_mail(consilium: &Consilium) -> bool {
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) => true,
-		ConsiliumTerms::FeePolicy(_) => false,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) => true,
 	}
 }
 
@@ -417,10 +414,10 @@ const VALUATION_MAIL_REASON: &str = "Valuation beyond the NAV-move guard; execut
 /// The tier the borrowed template is told: the claim a mark reprices is the product's.
 const VALUATION_MAIL_TIER: &str = "service";
 
-/// The outcome shape for every mailed kind: the payout pair, the payment tuple, or — for a
-/// valuation override — the same tuple the approval mail used, the rest left empty; the
-/// renderer switches on which is filled.
-fn outcome_of(consilium: &Consilium, outcome: String, detail: String, destination_detail: Option<&EndDetail>) -> PayoutOutcome {
+/// The outcome shape for every mailed kind: the payout pair, the payment tuple, the same
+/// tuple the approval mail used for a valuation override, or the fee-terms description —
+/// the rest left empty; the renderer switches on which is filled, and refuses two.
+fn outcome_of(consilium: &Consilium, outcome: String, detail: String, subject: &SubjectDetail) -> PayoutOutcome {
 	let base = PayoutOutcome {
 		consilium_id: consilium.id().to_string(),
 		outcome,
@@ -432,6 +429,9 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, destinatio
 		source: String::new(),
 		destination: String::new(),
 		reason: String::new(),
+		fund: String::new(),
+		current: None,
+		proposed: None,
 	};
 	match consilium.terms() {
 		ConsiliumTerms::RevenuePayout(payout) => PayoutOutcome {
@@ -440,25 +440,32 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, destinatio
 			amount: payout.amount.to_decimal_string(),
 			..base
 		},
-		ConsiliumTerms::Payment(subject) => PayoutOutcome {
-			amount: subject.terms.amount().to_decimal_string(),
-			tier: subject.terms.tier().as_str().to_owned(),
-			source: subject.terms.source_label(),
-			destination: payments::mail_destination(&subject.terms, destination_detail),
-			reason: subject.terms.reason().as_str().to_owned(),
+		ConsiliumTerms::Payment(payment) => PayoutOutcome {
+			amount: payment.terms.amount().to_decimal_string(),
+			tier: payment.terms.tier().as_str().to_owned(),
+			source: payment.terms.source_label(),
+			destination: payments::mail_destination(&payment.terms, subject.end_detail()),
+			reason: payment.terms.reason().as_str().to_owned(),
 			..base
 		},
 		ConsiliumTerms::ValuationOverride(terms) => PayoutOutcome {
 			amount: terms.aum.to_decimal_string(),
 			tier: VALUATION_MAIL_TIER.to_owned(),
-			source: valuation_mail_source(terms, destination_detail),
+			source: valuation_mail_source(terms, subject.end_detail()),
 			destination: format!("AUM {} USDT", terms.aum.to_decimal_string()),
 			reason: VALUATION_MAIL_REASON.to_owned(),
 			..base
 		},
-		// Never mailed — see `announces_by_mail`. The bare shape is returned rather than a
-		// panic so the caller's guard stays the one place that decides.
-		ConsiliumTerms::FeePolicy(_) => base,
+		// The same fund line and terms the approval mail carried, so an owner reads the
+		// verdict on the request they were asked about. The reason travels under the burn
+		// kind too, as a payment's does: the relay renders it as a note, never requires it.
+		ConsiliumTerms::FeePolicy(change) => PayoutOutcome {
+			fund: fee_policy_changes::fee_mail_fund(subject.fee_policy().map(|detail| detail.allocation_name).as_deref(), &change.service),
+			current: change.from.as_ref().map(fee_policy_changes::mail_terms),
+			proposed: Some(fee_policy_changes::mail_terms(&change.to)),
+			reason: change.reason.clone(),
+			..base
+		},
 	}
 }
 
@@ -707,8 +714,8 @@ async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) 
 	if !announces_by_mail(consilium) {
 		return Ok(());
 	}
-	let destination = subject_detail(conn, consilium).await?;
-	let mail = GovernanceMail::PayoutOutcome(outcome_of(consilium, consilium.state().as_str().to_uppercase(), detail.to_owned(), destination.end_detail()));
+	let subject = subject_detail(conn, consilium).await?;
+	let mail = GovernanceMail::PayoutOutcome(outcome_of(consilium, consilium.state().as_str().to_uppercase(), detail.to_owned(), &subject));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:outcome:{}:{recipient}", consilium.id(), consilium.state().as_str());
 		enqueue(conn, MailSubject::Consilium(consilium.id().raw()), recipient.raw(), &key, &mail).await?;
@@ -720,15 +727,14 @@ async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) 
 /// whole roster needs, not just its holder — who may be the one person who never sees it.
 async fn announce_burn(conn: &mut PgConnection, consilium: &Consilium, voter: UserId) -> Result<(), DomainError> {
 	if !announces_by_mail(consilium) {
-		tracing::error!(consilium_id = %consilium.id(), %voter, "consilium: an approval token burned on a fee-policy consilium; no burn notice is mailed for this kind yet");
 		return Ok(());
 	}
-	let destination = subject_detail(conn, consilium).await?;
+	let subject = subject_detail(conn, consilium).await?;
 	let mail = GovernanceMail::TokenBurned(outcome_of(
 		consilium,
 		"TOKEN_BURNED".to_owned(),
 		format!("five failed code attempts burned the approval token for seat {voter}"),
-		destination.end_detail(),
+		&subject,
 	));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:burn:{voter}:{recipient}", consilium.id());

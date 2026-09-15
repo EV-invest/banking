@@ -141,12 +141,9 @@ pub mod wired {
 						source: outcome.source.clone(),
 						destination: outcome.destination.clone(),
 						reason: outcome.reason.clone(),
-						// The fee-terms description (concierge v0.8.0): nothing names it yet,
-						// so the relay still reads a payout or a payment. Filled once the
-						// fee-policy consilium announces its outcome by mail (#233).
-						fund: String::new(),
-						current: None,
-						proposed: None,
+						fund: outcome.fund.clone(),
+						current: outcome.current.as_ref().map(fee_terms),
+						proposed: outcome.proposed.as_ref().map(fee_terms),
 					});
 				}
 				GovernanceMail::PaymentConsent(consent) => {

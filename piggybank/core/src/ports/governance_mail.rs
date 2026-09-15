@@ -168,10 +168,11 @@ pub struct PayoutApproval {
 
 /// How a consilium ended, or why a token burned.
 ///
-/// ONE shape for both subjects, additively — the wire's `PayoutOutcomeMail` is the same:
+/// ONE shape for three subjects, additively — the wire's `PayoutOutcomeMail` is the same:
 /// `network` + `address` describe a payout, `tier` + `source` + `destination` + `reason`
-/// describe a payment, and the renderer switches on which pair is filled. The payment
-/// fields default to empty so queue rows written before they existed still deserialize.
+/// describe a payment, `fund` + `proposed` (+ `current`, `reason`) describe a change of fee
+/// terms, and the renderer switches on which description is filled. The payment and the
+/// fee fields default to empty so queue rows written before they existed still deserialize.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PayoutOutcome {
 	pub consilium_id: String,
@@ -190,6 +191,17 @@ pub struct PayoutOutcome {
 	pub destination: String,
 	#[serde(default)]
 	pub reason: String,
+	/// The product's display name, as [`FeePolicyApproval::fund`] spells it. Empty for a
+	/// payout and for a payment.
+	#[serde(default)]
+	pub fund: String,
+	/// The terms in force when the change was proposed; `None` when the fund charged
+	/// nothing — and `None` for the other two subjects.
+	#[serde(default)]
+	pub current: Option<FeePolicyTerms>,
+	/// The terms the consilium was over. Concierge refuses a `fund` without it.
+	#[serde(default)]
+	pub proposed: Option<FeePolicyTerms>,
 }
 
 /// The consent invitation to the ONE investor whose claim a payment spends.

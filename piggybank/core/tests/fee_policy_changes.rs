@@ -45,7 +45,7 @@ use piggybank_core::{
 	},
 	ports::{
 		AllocationRegistry, ConsiliumRepository, PaymentRepository, UserRepository, WithdrawalRepository,
-		consilium::VoteAudit,
+		consilium::{MAX_CODE_ATTEMPTS, VoteAudit},
 		fees::{FeePolicies, FeePolicyChange, FeePolicyChanges, NewFeePolicyChange, PositionAccruals},
 		ledger::Ledger,
 	},
@@ -865,6 +865,81 @@ async fn a_refused_or_withdrawn_quorum_closes_the_change() {
 	let consilium = change.consilium_id.unwrap();
 	consilium_app::cancel(h.consilia.as_ref(), consilium, roster[0], now()).await.unwrap();
 	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Rejected);
+}
+
+/// The owners hear how a fee-policy consilium ended, and that a token burned on one of its
+/// seats, the way they do for a payout: one outcome mail per member of the audience on the
+/// verdict, one burn notice each on the fifth wrong code — both describing the terms (the
+/// fund line the approval used, the terms now and proposed, the initiator's reason) and
+/// naming no rail and no payment, since concierge renders exactly one description.
+#[tokio::test]
+async fn the_owners_are_mailed_the_verdict_and_the_burn_of_a_fee_policy_consilium() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let roster = owners(&h, 3).await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+
+	// Refused by one peer: the verdict reaches the initiator and both seats.
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "the new mandate costs more to run").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+	assert!(vote(&h, consilium, roster[1], VoteDecision::Reject).await);
+	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Rejected);
+	let outcomes = outcome_mails(&h, consilium, "payout_outcome").await;
+	assert_eq!(outcomes.len(), 3, "the initiator and every seat hear the verdict");
+	for mail in &outcomes {
+		assert_eq!(mail["outcome"], "REJECTED");
+		assert_fee_description(mail, &service);
+	}
+
+	// A token burned on the next proposal: the whole roster is warned, over the same terms.
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "the new mandate costs more to run").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+	let (token, _) = credentials(&h, consilium, roster[1]).await;
+	let audit = VoteAudit {
+		client_ip: "203.0.113.7".to_owned(),
+		user_agent: "itest".to_owned(),
+	};
+	for _ in 0..MAX_CODE_ATTEMPTS {
+		consilium_app::submit_decision(h.consilia.as_ref(), &token, "WRONGCODE1", VoteDecision::Approve, &audit, now())
+			.await
+			.unwrap_err();
+	}
+	let burns = outcome_mails(&h, consilium, "token_burned").await;
+	assert_eq!(burns.len(), 3, "the whole roster hears about a brute-force attempt");
+	for mail in &burns {
+		assert_eq!(mail["outcome"], "TOKEN_BURNED");
+		assert!(mail["detail"].as_str().unwrap().contains(&roster[1].to_string()), "the seat is named: {}", mail["detail"]);
+		assert_fee_description(mail, &service);
+	}
+	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Open, "one burned token does not disarm the consilium");
+}
+
+/// The outcome mails of one kind queued for a consilium, as the worker will read them.
+async fn outcome_mails(h: &Harness, consilium: ConsiliumId, kind: &str) -> Vec<serde_json::Value> {
+	sqlx::query_scalar::<_, String>("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 AND kind = $2 ORDER BY user_id")
+		.bind(consilium.raw())
+		.bind(kind)
+		.fetch_all(&h.pool)
+		.await
+		.unwrap()
+		.iter()
+		.map(|payload| serde_json::from_str(payload).unwrap())
+		.collect()
+}
+
+/// What an outcome or burn mail over a fee-policy consilium says — the fee description of
+/// the approval mail, and nothing of a payout's or a payment's.
+fn assert_fee_description(mail: &serde_json::Value, service: &ServiceId) {
+	assert_eq!(mail["fund"], format!("EV Trading ({service})"), "the title, and the slug it is known by");
+	assert_eq!(mail["current"]["management_bps"], 200, "the house terms in force when it was proposed");
+	assert_eq!(mail["proposed"]["management_bps"], 300);
+	assert_eq!(mail["proposed"]["basis"], "invested_capital");
+	assert_eq!(mail["reason"], "the new mandate costs more to run");
+	for empty in ["network", "address", "amount", "tier", "source", "destination"] {
+		assert_eq!(mail[empty], "", "a fee outcome names no rail and no payment: {empty}");
+	}
 }
 
 #[tokio::test]

@@ -4,8 +4,10 @@
 //!
 //! What is pinned: a relay that THROTTLES a recipient (`RESOURCE_EXHAUSTED`) or is down
 //! defers the mail without spending one of its attempts, the deferred row waits out its
-//! backoff before the relay is asked again, an actual refusal still costs an attempt, and a
-//! mail deferred for longer than the ceiling is finally given up on.
+//! backoff before the relay is asked again, an actual refusal still costs an attempt, a
+//! mail deferred for longer than the ceiling is finally given up on, and an outcome over a
+//! change of fee terms reaches the relay with the fund and the terms it was queued with —
+//! while a row queued before those fields existed still gets through.
 
 use std::sync::{
 	Arc,
@@ -21,7 +23,7 @@ use piggybank_core::{
 	infrastructure::{consilium_mailer::ConsiliumMailer, users::PgUsers},
 	ports::{
 		UserRepository,
-		governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError, PayoutApproval, PayoutOutcome},
+		governance_mail::{FeePolicyTerms, GovernanceMail, GovernanceMailer, MailDeliveryError, PayoutApproval, PayoutOutcome},
 	},
 };
 use sqlx::PgPool;
@@ -66,6 +68,21 @@ fn refusing() -> Arc<FixedRelay> {
 	})
 }
 
+/// A relay that accepts everything and keeps what it was handed, so a test can read the
+/// mail exactly as the worker rebuilt it from the queue row.
+#[derive(Default)]
+struct KeepingRelay {
+	seen: std::sync::Mutex<Vec<GovernanceMail>>,
+}
+
+#[async_trait]
+impl GovernanceMailer for KeepingRelay {
+	async fn send(&self, _recipient: Uuid, _dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError> {
+		self.seen.lock().unwrap().push(mail.clone());
+		Ok(())
+	}
+}
+
 /// A recipient with a mirrored concierge id, a terminal consilium fixture to hang the mail
 /// on, and one queued outcome mail. Returns the mail row's id.
 async fn a_queued_mail(pool: &PgPool) -> i64 {
@@ -81,6 +98,9 @@ async fn a_queued_mail(pool: &PgPool) -> i64 {
 			source: String::new(),
 			destination: String::new(),
 			reason: String::new(),
+			fund: String::new(),
+			current: None,
+			proposed: None,
 		})
 	})
 	.await
@@ -108,6 +128,16 @@ async fn a_queued_token_mail(pool: &PgPool) -> i64 {
 }
 
 async fn a_queued(pool: &PgPool, mail: impl FnOnce(Uuid) -> GovernanceMail) -> i64 {
+	a_queued_row(pool, |consilium| {
+		let mail = mail(consilium);
+		(mail.as_str(), serde_json::to_string(&mail).unwrap())
+	})
+	.await
+}
+
+/// The same fixture over the row's stored `kind` and JSON `payload` — for a payload written
+/// the way an EARLIER build of the worker wrote it, which no current type can produce.
+async fn a_queued_row(pool: &PgPool, row: impl FnOnce(Uuid) -> (&'static str, String)) -> i64 {
 	let users = PgUsers::new(pool.clone());
 	let tag = Uuid::new_v4();
 	let owner: UserId = users
@@ -137,16 +167,26 @@ async fn a_queued(pool: &PgPool, mail: impl FnOnce(Uuid) -> GovernanceMail) -> i
 	.execute(pool)
 	.await
 	.unwrap();
-	let mail = mail(consilium);
+	let (kind, payload) = row(consilium);
 	sqlx::query_scalar("INSERT INTO consilium_mail (consilium_id, user_id, kind, dedupe_key, payload) VALUES ($1, $2, $3, $4, $5::jsonb) RETURNING id")
 		.bind(consilium)
 		.bind(owner.raw())
-		.bind(mail.as_str())
+		.bind(kind)
 		.bind(format!("mailer-test:{tag}"))
-		.bind(serde_json::to_string(&mail).unwrap())
+		.bind(payload)
 		.fetch_one(pool)
 		.await
 		.unwrap()
+}
+
+fn terms(management_bps: u32) -> FeePolicyTerms {
+	FeePolicyTerms {
+		management_bps,
+		performance_bps: 2_000,
+		hurdle_bps: 0,
+		basis: "invested_capital".into(),
+		crystallization: "annual".into(),
+	}
 }
 
 async fn row(pool: &PgPool, id: i64) -> (i32, i32, bool, bool) {
@@ -279,4 +319,121 @@ async fn a_mail_given_up_on_is_redacted_like_a_delivered_one() {
 		.execute(&pool)
 		.await
 		.unwrap();
+}
+
+/// A burn notice over a change of fee terms carries the fund line and both sets of terms
+/// through the queue and out to the relay — the description concierge v0.8.0 renders — with
+/// the reason kept, and `current` kept absent when the fund charged nothing.
+#[tokio::test]
+async fn a_fee_terms_outcome_reaches_the_relay_with_its_fund_and_terms() {
+	let _guard = QUEUE.lock().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping the mailer suite");
+		return;
+	};
+	quiet_queue(&pool).await;
+	let burned = a_queued(&pool, |consilium| {
+		GovernanceMail::TokenBurned(PayoutOutcome {
+			consilium_id: consilium.to_string(),
+			outcome: "TOKEN_BURNED".into(),
+			network: String::new(),
+			address: String::new(),
+			amount: String::new(),
+			detail: "five failed code attempts burned the approval token for seat fixture".into(),
+			tier: String::new(),
+			source: String::new(),
+			destination: String::new(),
+			reason: "the new mandate costs more to run".into(),
+			fund: "Arb desk (service_arb)".into(),
+			current: None,
+			proposed: Some(terms(300)),
+		})
+	})
+	.await;
+	let rejected = a_queued(&pool, |consilium| {
+		GovernanceMail::PayoutOutcome(PayoutOutcome {
+			consilium_id: consilium.to_string(),
+			outcome: "REJECTED".into(),
+			network: String::new(),
+			address: String::new(),
+			amount: String::new(),
+			detail: "the threshold can no longer be reached".into(),
+			tier: String::new(),
+			source: String::new(),
+			destination: String::new(),
+			reason: "the new mandate costs more to run".into(),
+			fund: "Arb desk (service_arb)".into(),
+			current: Some(terms(200)),
+			proposed: Some(terms(300)),
+		})
+	})
+	.await;
+	let relay = Arc::new(KeepingRelay::default());
+	assert_eq!(ConsiliumMailer::new(pool.clone(), relay.clone()).drain().await.unwrap(), 2);
+
+	let seen = relay.seen.lock().unwrap().clone();
+	let GovernanceMail::TokenBurned(burn) = &seen[0] else {
+		panic!("the burn notice keeps its kind through the queue: {:?}", seen[0]);
+	};
+	assert_eq!(burn.outcome, "TOKEN_BURNED");
+	assert_eq!(burn.fund, "Arb desk (service_arb)");
+	assert!(burn.current.is_none(), "a fund that charged nothing has no current terms");
+	assert_eq!(burn.proposed.as_ref().map(|t| t.management_bps), Some(300));
+	assert_eq!(burn.reason, "the new mandate costs more to run");
+	assert!(burn.network.is_empty() && burn.source.is_empty() && burn.destination.is_empty(), "one description, not two");
+	let GovernanceMail::PayoutOutcome(outcome) = &seen[1] else {
+		panic!("the outcome keeps its kind through the queue: {:?}", seen[1]);
+	};
+	assert_eq!(outcome.outcome, "REJECTED");
+	assert_eq!(outcome.current.as_ref().map(|t| t.management_bps), Some(200));
+	assert_eq!(outcome.proposed.as_ref().map(|t| t.crystallization.as_str()), Some("annual"));
+
+	for id in [burned, rejected] {
+		let (_, _, _, sent) = row(&pool, id).await;
+		assert!(sent, "an accepted mail is marked sent");
+	}
+	sqlx::query("DELETE FROM consilium_mail WHERE id = ANY($1)")
+		.bind(vec![burned, rejected])
+		.execute(&pool)
+		.await
+		.unwrap();
+}
+
+/// A row queued by the worker as it was before the fee description existed — the payout
+/// pair alone, no `fund`, `current` or `proposed` key at all — is still a mail the current
+/// worker can rebuild and hand over: the queue outlives a deploy.
+#[tokio::test]
+async fn an_outcome_row_queued_before_the_fee_fields_existed_still_reaches_the_relay() {
+	let _guard = QUEUE.lock().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping the mailer suite");
+		return;
+	};
+	quiet_queue(&pool).await;
+	let id = a_queued_row(&pool, |consilium| {
+		(
+			"payout_outcome",
+			format!(
+				r#"{{"kind":"payout_outcome","consilium_id":"{consilium}","outcome":"CANCELLED","network":"bep20","address":"0x52908400098527886E0F7030069857D2E4169EE7","amount":"1","detail":"fixture"}}"#
+			),
+		)
+	})
+	.await;
+	let relay = Arc::new(KeepingRelay::default());
+	assert_eq!(ConsiliumMailer::new(pool.clone(), relay.clone()).drain().await.unwrap(), 1);
+
+	let seen = relay.seen.lock().unwrap().clone();
+	let GovernanceMail::PayoutOutcome(outcome) = &seen[0] else {
+		panic!("an old row is still an outcome: {:?}", seen[0]);
+	};
+	assert_eq!((outcome.outcome.as_str(), outcome.network.as_str()), ("CANCELLED", "bep20"));
+	assert!(
+		outcome.fund.is_empty() && outcome.current.is_none() && outcome.proposed.is_none(),
+		"absent keys read as the empty description"
+	);
+	assert!(outcome.tier.is_empty() && outcome.reason.is_empty());
+
+	let (_, _, _, sent) = row(&pool, id).await;
+	assert!(sent);
+	sqlx::query("DELETE FROM consilium_mail WHERE id = $1").bind(id).execute(&pool).await.unwrap();
 }
