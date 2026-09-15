@@ -751,15 +751,21 @@ async fn a_replayed_parked_event_does_not_roll_the_address_back() {
 	.await;
 }
 
-// ── #181: the two ways a poll cycle can misbehave ────────────────────────────────────
+// ── #181: the ways a poll cycle can misbehave ────────────────────────────────────────
 //
-// Both of these are about the SHAPE of the retry, not about an event being mirrored, so
-// they drive the consumer against a deliberately broken server and watch WHEN it comes
-// back. Each measures the time the consumer took to make a fixed number of pulls and
-// asserts a LOWER bound on it. That direction is deliberate: a loaded machine can only
-// stretch those gaps, so the assertion cannot fail because the suite ran beside something
-// else — the price is that enough load could hide a regression, which is the right way
-// round for a test that would otherwise be one more flake in this repository.
+// These drive the consumer against a deliberately broken server. Two of them are about the
+// SHAPE of the retry rather than about an event being mirrored, and watch WHEN the consumer
+// comes back: each measures the time it took to make a fixed number of pulls and asserts a
+// LOWER bound on it. That direction is deliberate: a loaded machine can only stretch those
+// gaps, so the assertion cannot fail because the suite ran beside something else — the price
+// is that enough load could hide a regression, which is the right way round for a test that
+// would otherwise be one more flake in this repository.
+//
+// [`a_cycle_that_mirrored_a_batch_does_not_back_off`] is the exception, and has to be: what
+// it forbids is the consumer being SLOWER than it should, so its bound is an upper one. It
+// is safe by margin instead of by direction — the behaviour it rejects spends 25 s in timer
+// sleeps before the pull it waits for (and those can only stretch), while the behaviour it
+// accepts needs a couple of seconds of real work against a cap of [`OBSERVE_CAP`].
 //
 // They share [`drive_misbehaving`] rather than [`drive`]: a consumer stuck in a hot loop
 // never reaches the `select!` that observes the shutdown token, so the consumer branch has
@@ -774,8 +780,12 @@ fn pull_log() -> PullLog {
 	Arc::new(Mutex::new(Vec::new()))
 }
 
-fn record(log: &PullLog) {
-	log.lock().expect("pull log").push(Instant::now());
+/// Stamps this pull and returns how many have arrived, counting it — which is how
+/// [`FlakyUserEvents`] decides whether to serve this one or fail it.
+fn record(log: &PullLog) -> usize {
+	let mut stamps = log.lock().expect("pull log");
+	stamps.push(Instant::now());
+	stamps.len()
 }
 
 /// Elapsed time from the first pull to the `n`th, or `None` when fewer than `n` arrived.
@@ -830,6 +840,32 @@ impl UserEvents for FailingUserEvents {
 	async fn pull_user_lifecycle(&self, _request: Request<PullUserLifecycleRequest>) -> Result<Response<PullUserLifecycleResponse>, Status> {
 		record(&self.pulls);
 		Err(Status::unavailable("concierge is down"))
+	}
+}
+
+/// A concierge that serves one full batch and then dies, over and over: odd pulls come back
+/// with a batch that moves the cursor, even pulls — the one `drain` makes for the rest of
+/// the backlog — fail. That is what a rolling restart looks like from here, and equally a
+/// pair of replicas one of which is not ready, or a per-request timeout only some pulls
+/// trip. Every cycle mirrors and commits a batch and then fails: the bridge is working.
+struct FlakyUserEvents {
+	event: UserLifecycleEvent,
+	pulls: PullLog,
+}
+
+#[tonic::async_trait]
+impl UserEvents for FlakyUserEvents {
+	async fn pull_user_lifecycle(&self, request: Request<PullUserLifecycleRequest>) -> Result<Response<PullUserLifecycleResponse>, Status> {
+		let nth = record(&self.pulls);
+		let req = request.into_inner();
+		if nth.is_multiple_of(2) {
+			return Err(Status::unavailable("concierge went away mid-drain"));
+		}
+		let count = req.limit.max(1);
+		Ok(Response::new(PullUserLifecycleResponse {
+			events: vec![self.event.clone(); count as usize],
+			next_position: req.after_position + i64::from(count),
+		}))
 	}
 }
 
@@ -1046,4 +1082,62 @@ async fn a_batch_the_cursor_cannot_move_past_is_still_applied() {
 		0,
 		"and nothing is consumed: the batch stays in concierge's outbox for a build that can move past it"
 	);
+}
+
+/// A CYCLE THAT MIRRORED A BATCH MUST NOT BACK OFF.
+///
+/// `drain` pulls repeatedly, so a backlog larger than one batch can fail on its Nth pull
+/// with N-1 batches already applied and committed. Treating that as a failed cycle walks the
+/// retry delay up to the one-minute ceiling while the bridge is in fact draining — minutes
+/// added to how long a freeze takes to reach the money gate, against a concierge that is
+/// merely rolling rather than down (#181).
+///
+/// The bound here is an upper one, unlike its neighbours: seventeen pulls is nine cycles,
+/// which the backing-off consumer cannot reach inside [`OBSERVE_CAP`] because it sleeps
+/// 0.1 + 0.2 + … + 12.8 s ≈ 25 s first, while a consumer that keeps the poll interval needs
+/// nine polls and nine batches of no-op applies — a couple of seconds.
+#[tokio::test]
+async fn a_cycle_that_mirrored_a_batch_does_not_back_off() {
+	let Some(pool) = pool().await else {
+		eprintln!("DATABASE_URL unset — skipping real-DB test");
+		return;
+	};
+	let subject = unique_subject();
+	// A row already past the event's sequence: the batches exist to move the CURSOR, and
+	// every apply is meant to be the cheap redelivery no-op, not a mutation.
+	PgUsers::new(pool.clone())
+		.provision(
+			domain::auth::AuthSubject::parse(&subject).unwrap(),
+			domain::users::Email::parse("flaky@example.com").unwrap(),
+			true,
+		)
+		.await
+		.expect("provision the subject the flaky batches name");
+	sqlx::query("UPDATE users SET last_lifecycle_sequence = 9 WHERE auth_subject = $1")
+		.bind(&subject)
+		.execute(&pool)
+		.await
+		.unwrap();
+
+	const POLL: Duration = Duration::from_millis(100);
+	const WANT: usize = 17;
+	let pulls = pull_log();
+	let finished = drive_misbehaving(
+		&pool,
+		FlakyUserEvents {
+			event: event(&subject, Kind::SessionsRevoked, 1),
+			pulls: pulls.clone(),
+		},
+		POLL,
+		pulls.clone(),
+		WANT,
+	)
+	.await;
+
+	assert!(finished, "the consumer winds down on cancellation");
+	assert!(
+		span_of_first(&pulls, WANT).is_some(),
+		"a cycle that mirrored a batch must retry at the poll interval, not back off — fewer than {WANT} pulls arrived within {OBSERVE_CAP:?} at a {POLL:?} poll"
+	);
+	assert!(cursor_position(&pool).await > 0, "the premise of the test: those cycles really did commit batches before failing");
 }

@@ -82,6 +82,22 @@ enum Outcome {
 	Unreadable,
 }
 
+/// What one pull did, in the two terms its callers need.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Pull {
+	/// The cursor moved past this batch, so it is consumed and will not be re-delivered.
+	/// [`BridgeConsumer::run`] reads this as the cycle having done work even when a LATER
+	/// pull in the same drain fails.
+	progressed: bool,
+	/// A full batch came back, so more may be waiting behind it and `drain` should pull again.
+	more: bool,
+}
+
+impl Pull {
+	/// Nothing consumed, and no reason to pull again in this cycle.
+	const STOP: Self = Self { progressed: false, more: false };
+}
+
 /// Whether an event's PROFILE SNAPSHOT (email, verification flag) still describes the
 /// subject, as opposed to the state-machine fields (`frozen`, `kyc_level`, `role`,
 /// `concierge_token_version`), which are ordered by `sequence` and safe either way.
@@ -127,8 +143,9 @@ impl BridgeConsumer {
 	/// the production value of five seconds a concierge outage becomes a permanent 12 rpm
 	/// of failing connects per hub — noise in the logs of the plane that is already having
 	/// a bad day, and load on it exactly while it is trying to come back. The delay doubles
-	/// per consecutive failure up to [`BACKOFF_MAX`] and snaps back to the poll interval on
-	/// the first success, so mirror latency in the ordinary case is unchanged.
+	/// per consecutive failure up to [`BACKOFF_MAX`] and snaps back to the poll interval the
+	/// moment the cycle makes progress, so mirror latency in the ordinary case is unchanged.
+	/// PROGRESS, NOT A CLEAN CYCLE, IS WHAT COUNTS AS SUCCESS — see the `Err` arm.
 	pub async fn run(self, shutdown: CancellationToken) {
 		info!(every = ?self.poll_interval, "bridge: consuming concierge lifecycle events");
 		let mut client = UserEventsClient::new(self.channel.clone());
@@ -138,7 +155,10 @@ impl BridgeConsumer {
 		// `None` = the last cycle succeeded (or none has run yet).
 		let mut backoff: Option<Duration> = None;
 		loop {
-			let wait = match self.drain(&mut client).await {
+			// Set by `drain` as soon as a batch's cursor is committed, and never cleared within
+			// the cycle: a cycle that got that far mirrored something, whatever happened after.
+			let mut progressed = false;
+			let wait = match self.drain(&mut client, &mut progressed).await {
 				Ok(()) => {
 					backoff = None;
 					self.poll_interval
@@ -148,9 +168,23 @@ impl BridgeConsumer {
 						Some(s) if s.code() == tonic::Code::Unavailable => " (is concierge running?)",
 						_ => "",
 					};
-					let next = backoff.map_or(self.poll_interval, |previous| previous.saturating_mul(2).min(ceiling));
-					backoff = Some(next);
-					warn!(retry_in = ?next, "bridge: pull/apply cycle failed, retrying{hint}: {err}");
+					// A DRAIN THAT MOVED THE CURSOR IS NOT A FAILING CYCLE. `drain` pulls
+					// repeatedly, so a backlog of thousands fails on the Nth pull with N-1
+					// batches already applied and committed — the ordinary shape of a concierge
+					// that is rolling, spread over replicas one of which is not ready, or
+					// tripping the per-request timeout on some pulls. Backing off there would
+					// walk the delay up to a minute while the bridge is in fact draining, adding
+					// minutes to how long a freeze or a tier downgrade takes to reach the money
+					// gate. Only a cycle that achieved nothing is worth slowing down.
+					let next = if progressed {
+						backoff = None;
+						self.poll_interval
+					} else {
+						let next = backoff.map_or(self.poll_interval, |previous| previous.saturating_mul(2).min(ceiling));
+						backoff = Some(next);
+						next
+					};
+					warn!(retry_in = ?next, mirrored = progressed, "bridge: pull/apply cycle failed, retrying{hint}: {err}");
 					next
 				}
 			};
@@ -170,19 +204,23 @@ impl BridgeConsumer {
 	/// The parked backlog is swept after every pass, and once even when there was nothing to
 	/// pull: a row can appear from the *other* direction (first sign-in materializes a user
 	/// this bridge never provisioned), and that must not wait for the next concierge event.
-	async fn drain(&self, client: &mut UserEventsClient<Channel>) -> color_eyre::Result<()> {
+	///
+	/// `progressed` is an out-parameter rather than a return value because it has to survive
+	/// the `?`: the whole point of it is to tell [`BridgeConsumer::run`] how much this cycle
+	/// got done BEFORE the error that ended it.
+	async fn drain(&self, client: &mut UserEventsClient<Channel>, progressed: &mut bool) -> color_eyre::Result<()> {
 		loop {
-			let more = self.pull_and_apply(client).await?;
+			let pull = self.pull_and_apply(client).await?;
+			*progressed |= pull.progressed;
 			self.replay_deferred().await?;
-			if !more {
+			if !pull.more {
 				return Ok(());
 			}
 		}
 	}
 
-	/// Pull one batch from the stored cursor and apply it. Returns whether a full batch was
-	/// consumed, i.e. whether more may be waiting behind it.
-	async fn pull_and_apply(&self, client: &mut UserEventsClient<Channel>) -> color_eyre::Result<bool> {
+	/// Pull one batch from the stored cursor and apply it.
+	async fn pull_and_apply(&self, client: &mut UserEventsClient<Channel>) -> color_eyre::Result<Pull> {
 		let after = self.cursor().await?;
 		let mut request = Request::new(PullUserLifecycleRequest {
 			after_position: after,
@@ -193,7 +231,7 @@ impl BridgeConsumer {
 
 		let response = client.pull_user_lifecycle(request).await?.into_inner();
 		if response.events.is_empty() {
-			return Ok(false);
+			return Ok(Pull::STOP);
 		}
 		for event in &response.events {
 			if self.apply(event, Freshness::Live).await? == Outcome::Unreadable {
@@ -206,7 +244,7 @@ impl BridgeConsumer {
 				// per-user guard forever, reinstating exactly the loss the stop prevents.
 				// Everything already applied from this batch re-applies as a no-op when the
 				// unchanged cursor re-delivers it.
-				return Ok(false);
+				return Ok(Pull::STOP);
 			}
 		}
 		// THE CURSOR MUST MOVE, OR THIS DRAIN ENDS — BUT THE BATCH IS APPLIED FIRST.
@@ -234,11 +272,14 @@ impl BridgeConsumer {
 				events = response.events.len(),
 				"bridge: server returned events but did not advance the cursor — applied this batch and ending the drain instead of re-pulling it"
 			);
-			return Ok(false);
+			return Ok(Pull::STOP);
 		}
 		self.advance_cursor(after, response.next_position).await?;
 		// A short batch (server gave back fewer than it caps) means we caught up.
-		Ok((response.events.len() as u32) >= PULL_LIMIT)
+		Ok(Pull {
+			progressed: true,
+			more: (response.events.len() as u32) >= PULL_LIMIT,
+		})
 	}
 
 	/// Replay parked events for every subject that now has a local row, oldest first.
