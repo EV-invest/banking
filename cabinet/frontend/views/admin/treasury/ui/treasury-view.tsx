@@ -326,7 +326,7 @@ function CopyableAddress({ address, label }: { address: string; label?: string }
         <code className="flex-1 min-w-0 truncate rounded border border-border bg-main-surface px-2 py-1 font-mono-tech text-xs text-muted-foreground" title={address}>
           {address}
         </code>
-        <Button type="button" variant="outline" size="icon" onClick={copy} aria-label={t("admin.treasury.a11y.copy", { what: label ?? t("ui.address") })}>
+        <Button type="button" variant="outline" icon onClick={copy} aria-label={t("admin.treasury.a11y.copy", { what: label ?? t("ui.address") })}>
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         </Button>
       </div>

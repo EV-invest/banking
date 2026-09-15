@@ -807,6 +807,10 @@
     "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
     "t": "Это цена, а не деталь: чем чаще происходит фиксация, тем ощутимо больше платит инвестор за всё время жизни фонда, потому что каждый сброс закрепляет прибыль, которую последующий убыток уже не вернёт."
   },
+  "admin.fees.dateTime.placeholder": {
+    "en": "As soon as the notice allows",
+    "t": "Как только позволит уведомление"
+  },
   "admin.fees.effectiveFrom": {
     "en": "Takes effect",
     "t": "Вступает в силу"
@@ -6194,6 +6198,30 @@
   "ui.copy": {
     "en": "Copy",
     "t": "Копировать"
+  },
+  "ui.dateTime.clear": {
+    "en": "Clear",
+    "t": "Очистить"
+  },
+  "ui.dateTime.dialog": {
+    "en": "Choose date and time",
+    "t": "Выберите дату и время"
+  },
+  "ui.dateTime.hours": {
+    "en": "Hours",
+    "t": "Часы"
+  },
+  "ui.dateTime.minutes": {
+    "en": "Minutes",
+    "t": "Минуты"
+  },
+  "ui.dateTime.nextMonth": {
+    "en": "Next month",
+    "t": "Следующий месяц"
+  },
+  "ui.dateTime.previousMonth": {
+    "en": "Previous month",
+    "t": "Предыдущий месяц"
   },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",

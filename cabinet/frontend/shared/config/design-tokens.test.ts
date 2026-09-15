@@ -9,11 +9,12 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 // Resolved through the package's own exports map, so this tracks whatever version is
-// installed rather than a guessed path into node_modules. The LEGACY sheet, because that
-// is the one both entry points import (see globals.css): since uikit 0.10 the plain
-// `tokens.css` carries the renamed vocabulary only, and the `main-*` palette this test
-// is about lives in the legacy layer.
-const uikitTokens = createRequire(import.meta.url).resolve("@evinvest/uikit/styles/tokens-legacy.css");
+// installed rather than a guessed path into node_modules. The `main-*` palette this test
+// is about is not in it: since uikit 0.10 `tokens.css` carries the renamed vocabulary
+// only, and 0.14 dropped the legacy sheet, so the aliases live in the cabinet's own
+// layer, which both entry points import after the kit's (see globals.css).
+const uikitTokens = createRequire(import.meta.url).resolve("@evinvest/uikit/styles/tokens.css");
+const legacyTokens = new URL("../../application/styles/tokens-legacy.css", import.meta.url);
 const mfeEntry = new URL("../../mfe/account-chip/mfe.css", import.meta.url);
 
 test("the brand palette follows the semantic tokens rather than copying them", () => {
@@ -22,14 +23,19 @@ test("the brand palette follows the semantic tokens rather than copying them", (
   // side was retuned — dashboard surfaces moved to the new palette and profile, settings
   // and wallet stayed on the old one, so half the cabinet changed colour and half did not.
   const upstream = readFileSync(uikitTokens, "utf8");
-  assert.match(upstream, /--color-main-card:\s*var\(--card\)/, "--color-main-card must reference --card, not repeat its value");
-  assert.match(upstream, /--color-main-surface:\s*var\(--secondary\)/, "--color-main-surface must reference --secondary");
+  const legacy = readFileSync(legacyTokens, "utf8");
+  assert.match(upstream, /^\s*--card:/m, "the kit's sheet must still define --card");
+  assert.match(upstream, /^\s*--secondary:/m, "the kit's sheet must still define --secondary");
+  assert.match(legacy, /--color-main-card:\s*var\(--card\)/, "--color-main-card must reference --card, not repeat its value");
+  assert.match(legacy, /--color-main-surface:\s*var\(--secondary\)/, "--color-main-surface must reference --secondary");
 });
 
 test("the element remote is built against the shared tokens", () => {
   // The remote compiles from its own stylesheet, so it does not inherit anything the app
   // entry point sets up. Without this import it renders an untokenised palette.
-  assert.match(readFileSync(mfeEntry, "utf8"), /@evinvest\/uikit\/styles\/tokens-legacy\.css/, "mfe.css must import the same token sheet as globals.css");
+  const remote = readFileSync(mfeEntry, "utf8");
+  assert.match(remote, /@evinvest\/uikit\/styles\/tokens\.css/, "mfe.css must import the same token sheet as globals.css");
+  assert.match(remote, /application\/styles\/tokens-legacy\.css/, "mfe.css must import the same legacy alias layer as globals.css");
 });
 
 test("the remote's theme import stays unlayered", () => {

@@ -807,6 +807,10 @@
     "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
     "t": "Ein Preis, kein Detail — häufigeres Kristallisieren erhöht messbar, was ein Investor über die Laufzeit eines Fonds zahlt, weil jeder Reset Gewinne festschreibt, die ein späterer Verlust nicht mehr zurückholen kann."
   },
+  "admin.fees.dateTime.placeholder": {
+    "en": "As soon as the notice allows",
+    "t": "Sobald die Frist es erlaubt"
+  },
   "admin.fees.effectiveFrom": {
     "en": "Takes effect",
     "t": "Tritt in Kraft"
@@ -6194,6 +6198,30 @@
   "ui.copy": {
     "en": "Copy",
     "t": "Kopieren"
+  },
+  "ui.dateTime.clear": {
+    "en": "Clear",
+    "t": "Leeren"
+  },
+  "ui.dateTime.dialog": {
+    "en": "Choose date and time",
+    "t": "Datum und Uhrzeit wählen"
+  },
+  "ui.dateTime.hours": {
+    "en": "Hours",
+    "t": "Stunden"
+  },
+  "ui.dateTime.minutes": {
+    "en": "Minutes",
+    "t": "Minuten"
+  },
+  "ui.dateTime.nextMonth": {
+    "en": "Next month",
+    "t": "Nächster Monat"
+  },
+  "ui.dateTime.previousMonth": {
+    "en": "Previous month",
+    "t": "Vorheriger Monat"
   },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
