@@ -1074,6 +1074,18 @@ address instead of crediting that user, so an operator who meant capital and got
 finds out. Both are chain-proven and idempotent by the chain `tx_ref`; neither accepts an
 amount from the caller (the free-amount, no-dedup `SeedCapital` was removed in #234).
 
+The EVM deposit scan ([`deposit_watcher`](src/infrastructure/deposit_watcher.rs)) degrades
+rather than wedges when its `eth_getLogs` endpoint refuses it. A window refused for **width**
+is halved down to a floor (the cap is static, so the window never widens again). A window
+refused because the provider has **pruned** that history (`-32701`, "pruned" — shared nodes
+keep a bounded suffix of the chain) can never succeed at any width, so the live scan bisects
+for the oldest block still served, jumps the cursor there, and files the skipped range as a
+Sentry-shipped `error!` with its `from`/`to` — those deposits are **not credited** and the
+operator reconciles the window by hand with `RecordDeposit`. Retrying the pruned window
+instead (the pre-#309 behaviour: cycle backoff to 300 s, forever) loses every deposit after
+the gap as well. A backfill (`CursorPolicy::Leave`) never clamps — the operator chose that
+window, so it gets the refusal back.
+
 [`reaper`](src/infrastructure/reaper.rs) (`Reaper::sweep`) owns the timeout for abandoned
 sagas (TB pendings are `timeout = 0`, so nothing auto-voids). Split by safety per the
 cardinal withdrawal rule: a **`processing` withdrawal** past the max age is **alert-only**
