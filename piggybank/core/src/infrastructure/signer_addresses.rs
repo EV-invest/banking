@@ -51,16 +51,24 @@ const ACTIVITY_ID_METADATA_KEY: &str = "turnkey-activity-id";
 /// where the holder of `DepositAddressRotate`/`DepositAddressMigrate` can read it off the
 /// status and find the activity on the custodian's side.
 ///
-/// `InvalidArgument` is a malformed request. `Aborted` is a lost race: the row moved under
-/// us, and the honest answer is "re-read and try again", not "the signer is broken".
-/// Anything else is an infrastructure fault.
+/// `PermissionDenied` is the custodian refusing ON THE MERITS (`BackendError::Rejected`: its
+/// policy said no to minting the key) — terminal for this request, and the signer composes
+/// the message itself, never from a vendor body, so it is safe to show. It must not fall
+/// into `Repository`: `map_err` hides that as a retryable `Unavailable("internal error")`,
+/// and the operator would retry a refusal with no idea why. `Forbidden` keeps both the code
+/// and the reason. `InvalidArgument` is a malformed request. `Aborted` is a lost race: the
+/// row moved under us, and the honest answer is "re-read and try again", not "the signer
+/// is broken". Anything else is an infrastructure fault.
 fn signer_refusal(op: &str, status: &Status) -> DomainError {
 	let message = status.message();
 	match status.code() {
 		Code::FailedPrecondition => match activity_id(status) {
-			Some(id) => DomainError::Precondition(format!("signer {op} requires custodian approval (activity {id}): {message}")),
+			// The signer's message already names the activity; the prefix is what makes the
+			// case recognisable without knowing that message's wording.
+			Some(_) => DomainError::Precondition(format!("signer {op} requires custodian approval: {message}")),
 			None => DomainError::Precondition(format!("signer refused the {op}: {message}")),
 		},
+		Code::PermissionDenied => DomainError::Forbidden(format!("signer refused the {op}: {message}")),
 		Code::InvalidArgument | Code::Aborted => DomainError::Validation(format!("signer refused the {op}: {message}")),
 		_ => DomainError::Repository(format!("signer {op} failed: {message}")),
 	}
@@ -275,12 +283,21 @@ mod tests {
 	}
 
 	#[test]
+	fn a_custodian_refusal_on_the_merits_is_forbidden_and_keeps_its_reason() {
+		let err = signer_refusal("custody migration", &Status::permission_denied("key custodian refused: policy denied CREATE_WALLET_ACCOUNTS"));
+		let DomainError::Forbidden(message) = err else {
+			panic!("a refusal on the merits must not hide behind a retryable internal error: {err:?}");
+		};
+		assert!(message.contains("policy denied"), "the reason must reach the operator: {message}");
+	}
+
+	#[test]
 	fn everything_else_is_an_infrastructure_fault() {
 		for status in [
 			Status::unavailable("down"),
 			Status::deadline_exceeded("slow"),
 			Status::internal("signing failed"),
-			Status::permission_denied("refused"),
+			Status::unauthenticated("token"),
 		] {
 			let code = status.code();
 			assert!(matches!(signer_refusal("rotation", &status), DomainError::Repository(_)), "{code:?} must be a repository error");
