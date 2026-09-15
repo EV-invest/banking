@@ -3,7 +3,7 @@
 import { Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
 import { dispatchWithdrawal, failWithdrawal, settleWithdrawal } from "@/entities/admin/api/admin-client";
@@ -177,6 +177,7 @@ function WithdrawalRow({
   onFail: () => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const queued = item.state === "queued";
   return (
     <>
@@ -207,8 +208,8 @@ function WithdrawalRow({
           </p>
         </td>
         <td className="px-5 py-3 tabular-nums">
-          <p>{formatUsd(item.amount)}</p>
-          <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", { amount: formatUsd(item.net_amount) })}</p>
+          <p>{formatUsd(item.amount, locale)}</p>
+          <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", { amount: formatUsd(item.net_amount, locale) })}</p>
         </td>
         <td className="px-5 py-3">
           <span className={queued ? "text-accent-warn" : "text-positive"}>{stateLabel(item.state, t)}</span>

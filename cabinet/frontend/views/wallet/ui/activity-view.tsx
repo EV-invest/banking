@@ -16,8 +16,8 @@ import { StaggerItem } from "@/shared/ui/motion";
 import { STATE_ICONS, stateLabel } from "@/views/operations/lib/format";
 import { formatUsdt, networkLabel, railMeta, shortAddress } from "@/views/wallet/lib/format";
 import { WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
-import type { Translate } from "@evinvest/i18n";
-import { useT } from "@evinvest/i18n/react";
+import type { Locale, Translate } from "@evinvest/i18n";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
 // The desktop table track — network, destination, amount, status. Fixed px columns with no
 // matching step on the spacing scale, so they ride in as a custom property rather than an
@@ -52,6 +52,7 @@ interface Entry {
 
 export function ActivityView() {
   const t = useT();
+  const locale = useLocale();
   const [cancelError, setCancelError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -79,7 +80,7 @@ export function ActivityView() {
   // worth reporting in its place.
   const failure = cancelError ?? (withdrawals.data ? null : withdrawals.error) ?? (deposits.data ? null : deposits.error) ?? null;
   const error = failure ? errorMessage(failure, t) : null;
-  const entries: Entry[] = loading ? [] : buildEntries(rows, credits, t);
+  const entries: Entry[] = loading ? [] : buildEntries(rows, credits, t, locale);
 
   return (
     <WalletScreen title={t("ui.activity")} subtitle={t("wallet.activitySub")} back="/wallet">
@@ -183,14 +184,14 @@ function EmptyState() {
   );
 }
 
-function buildEntries(withdrawals: Withdrawal[], deposits: Deposit[], t: Translate): Entry[] {
+function buildEntries(withdrawals: Withdrawal[], deposits: Deposit[], t: Translate, locale: Locale): Entry[] {
   const out: Entry[] = withdrawals.map((w, i) => ({
     key: `w-${w.id ?? i}`,
     id: w.id ?? "",
     network: w.network ?? "",
     title: shortAddress(w.address),
     sub: w.tx_ref ? t("wallet.txRef", { ref: shortAddress(w.tx_ref) }) : t("wallet.railUsdt", { network: networkLabel(w.network) }),
-    amount: `−${formatUsdt(w.amount)} USDT`,
+    amount: `−${formatUsdt(w.amount, locale)} USDT`,
     state: w.state ?? "queued",
     stateText: stateLabel(w.state ?? "queued", t),
     cancellable: w.state === "queued",
@@ -207,7 +208,7 @@ function buildEntries(withdrawals: Withdrawal[], deposits: Deposit[], t: Transla
       // A row title is a noun ("a deposit"), not the wallet button's verb.
       title: d.tx_ref ? shortAddress(d.tx_ref) : t("ops.kind.deposit"),
       sub: t("wallet.railUsdt", { network: networkLabel(d.network) }),
-      amount: `+${formatUsdt(d.amount)} USDT`,
+      amount: `+${formatUsdt(d.amount, locale)} USDT`,
       state: "credited",
       stateText: stateLabel("credited", t),
       cancellable: false,

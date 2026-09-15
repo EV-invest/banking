@@ -8,7 +8,7 @@
 
 import { ArrowLeft } from "lucide-react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Badge, TerminalTicker, TickerStat } from "@evinvest/uikit";
 
 import { bookSnapshotResource } from "@/entities/book/model/book-resource";
@@ -22,8 +22,9 @@ import { formatChange, formatUnits, formatUsdt, isFall } from "@/views/trade/lib
 
 export function TickerPane({ product, status }: { product: Product; status: BookStreamStatus }) {
   const t = useT();
+  const locale = useLocale();
   const book = useResource(bookSnapshotResource, product.service).data ?? null;
-  const price = (value: string | undefined) => (value ? formatUsdt(value) : "—");
+  const price = (value: string | undefined) => (value ? formatUsdt(value, locale) : "—");
   const fall = isFall(book?.change_24h);
 
   return (
@@ -45,7 +46,7 @@ export function TickerPane({ product, status }: { product: Product; status: Book
       </Link>
       <TickerStat label={t("trade.ticker.last")} value={price(book?.last_price)} className={book?.last_side === "sell" ? "text-accent-error" : book?.last_side === "buy" ? "text-positive" : undefined} />
       <TickerStat label={t("trade.ticker.change")} value={formatChange(book?.change_24h)} className={book?.change_24h ? (fall ? "text-accent-error" : "text-positive") : undefined} />
-      <TickerStat label={t("trade.ticker.volume")} value={book?.volume_24h ? formatUnits(book.volume_24h) : "—"} />
+      <TickerStat label={t("trade.ticker.volume")} value={book?.volume_24h ? formatUnits(book.volume_24h, locale) : "—"} />
       <TickerStat label={t("trade.ticker.mid")} value={price(book?.mid)} />
       <TickerStat label={t("trade.ticker.spread")} value={price(book?.spread)} />
       <TickerStat label={t("trade.ticker.nav")} value={price(book?.nav)} title={t("trade.ticker.navHint")} />

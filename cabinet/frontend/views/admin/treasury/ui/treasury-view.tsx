@@ -115,6 +115,7 @@ export function TreasuryView() {
  *  operator to re-submit under a second reference and double-count the same dollar. */
 function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefined; onRecorded: () => void }) {
   const t = useT();
+  const locale = useLocale();
   const [network, setNetwork] = useState("");
   const [txRef, setTxRef] = useState("");
   const [amount, setAmount] = useState("");
@@ -201,7 +202,7 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
           )}
           {state.result?.recorded && (
             <p className="text-sm text-accent-debug">
-              {t("admin.treasury.recorded", { amount: formatUsd(state.result.amount), party: partyLabel(state.result, t) })}
+              {t("admin.treasury.recorded", { amount: formatUsd(state.result.amount, locale), party: partyLabel(state.result, t) })}
             </p>
           )}
           {state.result && !state.result.recorded && <p className="text-sm text-accent-warn">{t("admin.treasury.alreadyRecorded")}</p>}
@@ -229,6 +230,7 @@ function partyLabel({ party_kind, party_id }: RecordedArrival, t: Translate): st
 // `network` is set only on the per-rail cards; the fund-level ones (bank, reserved) name
 // no chain and get no mark.
 function MoneyCard({ label, network, value, hint, loading, unavailable, footer, tip }: { label: string; network?: string; value: string | undefined; hint?: string; loading: boolean; unavailable?: boolean; footer?: ReactNode; tip?: TipKey }) {
+  const locale = useLocale();
   return (
     <Card>
       <CardContent className="space-y-1 py-5">
@@ -242,7 +244,7 @@ function MoneyCard({ label, network, value, hint, loading, unavailable, footer, 
         ) : unavailable ? (
           <p className="text-3xl font-semibold tabular-nums text-ink-soft">—</p>
         ) : (
-          <p className="text-3xl font-semibold tabular-nums">{formatUsd(value)}</p>
+          <p className="text-3xl font-semibold tabular-nums">{formatUsd(value, locale)}</p>
         )}
         {hint && !loading && !unavailable && <p className="text-xs text-positive">{hint}</p>}
         {footer && !loading && footer}
@@ -337,9 +339,9 @@ function CopyableAddress({ address, label }: { address: string; label?: string }
 /** A native-unit decimal string → grouped display; 6 dp so a thin gas balance
  * (e.g. 0.005 BNB) doesn't round to nothing.
  *
- * Grouped in the reader's locale, not `en-US`: this is a gas quantity, not money, so it
- * is outside `shared/lib/money.ts`'s fixed-precision policy and had no reason to stay
- * English. A German operator reads `1.234,5 BNB`. */
+ * Grouped in the reader's locale: this is a gas quantity, not money, so it is outside
+ * `shared/lib/money.ts`'s fixed-precision policies and formats on its own. A German
+ * operator reads `1.234,5 BNB`. */
 function qty(value: string, locale: Locale): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return value;

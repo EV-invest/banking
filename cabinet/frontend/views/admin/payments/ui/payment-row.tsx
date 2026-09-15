@@ -38,7 +38,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
           <PaymentEndSummary end={payment.destination} />
         </div>
       </td>
-      <td className="px-5 py-3 text-sm font-medium tabular-nums">{formatExactUsdt(payment.amount)}</td>
+      <td className="px-5 py-3 text-sm font-medium tabular-nums">{formatExactUsdt(payment.amount, locale)}</td>
       <td className="px-5 py-3 text-xs">{tierLabel(payment.tier, t)}</td>
       <td className="px-5 py-3 text-xs">
         <p>{requirementLabel(payment.requirement, t)}</p>
