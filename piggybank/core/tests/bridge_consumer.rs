@@ -10,7 +10,15 @@
 //! the asserting driver run as branches of one `tokio::join!`; the driver cancels a shared
 //! token when its assertions are done, winding the other two branches down.
 
-use std::{future::Future, net::SocketAddr, time::Duration};
+use std::{
+	future::Future,
+	net::SocketAddr,
+	sync::{
+		Arc,
+		atomic::{AtomicUsize, Ordering},
+	},
+	time::Duration,
+};
 
 use evconcierge_contracts::concierge::v1::{
 	PullUserLifecycleRequest, PullUserLifecycleResponse, UserLifecycleEvent,
@@ -744,4 +752,212 @@ async fn a_replayed_parked_event_does_not_roll_the_address_back() {
 		}
 	})
 	.await;
+}
+
+// ── #181: the two ways a poll cycle can misbehave ────────────────────────────────────
+//
+// Both of these are about the SHAPE of the retry, not about an event being mirrored, so
+// they drive the consumer against a deliberately broken server and watch how often it
+// comes back. They share [`drive_misbehaving`] rather than [`drive`]: a consumer stuck in
+// a hot loop never reaches the `select!` that observes the shutdown token, so the consumer
+// branch has to be bounded by a timeout — otherwise a regression would hang the suite
+// instead of failing it, and a hang says nothing about which invariant broke.
+
+/// Poll interval for the backoff test. Small enough that "retried at the poll interval" and
+/// "backed off" are hundreds of milliseconds apart rather than tens of seconds.
+const FAILING_POLL: Duration = Duration::from_millis(50);
+
+/// Poll interval for the stuck-cursor test, and the whole of its measurement: a consumer
+/// that ends the drain pulls once per interval, while one that re-pulls the same batch is
+/// paced only by how long applying it takes. Long enough that the two rates cannot be
+/// confused for each other on a loaded machine.
+const STUCK_POLL: Duration = Duration::from_millis(1000);
+
+/// How long the consumer branch is allowed to take after cancellation. Generous: it only
+/// has to tell a spin apart from an orderly wind-down.
+const CONSUMER_GRACE: Duration = Duration::from_secs(5);
+
+/// A server that breaks the pull contract: it hands back a FULL batch every time — which
+/// is what makes `drain` loop for more — while leaving `next_position` at the cursor the
+/// consumer sent, so the next pull asks the same question and gets the same answer.
+struct StuckUserEvents {
+	event: UserLifecycleEvent,
+	pulls: Arc<AtomicUsize>,
+}
+
+#[tonic::async_trait]
+impl UserEvents for StuckUserEvents {
+	async fn pull_user_lifecycle(&self, request: Request<PullUserLifecycleRequest>) -> Result<Response<PullUserLifecycleResponse>, Status> {
+		self.pulls.fetch_add(1, Ordering::SeqCst);
+		let req = request.into_inner();
+		Ok(Response::new(PullUserLifecycleResponse {
+			// `limit` is what the consumer asked for, so a batch of that size is a full one
+			// whatever `PULL_LIMIT` happens to be — the test does not need to know it.
+			events: vec![self.event.clone(); req.limit.max(1) as usize],
+			next_position: req.after_position,
+		}))
+	}
+}
+
+/// A concierge that is simply unreachable for this consumer: every pull is an error, the
+/// way a restarting pod or a rejected token looks from here.
+struct FailingUserEvents {
+	pulls: Arc<AtomicUsize>,
+}
+
+#[tonic::async_trait]
+impl UserEvents for FailingUserEvents {
+	async fn pull_user_lifecycle(&self, _request: Request<PullUserLifecycleRequest>) -> Result<Response<PullUserLifecycleResponse>, Status> {
+		self.pulls.fetch_add(1, Ordering::SeqCst);
+		Err(Status::unavailable("concierge is down"))
+	}
+}
+
+/// Run `service` against the real consumer for `observe_for`, then cancel and wind down.
+/// Returns whether the consumer actually finished within [`CONSUMER_GRACE`] of being told
+/// to stop.
+///
+/// Deliberately takes no assertion closure: the bridge cursor is one global row, so this
+/// holds the suite's advisory lock for the drive, and an assertion that unwound inside the
+/// `join!` would leave that lock on a pooled connection and wedge every later test. The
+/// caller asserts afterwards, on the counter it passed in and on the database.
+async fn drive_misbehaving<S: UserEvents>(pool: &PgPool, service: S, poll: Duration, observe_for: Duration) -> bool {
+	let mut guard = pool.acquire().await.expect("lock connection");
+	sqlx::query("SELECT pg_advisory_lock($1)")
+		.bind(BRIDGE_TEST_LOCK)
+		.execute(guard.as_mut())
+		.await
+		.expect("take bridge test lock");
+	sqlx::query("UPDATE bridge_cursor SET position = 0 WHERE id = TRUE").execute(pool).await.expect("reset cursor");
+
+	let addr: SocketAddr = {
+		let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind ephemeral port");
+		listener.local_addr().unwrap()
+	};
+	let stop = CancellationToken::new();
+
+	let server = {
+		let stop = stop.clone();
+		async move {
+			Server::builder()
+				.add_service(UserEventsServer::new(service))
+				.serve_with_shutdown(addr, stop.cancelled_owned())
+				.await
+				.ok();
+		}
+	};
+
+	let channel = tonic::transport::Endpoint::from_shared(format!("http://{addr}")).unwrap().connect_lazy();
+	let consumer = {
+		let pool = pool.clone();
+		let stop = stop.clone();
+		async move {
+			let run = BridgeConsumer::new(pool, channel, BRIDGE_TOKEN.to_string(), poll).run(stop);
+			tokio::time::timeout(CONSUMER_GRACE, run).await.is_ok()
+		}
+	};
+
+	let stopper = {
+		let stop = stop.clone();
+		async move {
+			tokio::time::sleep(observe_for).await;
+			stop.cancel();
+		}
+	};
+
+	let (_, finished, ()) = tokio::join!(server, consumer, stopper);
+
+	sqlx::query("SELECT pg_advisory_unlock($1)").bind(BRIDGE_TEST_LOCK).execute(guard.as_mut()).await.ok();
+	finished
+}
+
+/// A CURSOR THAT DOES NOT MOVE MUST END THE DRAIN, NOT RESTART IT.
+///
+/// `drain` keeps pulling while the server returns a full batch, and the only thing that
+/// makes the next pull different is `next_position` moving past the stored cursor. The
+/// server's contract (`position > after_position`) guarantees it does, so this is a
+/// defence against a contract change rather than a live bug — but the failure mode it
+/// defends against is a tight loop against the identity plane, diagnosable only as an
+/// unexplained load spike, and the consumer in that state never reaches the `select!` that
+/// would let it shut down (#181).
+#[tokio::test]
+async fn a_pull_that_cannot_move_the_cursor_ends_the_drain_instead_of_spinning() {
+	let Some(pool) = pool().await else {
+		eprintln!("DATABASE_URL unset — skipping real-DB test");
+		return;
+	};
+	let subject = unique_subject();
+	// A row for the batch to land on, already past the event's sequence — so even the
+	// unguarded consumer's apply is a no-op and what the test measures is the looping,
+	// not the mirroring.
+	PgUsers::new(pool.clone())
+		.provision(
+			domain::auth::AuthSubject::parse(&subject).unwrap(),
+			domain::users::Email::parse("stuck@example.com").unwrap(),
+			true,
+		)
+		.await
+		.expect("provision the subject the stuck batch names");
+	sqlx::query("UPDATE users SET last_lifecycle_sequence = 9 WHERE auth_subject = $1")
+		.bind(&subject)
+		.execute(&pool)
+		.await
+		.unwrap();
+
+	let pulls = Arc::new(AtomicUsize::new(0));
+	let observe_for = Duration::from_millis(3000);
+	let finished = drive_misbehaving(
+		&pool,
+		StuckUserEvents {
+			event: event(&subject, Kind::SessionsRevoked, 1),
+			pulls: pulls.clone(),
+		},
+		STUCK_POLL,
+		observe_for,
+	)
+	.await;
+
+	assert!(finished, "the consumer winds down on cancellation");
+	let attempts = pulls.load(Ordering::SeqCst);
+	// THE PULL RATE IS THE ASSERTION. A consumer that ends the drain asks once per poll
+	// interval — three or four times in three seconds. One that keeps re-pulling is paced
+	// only by how long applying a full batch takes (~150 ms here), so it lands several
+	// times higher; the bound sits between the two with room on both sides. (Cancellation
+	// alone proves nothing: it stops the fake server, the next pull then fails, and even a
+	// spinning `drain` returns on that error.)
+	assert!(
+		(1..=8).contains(&attempts),
+		"the drain re-pulled the batch it could not move past instead of ending — {attempts} pulls in {observe_for:?} at a {STUCK_POLL:?} poll"
+	);
+	assert_eq!(
+		cursor_position(&pool).await,
+		0,
+		"nothing is consumed on a cursor that cannot move: the batch stays in concierge's outbox for a build that can move past it"
+	);
+}
+
+/// A CYCLE THAT KEEPS FAILING MUST SLOW DOWN.
+///
+/// The poll interval is a *retry* interval while concierge is unreachable, and at the
+/// production value that is a permanent trickle of failing connects against the plane that
+/// is already down, plus a WARN per attempt in the log of the hub. The delay doubles per
+/// consecutive failure instead, up to a minute (#181).
+#[tokio::test]
+async fn a_failing_cycle_backs_off_instead_of_retrying_at_the_poll_interval() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let pulls = Arc::new(AtomicUsize::new(0));
+	let observe_for = Duration::from_millis(1200);
+	let finished = drive_misbehaving(&pool, FailingUserEvents { pulls: pulls.clone() }, FAILING_POLL, observe_for).await;
+
+	assert!(finished, "a backing-off consumer still winds down on cancellation rather than sleeping through it");
+	let attempts = pulls.load(Ordering::SeqCst);
+	// At a 50 ms poll, retrying at the interval is ~24 attempts in 1.2 s; backing off
+	// 50 → 100 → 200 → 400 → 800 is five. The bound keeps a wide margin for a loaded
+	// machine while staying far below the un-backed-off count.
+	assert!(
+		(2..=10).contains(&attempts),
+		"a failing cycle must back off, not retry at the poll interval — {attempts} attempts in {observe_for:?} at a {FAILING_POLL:?} poll"
+	);
 }

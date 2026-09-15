@@ -59,6 +59,12 @@ use tracing::{info, warn};
 /// (500), so this is the steady-state batch, not a hard bound.
 const PULL_LIMIT: u32 = 256;
 
+/// Ceiling on the retry delay after consecutive failed cycles (see [`BridgeConsumer::run`]).
+/// A minute is long enough to stop being load on a struggling concierge and short enough
+/// that a suspension or a tier change is not sitting unmirrored for an operator-visible
+/// stretch once the plane is back.
+const BACKOFF_MAX: Duration = Duration::from_secs(60);
+
 /// What [`BridgeConsumer::apply`] did with one event. `drain` reads this to decide whether
 /// the single global cursor may move past it — the cursor is the only delivery guarantee
 /// there is, so this is a consumed/not-consumed verdict, not a status log.
@@ -114,24 +120,46 @@ impl BridgeConsumer {
 
 	/// Run until `shutdown` is cancelled. Each cycle drains the available backlog, then
 	/// waits the poll interval (or wakes on cancellation). A transient pull/apply failure is
-	/// logged and retried next cycle from the unchanged cursor — nothing is dropped.
+	/// logged and retried from the unchanged cursor — nothing is dropped.
+	///
+	/// A FAILING CYCLE BACKS OFF; A HEALTHY ONE DOES NOT. When concierge is down (or
+	/// restarting, or rejecting the token) the poll interval is a *retry* interval, and at
+	/// the production value of five seconds a concierge outage becomes a permanent 12 rpm
+	/// of failing connects per hub — noise in the logs of the plane that is already having
+	/// a bad day, and load on it exactly while it is trying to come back. The delay doubles
+	/// per consecutive failure up to [`BACKOFF_MAX`] and snaps back to the poll interval on
+	/// the first success, so mirror latency in the ordinary case is unchanged.
 	pub async fn run(self, shutdown: CancellationToken) {
 		info!(every = ?self.poll_interval, "bridge: consuming concierge lifecycle events");
 		let mut client = UserEventsClient::new(self.channel.clone());
+		// The ceiling never shortens a deliberately slow poll: an operator who set
+		// BRIDGE_POLL_SECS above the cap asked for that interval, cap or no cap.
+		let ceiling = BACKOFF_MAX.max(self.poll_interval);
+		// `None` = the last cycle succeeded (or none has run yet).
+		let mut backoff: Option<Duration> = None;
 		loop {
-			if let Err(err) = self.drain(&mut client).await {
-				let hint = match err.downcast_ref::<tonic::Status>() {
-					Some(s) if s.code() == tonic::Code::Unavailable => " (is concierge running?)",
-					_ => "",
-				};
-				warn!("bridge: pull/apply cycle failed, retrying next poll{hint}: {err}");
-			}
+			let wait = match self.drain(&mut client).await {
+				Ok(()) => {
+					backoff = None;
+					self.poll_interval
+				}
+				Err(err) => {
+					let hint = match err.downcast_ref::<tonic::Status>() {
+						Some(s) if s.code() == tonic::Code::Unavailable => " (is concierge running?)",
+						_ => "",
+					};
+					let next = backoff.map_or(self.poll_interval, |previous| previous.saturating_mul(2).min(ceiling));
+					backoff = Some(next);
+					warn!(retry_in = ?next, "bridge: pull/apply cycle failed, retrying{hint}: {err}");
+					next
+				}
+			};
 			tokio::select! {
 				() = shutdown.cancelled() => {
 					info!("bridge: shutdown requested — stopping");
 					return;
 				},
-				() = tokio::time::sleep(self.poll_interval) => {},
+				() = tokio::time::sleep(wait) => {},
 			}
 		}
 	}
@@ -165,6 +193,26 @@ impl BridgeConsumer {
 
 		let response = client.pull_user_lifecycle(request).await?.into_inner();
 		if response.events.is_empty() {
+			return Ok(false);
+		}
+		// THE CURSOR MUST MOVE, OR THIS DRAIN ENDS. `drain` loops while a full batch comes
+		// back, and the only thing that makes the next pull ask for something different is
+		// `next_position` advancing. The server's contract (`position > after_position`)
+		// says it always does, so this cannot happen today — and that is exactly why it is
+		// worth a line: were the contract to change, or a position to be handed back
+		// unchanged for any other reason, the loop below would re-pull and re-apply the same
+		// batch as fast as the network allows, hammering the identity plane with a hot loop
+		// that reads, from the outside, as an unexplained load spike (#181). Returning here
+		// degrades that into one WARN per poll instead. Nothing is consumed and nothing is
+		// lost: the cursor stays put, so the batch is re-delivered to a build that can move
+		// past it.
+		if response.next_position <= after {
+			warn!(
+				cursor = after,
+				next_position = response.next_position,
+				events = response.events.len(),
+				"bridge: server returned events but did not advance the cursor — ending this drain instead of re-pulling the same batch"
+			);
 			return Ok(false);
 		}
 		for event in &response.events {
