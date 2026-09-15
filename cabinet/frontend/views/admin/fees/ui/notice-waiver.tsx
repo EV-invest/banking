@@ -26,6 +26,7 @@ import type { FeePolicyChange } from "@/shared/contracts/admin";
 import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { formatMoment } from "@/shared/lib/datetime";
+import { stripTransportPrefix } from "@/shared/lib/hub-refusal";
 import { revalidateTag } from "@/shared/lib/resource";
 import { noticeSummary, type Waiver, waiverName, waiverRecord } from "@/views/admin/fees/lib/notices";
 
@@ -149,7 +150,7 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
 // page's `csrf`, which carries a key of its own — is the "not yours to acknowledge" one.
 function waiverProblem(e: unknown, t: (key: string) => string): string {
   if (e instanceof RequestError && e.status === 403 && !e.code) return t("admin.fees.notices.err.forbidden");
-  return errorMessage(e, t);
+  return stripTransportPrefix(errorMessage(e, t));
 }
 
 /** The waiver as one line of history — who, and over how many — under the row's state.
