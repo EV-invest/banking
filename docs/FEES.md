@@ -219,6 +219,18 @@ the moment they bind and the cabinet-relative product page (`/invest/<service>`,
 concierge's own origin). On the administrator's path the same mails go out the moment the
 change is scheduled.
 
+The owners, for their part, are told how the consilium ended: one outcome mail
+(`GovernanceMail::PayoutOutcome`) to the initiator and to every seat on each closed state —
+rejected, expired, cancelled, executed, execution failed — and one burn notice
+(`GovernanceMail::TokenBurned`) to the same audience when a seat's token burns on five wrong
+codes, exactly as for a payout or a payment. Both ride the same `PayoutOutcomeMail` and
+describe the TERMS, not money: the fund line (from `fee_mail_fund` — the title, clipped, with
+the slug, or the slug alone), the terms in force when the change was proposed (absent when
+the fund charged nothing), the proposed terms and the initiator's reason; the rail and the
+payment fields stay empty, because the relay renders exactly one description. Concierge
+renders the fee description since v0.8.0 (concierge#72); an earlier relay refuses the mail,
+which the queue then retries and retires like any other refusal.
+
 ### Versions and states
 
 `fee_policy_changes` is the history. Every row carries the full five-field terms, a
