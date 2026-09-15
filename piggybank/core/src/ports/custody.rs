@@ -1,11 +1,14 @@
 //! The custody/signing-service port — the narrow "broadcast this withdrawal" seam.
 //!
-//! Custody is a **separate trust domain** (MPC/HSM): it holds the private keys,
-//! applies its own policy engine (limits, allowlists, velocity, 4-eyes), and is the
-//! second gate even if the hub is compromised. The hub never signs. This port is all
-//! the hub asks of it — submit an *already-reserved* withdrawal for on-chain
-//! broadcast, **idempotently by `withdrawal_id`** (a retried relay delivery must not
-//! double-send). A stub adapter stands in until the real custody service exists.
+//! Custody is a **separate trust domain** — our signer (`piggybank/signer`). It holds
+//! the key handles, applies its own spend policy (`SignerPolicy`: a per-transfer USDT
+//! cap plus a destination allowlist), and is the second gate even if the hub is
+//! compromised. The key custodian behind it (Turnkey, `sign_raw_payload` over a 32-byte
+//! digest) sees neither amount nor destination and enforces nothing about them. The hub
+//! never signs. This port is all the hub asks of it — submit an *already-reserved*
+//! withdrawal for on-chain broadcast, **idempotently by `withdrawal_id`** (a retried
+//! relay delivery must not double-send). A stub adapter stands in for rails without a
+//! configured signer (an operator settles manually).
 
 use async_trait::async_trait;
 use domain::{

@@ -21,7 +21,7 @@ use std::sync::Arc;
 use domain::money::Network;
 use ed25519_dalek::Signer as _;
 use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
-use tonic::{Code, Status};
+use tonic::{Code, Status, metadata::MetadataValue};
 use uuid::Uuid;
 
 use crate::{
@@ -73,6 +73,11 @@ pub struct KeyHandle {
 	pub network: Network,
 }
 
+/// gRPC trailer carrying the custodian's activity id on a [`BackendError::RequiresApproval`]
+/// status. The hub does not depend on this crate, so this is the wire contract the quorum
+/// flow (#195) mirrors on its side, not a symbol it imports.
+pub const ACTIVITY_ID_METADATA_KEY: &str = "turnkey-activity-id";
+
 /// A backend's failure modes, kept distinct because the hub's saga branches on them: a
 /// terminal rejection fails a withdrawal, an `Unavailable` parks it for retry.
 ///
@@ -81,6 +86,13 @@ pub struct KeyHandle {
 /// to `CustodyError::Rejected` (the withdrawal stops and waits for a human). A remote
 /// backend's ten-second outage must therefore never reach the wire as anything but
 /// `Unavailable` — see [`crate::turnkey`] for the classification that enforces it.
+///
+/// Within the terminal side, a refusal on the merits ([`Rejected`](Self::Rejected),
+/// `PermissionDenied`) and an activity parked for human consensus
+/// ([`RequiresApproval`](Self::RequiresApproval), `FailedPrecondition`) are told apart on the
+/// wire. **The discriminator for #195 is the `turnkey-activity-id` trailer, not the code**:
+/// `FailedPrecondition` is shared with [`NotProvisioned`](Self::NotProvisioned) and with the
+/// signer's own gates in `service`, none of which carry that trailer.
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
 	#[error("sending wallet is not provisioned")]
@@ -102,10 +114,23 @@ pub enum BackendError {
 	#[error("key custodian unavailable: {0}")]
 	Unavailable(String),
 	/// A remote key custodian refused ON THE MERITS: its policy engine said no, the account
-	/// does not exist, the activity needs a human approval. Retrying reproduces the refusal,
-	/// so this is terminal and the withdrawal parks for intervention.
+	/// does not exist, the intent was malformed. Retrying reproduces the refusal, so this is
+	/// terminal and the withdrawal parks for intervention.
 	#[error("key custodian refused: {0}")]
 	Rejected(String),
+	/// The custodian ACCEPTED the activity but will not execute it until consensus is reached
+	/// or an additional authenticator signs — a human has to act on the custodian's side.
+	/// Re-issuing the same intent does not summon that human (it only creates another pending
+	/// activity), so for THIS request the outcome is terminal: the hub parks the withdrawal,
+	/// it does NOT retry. The id is carried separately so an operator can find the activity
+	/// on the custodian's side. Resuming it needs #195: today the signer keeps none of the
+	/// unsigned transaction, so a late approval yields a signature nobody consumes.
+	///
+	/// A `Uuid`, not a `String`: the id reaches the status message, the trailer, the logs and
+	/// the hub's `outbox.last_error`, and the "never echo a vendor body" rule holds only
+	/// because `classify` refuses anything that does not parse as one.
+	#[error("key custodian requires approval for activity {activity_id}")]
+	RequiresApproval { activity_id: Uuid },
 	/// The custodian answered something this code cannot interpret — a schema drift, a
 	/// missing field, an activity result of the wrong shape. Our bug or the vendor's, never
 	/// the caller's, and it will not heal by itself.
@@ -138,6 +163,20 @@ impl From<BackendError> for Status {
 			BackendError::Rejected(ref reason) => {
 				tracing::error!(error = ?err, "key custodian refused on the merits — this withdrawal will NOT retry");
 				Status::new(Code::PermissionDenied, format!("key custodian refused: {reason}"))
+			}
+			// FailedPrecondition, not PermissionDenied: the custodian did not say no, it said
+			// "not until a human agrees". Either code parks the withdrawal at the hub (only
+			// Unavailable/DeadlineExceeded retry), but a distinct code plus the id in metadata
+			// lets the quorum flow pick this case out without parsing the message.
+			BackendError::RequiresApproval { activity_id } => {
+				tracing::error!(error = ?err, activity_id = %activity_id, "key custodian requires approval — parked for a human, this withdrawal will NOT retry");
+				let mut status = Status::new(Code::FailedPrecondition, format!("key custodian requires approval for activity {activity_id}"));
+				// A hyphenated UUID is always a valid header value; the `if let` only keeps this
+				// path panic-free should that ever stop being true.
+				if let Ok(value) = MetadataValue::try_from(activity_id.to_string()) {
+					status.metadata_mut().insert(ACTIVITY_ID_METADATA_KEY, value);
+				}
+				status
 			}
 			BackendError::Protocol(_) | BackendError::WrongBackend { .. } => {
 				tracing::error!(error = ?err, "key backend protocol/composition failure");
@@ -354,6 +393,30 @@ mod tests {
 		};
 		let verifying = Ed25519VerifyingKey::from_bytes(&ed25519_pubkey(&seed)).unwrap();
 		assert!(verifying.verify(&digest, &ed25519_dalek::Signature::from_bytes(&signature)).is_ok());
+	}
+
+	/// The hub parks on any non-retryable code, so the exact code matters less than the id
+	/// travelling as its own trailer: that is what lets an operator find the pending activity
+	/// without parsing a message.
+	#[test]
+	fn requires_approval_maps_to_failed_precondition_with_the_activity_id_in_metadata() {
+		let activity_id = Uuid::parse_str("0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b").unwrap();
+		let status = Status::from(BackendError::RequiresApproval { activity_id });
+		assert_eq!(status.code(), Code::FailedPrecondition);
+		assert!(status.message().contains(&activity_id.to_string()), "the message must name the activity: {}", status.message());
+		assert_eq!(
+			status.metadata().get(ACTIVITY_ID_METADATA_KEY).and_then(|v| v.to_str().ok()),
+			Some("0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b")
+		);
+	}
+
+	/// `FailedPrecondition` is shared with the signer's own gates, so the trailer — not the
+	/// code — is what tells a parked activity apart. Nothing else may carry it.
+	#[test]
+	fn only_requires_approval_carries_the_activity_id_trailer() {
+		let status = Status::from(BackendError::NotProvisioned);
+		assert_eq!(status.code(), Code::FailedPrecondition);
+		assert!(status.metadata().get(ACTIVITY_ID_METADATA_KEY).is_none());
 	}
 
 	#[test]
