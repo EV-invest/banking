@@ -1,127 +1,97 @@
 "use client";
 
-import type { Translate } from "@evinvest/i18n";
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
-import { BadgeCheck, Loader2 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { BadgeCheck } from "lucide-react";
 
-import { PhoneNumber } from "@evinvest/types";
-import { usePhoneNumber } from "@evinvest/types/react";
-import { Button, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Card, Skeleton } from "@evinvest/uikit";
 
 import { positionsResource } from "@/entities/fund/model/fund-resource";
-import { StartVerificationRow } from "@/features/kyc";
-import { isUnverified } from "@/entities/user/lib/kyc";
-import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
-import { validateProfileForm } from "@/entities/user/model/profile-schema";
-import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
+import { operationsResource } from "@/entities/operation/model/operation-resource";
+import { sessionsResource } from "@/entities/session/model/session-resource";
+import { profileResource } from "@/entities/user/model/profile-resource";
+import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
-import { formatUsd, num } from "@/shared/lib/money";
+import { formatDay } from "@/shared/lib/datetime";
+import { formatSignedUsd, formatUsd, num } from "@/shared/lib/money";
 import { useResource } from "@/shared/lib/resource";
-import { CARD, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, type PillTone, Row, RowLabel, RowValue, StackRow } from "@/shared/ui/list-card";
+import { Link } from "@/shared/ui/cabinet-link";
+import { CARD, InitialsAvatar, Pill } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
-import { TipAnchor, type TipKey } from "@/shared/tips";
-import { displayName, initialsOfName, truncateName } from "@/views/profile/lib/format";
+import { formatCount, STAT_STRIP, StatDivider, StatTile } from "@/shared/ui/stat-tile";
+import { seconds } from "@/views/operations/lib/format";
+import { displayName, enumLabel, initialsOfName, statusTone, truncateName } from "@/views/profile/lib/format";
+import { ActivityCard, PersonalCard, SecurityCard, VerificationCard } from "@/views/profile/ui/profile-cards";
 
-// The investor profile. Two Figma frames, one component: `cabinet/mobile/profile`
-// (node 503:266) below `lg` — a hero card over stacked label/value cards — and
-// `cabinet/profile` (node 489:258) above it, a two-column form beside the verification
-// and snapshot cards.
+// The investor profile: who the reader is on the platform and how their account stands.
+// Read-only by design — it used to be an editor as well, which made it a second, worse
+// Settings and left nobody sure where a detail was changed. Every editable fact here
+// links to the settings section that owns it (`/settings?section=…`).
 //
-// Name/email and the editable personal fields are real (core UsersService via the BFF),
-// as are Identity verification (the admin-managed `status`/`kyc_level`/`email_verified`
-// on the user record) and the Account snapshot (fund positions). The mock's per-document
-// KYC rows (passport, proof of address, source of funds) have no document store behind
-// them, so this states the KYC level the hub actually holds instead of inventing four.
-
-// All editable fields are held in the form (initialised from the loaded profile) even
-// though this surface only shows seven of them — UpdateProfile is full-replace, so
-// carrying language/currency/timezone preserves what Settings → General owns.
-const EDITABLE = ["legal_name", "preferred_name", "phone", "date_of_birth", "nationality", "tax_residence", "residential_address", "language", "base_currency", "timezone"] as const;
-type Form = Record<(typeof EDITABLE)[number], string>;
-
-// Module scope, so the labels are catalogue keys rather than finished English; both
-// breakpoints resolve them at render. `tip` is a TipKey (a compile-time id), not a label.
-const SHOWN: { key: (typeof EDITABLE)[number]; labelKey: string; tip?: TipKey }[] = [
-  { key: "legal_name", labelKey: "profile.legalName", tip: "profile.field.legal-name" },
-  { key: "preferred_name", labelKey: "profile.preferredName" },
-  { key: "phone", labelKey: "profile.phoneNumber" },
-  { key: "date_of_birth", labelKey: "profile.dateOfBirth" },
-  { key: "nationality", labelKey: "profile.nationality", tip: "profile.field.nationality" },
-  { key: "tax_residence", labelKey: "profile.taxResidence", tip: "profile.field.tax-residence" },
-  { key: "residential_address", labelKey: "profile.residentialAddress" },
-];
-
-function formFrom(p: UserProfile): Form {
-  return Object.fromEntries(EDITABLE.map((k) => [k, p[k] ?? ""])) as Form;
-}
+// Two Figma frames, one component: `cabinet/mobile/profile` (node 503:266) below `lg` — a
+// hero card over stacked cards — and `cabinet/profile` (node 489:258) above it, the hero
+// and a stat strip over two columns. Name/email and the identity fields are real (core
+// UsersService via the BFF), as are Identity verification (the admin-managed
+// `status`/`kyc_level`/`email_verified`), the figures (fund positions and the wallet) and
+// the activity counts (the same timeline `/operations` lists). The mock's per-document KYC
+// rows have no document store behind them, so this states the KYC level the hub actually
+// holds instead of inventing four.
 
 export function ProfileView() {
   const t = useT();
-  const [form, setForm] = useState<Form | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const locale = useLocale();
 
-  // Both reads are cached: the profile with the account chip and Settings, the positions
-  // with Home and Invest. Arriving from any of them fills this page on the first frame.
+  // Every read is cached and shared with another screen — the profile with the account
+  // chip and Settings, the rest with Home, Operations and Settings — and all five are
+  // warmed on intent (application/prefetch.ts), so arriving here fills the page on the
+  // first frame.
   const { data: profile, error: readError, isLoading: loading } = useResource(profileResource);
-  const positions = useResource(positionsResource).data?.positions ?? [];
-  const error = saveError ?? (profile || !readError ? null : errorMessage(readError, t));
-
-  // Seed the form during render, not in an effect, so a cached profile fills the fields on
-  // the frame it is read rather than one frame later. Never while the user is editing: a
-  // background refresh must not overwrite what they are part-way through typing.
-  const [seeded, setSeeded] = useState<UserProfile | null>(null);
-  if (profile && profile !== seeded && !editing) {
-    setSeeded(profile);
-    setForm(formFrom(profile));
-  }
+  const positions = useResource(positionsResource);
+  const wallet = useResource(walletResource);
+  const operations = useResource(operationsResource, undefined);
+  const sessionList = useResource(sessionsResource);
+  // One banner, the first read that failed. A failed figure is a dash in its tile, not a
+  // zero — see the strip below.
+  const posFailed = !positions.data && !!positions.error;
+  const walletFailed = !wallet.data && !!wallet.error;
+  const failed = (profile || !readError ? null : readError) ?? (posFailed ? positions.error : null) ?? (walletFailed ? wallet.error : null);
+  const error = failed ? errorMessage(failed, t) : null;
 
   const email = profile?.email ?? "";
   const legalName = (profile?.legal_name ?? "").trim();
   const name = truncateName(legalName) || (loading ? "…" : displayName(email, t));
-  const invested = positions.reduce((s, p) => s + num(p.value), 0);
 
-  function set(key: keyof Form, value: string) {
-    setForm((f) => (f ? { ...f, [key]: value } : f));
-  }
-  function cancel() {
-    if (profile) setForm(formFrom(profile));
-    setEditing(false);
-    setSaveError(null);
-    setFieldErrors({});
-  }
-  async function save() {
-    if (!form) return;
-    const errors = validateProfileForm(form, t);
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
-      setSaveError(t("settings.fixHighlighted"));
-      return;
-    }
-    setFieldErrors({});
-    setSaving(true);
-    setSaveError(null);
-    try {
-      // `saveProfile` publishes the PATCH response into the cache, so this page, the
-      // sidebar account chip and Settings all show the new name without a refetch.
-      const updated = await saveProfile(form as UpdateProfileRequest);
-      setForm(formFrom(updated));
-      setEditing(false);
-    } catch (e) {
-      setSaveError(errorMessage(e, t));
-    } finally {
-      setSaving(false);
-    }
-  }
+  const pos = positions.data?.positions ?? [];
+  const value = pos.reduce((s, p) => s + num(p.value), 0);
+  const pnl = pos.reduce((s, p) => s + num(p.pnl), 0);
+  const ops = operations.data?.operations ?? [];
+  // The hub caps the list (DEFAULT_PAGE): when it did, the oldest row here is the
+  // hundredth operation, not the first, and "active since" would be a lie — so it is
+  // only shown over a complete list. The Activity card says the same in its caption.
+  const truncated = operations.data?.truncated ?? false;
+  // The oldest stamped operation is when the account first moved money — "active since"
+  // is that, not the day the account was created, which the hub does not expose.
+  const oldest = truncated
+    ? 0
+    : ops.reduce((min, op) => {
+        const at = seconds(op.created_at);
+        return at > 0 && (min === 0 || at < min) ? at : min;
+      }, 0);
 
+  // The one action on the page. Desktop keeps it in the heading, mobile in the hero,
+  // full-width — both lead to the section that edits what the hero shows.
+  const edit = (className: string) => (
+    // i18n-max: 20 — a `shrink-0` outline Button beside the `min-w-0` heading column.
+    <Button asChild variant="outline" className={cn("border-border", className)}>
+      <Link href="/settings?section=personal">{t("profile.editInSettings")}</Link>
+    </Button>
+  );
+  const personal = <PersonalCard loading={loading} profile={profile ?? null} email={email} />;
+  const activity = <ActivityCard loading={operations.isLoading} operations={ops} truncated={truncated} error={operations.data || !operations.error ? null : errorMessage(operations.error, t)} />;
   const verification = <VerificationCard loading={loading} profile={profile ?? null} email={email} />;
-  const snapshot = <SnapshotCard invested={invested} strategies={positions.length} />;
+  const security = <SecurityCard loading={loading} email={email} sessions={sessionList.data} sessionsFailed={!sessionList.data && !!sessionList.error} />;
 
   return (
     <>
@@ -134,25 +104,7 @@ export function ProfileView() {
             <h1 className="text-2xl font-semibold text-ink">{t("ui.profile")}</h1>
             <p className="text-sm text-ink-soft">{t("profile.subtitle")}</p>
           </div>
-          {/* `shrink-0` Buttons beside a `min-w-0` heading column — their width is taken
-              out of the page title, so the labels stay short. */}
-          {/* i18n-max: 11 for the two verbs, 20 for the edit CTA. */}
-          <div className="flex shrink-0 gap-2">
-            {editing ? (
-              <>
-                <Button variant="outline" size="sm" className="border-border" onClick={cancel} disabled={saving}>
-                  {t("ui.cancel")}
-                </Button>
-                <Button type="button" onClick={save} disabled={saving} className="rounded-lg font-semibold">
-                  {saving && <Loader2 className="size-4 animate-spin" />} {t("ui.save")}
-                </Button>
-              </>
-            ) : (
-              <Button type="button" onClick={() => setEditing(true)} disabled={loading || profile === null} className="rounded-lg font-semibold">
-                {t("profile.editProfile")}
-              </Button>
-            )}
-          </div>
+          {edit("shrink-0")}
         </StaggerItem>
 
         {error && (
@@ -175,265 +127,50 @@ export function ProfileView() {
                 {profile?.email_verified && <Pill icon={BadgeCheck}>{t("ui.verified")}</Pill>}
                 {profile?.status && <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill>}
                 {profile?.kyc_level !== undefined && <Pill tone="neutral">{t("profile.kycLevelPill", { n: profile.kyc_level })}</Pill>}
+                {profile?.role && <Pill tone="neutral">{enumLabel("admin.role", profile.role, t)}</Pill>}
               </div>
             )}
+            {oldest > 0 && <p className="mt-1 text-xs text-ink-soft">{t("profile.activeSince", { date: formatDay(String(oldest), locale) })}</p>}
           </div>
-          {/* Mobile puts the primary action in the hero; desktop has it in the page heading. */}
-          <div className="flex w-full gap-2 lg:hidden">
-            {editing ? (
-              <>
-                <Button variant="outline" className="h-9 flex-1 border-input" onClick={cancel} disabled={saving}>
-                  {t("ui.cancel")}
-                </Button>
-                <Button type="button" onClick={save} disabled={saving} className="h-9 flex-1 gap-1.5 font-semibold">
-                  {saving && <Loader2 className="size-4 animate-spin" />} {t("ui.save")}
-                </Button>
-              </>
-            ) : (
-              <Button variant="outline" className="h-9 w-full border-input" onClick={() => setEditing(true)} disabled={loading || profile === null}>
-                {t("profile.editProfile")}
-              </Button>
-            )}
-          </div>
+          {/* Mobile puts the action in the hero; desktop has it in the page heading. */}
+          {edit("w-full lg:hidden")}
+        </StaggerItem>
+
+        {/* Stat strip — the same tiles and arrangement as Home, so a figure reads the
+            same on both screens: a 2×2 card grid on mobile, one divided strip from `lg`. */}
+        <StaggerItem as={Card} className={cn(STAT_STRIP, "rounded-none border-0 bg-transparent py-0 shadow-none lg:rounded-xl lg:border lg:bg-card lg:py-5 lg:shadow-sm")}>
+          <StatTile label={t("dash.portfolioValue")} value={positions.isLoading ? null : value} format={formatUsd} hint={t("profile.hintAtNav")} unavailable={posFailed} />
+          <StatDivider />
+          <StatTile label={t("dash.unrealizedPnl")} value={positions.isLoading ? null : pnl} format={formatSignedUsd} tone={pnl < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" unavailable={posFailed} />
+          <StatDivider />
+          <StatTile label={t("dash.available")} value={wallet.isLoading ? null : num(wallet.data?.balance?.available)} format={formatUsd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" unavailable={walletFailed} />
+          <StatDivider />
+          <StatTile label={t("dash.activeStrategies")} value={positions.isLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} unavailable={posFailed} />
         </StaggerItem>
 
         {/* ── Mobile (Figma cabinet/mobile/profile) ────────────────────────── */}
-        {/* One item per viewport block rather than per card: `verification` and
-            `snapshot` are the same two elements rendered into both, and giving each a
-            place in the sequence would have them animating twice over. */}
+        {/* One item per viewport block rather than per card: the four cards are the same
+            elements rendered into both blocks, and giving each a place in the sequence
+            would have them animating twice over. */}
         <StaggerItem className="flex flex-col gap-4 lg:hidden">
-          <ListCard>
-            <ListCardTitle
-              sub={profile?.role ? <span className="text-accent-debug/85">{t("profile.roleAccount", { role: enumLabel("admin.role", profile.role, t) })}</span> : undefined}
-            >
-              {t("profile.personalInformation")}
-            </ListCardTitle>
-            {SHOWN.map(({ key, labelKey }, i) => (
-              <div key={key}>
-                {i > 0 && <Hairline />}
-                <StackRow label={t(labelKey)}>
-                  {loading || !form ? (
-                    <Skeleton className="h-5 w-40" />
-                  ) : editing ? (
-                    key === "phone" ? (
-                      <PhoneField initial={form.phone} onChange={(v) => set("phone", v)} error={fieldErrors.phone} />
-                    ) : (
-                      <div className="min-w-0">
-                        <Input
-                          value={form[key]}
-                          onChange={(e) => set(key, e.target.value)}
-                          className={fieldErrors[key] ? "border-accent-error bg-accent-error/5" : "border-border bg-secondary"}
-                        />
-                        {fieldErrors[key] && <p className="mt-1 text-xs text-accent-error">{fieldErrors[key]}</p>}
-                      </div>
-                    )
-                  ) : (
-                    <span className={cn("break-words text-sm font-medium", profile?.[key] ? "text-ink" : "text-ink-soft")}>
-                      {(key === "phone" ? formatPhone(profile?.[key]) : profile?.[key]) || "—"}
-                    </span>
-                  )}
-                </StackRow>
-              </div>
-            ))}
-            <Hairline />
-            <StackRow label={t("ui.emailAddress")}>
-              {loading ? <Skeleton className="h-5 w-48" /> : <span className="break-words text-sm font-medium text-ink-soft">{email || "—"}</span>}
-            </StackRow>
-          </ListCard>
-
           {verification}
-          {snapshot}
+          {personal}
+          {activity}
+          {security}
         </StaggerItem>
 
         {/* ── Desktop (Figma cabinet/profile) ──────────────────────────────── */}
         <StaggerItem className="hidden items-start gap-5 lg:flex">
-          <section className={cn(CARD, "w-full flex-1 space-y-4.5 px-6 py-5.5")}>
-            <header>
-              <h2 className="text-sm font-semibold tracking-normal text-ink">{t("profile.personalInformation")}</h2>
-              <p className="text-xs text-ink-soft">{t("profile.personalInformationSub")}</p>
-            </header>
-            <div className="flex flex-wrap gap-x-4.5 gap-y-4">
-              {SHOWN.map(({ key, labelKey, tip }) => (
-                <FieldBox key={key} label={t(labelKey)} tip={tip}>
-                  {loading || !form ? (
-                    <Skeleton className="h-10.5 w-full rounded-lg" />
-                  ) : editing ? (
-                    key === "phone" ? (
-                      <PhoneField initial={form.phone} onChange={(v) => set("phone", v)} error={fieldErrors.phone} />
-                    ) : (
-                      <div className="min-w-0 flex-1">
-                        <Input
-                          value={form[key]}
-                          onChange={(e) => set(key, e.target.value)}
-                          className={fieldErrors[key] ? "border-accent-error bg-accent-error/5" : "border-border bg-secondary"}
-                        />
-                        {fieldErrors[key] && <p className="mt-1 text-xs text-accent-error">{fieldErrors[key]}</p>}
-                      </div>
-                    )
-                  ) : (
-                    <ReadValue value={key === "phone" ? formatPhone(profile?.[key]) : profile?.[key]} />
-                  )}
-                </FieldBox>
-              ))}
-              <FieldBox label={t("ui.emailAddress")} trailing={profile?.email_verified ? <VerifiedTag /> : undefined}>
-                {loading ? <Skeleton className="h-10.5 w-full rounded-lg" /> : <ReadValue value={email} muted />}
-              </FieldBox>
-            </div>
-          </section>
-
+          <div className="flex min-w-0 flex-1 flex-col gap-5">
+            {personal}
+            {activity}
+          </div>
           <div className="flex w-97 shrink-0 flex-col gap-5">
             {verification}
-            {snapshot}
+            {security}
           </div>
         </StaggerItem>
       </Stagger>
     </>
-  );
-}
-
-/** `card-Verification` — the KYC state the hub actually holds, not a document checklist. */
-function VerificationCard({ loading, profile, email }: { loading: boolean; profile: UserProfile | null; email: string }) {
-  const t = useT();
-  return (
-    <ListCard className="lg:px-5.5">
-      <ListCardTitle sub={t("profile.identityAndStanding")}>{t("profile.identityVerification")}</ListCardTitle>
-      <Hairline />
-      <Row>
-        <RowLabel title={t("ui.emailAddress")} sub={loading ? "…" : email || "—"} />
-        {/* i18n-max: 12 — `shrink-0` Pills beside the `min-w-0` row label. */}
-        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill icon={BadgeCheck}>{t("ui.verified")}</Pill> : <Pill tone="pending">{t("profile.unverified")}</Pill>}
-      </Row>
-      <Hairline />
-      <Row>
-        <RowLabel title={t("ui.kycLevel")} sub={t("profile.kycRaisedBy")} />
-        {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold tabular-nums text-ink">{profile?.kyc_level ?? "—"}</RowValue>}
-      </Row>
-      <Hairline />
-      <Row>
-        <RowLabel title={t("ui.accountStatus")} sub={t("profile.platformAccess")} />
-        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.status ? <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill> : <RowValue>—</RowValue>}
-      </Row>
-      {/* The same tier line the wallet screens gate on — see `entities/user/lib/kyc`. */}
-      {isUnverified(profile) && <StartVerificationRow />}
-    </ListCard>
-  );
-}
-
-function SnapshotCard({ invested, strategies }: { invested: number; strategies: number }) {
-  const t = useT();
-  return (
-    <ListCard className="lg:px-5.5">
-      <ListCardTitle>{t("profile.accountSnapshot")}</ListCardTitle>
-      <Hairline />
-      <Row>
-        <span className="text-sm font-medium text-ink-soft">{t("profile.totalInvested")}</span>
-        <span className="text-sm font-semibold tabular-nums text-ink">{formatUsd(invested)}</span>
-      </Row>
-      <Hairline />
-      <Row>
-        <span className="text-sm font-medium text-ink-soft">{t("dash.activeStrategies")}</span>
-        <span className="text-sm font-semibold tabular-nums text-ink">{strategies}</span>
-      </Row>
-    </ListCard>
-  );
-}
-
-function FieldBox({ label, trailing, tip, children }: { label: string; trailing?: ReactNode; tip?: TipKey; children: ReactNode }) {
-  return (
-    <div className="flex min-w-65 flex-1 flex-col">
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs text-ink-soft">
-          {label}
-          {tip && <TipAnchor anchor={tip} />}
-        </span>
-        {trailing}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-const MAX_DISPLAY_VALUE = 80;
-
-function ReadValue({ value, muted }: { value?: string; muted?: boolean }) {
-  const raw = (value ?? "").trim();
-  const v = raw.length > MAX_DISPLAY_VALUE ? `${raw.slice(0, MAX_DISPLAY_VALUE - 1)}…` : raw;
-  return (
-    <div
-      className={cn(
-        "flex min-h-10.5 items-center rounded-lg border border-border bg-secondary px-3.5 py-3 text-sm",
-        v && !muted ? "text-ink" : "text-ink-soft",
-      )}
-      title={raw.length > MAX_DISPLAY_VALUE ? raw : undefined}
-    >
-      {v || "—"}
-    </div>
-  );
-}
-
-function VerifiedTag() {
-  const t = useT();
-  return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent-debug">
-      {/* i18n-max: 12 — beside a field label in a `justify-between` header row. */}
-      <BadgeCheck className="size-3" /> {t("ui.verified")}
-      <TipAnchor anchor="profile.email.verified" />
-    </span>
-  );
-}
-
-/** `status`/`role` arrive as lower snake_case from the hub. */
-function titleCase(value: string): string {
-  const s = value.replace(/_/g, " ");
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-/**
- * A wire enum as words. `titleCase` alone is English capitalisation applied to an
- * English wire value, so it stayed English under every locale; these resolve through the
- * shared `admin.status.*` / `admin.role.*` entries instead. The translator hands back the
- * key itself for a value no entry names — a hub enum we have not catalogued yet — so that
- * case falls back to the old capitalisation rather than printing a key on screen.
- */
-function enumLabel(namespace: "admin.status" | "admin.role", value: string, t: Translate): string {
-  const key = `${namespace}.${value}`;
-  const label = t(key);
-  return label === key ? titleCase(value) : label;
-}
-
-function statusTone(status: string): PillTone {
-  const s = status.toLowerCase();
-  if (s === "active") return "positive";
-  if (s === "pending" || s === "review") return "pending";
-  return "neutral";
-}
-
-function formatPhone(raw?: string): string {
-  if (!raw) return "";
-  const pn = PhoneNumber.parseInput(raw) ?? PhoneNumber.fromUnsafe(raw);
-  return PhoneNumber.format(pn);
-}
-
-/** Phone input wired to the `PhoneNumber` TypeObject via `usePhoneNumber`. */
-function PhoneField({ initial, onChange, error }: { initial: string; onChange: (v: string) => void; error?: string }) {
-  const { inputProps, value, reset } = usePhoneNumber({ initial: initial || undefined });
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  // Propagate canonical value changes to the parent form state.
-  useEffect(() => {
-    onChangeRef.current(value ? PhoneNumber.raw(value) : "");
-  }, [value]);
-
-  // Sync external initial changes (e.g. after save reloads the profile).
-  useEffect(() => {
-    if (initial) reset(initial);
-  }, [initial, reset]);
-
-  return (
-    <div className="min-w-0 flex-1">
-      <Input {...inputProps} className={error ? "border-accent-error bg-accent-error/5" : "border-border bg-secondary"} />
-      {error && <p className="mt-1 text-xs text-accent-error">{error}</p>}
-    </div>
   );
 }
