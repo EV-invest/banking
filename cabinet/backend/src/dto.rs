@@ -420,6 +420,11 @@ pub struct Allocation {
 	/// (their permission does not make them an investor), so the console must not read
 	/// it as "what investors get".
 	pub caller_access: String,
+	/// What stands behind the units: `cash` | `in_kind`. Gates money on the way OUT: a
+	/// redemption pays out of the fund's cash claim, and an `in_kind` product has none
+	/// there, so the hub refuses `Redeem` on it (412) and holders exit through the book.
+	/// The client draws the redeem control off this, never off `state` alone.
+	pub backing: String,
 }
 
 impl From<bk::Allocation> for Allocation {
@@ -433,6 +438,7 @@ impl From<bk::Allocation> for Allocation {
 			icon: a.icon,
 			access: a.access,
 			caller_access: a.caller_access,
+			backing: a.backing,
 			created_at: a.created_at.to_string(),
 			updated_at: a.updated_at.to_string(),
 		}
@@ -442,13 +448,17 @@ impl From<bk::Allocation> for Allocation {
 list_dto! { AllocationList from bk::AllocationList { allocations: Vec<Allocation> } }
 
 /// One investor raised above a product's default level. `user_id` and `granted_by` are
-/// BANKING user ids (what the money plane stores), like the redemption queue's — the
-/// console resolves them the way it does there. `granted_at` crosses as a string like
-/// every other int64.
+/// the ids the console carries for a person — the concierge id when the bridge has
+/// mirrored them, the banking id as a fallback — the same order the hub accepts on a
+/// grant or revoke, so either can be echoed straight back. `email` is filled in by the
+/// grants route from the identity plane and is `null` when the directory cannot name
+/// the id (a banking-only mirror, or a directory outage): the grant still lists.
+/// `granted_at` crosses as a string like every other int64.
 #[derive(Serialize)]
 pub struct AllocationAccessGrant {
 	pub service: String,
 	pub user_id: String,
+	pub email: Option<String>,
 	/// `view` | `invest`.
 	pub level: String,
 	pub granted_by: String,
@@ -460,6 +470,7 @@ impl From<bk::AllocationAccessGrant> for AllocationAccessGrant {
 		Self {
 			service: g.service,
 			user_id: g.user_id,
+			email: None,
 			level: g.level,
 			granted_by: g.granted_by,
 			granted_at: g.granted_at.to_string(),
@@ -469,12 +480,14 @@ impl From<bk::AllocationAccessGrant> for AllocationAccessGrant {
 
 list_dto! { AllocationAccessGrantList from bk::AllocationAccessGrantList { grants: Vec<AllocationAccessGrant> } }
 
-/// One in-kind issuance — units an operator handed over with no cash behind them:
-/// minted (`source: mint`) or moved out of the company's stake (`source: company`,
-/// supply unchanged). `holder_id` is a BANKING user id for a `user` holder and empty
-/// for `company` (the fund's own stake, which has no user to resolve). `state` is
-/// `queued` until the relay posts the leg, then `applied`; the console polls for the
-/// latter before it shows the holder their units.
+/// One in-kind issuance — units an operator moved with no cash behind them: minted
+/// (`source: mint`), moved out of the company's stake (`source: company`, supply
+/// unchanged) or burnt out of the holder's account (`source: retire`, supply shrank).
+/// `units` is always the magnitude; `source` is the direction. `holder_id` is a
+/// BANKING user id for a `user` holder and empty for `company` (the fund's own stake,
+/// which has no user to resolve). `state` is `queued` until the relay posts the leg,
+/// then `applied`; the console polls for the latter before it shows the holder their
+/// units.
 #[derive(Serialize)]
 pub struct UnitIssuance {
 	pub id: String,
@@ -488,7 +501,7 @@ pub struct UnitIssuance {
 	/// `queued` | `applied`.
 	pub state: String,
 	pub created_at: String,
-	/// `mint` | `company`.
+	/// `mint` | `company` | `retire`.
 	pub source: String,
 }
 
@@ -966,6 +979,9 @@ pub struct BookPolicy {
 	pub price_tick: String,
 	pub lot_size: String,
 	pub market_slippage_bps: u32,
+	/// The operator acknowledged that the units trade unbacked by fund cash; the terminal
+	/// tells buyers the book is their only exit.
+	pub allow_unbacked_trading: bool,
 	pub updated_at: String,
 }
 
@@ -978,6 +994,7 @@ impl From<bk::BookPolicy> for BookPolicy {
 			price_tick: p.price_tick,
 			lot_size: p.lot_size,
 			market_slippage_bps: p.market_slippage_bps,
+			allow_unbacked_trading: p.allow_unbacked_trading,
 			updated_at: p.updated_at.to_string(),
 		}
 	}

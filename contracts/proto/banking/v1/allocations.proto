@@ -38,7 +38,16 @@ package banking.v1;
 // made by the same `AllocationManage` holder who sizes the product, not an investor
 // dealing at NAV. `TransferCompanyStake` is the same decision in the other direction —
 // units the company was seeded with handed to the person they belong to — and touches
-// holdings, not supply.
+// holdings, not supply. `RetireUnits` is the mirror of `IssueUnits`: a holder's units
+// burnt with no cash leg, supply shrinking by exactly that. It is Read-First on what the
+// holder has AVAILABLE (units resting on the book or reserved by a redemption cannot be
+// retired), and the burn shows in `ListUnitHolders` like any other supply change.
+//
+// Backing is the third axis. Units minted in kind have no cash in the fund's claim
+// behind them, so `Redeem` — which pays cash out of that claim — is refused on a product
+// whose `backing` is `in_kind` (FAILED_PRECONDITION); holders exit through the book. The
+// first `IssueUnits` flips a product from `cash` to `in_kind` on its own; an operator
+// flips it back with `SetAllocationBacking` once the fund does hold cash for the units.
 service AllocationsService {
   // The catalog. Any authenticated user sees the `open` allocations they may at least
   // view; an `AllocationManage` holder may set `include_unlisted` to see drafts,
@@ -79,6 +88,13 @@ service AllocationsService {
   // and collapsing them would make "open but invite-only" unexpressible. Lowering
   // the default never touches a per-user grant, and never touches redemptions.
   rpc SetAllocationAccess(SetAllocationAccessRequest) returns (Allocation);
+
+  // Declare what stands behind a product's units (AllocationManage): `cash` |
+  // `in_kind`. Idempotent. `in_kind` is set automatically by the first `IssueUnits`,
+  // never the reverse: this RPC is how an operator says the fund now holds cash for
+  // the units and `Redeem` may pay it out again — or corrects a product back to
+  // `in_kind`. Lifecycle, access and holdings are untouched.
+  rpc SetAllocationBacking(SetAllocationBackingRequest) returns (Allocation);
 
   // Raise one investor above the default (AllocationManage): `view` | `invest`. A
   // repeat grant for the same user overwrites the level. A grant can only ever add —
@@ -125,6 +141,24 @@ service AllocationsService {
   // hand-over is ALREADY_EXISTS, not a retry.
   rpc TransferCompanyStake(TransferCompanyStakeRequest) returns (UnitIssuance);
 
+  // Burn a holder's units with no cash leg (AllocationManage) — the reverse of
+  // IssueUnits: `units` leave the holder's account (a user's or the company's) and the
+  // supply shrinks by the same amount. Nothing is paid; this is a cap-table correction,
+  // the way an in-kind mint was. The holder must have at least `units` AVAILABLE
+  // (Read-First; units resting on the book or reserved by a redemption do not count) —
+  // otherwise INVALID_ARGUMENT — and the allocation must be `closed`, because burning a
+  // holder's units out of a live product is a decision that deserves a closed door
+  // first; `force` is the explicit override for a live product (FAILED_PRECONDITION
+  // without it). Priced at the current (fresh) NAV for the record; the default
+  // `cost_basis` is `units × NAV`, the book value written off.
+  //
+  // Answers a `UnitIssuance` with `source = "retire"` and POSITIVE `units`: the row is
+  // the magnitude, the source is the direction, and the console lists mints, hand-overs
+  // and retirements as one history. Idempotent by `idempotency_key` in the same key
+  // space as IssueUnits: the same key naming a mint and then a retirement is
+  // ALREADY_EXISTS, not a retry.
+  rpc RetireUnits(RetireUnitsRequest) returns (UnitIssuance);
+
   // The settled supply of one product by holder class (AllocationManage): what the
   // company holds, what the fee account holds, and what is left to investors. Read
   // straight from the ledger — the number an operator checks against the registration
@@ -156,6 +190,13 @@ message Allocation {
   // get as one. A client renders the card off `access` and the subscribe control off
   // this — never off `state` alone.
   string caller_access = 10;
+  // What stands behind the units: `cash` | `in_kind`. `cash` — the units were paid for
+  // into the fund's claim and a redemption pays out of it. `in_kind` — the units stand
+  // for an asset the holders own; the fund holds no cash for them, so `Redeem` is
+  // refused (FAILED_PRECONDITION) and holders exit through the book. Set to `in_kind`
+  // automatically by the first IssueUnits on the product; only SetAllocationBacking
+  // takes it back to `cash`. A registration lands on `cash`.
+  string backing = 11;
 }
 
 // One investor raised above an allocation's default level.
@@ -230,6 +271,11 @@ message SetAllocationAccessRequest {
   string access = 2;  // hidden | view | invest
 }
 
+message SetAllocationBackingRequest {
+  string service = 1;
+  string backing = 2;  // cash | in_kind
+}
+
 message GrantAllocationAccessRequest {
   string service = 1;
   string user_id = 2;  // the investor's banking user id
@@ -282,7 +328,27 @@ message TransferCompanyStakeRequest {
   string idempotency_key = 5;   // required, 1..64 chars, unique per service (shared with IssueUnits)
 }
 
-// One in-kind issuance: a mint, or a hand-over out of the company's stake (`source`).
+message RetireUnitsRequest {
+  string service = 1;
+  // Whose units are burnt. Exactly one of the two, shaped as IssueUnits' holder is and
+  // for the same reason: a user (banking or concierge id) or the company itself, with
+  // `company: false` and no `user_id` a malformed request rather than a burn of nobody's.
+  oneof holder {
+    string user_id = 2;
+    bool company = 3;
+  }
+  string units = 4;             // decimal units, > 0, at most what the holder has available
+  // Decimal USDT of book value written off, recorded on the row. Empty means
+  // `units × NAV` at the dealing mark, like IssueUnits. No cash moves either way.
+  string cost_basis = 5;
+  string idempotency_key = 6;   // required, 1..64 chars, unique per service (shared with IssueUnits)
+  // Retiring is allowed on a `closed` allocation only; `force = true` is the operator's
+  // explicit override to burn units out of a live (draft or open) product.
+  bool force = 7;
+}
+
+// One in-kind issuance: a mint, a hand-over out of the company's stake, or a
+// retirement (`source`).
 // The holder is flattened to a kind + id pair here, unlike the request's `oneof`,
 // because this shape is projected to TypeScript through OpenAPI and a flat message
 // survives that pipeline unambiguously (the same trade the operations timeline makes).
@@ -291,7 +357,7 @@ message UnitIssuance {
   string service = 2;
   string holder_kind = 3;     // user | company
   string holder_id = 4;       // the banking user id for `user`; empty for `company`
-  string units = 5;           // decimal units minted or handed over
+  string units = 5;           // decimal units minted, handed over or retired (always positive)
   string nav = 6;             // decimal USDT per unit the issuance was recorded at
   string cost_basis = 7;      // decimal USDT
   // `queued` until the relay posts the leg, then `applied`. A client that needs the
@@ -299,9 +365,11 @@ message UnitIssuance {
   // relay has not reached yet (or one it parked — see BalanceService.ListParkedEvents).
   string state = 8;
   int64 created_at = 9;       // unix seconds
-  // Where the units came from: `mint` (IssueUnits — supply grew by `units`) or
+  // Where the units came from — or went: `mint` (IssueUnits — supply grew by `units`),
   // `company` (TransferCompanyStake — moved out of the company's stake, supply
-  // unchanged). Always populated; a row that predates the field reads as `mint`.
+  // unchanged) or `retire` (RetireUnits — burnt out of the holder's account, supply
+  // shrank by `units`). `units` is always the magnitude; the source is the direction.
+  // Always populated; a row that predates the field reads as `mint`.
   string source = 10;
 }
 

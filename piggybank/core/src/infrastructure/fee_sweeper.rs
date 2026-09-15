@@ -24,9 +24,10 @@
 //!
 //! A per-position failure warns and moves on: one investor whose fund has a stale NAV
 //! must not stop every other investor's fee from being collected. And a fee is never
-//! forced — if the holder's units are locked or the charge floors to nothing, the
-//! assessment declines to persist anything and the accrual simply continues (see
-//! [`domain::fees::FeeCharge::is_empty`]).
+//! forced — if the holder's units are locked or escrowed, the charge is recorded and
+//! carried as debt rather than drawn from units the holder cannot spare; only a charge
+//! that is not owed at all (it floors to nothing) persists nothing, and then the accrual
+//! simply continues (see [`domain::fees::FeeCharge::is_empty`]).
 //!
 //! ## The second clock: promoting a change of terms
 //!

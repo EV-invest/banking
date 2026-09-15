@@ -13,9 +13,11 @@
 use domain::money::Network;
 use piggybank_core::infrastructure::db;
 
+mod common;
+
 #[tokio::test]
 async fn chain_identity_binds_once_and_refuses_a_chain_flip() {
-	let Some(url) = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty()) else {
+	let Some(url) = common::database_url() else {
 		eprintln!("DATABASE_URL unset — skipping rail chain-identity test");
 		return;
 	};

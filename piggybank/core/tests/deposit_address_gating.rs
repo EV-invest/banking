@@ -24,12 +24,12 @@ use evbanking_contracts::signer::v1::{
 	signer_service_client::SignerServiceClient,
 	signer_service_server::{SignerService, SignerServiceServer},
 };
-use piggybank_core::{
-	infrastructure::{db, signer_addresses::SignerDepositAddresses},
-	ports::DepositAddresses,
-};
+use piggybank_core::{infrastructure::signer_addresses::SignerDepositAddresses, ports::DepositAddresses};
 use sqlx::PgPool;
 use tonic::transport::{Endpoint, Server};
+
+mod common;
+use common::pool;
 
 /// A deterministic, structurally-valid address per network — a derived-grade stand-in.
 const BEP20: &str = "0x52908400098527886E0F7030069857D2E4169EE7";
@@ -96,13 +96,6 @@ impl SignerService for FakeSigner {
 	async fn migrate_address_to_custodian(&self, _request: tonic::Request<MigrateAddressToCustodianRequest>) -> Result<tonic::Response<MigrateAddressToCustodianResponse>, tonic::Status> {
 		Err(tonic::Status::unimplemented("migrate_address_to_custodian is not exercised by the deposit-address gating test"))
 	}
-}
-
-async fn pool() -> Option<PgPool> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-	Some(pool)
 }
 
 #[tokio::test]

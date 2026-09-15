@@ -13,19 +13,11 @@ use domain::{
 	money::{Network, TxRef, Usdt},
 	users::UserId,
 };
-use piggybank_core::{
-	infrastructure::{db, deposits::PgDeposits},
-	ports::Deposits,
-};
-use sqlx::PgPool;
+use piggybank_core::{infrastructure::deposits::PgDeposits, ports::Deposits};
 use uuid::Uuid;
 
-async fn pool() -> Option<PgPool> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-	Some(pool)
-}
+mod common;
+use common::pool;
 
 fn usdt(decimal: &str) -> Usdt {
 	Usdt::parse_decimal(decimal).unwrap()

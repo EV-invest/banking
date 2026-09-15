@@ -34,11 +34,14 @@ use evbanking_contracts::signer::v1::{
 };
 use piggybank_core::{
 	application::wallet as wallet_app,
-	infrastructure::{db, deposits::PgDeposits, signer_addresses::SignerDepositAddresses},
+	infrastructure::{deposits::PgDeposits, signer_addresses::SignerDepositAddresses},
 	ports::{DepositAddresses, Deposits},
 };
 use sqlx::PgPool;
 use tonic::transport::{Endpoint, Server};
+
+mod common;
+use common::pool;
 
 const NETWORK: Network = Network::Bep20;
 /// The address the fake signer provisions, and the one the gate must clear before anything is
@@ -106,13 +109,6 @@ impl SignerService for RecordingSigner {
 	async fn rotate_address(&self, _request: tonic::Request<RotateAddressRequest>) -> Result<tonic::Response<ProvisionAddressResponse>, tonic::Status> {
 		Err(tonic::Status::unimplemented("rotate_address is not exercised by the custody-migration gate test"))
 	}
-}
-
-async fn pool() -> Option<PgPool> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-	Some(pool)
 }
 
 #[tokio::test]

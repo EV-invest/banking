@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use domain::{
-	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
+	allocations::{Allocation, AllocationAccess, AllocationBacking, AllocationIcon, AllocationId},
 	auth::AuthSubject,
 	balance::{LedgerAccountKey, Party, ServiceId},
 	book::{BookPolicy, CancelReason, CandleResolution, ClientOrderId, Locked, OrderKind, OrderState, Price, PriceTimeEngine, Side, Tif},
@@ -141,8 +141,11 @@ async fn tradable_product(h: &Harness, fee_bps: u32) -> ServiceId {
 	service
 }
 
+/// Open with unbacked trading acknowledged: every seller here is seeded by `issue_units`,
+/// an in-kind mint that flips the product to `in_kind` — the same shape as `service_arb` in
+/// production — and an unacknowledged book on such a product takes no order.
 async fn open_book(h: &Harness, service: &ServiceId, fee_bps: u32) {
-	let policy = BookPolicy::new(true, fee_bps, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500).unwrap();
+	let policy = BookPolicy::new(true, fee_bps, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, true).unwrap();
 	book_app::set_policy(&h.allocations, &h.book, service, policy).await.unwrap();
 }
 
@@ -571,7 +574,7 @@ async fn the_gates_a_closed_book_view_access_hidden_and_read_only() {
 	issue_units(&h, &service, seller, "10").await;
 
 	// The operator closes the book: no new orders, whatever the allocation's state.
-	let closed = BookPolicy::new(false, 0, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500).unwrap();
+	let closed = BookPolicy::new(false, 0, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, false).unwrap();
 	book_app::set_policy(&h.allocations, &h.book, &service, closed).await.unwrap();
 	let err = place(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, Some("1"), "1").await.unwrap_err();
 	assert!(matches!(err, DomainError::Precondition(ref m) if m.contains("closed")), "got {err:?}");
@@ -781,7 +784,7 @@ async fn the_policy_is_operator_set_and_bounded() {
 	let err = book_app::set_policy(&h.allocations, &h.book, &ghost, BookPolicy::default()).await.unwrap_err();
 	assert!(matches!(err, DomainError::NotFound { entity: "allocation", .. }), "got {err:?}");
 	// The grid can be widened, and the defaults answer for a product with no row.
-	let coarse = BookPolicy::new(true, 0, price("0.1"), shares("1"), 1000).unwrap();
+	let coarse = BookPolicy::new(true, 0, price("0.1"), shares("1"), 1000, false).unwrap();
 	let stored = book_app::set_policy(&h.allocations, &h.book, &service, coarse).await.unwrap();
 	assert_eq!(
 		(stored.policy.price_tick(), stored.policy.lot_size(), stored.policy.market_slippage_bps()),
@@ -797,4 +800,75 @@ async fn the_policy_is_operator_set_and_bounded() {
 	let snapshot = book_app::snapshot(&h.book, &h.nav, &fresh, 20, now_unix()).await.unwrap();
 	assert_eq!(snapshot.revision, 0);
 	assert_eq!(snapshot.last, None);
+}
+
+/// Opening the book on a product whose units are held in kind is refused until the
+/// operator acknowledges unbacked trading — and the refusal writes nothing, so the terms in
+/// force stay what they were. Closing needs no acknowledgement.
+#[tokio::test]
+async fn an_in_kind_book_does_not_open_without_the_acknowledgement() {
+	let Some(h) = harness().await else { return };
+	let service = tradable_product(&h, 0).await;
+	let seller = provisioned_user(&h).await;
+	issue_units(&h, &service, seller, "10").await;
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().backing(), AllocationBacking::InKind);
+	let before = book_app::policy(&h.book, &service).await.unwrap();
+
+	let unacknowledged = BookPolicy::new(true, 25, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, false).unwrap();
+	let err = book_app::set_policy(&h.allocations, &h.book, &service, unacknowledged).await.unwrap_err();
+	assert!(matches!(err, DomainError::Precondition(ref m) if m.contains("allow_unbacked_trading")), "got {err:?}");
+	let after = book_app::policy(&h.book, &service).await.unwrap();
+	assert_eq!((after.policy, after.updated_at), (before.policy, before.updated_at), "a refused policy is not written");
+
+	let closed = BookPolicy::new(false, 25, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, false).unwrap();
+	let stored = book_app::set_policy(&h.allocations, &h.book, &service, closed).await.expect("closing needs no acknowledgement");
+	assert!(!stored.policy.book_open());
+	assert!(!stored.policy.allow_unbacked_trading());
+}
+
+/// With the acknowledgement the book opens, and the flag comes back on the policy for the
+/// terminal to show its notice.
+#[tokio::test]
+async fn an_in_kind_book_opens_once_unbacked_trading_is_acknowledged() {
+	let Some(h) = harness().await else { return };
+	let service = tradable_product(&h, 0).await;
+	let seller = provisioned_user(&h).await;
+	issue_units(&h, &service, seller, "10").await;
+
+	let acknowledged = BookPolicy::new(true, 25, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, true).unwrap();
+	let stored = book_app::set_policy(&h.allocations, &h.book, &service, acknowledged).await.unwrap();
+	assert!(stored.policy.book_open());
+	assert!(stored.policy.allow_unbacked_trading());
+	assert_eq!(stored.policy.taker_fee_bps(), 25);
+	let read = book_app::policy(&h.book, &service).await.unwrap();
+	assert!(read.policy.allow_unbacked_trading(), "the flag round-trips through the store");
+	sell(&h, seller, &service, "1", "1").await;
+}
+
+/// The gate runs on every order, not only when the book opens: a book opened on a `cash`
+/// product without the acknowledgement stops taking orders the moment the first in-kind
+/// mint flips the product to `in_kind`, and resumes once the operator acknowledges.
+#[tokio::test]
+async fn a_book_opened_on_cash_stops_when_the_units_turn_in_kind_until_acknowledged() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "Service Arb", "Arbitrage", AllocationIcon::Arbitrage).unwrap();
+	h.allocations.register(&mut allocation).await.unwrap();
+	h.allocations.open(&service).await.unwrap();
+	h.allocations.set_access(&service, AllocationAccess::Invest).await.unwrap();
+	let cash_only = BookPolicy::new(true, 0, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, false).unwrap();
+	book_app::set_policy(&h.allocations, &h.book, &service, cash_only)
+		.await
+		.expect("a cash product's book opens unacknowledged");
+
+	let seller = provisioned_user(&h).await;
+	issue_units(&h, &service, seller, "10").await;
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().backing(), AllocationBacking::InKind);
+	let err = place(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, Some("1"), "1").await.unwrap_err();
+	assert!(matches!(err, DomainError::Precondition(ref m) if m.contains("allow_unbacked_trading")), "got {err:?}");
+	assert!(book_app::list_open_orders(&h.book, seller, Some(&service)).await.unwrap().is_empty(), "nothing was recorded");
+
+	open_book(&h, &service, 0).await;
+	sell(&h, seller, &service, "1", "1").await;
+	assert_eq!(book_app::list_open_orders(&h.book, seller, Some(&service)).await.unwrap().len(), 1);
 }

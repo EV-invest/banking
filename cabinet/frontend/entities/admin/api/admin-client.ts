@@ -10,6 +10,7 @@ import type {
   AllocationAccessGrant,
   AllocationAccessGrantList,
   AllocationAccessLevel,
+  AllocationBacking,
   AllocationGrantLevel,
   AllocationIcon,
   AllocationList,
@@ -31,6 +32,7 @@ import type {
   PlatformConfig,
   Redemption,
   RedemptionQueue,
+  RetireUnitsBody,
   RevenuePayout,
   RevenuePayoutList,
   TransferStakeBody,
@@ -190,6 +192,17 @@ export const issueUnits = (body: IssueUnitsBody): Promise<UnitIssuance> => postJ
 // holding and land in theirs, and the supply does not move. Answers the same shape as a
 // mint with `source: "company"`; the key shares the mint's per-product key space.
 export const transferCompanyStake = (body: TransferStakeBody): Promise<UnitIssuance> => postJson("/api/admin/allocations/transfer-stake", body);
+
+// The mirror of a mint: burn units out of one holder — an investor or the company — so
+// the supply shrinks by them. Answers the same shape with `source: "retire"`; the key
+// shares the mint's per-product key space. Allowed on a `closed` product, or on a live
+// one only with the operator's explicit `force`.
+export const retireUnits = (body: RetireUnitsBody): Promise<UnitIssuance> => postJson("/api/admin/allocations/retire", body);
+
+// What stands behind the units. Its own route for the same reason the cap and the access
+// level have one: it decides whether `Redeem` pays out or is refused, so the hub raises
+// its own audit event for the flip.
+export const setAllocationBacking = (service: string, backing: AllocationBacking): Promise<Allocation> => postJson("/api/admin/allocations/backing", { service, backing });
 
 export const fetchUnitHolders = (service: string): Promise<UnitHolders> => getJson(`/api/admin/allocations/holders?service=${encodeURIComponent(service)}`);
 

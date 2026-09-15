@@ -64,6 +64,10 @@ export interface SetBookPolicyBody {
   price_tick?: string;
   lot_size?: string;
   market_slippage_bps?: number;
+  /** The operator's acknowledgement that units held `in_kind` may trade for cash the fund
+   *  does not hold. Always sent: the hub refuses to open such a book — and refuses orders
+   *  on it — while this is `false`, and a left-out field reads as `false` on the BFF. */
+  allow_unbacked_trading: boolean;
 }
 
 // ── The realtime frame ─────────────────────────────────────────────────────────

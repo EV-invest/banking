@@ -141,6 +141,17 @@ export type BankingV1Allocation = {
      * this — never off `state` alone.
      */
     caller_access?: string;
+    /**
+     * backing
+     *
+     * What stands behind the units: `cash` | `in_kind`. `cash` — the units were paid for
+     * into the fund's claim and a redemption pays out of it. `in_kind` — the units stand
+     * for an asset the holders own; the fund holds no cash for them, so `Redeem` is
+     * refused (FAILED_PRECONDITION) and holders exit through the book. Set to `in_kind`
+     * automatically by the first IssueUnits on the product; only SetAllocationBacking
+     * takes it back to `cash`. A registration lands on `cash`.
+     */
+    backing?: string;
 };
 
 /**
@@ -329,6 +340,13 @@ export type BankingV1BookPolicy = {
      * unix seconds; 0 when the product has no policy row (the defaults)
      */
     updated_at?: number | string;
+    /**
+     * allow_unbacked_trading
+     *
+     * See SetBookPolicyRequest.allow_unbacked_trading. When true the terminal tells buyers the
+     * units are not backed by fund cash and cannot be redeemed — the book is their only exit.
+     */
+    allow_unbacked_trading?: boolean;
 };
 
 /**
@@ -3472,6 +3490,52 @@ export type BankingV1RequestWithdrawalRequest = {
 };
 
 /**
+ * RetireUnitsRequest
+ */
+export type BankingV1RetireUnitsRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * units
+     *
+     * decimal units, > 0, at most what the holder has available
+     */
+    units?: string;
+    /**
+     * cost_basis
+     *
+     * Decimal USDT of book value written off, recorded on the row. Empty means
+     * `units × NAV` at the dealing mark, like IssueUnits. No cash moves either way.
+     */
+    cost_basis?: string;
+    /**
+     * idempotency_key
+     *
+     * required, 1..64 chars, unique per service (shared with IssueUnits)
+     */
+    idempotency_key?: string;
+    /**
+     * force
+     *
+     * Retiring is allowed on a `closed` allocation only; `force = true` is the operator's
+     * explicit override to burn units out of a live (draft or open) product.
+     */
+    force?: boolean;
+} & ({
+    /**
+     * company
+     */
+    company: boolean;
+} | {
+    /**
+     * user_id
+     */
+    user_id: string;
+});
+
+/**
  * RevenuePayoutTerms
  *
  * The immutable subject of a revenue payout. Amounts are decimal USDT STRINGS, as
@@ -3783,6 +3847,22 @@ export type BankingV1SetAllocationAccessRequest = {
 };
 
 /**
+ * SetAllocationBackingRequest
+ */
+export type BankingV1SetAllocationBackingRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * backing
+     *
+     * cash | in_kind
+     */
+    backing?: string;
+};
+
+/**
  * SetAllocationStateRequest
  */
 export type BankingV1SetAllocationStateRequest = {
@@ -3850,6 +3930,16 @@ export type BankingV1SetBookPolicyRequest = {
      * 0..10000; how far past the best quote a market order may fill
      */
     market_slippage_bps?: number;
+    /**
+     * allow_unbacked_trading
+     *
+     * The operator's acknowledgement that the book may trade units the fund holds no cash
+     * for (`Allocation.backing = in_kind`): a buyer pays cash for a claim on an asset held in
+     * kind and cannot redeem it. Required to open the book on an in_kind product, and
+     * checked again on every order — the backing can flip after the book opened (the first
+     * in-kind mint). Harmless on a cash product. The terminal shows buyers a notice when set.
+     */
+    allow_unbacked_trading?: boolean;
 };
 
 /**
@@ -4283,7 +4373,8 @@ export type BankingV1UnitHolders = {
 /**
  * UnitIssuance
  *
- * One in-kind issuance: a mint, or a hand-over out of the company's stake (`source`).
+ * One in-kind issuance: a mint, a hand-over out of the company's stake, or a
+ * retirement (`source`).
  * The holder is flattened to a kind + id pair here, unlike the request's `oneof`,
  * because this shape is projected to TypeScript through OpenAPI and a flat message
  * survives that pipeline unambiguously (the same trade the operations timeline makes).
@@ -4312,7 +4403,7 @@ export type BankingV1UnitIssuance = {
     /**
      * units
      *
-     * decimal units minted or handed over
+     * decimal units minted, handed over or retired (always positive)
      */
     units?: string;
     /**
@@ -4344,9 +4435,11 @@ export type BankingV1UnitIssuance = {
     /**
      * source
      *
-     * Where the units came from: `mint` (IssueUnits — supply grew by `units`) or
+     * Where the units came from — or went: `mint` (IssueUnits — supply grew by `units`),
      * `company` (TransferCompanyStake — moved out of the company's stake, supply
-     * unchanged). Always populated; a row that predates the field reads as `mint`.
+     * unchanged) or `retire` (RetireUnits — burnt out of the holder's account, supply
+     * shrank by `units`). `units` is always the magnitude; the source is the direction.
+     * Always populated; a row that predates the field reads as `mint`.
      */
     source?: string;
 };
@@ -7213,6 +7306,35 @@ export type BankingV1AllocationsServiceRegisterAllocationResponses = {
 
 export type BankingV1AllocationsServiceRegisterAllocationResponse = BankingV1AllocationsServiceRegisterAllocationResponses[keyof BankingV1AllocationsServiceRegisterAllocationResponses];
 
+export type BankingV1AllocationsServiceRetireUnitsData = {
+    body: BankingV1RetireUnitsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/RetireUnits';
+};
+
+export type BankingV1AllocationsServiceRetireUnitsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceRetireUnitsError = BankingV1AllocationsServiceRetireUnitsErrors[keyof BankingV1AllocationsServiceRetireUnitsErrors];
+
+export type BankingV1AllocationsServiceRetireUnitsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1UnitIssuance;
+};
+
+export type BankingV1AllocationsServiceRetireUnitsResponse = BankingV1AllocationsServiceRetireUnitsResponses[keyof BankingV1AllocationsServiceRetireUnitsResponses];
+
 export type BankingV1AllocationsServiceRevokeAllocationAccessData = {
     body: BankingV1RevokeAllocationAccessRequest;
     headers: {
@@ -7270,6 +7392,35 @@ export type BankingV1AllocationsServiceSetAllocationAccessResponses = {
 };
 
 export type BankingV1AllocationsServiceSetAllocationAccessResponse = BankingV1AllocationsServiceSetAllocationAccessResponses[keyof BankingV1AllocationsServiceSetAllocationAccessResponses];
+
+export type BankingV1AllocationsServiceSetAllocationBackingData = {
+    body: BankingV1SetAllocationBackingRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/SetAllocationBacking';
+};
+
+export type BankingV1AllocationsServiceSetAllocationBackingErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceSetAllocationBackingError = BankingV1AllocationsServiceSetAllocationBackingErrors[keyof BankingV1AllocationsServiceSetAllocationBackingErrors];
+
+export type BankingV1AllocationsServiceSetAllocationBackingResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Allocation;
+};
+
+export type BankingV1AllocationsServiceSetAllocationBackingResponse = BankingV1AllocationsServiceSetAllocationBackingResponses[keyof BankingV1AllocationsServiceSetAllocationBackingResponses];
 
 export type BankingV1AllocationsServiceSetAllocationStateData = {
     body: BankingV1SetAllocationStateRequest;

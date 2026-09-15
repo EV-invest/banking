@@ -11,11 +11,13 @@
 //! registry decision about who holds what, made by the same manager who sizes the
 //! product, so it lives beside the cap rather than on the investor's dealing surface.
 //! [`TransferCompanyStake`] is the same decision in reverse — the company's seeded
-//! units handed to a named user, supply untouched. They and [`ListUnitHolders`] are the
-//! only handlers here that read the ledger or notify the relay.
+//! units handed to a named user, supply untouched — and [`RetireUnits`] is the mint's
+//! mirror, a holder's units burnt. They and [`ListUnitHolders`] are the only handlers
+//! here that read the ledger or notify the relay.
 //!
 //! [`IssueUnits`]: AllocationsService::issue_units
 //! [`TransferCompanyStake`]: AllocationsService::transfer_company_stake
+//! [`RetireUnits`]: AllocationsService::retire_units
 //! [`ListUnitHolders`]: AllocationsService::list_unit_holders
 //!
 //! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large
@@ -23,15 +25,15 @@
 #![allow(clippy::result_large_err)]
 
 use domain::{
-	allocations::{AllocationAccess, AllocationIcon},
+	allocations::{AllocationAccess, AllocationBacking, AllocationIcon},
 	authz::Permission,
 	balance::ServiceId,
 	issuance::{IdempotencyKey, UnitHolder},
 	money::{Shares, Usdt},
-	users::UserId,
+	users::{ConciergeUserId, UserId},
 };
 use evbanking_contracts::{
-	allocation::{IssueUnitsHolder, access as wire_access, state as wire_state},
+	allocation::{IssueUnitsHolder, RetireUnitsHolder, access as wire_access, backing as wire_backing, state as wire_state},
 	banking::v1::{self as pb, allocations_service_server::AllocationsService},
 };
 use tonic::{Request, Response, Status};
@@ -41,7 +43,7 @@ use crate::{
 	application::{
 		allocations as allocations_app,
 		funds::FundPorts,
-		issuance::{self as issuance_app, IssueUnitsRequest, TransferCompanyStakeRequest, UnitHoldersView},
+		issuance::{self as issuance_app, IssueUnitsRequest, RetireUnitsRequest, TransferCompanyStakeRequest, UnitHoldersView},
 	},
 	ports::{
 		allocations::{AllocationAccessGrant, AllocationRecord},
@@ -69,6 +71,46 @@ impl AllocationsSvc {
 	async fn manager_view(&self, caller: UserId, service: &ServiceId) -> Result<Response<pb::Allocation>, Status> {
 		let record = allocations_app::get_for(self.state.allocations.as_ref(), service, caller, true).await.map_err(map_err)?;
 		Ok(Response::new(record_to_proto(&record)))
+	}
+
+	/// The holder a mint or a retirement names. The console names investors by their
+	/// concierge id; resolve the way every admin RPC does, so the units land on (or leave)
+	/// the money-plane row the holder redeems from. `NOT_FOUND` here is the existence
+	/// gate the use case repeats.
+	async fn resolve_holder(&self, holder: Option<WireHolder>) -> Result<UnitHolder, Status> {
+		match holder {
+			Some(WireHolder::UserId(raw)) => Ok(UnitHolder::User(resolve_target_user(&self.state, &raw).await?)),
+			Some(WireHolder::Company(true)) => Ok(UnitHolder::Company),
+			// `company: false` names nobody: a malformed request, never a mint to — or a
+			// burn of — nobody's units.
+			Some(WireHolder::Company(false)) | None => Err(Status::invalid_argument("holder is required: a user_id, or company = true")),
+		}
+	}
+}
+
+/// The `holder` oneof, as both `IssueUnitsRequest` and `RetireUnitsRequest` spell it.
+/// prost generates one enum per message, so the two are distinct types with identical
+/// arms; folding them here keeps one resolver rather than two copies of its rules.
+enum WireHolder {
+	UserId(String),
+	Company(bool),
+}
+
+impl From<IssueUnitsHolder> for WireHolder {
+	fn from(holder: IssueUnitsHolder) -> Self {
+		match holder {
+			IssueUnitsHolder::UserId(raw) => Self::UserId(raw),
+			IssueUnitsHolder::Company(flag) => Self::Company(flag),
+		}
+	}
+}
+
+impl From<RetireUnitsHolder> for WireHolder {
+	fn from(holder: RetireUnitsHolder) -> Self {
+		match holder {
+			RetireUnitsHolder::UserId(raw) => Self::UserId(raw),
+			RetireUnitsHolder::Company(flag) => Self::Company(flag),
+		}
 	}
 }
 
@@ -167,6 +209,16 @@ impl AllocationsService for AllocationsSvc {
 		self.manager_view(caller, &service).await
 	}
 
+	async fn set_allocation_backing(&self, request: Request<pb::SetAllocationBackingRequest>) -> Result<Response<pb::Allocation>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let caller = caller_id(&request)?;
+		let req = request.into_inner();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		let backing = parse_backing(&req.backing)?;
+		allocations_app::set_backing(self.state.allocations.as_ref(), &service, backing).await.map_err(map_err)?;
+		self.manager_view(caller, &service).await
+	}
+
 	async fn grant_allocation_access(&self, request: Request<pb::GrantAllocationAccessRequest>) -> Result<Response<pb::AllocationAccessGrant>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let granted_by = caller_id(&request)?;
@@ -207,15 +259,7 @@ impl AllocationsService for AllocationsSvc {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		let holder = match req.holder {
-			// The console names investors by their concierge id; resolve the way every
-			// admin RPC does, so the units land on the money-plane row the holder redeems
-			// from. `NOT_FOUND` here is the existence gate the use case repeats.
-			Some(IssueUnitsHolder::UserId(raw)) => UnitHolder::User(resolve_target_user(&self.state, &raw).await?),
-			Some(IssueUnitsHolder::Company(true)) => UnitHolder::Company,
-			// `company: false` names nobody: a malformed request, never a mint to nobody.
-			Some(IssueUnitsHolder::Company(false)) | None => return Err(Status::invalid_argument("holder is required: a user_id, or company = true")),
-		};
+		let holder = self.resolve_holder(req.holder.map(WireHolder::from)).await?;
 		// Parsed at the boundary, so a malformed amount is an `invalid_argument` about the
 		// input rather than a validation error from inside the aggregate.
 		let units = Shares::parse_decimal(&req.units).map_err(map_err)?;
@@ -279,6 +323,39 @@ impl AllocationsService for AllocationsSvc {
 		Ok(Response::new(issuance_to_proto(&record)))
 	}
 
+	async fn retire_units(&self, request: Request<pb::RetireUnitsRequest>) -> Result<Response<pb::UnitIssuance>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let req = request.into_inner();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		let holder = self.resolve_holder(req.holder.map(WireHolder::from)).await?;
+		let units = Shares::parse_decimal(&req.units).map_err(map_err)?;
+		let cost_basis = optional(&req.cost_basis).map(Usdt::parse_decimal).transpose().map_err(map_err)?;
+		let idempotency_key = IdempotencyKey::parse(&req.idempotency_key).map_err(map_err)?;
+		let ports = FundPorts {
+			allocations: self.state.allocations.as_ref(),
+			ledger: self.state.ledger.as_ref(),
+			nav: self.state.nav.as_ref(),
+			relay: &self.state.relay_notify,
+		};
+		let record = issuance_app::retire_units(
+			&ports,
+			self.state.issuances.as_ref(),
+			self.state.users.as_ref(),
+			RetireUnitsRequest {
+				service,
+				holder,
+				units,
+				cost_basis,
+				idempotency_key,
+				force: req.force,
+			},
+			unix_now(),
+		)
+		.await
+		.map_err(map_err)?;
+		Ok(Response::new(issuance_to_proto(&record)))
+	}
+
 	async fn list_unit_holders(&self, request: Request<pb::ListUnitHoldersRequest>) -> Result<Response<pb::UnitHolders>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
@@ -328,17 +405,28 @@ fn record_to_proto(record: &AllocationRecord) -> pb::Allocation {
 		icon: allocation.icon().as_str().to_owned(),
 		access: allocation.access().as_str().to_owned(),
 		caller_access: record.caller_access.as_str().to_owned(),
+		backing: allocation.backing().as_str().to_owned(),
 	}
 }
 
+/// The ids cross the wire as the CONSOLE knows them — the concierge mirror when the
+/// bridge has written one, the hub's own id otherwise. That is the exact order
+/// [`resolve_target_user`] accepts on the way in, so a revoke that echoes a listed id
+/// lands on the same row, and the console can look the person up in its directory
+/// instead of showing a uuid no other screen recognises. The storage id stays what the
+/// grants table holds; only the presentation changes.
 fn grant_to_proto(grant: &AllocationAccessGrant) -> pb::AllocationAccessGrant {
 	pb::AllocationAccessGrant {
 		service: grant.service.to_string(),
-		user_id: grant.user_id.to_string(),
+		user_id: console_user_id(grant.concierge_user_id, grant.user_id),
 		level: grant.level.as_str().to_owned(),
-		granted_by: grant.granted_by.to_string(),
+		granted_by: console_user_id(grant.granted_by_concierge_id, grant.granted_by),
 		granted_at: grant.granted_at,
 	}
+}
+
+fn console_user_id(concierge: Option<ConciergeUserId>, banking: UserId) -> String {
+	concierge.map_or_else(|| banking.to_string(), |id| id.to_string())
 }
 
 /// An access level a request named, parsed strictly. Unlike the icon there is no
@@ -349,6 +437,12 @@ fn grant_to_proto(grant: &AllocationAccessGrant) -> pb::AllocationAccessGrant {
 /// GRANT is the aggregate's rule, so it is refused there with its own reason.
 fn parse_access(raw: &str) -> Result<AllocationAccess, Status> {
 	AllocationAccess::parse(raw).map_err(|_| Status::invalid_argument(format!("access level must be one of {}, got '{raw}'", wire_access::ALL.join(", "))))
+}
+
+/// A backing a request named, parsed as strictly as an access level and for the same
+/// reason: it gates money (the way out), so neither empty nor unknown is a safe guess.
+fn parse_backing(raw: &str) -> Result<AllocationBacking, Status> {
+	AllocationBacking::parse(raw).map_err(|_| Status::invalid_argument(format!("backing must be one of {}, got '{raw}'", wire_backing::ALL.join(", "))))
 }
 
 /// The icon a *request* named. Empty means "the operator chose nothing", which is
@@ -416,7 +510,7 @@ mod tests {
 		for state in wire_issuance_state::ALL {
 			assert_eq!(IssuanceState::parse(state).unwrap().as_str(), state);
 		}
-		let sources = [IssuanceSource::Mint, IssuanceSource::Company];
+		let sources = [IssuanceSource::Mint, IssuanceSource::Company, IssuanceSource::Retire];
 		let as_wire: Vec<&str> = sources.iter().map(|source| source.as_str()).collect();
 		assert_eq!(
 			as_wire.as_slice(),
@@ -463,6 +557,26 @@ mod tests {
 	}
 
 	#[test]
+	fn domain_backing_matches_the_wire_contract() {
+		// The fourth vocabulary, and the one that gates the way OUT: a client draws the
+		// redeem control off `wire_backing`, the hub refuses `Redeem` off the domain enum,
+		// so the two must agree member for member.
+		let domain = [AllocationBacking::Cash, AllocationBacking::InKind];
+		let as_wire: Vec<&str> = domain.iter().map(|backing| backing.as_str()).collect();
+		assert_eq!(as_wire.as_slice(), wire_backing::ALL.as_slice(), "the domain enum and the wire vocabulary have drifted");
+		for backing in wire_backing::ALL {
+			assert_eq!(AllocationBacking::parse(backing).unwrap().as_str(), backing);
+		}
+		assert_eq!(AllocationBacking::default().as_str(), wire_backing::DEFAULT);
+		// The wire's "may redeem" is exactly the domain's `ensure_cash_backed`.
+		assert!(wire_backing::permits_redemptions(AllocationBacking::Cash.as_str()));
+		assert!(!wire_backing::permits_redemptions(AllocationBacking::InKind.as_str()));
+		assert_eq!(parse_backing(wire_backing::IN_KIND).unwrap(), AllocationBacking::InKind);
+		assert_eq!(parse_backing("").unwrap_err().code(), tonic::Code::InvalidArgument, "no backing is a safe guess");
+		assert_eq!(parse_backing("asset").unwrap_err().code(), tonic::Code::InvalidArgument);
+	}
+
+	#[test]
 	fn domain_icons_match_the_wire_contract() {
 		// Same guard as the states above, for the second vocabulary: the client picks its
 		// SVG off `wire_icon`, the hub stores the domain enum, and the DB CHECK in
@@ -503,6 +617,38 @@ mod tests {
 		assert_eq!(parse_icon_update(Some(wire_icon::VENTURE)).unwrap(), Some(AllocationIcon::Venture));
 		// Strictness is unchanged for a value the caller did send.
 		assert_eq!(parse_icon_update(Some("rocket")).unwrap_err().code(), tonic::Code::InvalidArgument);
+	}
+
+	#[test]
+	fn a_grant_crosses_the_wire_under_the_id_the_console_carries() {
+		// The console's user picker and `/users/detail` speak concierge ids; a listed grant
+		// that answered with the hub's id was one the console could not name (banking#252).
+		// The fallback must stay the hub id, because that is what `resolve_target_user`
+		// tries second — so a revoke echoing either listed id still finds the row.
+		let (investor, operator) = (UserId::new(), UserId::new());
+		let (investor_cc, operator_cc) = (ConciergeUserId::new(), ConciergeUserId::new());
+		let mirrored = AllocationAccessGrant {
+			service: ServiceId::parse("quy-nhon").unwrap(),
+			user_id: investor,
+			concierge_user_id: Some(investor_cc),
+			level: AllocationAccess::Invest,
+			granted_by: operator,
+			granted_by_concierge_id: Some(operator_cc),
+			granted_at: 1_750_000_400,
+		};
+		let wire = grant_to_proto(&mirrored);
+		assert_eq!(wire.user_id, investor_cc.to_string(), "a mirrored investor is named by the concierge id");
+		assert_eq!(wire.granted_by, operator_cc.to_string(), "and so is the operator who let them in");
+		assert_eq!((wire.service.as_str(), wire.level.as_str(), wire.granted_at), ("quy-nhon", wire_access::INVEST, 1_750_000_400));
+
+		let unmirrored = AllocationAccessGrant {
+			concierge_user_id: None,
+			granted_by_concierge_id: None,
+			..mirrored
+		};
+		let wire = grant_to_proto(&unmirrored);
+		assert_eq!(wire.user_id, investor.to_string(), "without a mirror the hub id is the only name there is");
+		assert_eq!(wire.granted_by, operator.to_string());
 	}
 
 	#[test]

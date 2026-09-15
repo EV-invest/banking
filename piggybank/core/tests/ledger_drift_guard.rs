@@ -13,27 +13,17 @@
 use std::sync::Arc;
 
 use domain::{balance::LedgerAccountKey, users::UserId};
-use piggybank_core::{
-	infrastructure::{db, ledger::TbLedger, tigerbeetle::TigerBeetle},
-	ports::ledger::{Ledger, LedgerError},
-};
+use piggybank_core::ports::ledger::{Ledger, LedgerError};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-async fn pool() -> Option<PgPool> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-	Some(pool)
-}
+mod common;
+use common::pool;
 
 /// A TB client init that does not require a live replica (no handshake until first
 /// call); the drift guard returns before any TB call, so this is never exercised.
-fn ledger(pool: PgPool) -> TbLedger {
-	let address = std::env::var("TIGERBEETLE_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3033".to_owned());
-	let cluster = std::env::var("TIGERBEETLE_CLUSTER_ID").ok().and_then(|s| s.parse().ok()).unwrap_or(0u128);
-	let tb = Arc::new(TigerBeetle::connect(cluster, &address).expect("init TigerBeetle client"));
-	TbLedger::new(tb, pool)
+fn ledger(pool: PgPool) -> Arc<dyn Ledger> {
+	common::ledger_for(&pool)
 }
 
 /// An id-map row whose persisted derivation no longer matches what the key derives

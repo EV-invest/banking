@@ -25,6 +25,7 @@ import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { BookForm } from "@/views/admin/allocations/ui/book-form";
+import { UnbackedAckBadge } from "@/views/admin/allocations/ui/book-unbacked-ack";
 import { PanelHeader } from "@/views/admin/allocations/ui/panel-header";
 
 export function BookPanel({ allocation, onClose, className }: { allocation: Allocation; onClose: () => void; className?: string }) {
@@ -70,9 +71,12 @@ export function BookPanel({ allocation, onClose, className }: { allocation: Allo
         )}
 
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.alloc.book.title")}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.alloc.book.title")}</p>
+            <UnbackedAckBadge acknowledged={read.data?.allow_unbacked_trading === true} />
+          </div>
           <Settled loading={!read.data && !read.error} skeleton={<Skeleton className="h-40 w-full" />}>
-            {(read.data || read.error) && <BookForm key={read.data?.updated_at ?? "none"} service={allocation.service} policy={read.data ?? null} busy={busy} saved={saved} onSubmit={save} />}
+            {(read.data || read.error) && <BookForm key={read.data?.updated_at ?? "none"} allocation={allocation} policy={read.data ?? null} busy={busy} saved={saved} onSubmit={save} />}
           </Settled>
           <p className="text-xs text-muted-foreground">{t("admin.alloc.book.note")}</p>
         </div>

@@ -27,6 +27,42 @@
     "en": "View only",
     "t": "Только просмотр"
   },
+  "admin.alloc.backing.cash": {
+    "en": "Cash-backed",
+    "t": "Обеспечены кэшем"
+  },
+  "admin.alloc.backing.cashHint": {
+    "en": "Units were paid for into the fund's cash, and a redemption pays out of it at NAV.",
+    "t": "Юниты оплачены в кэш фонда, и погашение выплачивается из него по NAV."
+  },
+  "admin.alloc.backing.confirmCash": {
+    "en": "Mark {service} as cash-backed. Redeem will pay holders out of the fund's cash at NAV — make sure that cash is actually there.",
+    "t": "Отметить «{service}» как обеспеченный кэшем. Redeem будет выплачивать держателям из кэша фонда по NAV — убедитесь, что этот кэш действительно есть."
+  },
+  "admin.alloc.backing.confirmInKind": {
+    "en": "Mark {service} as in-kind. Redeem will be refused, and holders exit by selling their units on the book.",
+    "t": "Отметить «{service}» как обеспеченный натурой. Redeem будет отклоняться, а держатели выходят, продавая юниты в книге."
+  },
+  "admin.alloc.backing.inKind": {
+    "en": "In kind",
+    "t": "Натурой"
+  },
+  "admin.alloc.backing.inKindHint": {
+    "en": "Units stand for an asset the holders own off-platform. The fund holds no cash for them, so Redeem is refused and holders exit through the book.",
+    "t": "Юниты представляют актив, которым держатели владеют вне платформы. Фонд не держит под них кэш, поэтому Redeem отклоняется, а выход — через книгу."
+  },
+  "admin.alloc.backing.markCash": {
+    "en": "Mark as cash-backed",
+    "t": "Отметить как обеспеченный кэшем"
+  },
+  "admin.alloc.backing.markInKind": {
+    "en": "Mark as in-kind",
+    "t": "Отметить как обеспеченный натурой"
+  },
+  "admin.alloc.backing.title": {
+    "en": "Backing",
+    "t": "Обеспечение"
+  },
   "admin.alloc.book.action": {
     "en": "Book",
     "t": "Книга"
@@ -98,6 +134,22 @@
   "admin.alloc.book.title": {
     "en": "Order book",
     "t": "Книга заявок"
+  },
+  "admin.alloc.book.unbacked.ack": {
+    "en": "Allow trading of units not backed by fund cash",
+    "t": "Разрешить торговлю юнитами, не обеспеченными кэшем фонда"
+  },
+  "admin.alloc.book.unbacked.acknowledged": {
+    "en": "Unbacked trading acknowledged",
+    "t": "Необеспеченная торговля подтверждена"
+  },
+  "admin.alloc.book.unbacked.required": {
+    "en": "This product is held in kind: tick the acknowledgement before opening its book.",
+    "t": "Этот продукт держится in kind: поставьте галочку подтверждения, прежде чем открывать его книгу."
+  },
+  "admin.alloc.book.unbacked.warning": {
+    "en": "Buyers pay cash for a claim on an asset held in kind and cannot redeem it — the book is their only exit",
+    "t": "Покупатели платят кэш за право на актив, который держится in kind, и не могут его погасить — книга для них единственный выход"
   },
   "admin.alloc.close": {
     "en": "Close",
@@ -271,6 +323,10 @@
     "en": "Yield",
     "t": "Доходность"
   },
+  "admin.alloc.issuance.source.retire": {
+    "en": "retired",
+    "t": "списано"
+  },
   "admin.alloc.issue.action": {
     "en": "Issue",
     "t": "Выпустить"
@@ -362,6 +418,54 @@
   "admin.alloc.issuance.source.mint": {
     "en": "minted",
     "t": "выпущено"
+  },
+  "admin.alloc.retire.action": {
+    "en": "Retire units",
+    "t": "Списать юниты"
+  },
+  "admin.alloc.retire.closeFirst": {
+    "en": "Close the product first — units are retired out of a wound-down product.",
+    "t": "Сначала закройте продукт — юниты списываются из свёрнутого продукта."
+  },
+  "admin.alloc.retire.confirm": {
+    "en": "Retire {units} units from {holder} — the supply shrinks. No cash moves.",
+    "t": "Списать {units} юнитов у {holder} — предложение сокращается. Деньги не движутся."
+  },
+  "admin.alloc.retire.costBasisHint": {
+    "en": "Optional — the book value written off, defaults to units × NAV at the current mark.",
+    "t": "Необязательно — списываемая балансовая стоимость, по умолчанию юниты × NAV по текущей оценке."
+  },
+  "admin.alloc.retire.force": {
+    "en": "Retire anyway (force)",
+    "t": "Списать всё равно (force)"
+  },
+  "admin.alloc.retire.forceConfirm": {
+    "en": "Forced: the product is not closed.",
+    "t": "Принудительно: продукт не закрыт."
+  },
+  "admin.alloc.retire.forceWarning": {
+    "en": "The product is still live — units will be burned out of it while it accepts money. The hub records the override.",
+    "t": "Продукт ещё работает — юниты будут сожжены, пока он принимает деньги. Хаб фиксирует переопределение."
+  },
+  "admin.alloc.retire.investorHint": {
+    "en": "Up to what the investor holds — the hub refuses more, and says so.",
+    "t": "Не больше, чем держит инвестор — хаб откажет и назовёт причину."
+  },
+  "admin.alloc.retire.resultApplied": {
+    "en": "{units} units retired from {holder}.",
+    "t": "{units} юнитов списано у {holder}."
+  },
+  "admin.alloc.retire.resultQueued": {
+    "en": "{units} units from {holder} queued for retirement — the relay posts the burn shortly, and the split below follows.",
+    "t": "{units} юнитов у {holder} поставлено на списание — ретранслятор скоро проведёт сжигание, и разбивка ниже обновится."
+  },
+  "admin.alloc.retire.review": {
+    "en": "Review retirement",
+    "t": "Проверить списание"
+  },
+  "admin.alloc.retire.submit": {
+    "en": "Retire",
+    "t": "Списать"
   },
   "admin.alloc.transfer.action": {
     "en": "Transfer company stake",
@@ -1934,6 +2038,14 @@
   "admin.valuation.postValuation": {
     "en": "Post valuation",
     "t": "Опубликовать оценку"
+  },
+  "admin.valuation.postedBody": {
+    "en": "NAV {nav} at {aum} USDT AUM",
+    "t": "NAV {nav} при AUM {aum} USDT"
+  },
+  "admin.valuation.postedTitle": {
+    "en": "Marked",
+    "t": "Оценка записана"
   },
   "admin.valuation.propose": {
     "en": "Propose to the owners",
@@ -3611,6 +3723,14 @@
     "en": "Awaiting settlement",
     "t": "Ожидает исполнения"
   },
+  "invest.backing.inKind": {
+    "en": "In kind",
+    "t": "Натурой"
+  },
+  "invest.backing.inKindNote": {
+    "en": "Units of this product represent an asset held off-platform. The fund holds no cash for them, so they are sold on the book rather than redeemed.",
+    "t": "Юниты этого продукта представляют актив, хранящийся вне платформы. Фонд не держит под них кэш, поэтому они продаются в книге, а не погашаются."
+  },
   "invest.badge.locked": {
     "en": "Locked",
     "t": "Заблокирован"
@@ -3802,6 +3922,10 @@
   "invest.redeemTimingNote": {
     "en": "Your units are reserved the moment you submit, but the cash is priced when the redemption settles — not now. A figure shown here is an estimate at today's NAV.",
     "t": "Паи резервируются в момент отправки заявки, но сумма определяется при исполнении погашения, а не сейчас. Показанная здесь цифра — оценка по сегодняшнему NAV."
+  },
+  "invest.redeemUnbacked": {
+    "en": "Units of this product are not backed by fund cash — sell them on the book instead of redeeming.",
+    "t": "Юниты этого продукта не обеспечены кэшем фонда — продайте их в книге вместо погашения."
   },
   "invest.remainingCapacity": {
     "en": "Remaining capacity",
@@ -5922,6 +6046,10 @@
   "trade.ticker.volume": {
     "en": "24h volume",
     "t": "Объём 24 ч"
+  },
+  "trade.unbackedNotice": {
+    "en": "Units of this product are a claim on an off-platform asset and cannot be redeemed for fund cash — the book is the only exit.",
+    "t": "Юниты этого продукта — право на актив вне платформы; их нельзя погасить за кэш фонда — книга является единственным выходом."
   },
   "ui.account": {
     "en": "Account",
