@@ -275,7 +275,10 @@ notice still queued behind a relay outage would otherwise tell its holder, once 
 is back, that terms which will never bind "change on <date>" (#319). A withdrawn notice is
 terminal — never drained, never counted as owed — and distinct from one given up on: nobody
 failed to reach anybody. Notices already delivered stand; this plane sends no "cancelled"
-mail after them.
+mail after them. The mailer holds each row's lock across the relay call, so a cancel that
+lands while a notice is being handed over waits for the outcome and then withdraws nothing
+delivered — never a notice sent after the fact was taken back, never a delivered one on
+record as withdrawn.
 
 Every transaction over a product's terms — scheduling, the owners carrying, promotion —
 opens by locking the product's `allocations` row. The requirement an operator's request

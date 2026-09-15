@@ -15,7 +15,7 @@
 
 use std::sync::{
 	Arc,
-	atomic::{AtomicBool, Ordering},
+	atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
 use async_trait::async_trait;
@@ -761,6 +761,86 @@ async fn cancelling_a_change_withdraws_the_notices_the_relay_has_not_taken() {
 			.iter()
 			.all(|(_, mail)| matches!(mail, GovernanceMail::FeePolicyNotice(notice) if notice.effective_at == next.effective_from_unix))
 	);
+}
+
+/// A relay that, while it holds the one mail it is handed, has the change CANCELLED from
+/// another connection — and hands the mail over only once that cancel is queued on the mail
+/// row's lock. The race #319's withdrawal opened: a cancel landing between the worker's read
+/// and its write-back.
+struct CancellingRelay {
+	pool: PgPool,
+	service: ServiceId,
+	change: FeePolicyChangeId,
+	cancel: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<FeePolicyChange, DomainError>>>>,
+	seen: AtomicUsize,
+}
+
+#[async_trait]
+impl GovernanceMailer for CancellingRelay {
+	async fn send(&self, _recipient: Uuid, _dedupe_key: &str, _mail: &GovernanceMail) -> Result<(), MailDeliveryError> {
+		self.seen.fetch_add(1, Ordering::SeqCst);
+		let (pool, service, change) = (self.pool.clone(), self.service.clone(), self.change);
+		let cancel = tokio::spawn(async move {
+			let changes = PgFeePolicyChanges::new(pool.clone());
+			let consilia = PgConsilia::new(pool);
+			fee_app::cancel_change(&changes, &consilia, &service, change, UserId::new(), now()).await
+		});
+		// Not awaited here: the cancel must queue behind the worker's lock on the row, and
+		// waiting for it inside the delivery would be the deadlock the lock exists to order.
+		for _ in 0..200 {
+			let waiting: i64 = sqlx::query_scalar(
+				"SELECT COUNT(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' \
+				 AND query LIKE '%consilium_mail SET withdrawn_at%'",
+			)
+			.fetch_one(&self.pool)
+			.await
+			.unwrap();
+			if waiting >= 1 {
+				*self.cancel.lock().unwrap() = Some(cancel);
+				return Ok(());
+			}
+			tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+		}
+		panic!("the cancel never queued on the mail row's lock within 10s — the worker is not holding it across the send");
+	}
+}
+
+/// A cancel that lands while the worker is handing a notice over waits for the outcome
+/// rather than withdrawing a mail in flight: the row is delivered on the record, the cancel
+/// then withdraws nothing (there is nothing left undelivered), and no write trips
+/// `consilium_mail_withdrawn_is_unsent`. Without the row lock held across the send the mail
+/// would go out AND the write-back would fail, leaving a delivered notice recorded as
+/// "nobody told".
+#[tokio::test]
+async fn a_cancel_racing_a_delivery_waits_for_the_outcome_and_withdraws_nothing_delivered() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	let holder_ = holder(&h, &service, "1000").await;
+	quiet_queue(&h).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let change = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+
+	let relay = Arc::new(CancellingRelay {
+		pool: h.pool.clone(),
+		service: service.clone(),
+		change: change.id,
+		cancel: std::sync::Mutex::new(None),
+		seen: AtomicUsize::new(0),
+	});
+	let mailer = ConsiliumMailer::new(h.pool.clone(), relay.clone());
+	assert_eq!(mailer.drain().await.unwrap(), 1, "handed over, and the outcome written without tripping the schema");
+	assert_eq!(relay.seen.load(Ordering::SeqCst), 1);
+
+	let cancel = relay.cancel.lock().unwrap().take().expect("the cancel was queued during the send");
+	let cancelled = cancel.await.unwrap().unwrap();
+	assert_eq!(cancelled.state, FeePolicyChangeState::Cancelled);
+	assert_eq!(notice_states(&h, &change).await.get(&holder_), Some(&(true, false)), "delivered stands; nothing to withdraw");
+	// A second pass has nothing left to do for this change.
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert_eq!(relay.seen.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
