@@ -35,10 +35,10 @@ export function ScheduledReceipt({ change, onDismiss }: { change: FeePolicyChang
   const awaiting = kind === "awaiting";
   const Icon = ICON[kind];
   return (
-    <Alert role="status" className="border-main-accent-t2/40 bg-main-accent-t2/10">
-      <Icon className="size-4 text-main-accent-t2" />
+    <Alert role="status" variant="success">
+      <Icon className="size-4" />
       <AlertTitle>{t(TITLE_KEY[kind])}</AlertTitle>
-      <AlertDescription className="gap-3 text-foreground">
+      <AlertDescription className="gap-3">
         <p className="leading-relaxed">{t(BODY_KEY[kind], { version: change.version, at: formatMoment(change.effective_from, locale) })}</p>
         <div className="flex flex-wrap gap-2">
           {awaiting && (

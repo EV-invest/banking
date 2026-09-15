@@ -22,10 +22,10 @@ export function OpenedReceipt({ payment, onDismiss }: { payment: Payment; onDism
   const locale = useLocale();
   const consent = payment.consent;
   return (
-    <Alert role="status" className="border-main-accent-t2/40 bg-main-accent-t2/10">
-      <CheckCircle2 className="size-4 text-main-accent-t2" />
+    <Alert role="status" variant="success">
+      <CheckCircle2 className="size-4" />
       <AlertTitle>{t("admin.payments.openedTitle")}</AlertTitle>
-      <AlertDescription className="gap-3 text-foreground">
+      <AlertDescription className="gap-3">
         <p className="leading-relaxed">
           {consent
             ? t("admin.payments.openedConsentBody", { email: consent.subject_email })
