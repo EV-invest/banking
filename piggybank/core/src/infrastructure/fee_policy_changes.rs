@@ -856,4 +856,18 @@ mod mail_fund_tests {
 	fn control_characters_are_folded() {
 		assert_eq!(fee_mail_fund(Some("Arb\tdesk\n"), &service()), "Arb desk (service_arb)");
 	}
+
+	/// A slug carrying the bare word `http` is a legal product key (banking#265), and the
+	/// relay's `no_url` (concierge v0.8.0) refuses only `://` and `www.` — so the fund line
+	/// keeps the slug, whatever the title was, and never carries either needle.
+	#[test]
+	fn a_slug_containing_http_yields_a_link_free_fund_line() {
+		let service = ServiceId::parse("httpfund").unwrap();
+		for title in [None, Some("see https://evil.example"), Some("www.evil.example"), Some("Lighthouse arb")] {
+			let fund = fee_mail_fund(title, &service);
+			assert!(!fund.contains("://") && !fund.contains("www."), "{title:?} -> {fund}");
+			assert!(fund.contains("httpfund"), "{title:?} -> {fund}");
+		}
+		assert_eq!(fee_mail_fund(Some("Lighthouse arb"), &service), "Lighthouse arb (httpfund)");
+	}
 }
