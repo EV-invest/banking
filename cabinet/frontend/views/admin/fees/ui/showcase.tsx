@@ -10,7 +10,7 @@
 import { useT } from "@evinvest/i18n/react";
 
 import { pct } from "@/shared/lib/rate";
-import { formatUsd } from "@/views/admin/lib/format";
+import { formatUsdt } from "@/views/admin/lib/format";
 import { FIELD_LABEL_KEY, RATE_FIELDS, type RateField } from "@/views/admin/fees/lib/schedule";
 
 /** The reference position the worked example prices. A round hundred thousand: big enough
@@ -27,8 +27,10 @@ export function Showcase({ bps }: { bps: Record<RateField, number | null> }) {
     bps.management === null || bps.performance === null || bps.hurdle === null
       ? null
       : t(bps.hurdle > 0 ? "admin.fees.showcase.exampleHurdle" : "admin.fees.showcase.example", {
-          amount: formatUsd(REFERENCE_POSITION),
-          management: formatUsd((REFERENCE_POSITION * bps.management) / 10_000),
+          amount: `${formatUsdt(String(REFERENCE_POSITION))} USDT`,
+          // Exact: bps are integers and the reference is a multiple of 10 000, so the
+          // quotient is a whole number of USDT — no float residue to round away.
+          management: `${formatUsdt(String((REFERENCE_POSITION * bps.management) / 10_000))} USDT`,
           performance: pct(bps.performance),
           hurdle: pct(bps.hurdle),
         });

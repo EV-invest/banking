@@ -8,7 +8,7 @@
 import { History } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Badge, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
+import { Badge, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { feePolicyChangesResource } from "@/entities/admin/model/admin-resource";
 import { cn } from "@/shared/lib/cn";
@@ -16,6 +16,10 @@ import { formatMoment, hasStamp } from "@/shared/lib/datetime";
 import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { changeStateLabel, changeStateTone, termsSummary } from "@/views/admin/fees/lib/format";
+
+// The house table idiom (`views/trade/ui/fills-table.tsx`): uikit's `Table` carries the
+// borders, the cell padding and the scroll wrapper; only the header treatment is ours.
+const HEAD = "h-8 text-xs font-medium uppercase tracking-wide text-muted-foreground";
 
 export function ChangeHistory({ service }: { service: string }) {
   const t = useT();
@@ -44,36 +48,36 @@ export function ChangeHistory({ service }: { service: string }) {
             </EmptyHeader>
           </Empty>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="pb-2 font-medium">{t("admin.fees.col.version")}</th>
-                  <th className="pb-2 font-medium">{t("admin.col.state")}</th>
-                  <th className="pb-2 font-medium">{t("admin.fees.terms")}</th>
-                  <th className="pb-2 font-medium">{t("admin.fees.col.effective")}</th>
-                  <th className="pb-2 font-medium">{t("admin.fees.col.reason")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((c) => (
-                  <tr key={c.id} className="border-b border-border/50 align-top last:border-0">
-                    <td className="py-2 tabular-nums">{c.version}</td>
-                    <td className="py-2">
-                      <Badge variant="outline" className={cn(changeStateTone(c.state))}>
-                        {changeStateLabel(c.state, t)}
-                      </Badge>
-                    </td>
-                    <td className="py-2 tabular-nums">{termsSummary(c, t)}</td>
-                    {/* "0" while a change awaits the owners: the moment is not known until
-                        they carry it, and a dash says so better than 1 Jan 1970 would. */}
-                    <td className="py-2 tabular-nums text-muted-foreground">{hasStamp(c.effective_from) ? formatMoment(c.effective_from, locale) : "—"}</td>
-                    <td className="max-w-xs py-2 text-muted-foreground">{c.reason.trim() || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className={HEAD}>{t("admin.fees.col.version")}</TableHead>
+                <TableHead className={HEAD}>{t("admin.col.state")}</TableHead>
+                <TableHead className={HEAD}>{t("admin.fees.terms")}</TableHead>
+                <TableHead className={HEAD}>{t("admin.fees.col.effective")}</TableHead>
+                <TableHead className={HEAD}>{t("admin.fees.col.reason")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="align-top tabular-nums">{c.version}</TableCell>
+                  <TableCell className="align-top">
+                    <Badge variant="outline" className={cn(changeStateTone(c.state))}>
+                      {changeStateLabel(c.state, t)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="align-top tabular-nums">{termsSummary(c, t)}</TableCell>
+                  {/* "0" while a change awaits the owners: the moment is not known until
+                      they carry it, and a dash says so better than 1 Jan 1970 would. */}
+                  <TableCell className="align-top tabular-nums text-muted-foreground">{hasStamp(c.effective_from) ? formatMoment(c.effective_from, locale) : "—"}</TableCell>
+                  {/* The one free-text column: it wraps (uikit cells default to nowrap) so a
+                      long reason costs height, not a sideways scroll of the whole table. */}
+                  <TableCell className="max-w-xs align-top whitespace-normal text-muted-foreground">{c.reason.trim() || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>

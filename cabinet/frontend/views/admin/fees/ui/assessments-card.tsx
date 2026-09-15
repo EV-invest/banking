@@ -5,13 +5,18 @@
 import { Percent } from "lucide-react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
+import { Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { feeAssessmentsResource } from "@/entities/admin/model/admin-resource";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
-import { ago, formatUnits, formatUsd } from "@/views/admin/lib/format";
+import { triggerLabel } from "@/views/admin/fees/lib/format";
+import { ago, formatUnits, formatUsdt } from "@/views/admin/lib/format";
+
+// The house table idiom (`views/trade/ui/fills-table.tsx`): uikit's `Table` carries the
+// borders, the cell padding and the scroll wrapper; only the header treatment is ours.
+const HEAD = "h-8 text-xs font-medium uppercase tracking-wide text-muted-foreground";
 
 export function AssessmentsCard({ service }: { service: string }) {
   const t = useT();
@@ -39,39 +44,37 @@ export function AssessmentsCard({ service }: { service: string }) {
             </EmptyHeader>
           </Empty>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                {/* i18n-max: 14 per header — the wrapper scrolls, so a long header costs a
-                    sideways drag rather than a clipped column. */}
-                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="pb-2 font-medium">{t("admin.col.when")}</th>
-                  <th className="pb-2 font-medium">{t("admin.fees.col.trigger")}</th>
-                  <th className="pb-2 text-right font-medium">{t("admin.fees.field.management")}</th>
-                  <th className="pb-2 text-right font-medium">{t("admin.fees.field.performance")}</th>
-                  <th className="pb-2 text-right font-medium">{t("admin.fees.col.unitsTaken")}</th>
-                  <th className="pb-2 text-right font-medium">{t("admin.fees.col.deferred")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((a, i) => (
-                  <tr key={`${a.assessed_at}-${i}`} className="border-b border-border/50 last:border-0">
-                    <td className="py-2 text-muted-foreground">{ago(a.assessed_at, t)}</td>
-                    <td className="py-2 capitalize">{a.trigger}</td>
-                    <td className="py-2 text-right tabular-nums">{formatUsd(a.management)}</td>
-                    <td className="py-2 text-right tabular-nums">{formatUsd(a.performance)}</td>
-                    <td className="py-2 text-right tabular-nums">{formatUnits(a.charged_units)}</td>
-                    {/* Non-zero means the holding could not cover the charge and the rest
-                        rides to the next one. Worth its own column: it is the only reason
-                        a charge collects less than it assessed. */}
-                    <td className={cn("py-2 text-right tabular-nums", Number(a.debt_carried) > 0 ? "text-main-accent-t3" : "text-muted-foreground")}>
-                      {formatUsd(a.debt_carried)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              {/* i18n-max: 14 per header — the wrapper scrolls, so a long header costs a
+                  sideways drag rather than a clipped column. */}
+              <TableRow>
+                <TableHead className={HEAD}>{t("admin.col.when")}</TableHead>
+                <TableHead className={HEAD}>{t("admin.fees.col.trigger")}</TableHead>
+                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.managementUsdt")}</TableHead>
+                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.performanceUsdt")}</TableHead>
+                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.unitsTaken")}</TableHead>
+                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.deferredUsdt")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((a, i) => (
+                <TableRow key={`${a.assessed_at}-${i}`}>
+                  <TableCell className="text-muted-foreground">{ago(a.assessed_at, t)}</TableCell>
+                  <TableCell>{triggerLabel(a.trigger, t)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatUsdt(a.management)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatUsdt(a.performance)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatUnits(a.charged_units)}</TableCell>
+                  {/* Non-zero means the holding could not cover the charge and the rest
+                      rides to the next one. Worth its own column: it is the only reason
+                      a charge collects less than it assessed. */}
+                  <TableCell className={cn("text-right tabular-nums", Number(a.debt_carried) > 0 ? "text-main-accent-t3" : "text-muted-foreground")}>
+                    {formatUsdt(a.debt_carried)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>

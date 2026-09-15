@@ -763,13 +763,21 @@
     "en": "Charges",
     "t": "Prélèvements"
   },
-  "admin.fees.col.deferred": {
-    "en": "Deferred",
-    "t": "Reporté"
+  "admin.fees.col.deferredUsdt": {
+    "en": "Deferred, USDT",
+    "t": "Reporté, USDT"
   },
   "admin.fees.col.effective": {
     "en": "Effective",
     "t": "Effectif"
+  },
+  "admin.fees.col.managementUsdt": {
+    "en": "Management, USDT",
+    "t": "Gestion, USDT"
+  },
+  "admin.fees.col.performanceUsdt": {
+    "en": "Performance, USDT",
+    "t": "Commission de performance, USDT"
   },
   "admin.fees.col.reason": {
     "en": "Reason",
@@ -1046,6 +1054,14 @@
   "admin.fees.title": {
     "en": "Fee terms and collection",
     "t": "Conditions et collecte des frais"
+  },
+  "admin.fees.trigger.period": {
+    "en": "Period",
+    "t": "Période"
+  },
+  "admin.fees.trigger.redemption": {
+    "en": "Redemption",
+    "t": "Rachat"
   },
   "admin.fees.unitsHeld": {
     "en": "Fee units held",

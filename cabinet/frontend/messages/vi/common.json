@@ -763,13 +763,21 @@
     "en": "Charges",
     "t": "Các khoản thu phí"
   },
-  "admin.fees.col.deferred": {
-    "en": "Deferred",
-    "t": "Hoãn lại"
+  "admin.fees.col.deferredUsdt": {
+    "en": "Deferred, USDT",
+    "t": "Hoãn lại, USDT"
   },
   "admin.fees.col.effective": {
     "en": "Effective",
     "t": "Hiệu lực"
+  },
+  "admin.fees.col.managementUsdt": {
+    "en": "Management, USDT",
+    "t": "Phí quản lý, USDT"
+  },
+  "admin.fees.col.performanceUsdt": {
+    "en": "Performance, USDT",
+    "t": "Phí hiệu suất, USDT"
   },
   "admin.fees.col.reason": {
     "en": "Reason",
@@ -1046,6 +1054,14 @@
   "admin.fees.title": {
     "en": "Fee terms and collection",
     "t": "Điều khoản phí và việc thu phí"
+  },
+  "admin.fees.trigger.period": {
+    "en": "Period",
+    "t": "Kỳ hạn"
+  },
+  "admin.fees.trigger.redemption": {
+    "en": "Redemption",
+    "t": "Hoàn vốn"
   },
   "admin.fees.unitsHeld": {
     "en": "Fee units held",

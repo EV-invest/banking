@@ -763,13 +763,21 @@
     "en": "Charges",
     "t": "Начисления"
   },
-  "admin.fees.col.deferred": {
-    "en": "Deferred",
-    "t": "Отложено"
+  "admin.fees.col.deferredUsdt": {
+    "en": "Deferred, USDT",
+    "t": "Отложено, USDT"
   },
   "admin.fees.col.effective": {
     "en": "Effective",
     "t": "В силе с"
+  },
+  "admin.fees.col.managementUsdt": {
+    "en": "Management, USDT",
+    "t": "За управление, USDT"
+  },
+  "admin.fees.col.performanceUsdt": {
+    "en": "Performance, USDT",
+    "t": "За успех, USDT"
   },
   "admin.fees.col.reason": {
     "en": "Reason",
@@ -1046,6 +1054,14 @@
   "admin.fees.title": {
     "en": "Fee terms and collection",
     "t": "Условия комиссий и их сбор"
+  },
+  "admin.fees.trigger.period": {
+    "en": "Period",
+    "t": "Период"
+  },
+  "admin.fees.trigger.redemption": {
+    "en": "Redemption",
+    "t": "Погашение"
   },
   "admin.fees.unitsHeld": {
     "en": "Fee units held",

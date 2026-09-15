@@ -763,13 +763,21 @@
     "en": "Charges",
     "t": "Belastungen"
   },
-  "admin.fees.col.deferred": {
-    "en": "Deferred",
-    "t": "Aufgeschoben"
+  "admin.fees.col.deferredUsdt": {
+    "en": "Deferred, USDT",
+    "t": "Aufgeschoben, USDT"
   },
   "admin.fees.col.effective": {
     "en": "Effective",
     "t": "Gültig ab"
+  },
+  "admin.fees.col.managementUsdt": {
+    "en": "Management, USDT",
+    "t": "Verwaltung, USDT"
+  },
+  "admin.fees.col.performanceUsdt": {
+    "en": "Performance, USDT",
+    "t": "Performance-Gebühr, USDT"
   },
   "admin.fees.col.reason": {
     "en": "Reason",
@@ -1046,6 +1054,14 @@
   "admin.fees.title": {
     "en": "Fee terms and collection",
     "t": "Gebührenkonditionen und Einzug"
+  },
+  "admin.fees.trigger.period": {
+    "en": "Period",
+    "t": "Periode"
+  },
+  "admin.fees.trigger.redemption": {
+    "en": "Redemption",
+    "t": "Rücknahme"
   },
   "admin.fees.unitsHeld": {
     "en": "Fee units held",
