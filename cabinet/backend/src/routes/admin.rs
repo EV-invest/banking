@@ -407,7 +407,7 @@ pub async fn cancel_fee_policy_change(State(st): State<AppState>, jar: CookieJar
 /// of a scheduled change who could not be told, so a tightening binds over them. The hub
 /// decides who may (the requester or an owner) and whether there is anything to acknowledge.
 pub async fn acknowledge_undelivered_notices(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_fee_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -2003,6 +2003,45 @@ mod admin_route_tests {
 		assert!(seen.set_policy.is_none(), "the fee refusal must be decided before the hub is called");
 		assert_eq!(seen.money_tokens_issued, 0, "a caller refused on role must not cost a money-token mint");
 		assert!(seen.set_kyc.is_some(), "the operator's KYC call must still have reached the hub");
+	}
+
+	/// The fee gate is on every `/api/admin/fees/*` route, not on the ones the previous
+	/// test happens to poke. The acknowledgement route once sat behind the coarse gate
+	/// alone, so an operator passed the BFF, the CSRF check and a money-token mint, and
+	/// only the hub said no — a 403 with the hub's wording instead of the one the screen
+	/// reads the roles from. Every route here answers the same refusal before the hub.
+	#[tokio::test]
+	async fn an_operator_is_refused_every_fees_route_before_the_hub() {
+		let hub = Hub::new("operator");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for (method, uri, body) in [
+			("GET", "/api/admin/fees/policies", None),
+			("GET", "/api/admin/fees/shares?service=quy-nhon", None),
+			("GET", "/api/admin/fees/assessments?service=quy-nhon", None),
+			("GET", "/api/admin/fees/changes?service=quy-nhon", None),
+			("POST", "/api/admin/fees/policy", Some("{}")),
+			("POST", "/api/admin/fees/policy/cancel", Some(r#"{"service":"quy-nhon","change_id":"c1"}"#)),
+			("POST", "/api/admin/fees/policy/acknowledge-notices", Some(r#"{"service":"quy-nhon","change_id":"c1"}"#)),
+			("POST", "/api/admin/fees/settle", Some(r#"{"service":"quy-nhon"}"#)),
+		] {
+			// The CSRF echo is sent so a 403 can only come from the role gate, and the
+			// bodies are complete so nothing short-circuits on validation before it.
+			let (status, response) = send(&app, signed(method, uri, body, true)).await;
+			assert_eq!(status, StatusCode::FORBIDDEN, "{method} {uri} must refuse an operator");
+			assert_eq!(
+				response["error"], "fee administration requires the admin or owner role",
+				"{method} {uri} must name the roles that get through"
+			);
+		}
+
+		let seen = seen.lock().unwrap();
+		assert_eq!(seen.money_tokens_issued, 0, "a caller refused on role must not cost a money-token mint");
+		assert!(
+			seen.set_policy.is_none() && seen.cancel_change.is_none() && seen.acknowledge.is_none() && seen.settle.is_none(),
+			"the fee refusal must be decided before the hub is called"
+		);
 	}
 
 	/// The two roles the fee gate admits, both reading and writing. `owner` is here on
