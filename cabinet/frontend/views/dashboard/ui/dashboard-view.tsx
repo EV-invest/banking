@@ -6,7 +6,7 @@ import { useT } from "@evinvest/i18n/react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type CSSProperties, Fragment, useState } from "react";
 
-import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle, Progress, Separator, Skeleton, Switch } from "@evinvest/uikit";
+import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle, Progress, Skeleton, Switch } from "@evinvest/uikit";
 
 import { allocationsResource, positionsResource } from "@/entities/fund/model/fund-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
@@ -15,7 +15,8 @@ import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { AnimatedNumber, SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
-import { TipAnchor, type TipKey } from "@/shared/tips";
+import { TipAnchor } from "@/shared/tips";
+import { formatCount, STAT_STRIP, StatDivider, StatTile } from "@/shared/ui/stat-tile";
 import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
 import { amountTone, kindBadge, kindLabel, kindMeta, networkLabel, stateLabel } from "@/views/operations/lib/format";
 
@@ -50,10 +51,6 @@ type Accent = (typeof ACCENTS)[number];
 
 // Cards inset 16px on mobile (Figma `cabinet/mobile/home`), the uikit 24px from `lg`.
 const CARD_PAD = "px-4 lg:px-6";
-
-// Module scope on purpose: an inline `(n) => String(n)` would be a new function
-// every render, and AnimatedNumber restarts its count when `format` changes.
-const formatCount = (n: number) => String(Math.round(n));
 
 // Mobile reads the hero and the stat strip as page content rather than as cards: those two
 // surfaces sit flat on the background and only take their Card chrome from `lg`.
@@ -132,14 +129,14 @@ export function DashboardView() {
       <PerfCard value={balance?.total} loading={walletLoading} allTimePct={allTimePct} className="lg:order-1 xl:col-start-1 xl:row-span-2 xl:row-start-2" />
 
       {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
-      <StaggerItem as={Card} className={cn("grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-x-7 lg:gap-y-4 lg:px-6", CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
-        <Stat label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={formatSignedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
-        <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={formatUsd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
-        <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label={t("dash.activeStrategies")} value={posLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} />
-        <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label={t("dash.netContributed")} value={posLoading ? null : netContributed} format={formatUsd} hint={t("dash.hintAtCostBasis")} tip="dashboard.stats.net-invested" />
+      <StaggerItem as={Card} className={cn(STAT_STRIP, CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
+        <StatTile label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={formatSignedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
+        <StatDivider />
+        <StatTile label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={formatUsd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
+        <StatDivider />
+        <StatTile label={t("dash.activeStrategies")} value={posLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} />
+        <StatDivider />
+        <StatTile label={t("dash.netContributed")} value={posLoading ? null : netContributed} format={formatUsd} hint={t("dash.hintAtCostBasis")} tip="dashboard.stats.net-invested" />
       </StaggerItem>
 
       {/* Below `xl` the DOM order is the mobile order; `lg:order-*` restores the desktop
@@ -366,26 +363,6 @@ function WhatIOwn({ allocations, total, loading, className }: { allocations: { n
         </Settled>
       </CardContent>
     </StaggerItem>
-  );
-}
-
-// Takes the figure and its formatter rather than a finished string: a string can
-// only be swapped, and swapping is the thing AnimatedNumber exists to replace.
-// `format` has to be a stable reference (all of these are module functions from
-// shared/lib/money) or the count restarts on every parent render.
-function Stat({ label, value, format, tone, hint, tip }: { label: string; value: number | null; format: (n: number) => string; tone?: "gain" | "loss"; hint: string; tip?: TipKey }) {
-  const valueClass = tone === "gain" ? "text-positive" : tone === "loss" ? "text-accent-error" : "text-ink";
-  const hintClass = tone === "gain" ? "text-positive/80" : tone === "loss" ? "text-accent-error/80" : "text-ink-soft";
-  return (
-    // Its own tile on mobile, a cell of the shared strip from `lg`.
-    <Card className="min-w-0 flex-1 gap-1 px-3.5 py-3 lg:min-w-30 lg:gap-1.5 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
-      <div className="flex items-center gap-1.5">
-        <p className="truncate text-xs font-medium text-ink-soft">{label}</p>
-        {tip && <TipAnchor anchor={tip} />}
-      </div>
-      {value === null ? <Skeleton className="h-6 w-20" /> : <p className={cn("truncate text-xl font-semibold tabular-nums lg:text-2xl", valueClass)}><AnimatedNumber value={value} format={format} /></p>}
-      <p className={cn("truncate text-xs font-medium", hintClass)}>{hint}</p>
-    </Card>
   );
 }
 

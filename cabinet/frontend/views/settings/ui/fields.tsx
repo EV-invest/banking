@@ -15,6 +15,7 @@ import { usePhoneNumber } from "@evinvest/types/react";
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { cn } from "@/shared/lib/cn";
+import { TipAnchor, type TipKey } from "@/shared/tips";
 import { labelOf } from "@/views/settings/lib/form";
 
 /** Desktop card header. */
@@ -27,16 +28,30 @@ export function SectionHeader({ title, sub }: { title: string; sub: string }) {
   );
 }
 
-export function Field({ label, trailing, children }: { label: string; trailing?: ReactNode; children: ReactNode }) {
+/**
+ * A labelled field slot. `hint` is the one sentence under the control that says what the
+ * value is used for — it stays visible, where a `tip` is the ⓘ beside the label for the
+ * longer explanation a reader opens on demand. A field takes either, both, or neither.
+ */
+export function Field({ label, hint, tip, trailing, children }: { label: string; hint?: string; tip?: TipKey; trailing?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex min-w-65 flex-1 flex-col">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-xs text-ink-soft">{label}</span>
+        <span className="flex items-center gap-1.5 text-xs text-ink-soft">
+          {label}
+          {tip && <TipAnchor anchor={tip} />}
+        </span>
         {trailing}
       </div>
       {children}
+      {hint && <FieldHint>{hint}</FieldHint>}
     </div>
   );
+}
+
+/** The sentence under a control. Shared with the mobile row editors so both breakpoints word a field the same way. */
+export function FieldHint({ children }: { children: ReactNode }) {
+  return <p className="mt-1.5 text-xs leading-snug text-ink-soft">{children}</p>;
 }
 
 export function FieldSkeleton() {
@@ -49,6 +64,9 @@ export function VerifiedTag() {
     <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent-debug">
       {/* i18n-max: 12 — sits beside a field label in a `justify-between` header row. */}
       <BadgeCheck className="size-3" /> {t("ui.verified")}
+      {/* Verified means the address, not the person — the tip says so before anyone
+          reads it as KYC. */}
+      <TipAnchor anchor="profile.email.verified" />
     </span>
   );
 }

@@ -4175,6 +4175,10 @@
     "en": "Payments",
     "t": "Платежи"
   },
+  "nav.profile": {
+    "en": "Profile",
+    "t": "Профиль"
+  },
   "nav.revenue": {
     "en": "Revenue stats",
     "t": "Статистика дохода"
@@ -4731,17 +4735,41 @@
     "en": "To a product",
     "t": "В продукт"
   },
-  "profile.accountSnapshot": {
-    "en": "Account snapshot",
-    "t": "Сводка по счёту"
+  "profile.activeSince": {
+    "en": "Active since {date}",
+    "t": "Активен с {date}"
+  },
+  "profile.activity": {
+    "en": "Activity",
+    "t": "Активность"
+  },
+  "profile.activityCapped": {
+    "en": "Counted over your {n} most recent operations",
+    "t": "Подсчитано по вашим {n} последним операциям"
+  },
+  "profile.activitySub": {
+    "en": "Everything that has moved money on this account",
+    "t": "Всё, что двигало деньги на этом счёте"
+  },
+  "profile.completeDetails": {
+    "en": "Complete your details in Settings — verification and compliance checks rely on them.",
+    "t": "Заполните данные в Настройках — на них опираются верификация и комплаенс-проверки."
   },
   "profile.dateOfBirth": {
     "en": "Date of birth",
     "t": "Дата рождения"
   },
-  "profile.editProfile": {
-    "en": "Edit profile",
-    "t": "Редактировать"
+  "profile.edit": {
+    "en": "Edit",
+    "t": "Изменить"
+  },
+  "profile.editInSettings": {
+    "en": "Edit in Settings",
+    "t": "Править в настройках"
+  },
+  "profile.hintAtNav": {
+    "en": "at current NAV",
+    "t": "по текущему NAV"
   },
   "profile.identityAndStanding": {
     "en": "Identity and account standing",
@@ -4783,6 +4811,10 @@
     "en": "Raised by verification and review",
     "t": "Повышается по итогам верификации и проверки"
   },
+  "profile.lastActivity": {
+    "en": "Last activity",
+    "t": "Последняя активность"
+  },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Имя по документам"
@@ -4791,13 +4823,13 @@
     "en": "Nationality",
     "t": "Гражданство"
   },
-  "profile.personalInformation": {
-    "en": "Personal information",
-    "t": "Личные данные"
+  "profile.noActivityBody": {
+    "en": "Your first deposit will appear here.",
+    "t": "Здесь появится ваше первое пополнение."
   },
-  "profile.personalInformationSub": {
-    "en": "Used for compliance and statements",
-    "t": "Используются для комплаенса и отчётов"
+  "profile.noActivityTitle": {
+    "en": "No activity yet",
+    "t": "Активности пока нет"
   },
   "profile.phoneNumber": {
     "en": "Phone number",
@@ -4815,25 +4847,21 @@
     "en": "Residential address",
     "t": "Адрес проживания"
   },
-  "profile.roleAccount": {
-    "en": "{role} account",
-    "t": "Аккаунт: {role}"
-  },
   "profile.subtitle": {
-    "en": "Your personal details and verification status",
-    "t": "Ваши личные данные и статус верификации"
+    "en": "Who you are on the platform and how your account stands",
+    "t": "Кто вы на платформе и в каком состоянии ваш аккаунт"
   },
   "profile.taxResidence": {
     "en": "Tax residence",
     "t": "Налоговое резидентство"
   },
-  "profile.totalInvested": {
-    "en": "Total invested",
-    "t": "Всего инвестировано"
-  },
   "profile.unverified": {
     "en": "Unverified",
     "t": "Не проверен"
+  },
+  "profile.viewAllActivity": {
+    "en": "View all activity",
+    "t": "Вся активность"
   },
   "session.breakGlass.body": {
     "en": "This fund has no owner in the register yet, so your role comes from the OWNER_SUBJECTS emergency allowlist and not from the register itself. It is real authority over this console, but it seats nobody: you hold no vote in the consilium. A seat is written once by the genesis seed when the service starts, or granted afterwards by a consilium of the existing owners — and this notice goes away for good the moment the first owner is seated.",
@@ -4846,10 +4874,6 @@
   "settings.a11y.sections": {
     "en": "Settings sections",
     "t": "Разделы настроек"
-  },
-  "settings.accountSub": {
-    "en": "Your contact details and preferences",
-    "t": "Ваши контактные данные и предпочтения"
   },
   "settings.baseCurrency": {
     "en": "Base currency",
@@ -4903,17 +4927,81 @@
     "en": "Your password, two-factor authentication and recovery are configured in your Google Account.",
     "t": "Пароль, двухфакторная аутентификация и восстановление настраиваются в вашем аккаунте Google."
   },
-  "settings.nav.general": {
-    "en": "General",
-    "t": "Общие"
+  "settings.group.cabinet": {
+    "en": "Cabinet",
+    "t": "Кабинет"
+  },
+  "settings.group.cabinetSub": {
+    "en": "How the cabinet looks and how it reaches you",
+    "t": "Как кабинет выглядит и как с вами связывается"
+  },
+  "settings.group.profileSub": {
+    "en": "Who you are and how your account is protected",
+    "t": "Кто вы и как защищён ваш аккаунт"
+  },
+  "settings.hint.address": {
+    "en": "Your current home address.",
+    "t": "Ваш текущий домашний адрес."
+  },
+  "settings.hint.baseCurrency": {
+    "en": "Saved to your account. Balances in the cabinet are always shown in USD.",
+    "t": "Хранится в аккаунте. Балансы в кабинете всегда показаны в USD."
+  },
+  "settings.hint.dateOfBirth": {
+    "en": "As on your identity document.",
+    "t": "Как в документе, удостоверяющем личность."
+  },
+  "settings.hint.email": {
+    "en": "Comes from your Google account and can't be changed here.",
+    "t": "Берётся из вашего аккаунта Google, здесь не меняется."
+  },
+  "settings.hint.language": {
+    "en": "Applies as soon as you save; the whole cabinet switches.",
+    "t": "Применяется сразу после сохранения — переключается весь кабинет."
+  },
+  "settings.hint.phone": {
+    "en": "Used to reach you about your account.",
+    "t": "Чтобы связаться с вами по поводу аккаунта."
+  },
+  "settings.hint.preferredName": {
+    "en": "How the cabinet and our emails address you.",
+    "t": "Как к вам обращаются кабинет и наши письма."
+  },
+  "settings.hint.timeZone": {
+    "en": "Saved to your account. The cabinet itself shows times in your device's time zone.",
+    "t": "Хранится в аккаунте. Сам кабинет показывает время в часовом поясе вашего устройства."
+  },
+  "settings.nav.personal": {
+    "en": "Personal details",
+    "t": "Личные данные"
+  },
+  "settings.nav.preferences": {
+    "en": "Preferences",
+    "t": "Предпочтения"
   },
   "settings.noSessions": {
     "en": "No active sessions.",
     "t": "Активных сеансов нет."
   },
+  "settings.notificationsSub": {
+    "en": "Which channels reach you and which events you follow",
+    "t": "Какие каналы до вас доходят и за какими событиями вы следите"
+  },
+  "settings.personalRowSub": {
+    "en": "Name, phone, address, tax residence",
+    "t": "Имя, телефон, адрес, налоговое резидентство"
+  },
+  "settings.personalSub": {
+    "en": "Your identity as the fund records it",
+    "t": "Ваша личность, как её учитывает фонд"
+  },
   "settings.phone": {
     "en": "Phone",
     "t": "Телефон"
+  },
+  "settings.preferencesSub": {
+    "en": "How the cabinet is displayed to you. Saved to your account, so every device follows",
+    "t": "Как кабинет показывается вам. Хранится в аккаунте, поэтому действует на всех устройствах"
   },
   "settings.revoke": {
     "en": "Revoke",
@@ -4990,6 +5078,10 @@
   "settings.tz.hoChiMinh": {
     "en": "Asia / Ho Chi Minh",
     "t": "Азия / Хошимин"
+  },
+  "settings.viewProfile": {
+    "en": "View profile",
+    "t": "Открыть профиль"
   },
   "status.backHome": {
     "en": "Back to home",
