@@ -1,16 +1,16 @@
 "use client";
 
-// Browser → shell KYC client (site-root `/api/kyc/start`). Verification is identity-plane
-// work and the identity plane is shell-owned, exactly like `/api/auth/sessions` — hence
-// `scope: "shell"`, no zone prefix. Transport, CSRF and the session pre-flight/replay
-// belong to `@/shared/lib/api-client`; only the answer-shaping is here.
+// Browser → shell KYC client (site-root `/api/kyc/start`, `/api/kyc/status`). Verification is
+// identity-plane work and the identity plane is shell-owned, exactly like `/api/auth/sessions`
+// — hence `scope: "shell"`, no zone prefix. Transport, CSRF and the session pre-flight/replay
+// belong to `@/shared/lib/api-client`; the wire shapes belong to ./kyc-contract; only the
+// answer-shaping — which wire answer is which OUTCOME for a screen — is here.
 
-import { RequestError, requestJson } from "@/shared/lib/api-client";
-
+import { config } from "@/config";
+import { parseErrorBody, parseStartResponse, parseStatus, type KycStatus } from "@/features/kyc/api/kyc-contract";
+import { providerUrl } from "@/features/kyc/lib/provider-url";
 import { readString } from "@/features/kyc/lib/read-field";
-
-/** The one code `/kyc/start` publishes. Switched on instead of its prose, by its own contract. */
-const UNAVAILABLE = "kyc_unavailable";
+import { RequestError, requestJson } from "@/shared/lib/api-client";
 
 /**
  * `unavailable` is its own outcome rather than a failure because "no vendor will open a
@@ -18,10 +18,11 @@ const UNAVAILABLE = "kyc_unavailable";
  * and the screen owes the user a different sentence for it than for a fault. Modelling it as
  * a thrown error would have the UI reconstructing the distinction from a status code.
  *
- * `stale` and `throttled` are here for the same reason and no other: both arrive as bare
- * status codes with plain-text bodies, so nothing downstream could tell them apart from an
- * ordinary failure. Everything that DOES carry a code stays inside `failed` and is worded
- * by `errorMessage` — this layer names outcomes, it does not write sentences.
+ * `stale` and `throttled` are here for the same reason and no other: neither has wording of
+ * its own in the transport's table that fits — a 24-hour cap is not "give it a moment", and a
+ * stale CSRF token is not "you don't have access to this". Everything that carries a code the
+ * transport already words stays inside `failed` — this layer names outcomes, it does not
+ * write sentences.
  */
 export type KycStart =
   | { kind: "started"; redirectUrl: string }
@@ -35,7 +36,8 @@ export async function startVerification(): Promise<KycStart> {
     // No body on purpose: absent `tier` means the entry tier, and that policy is the
     // identity plane's. Restating `{ tier: 1 }` here would be a second place to change it.
     const data = await requestJson<unknown>("/api/kyc/start", { method: "POST", scope: "shell" });
-    const url = providerUrl(readString(data, "redirect_url"));
+    const started = parseStartResponse(data);
+    const url = providerUrl(started?.redirectUrl ?? null, config.public.kycProviderHost);
     return url ? { kind: "started", redirectUrl: url } : { kind: "failed", error: unusable() };
   } catch (error) {
     return classify(error);
@@ -43,14 +45,17 @@ export async function startVerification(): Promise<KycStart> {
 }
 
 /**
- * The vendor's URL is handed to us by our own backend, but it lands in `window.location`,
- * where a `javascript:` or `data:` scheme executes in THIS origin. One scheme check costs
- * nothing and keeps a compromised or confused provider from becoming an XSS in the cabinet.
+ * The caller's tier and their running case, or `null` when the plane cannot tell us.
+ *
+ * `null` rather than a throw because every consumer of this answers the same way — fall back
+ * to the tier the profile already carries — and because the commonest reason for it is not an
+ * error at all: a cabinet deployed ahead of the concierge release that adds the route gets a
+ * 404 here, and must keep working exactly as it does today.
  */
-function providerUrl(raw: string | null): string | null {
-  if (!raw) return null;
+export async function fetchKycStatus(): Promise<KycStatus | null> {
   try {
-    return new URL(raw).protocol === "https:" ? raw : null;
+    // A GET: no CSRF token, and nothing is spent by asking.
+    return parseStatus(await requestJson<unknown>("/api/kyc/status", { scope: "shell" }));
   } catch {
     return null;
   }
@@ -66,22 +71,40 @@ function unusable(): RequestError {
 }
 
 function classify(error: unknown): KycStart {
-  if (error instanceof RequestError) {
-    if (error.status === 503 && readString(error.body, "error") === UNAVAILABLE) {
-      return { kind: "unavailable", contact: readString(error.body, "contact") };
-    }
-    // The daily cap on starts, refused in plain text with no machine-readable code, so the
-    // status is all there is to key on. The transport's generic wording ("give it a moment")
-    // is wrong for a 24-hour window — the screen owes this one its own sentence.
-    if (error.status === 429) return { kind: "throttled" };
-    // Keyed on the ABSENCE of a body code, not on the status alone. The only 403 this plane
-    // raises today is a stale token, refused as the plain text `csrf check failed` — there is
-    // no `{ error: "csrf" }` to match, and the transport's generic 403 wording ("You don't
-    // have access to this") would send the user hunting for a permission problem instead of
-    // reloading. But a 403 that DOES name its reason is a refusal on the merits, and telling
-    // that user the page went stale sends them reloading forever instead of to support.
-    if (error.status === 403 && readString(error.body, "error") === null) return { kind: "stale" };
+  if (!(error instanceof RequestError)) {
+    // Includes SessionExpiredError, whose own code already says to sign in again.
+    return { kind: "failed", error };
   }
-  // Includes SessionExpiredError, whose own code already says to sign in again.
+  // Keyed on the body's code, not on the status: the plane publishes a closed dictionary and
+  // answers every refusal with one, so the status is now corroboration rather than evidence.
+  // (This retires the old "a 403 with no body is a stale token" heuristic — there is no
+  // bodyless refusal left for it to match.)
+  const body = parseErrorBody(error.body);
+  switch (body?.error) {
+    case "kyc_unavailable":
+      return { kind: "unavailable", contact: body.contact };
+    case "throttled":
+      return { kind: "throttled" };
+    case "csrf":
+      return { kind: "stale" };
+    // `internal` is the one code the transport's own table does not word, so it would reach
+    // the reader as the literal string "internal". Re-keyed to the sentence every other 5xx
+    // in the cabinet gets.
+    case "internal":
+      return { kind: "failed", error: new RequestError("The service is temporarily unavailable. Please try again.", error.status, "err.serverUnavailable", error.body) };
+    // `unauthenticated` IS in that table (`err.unauthenticated`), and a session the shell
+    // confirms is gone has already been turned into SessionExpiredError upstream.
+    case "unauthenticated":
+      return { kind: "failed", error };
+    default:
+      break;
+  }
+  // No code we know: fall back to what the status alone can say, so a plane that has not
+  // shipped the dictionary yet still gets the outcomes that have their own wording. The 403
+  // branch keeps the old rule — a refusal that NAMES a reason is a refusal on the merits, and
+  // telling that reader the page went stale sends them reloading forever instead of to
+  // support; only a bodyless one is the identity plane's plain-text `csrf check failed`.
+  if (error.status === 429) return { kind: "throttled" };
+  if (error.status === 403 && readString(error.body, "error") === null) return { kind: "stale" };
   return { kind: "failed", error };
 }

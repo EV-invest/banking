@@ -32,6 +32,10 @@ function getSettings() {
     clientPrefix: "NEXT_PUBLIC_",
     client: {
       NEXT_PUBLIC_MFE_ALLOWED_ORIGINS: opt(str()),
+      // Host(s) the identity plane is allowed to hand back as a verification redirect,
+      // comma-separated. Optional: the plane refuses a foreign host itself, and an unset
+      // value here degrades to the https-only check rather than blocking verification.
+      NEXT_PUBLIC_KYC_PROVIDER_HOST: opt(str()),
       NEXT_PUBLIC_POSTHOG_HOST: opt(str()),
       // Unset ⇒ browser error monitoring is a silent no-op: the cabinet's
       // client-side crashes reach nobody. Acceptable locally, not in a deploy.
@@ -54,6 +58,7 @@ function getSettings() {
       MFE_ALLOWED_ORIGINS: process.env.MFE_ALLOWED_ORIGINS,
       NODE_ENV: process.env.NODE_ENV,
       NEXT_PUBLIC_MFE_ALLOWED_ORIGINS: process.env.NEXT_PUBLIC_MFE_ALLOWED_ORIGINS,
+      NEXT_PUBLIC_KYC_PROVIDER_HOST: process.env.NEXT_PUBLIC_KYC_PROVIDER_HOST,
       NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
       NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
     },
@@ -93,6 +98,7 @@ export const config = ((): Readonly<{
   isDevelopment: boolean;
   public: Readonly<{
     mfeAllowedOrigins: string | undefined;
+    kycProviderHost: string | undefined;
     posthogHost: string | undefined;
     sentryDsn: string | undefined;
   }>;
@@ -116,6 +122,9 @@ export const config = ((): Readonly<{
     public: Object.freeze({
       get mfeAllowedOrigins(): string | undefined {
         return getSettings().NEXT_PUBLIC_MFE_ALLOWED_ORIGINS;
+      },
+      get kycProviderHost(): string | undefined {
+        return getSettings().NEXT_PUBLIC_KYC_PROVIDER_HOST;
       },
       get posthogHost(): string | undefined {
         return getSettings().NEXT_PUBLIC_POSTHOG_HOST;
@@ -144,6 +153,7 @@ export function assertConfig(): void {
   void config.isProduction;
   void config.isDevelopment;
   void config.public.mfeAllowedOrigins;
+  void config.public.kycProviderHost;
   void config.public.posthogHost;
   void config.public.sentryDsn;
 }
