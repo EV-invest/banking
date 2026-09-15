@@ -1,20 +1,35 @@
 #!/usr/bin/env bash
 # FB-24 / CROSS-5: guard the cross-repo concierge pin.
 #
-# Banking compiles the identity wire contract from the `evconcierge_contracts` git dep
-# (Cargo.toml) and re-aliases the cabinet's identity TS from concierge's proto. This
+# Banking compiles the identity + governance wire contract from the `evconcierge_contracts`
+# git dep (Cargo.toml) and re-aliases the cabinet's TS from concierge's proto. This
 # asserts that pin is trustworthy:
 #   1. the pinned rev is an ANCESTOR of concierge `origin/main` (not an orphaned /
-#      force-pushed SHA — the supply-chain fragility the audit flagged), and
+#      force-pushed SHA — the supply-chain fragility the audit flagged);
 #   2. the proto BYTES at the pin match what's on origin/main today (no silent drift
-#      between "the proto banking compiles against" and "the proto concierge ships").
+#      between "the proto banking compiles against" and "the proto concierge ships");
+#   3. the proto BYTES in the local cargo checkout — the files `gen-api` actually feeds
+#      protoc — match the pin (a stale or hand-edited checkout would otherwise generate
+#      a contract nobody pinned).
 #
-# Run in CI (and locally before bumping the pin). Needs network access to the concierge
-# remote; exits non-zero on any violation so a bad pin can't merge.
+# WHICH protos: contracts/concierge-protos.txt — the same list `gen-api` feeds protoc,
+# so a proto cannot be generated without being guarded (issue #293: governance.proto).
+#
+# Run in CI (.github/workflows/drift.yml) and locally before bumping the pin. Needs
+# network access to the concierge remote and a resolvable cargo workspace (`cargo
+# metadata`, i.e. .tb-client linked — the nix app does that); exits non-zero on any
+# violation so a bad pin can't merge.
 set -euo pipefail
 
 repo="$(git rev-parse --show-toplevel)"
 remote="https://github.com/EV-invest/concierge.git"
+list="$repo/contracts/concierge-protos.txt"
+
+mapfile -t protos < <(grep -Ev '^[[:space:]]*(#|$)' "$list")
+if [ "${#protos[@]}" -eq 0 ]; then
+	echo "::error::$list lists no protos" >&2
+	exit 1
+fi
 
 pin="$(grep -oE 'evconcierge_contracts = \{ git = "[^"]+", (rev|tag) = "[^"]+"' "$repo/Cargo.toml" | grep -oE '(rev|tag) = "[^"]+"' | sed -E 's/.*"([^"]+)"/\1/')"
 if [ -z "$pin" ]; then
@@ -43,9 +58,8 @@ if ! git -C "$work" merge-base --is-ancestor "$pin_commit" origin/main; then
 fi
 echo "ok: pin is an ancestor of origin/main"
 
-# The proto bytes banking depends on must match origin/main's. The identity surface the
-# cabinet straddles lives in concierge/v1/{directory,auth}.proto.
-for p in concierge/v1/directory.proto concierge/v1/auth.proto; do
+# 2. The proto bytes banking depends on must match origin/main's.
+for p in "${protos[@]}"; do
 	pinned="$(git -C "$work" show "$pin_commit:contracts/proto/$p")"
 	head="$(git -C "$work" show "origin/main:contracts/proto/$p")"
 	if [ "$pinned" != "$head" ]; then
@@ -53,4 +67,28 @@ for p in concierge/v1/directory.proto concierge/v1/auth.proto; do
 		exit 1
 	fi
 done
-echo "ok: vendored identity proto bytes match origin/main"
+echo "ok: vendored proto bytes match origin/main (${protos[*]})"
+
+# 3. The local cargo checkout is what `gen-api` compiles from (same `cargo metadata`
+# lookup as runGenApi in flake.nix). Its bytes must be the pin's, file for file.
+cc_manifest="$(cargo metadata --format-version 1 --manifest-path "$repo/contracts/Cargo.toml" \
+	| jq -r '.packages[] | select(.name=="evconcierge_contracts") | .manifest_path')"
+if [ -z "$cc_manifest" ] || [ ! -f "$cc_manifest" ]; then
+	echo "::error::cargo metadata did not resolve the evconcierge_contracts checkout" >&2
+	exit 1
+fi
+cc_dir="$(dirname "$cc_manifest")"
+echo "local checkout -> $cc_dir"
+for p in "${protos[@]}"; do
+	local_file="$cc_dir/proto/$p"
+	if [ ! -f "$local_file" ]; then
+		echo "::error::$local_file is missing from the local concierge checkout" >&2
+		exit 1
+	fi
+	pinned="$(git -C "$work" show "$pin_commit:contracts/proto/$p")"
+	if [ "$pinned" != "$(cat "$local_file")" ]; then
+		echo "::error::$local_file differs from contracts/proto/$p at the pin — the checkout is stale or edited; 'cargo update -p evconcierge_contracts' or restore it" >&2
+		exit 1
+	fi
+done
+echo "ok: local checkout proto bytes match the pin"
