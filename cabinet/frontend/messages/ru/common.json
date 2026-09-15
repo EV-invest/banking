@@ -6691,8 +6691,12 @@
     "en": "No deposit or withdrawal rails are available right now — check back soon.",
     "t": "Каналы пополнения и вывода сейчас недоступны — загляните позже."
   },
+  "wallet.noRailsTitle": {
+    "en": "No networks available yet",
+    "t": "Пока нет доступных сетей"
+  },
   "wallet.overviewVerifyTitle": {
-    "en": "Verify your identity to use these rails",
+    "en": "Verify your identity to use these networks",
     "t": "Подтвердите личность, чтобы пользоваться сетями"
   },
   "wallet.overviewVerifyBody": {

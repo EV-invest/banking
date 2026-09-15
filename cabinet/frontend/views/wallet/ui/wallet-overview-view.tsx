@@ -2,14 +2,13 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { TriangleAlert } from "lucide-react";
+import { Waypoints } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
-import { Skeleton } from "@evinvest/uikit";
+import { Alert, AlertDescription, AlertTitle, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
 
-import { isUnverified } from "@/entities/user/lib/kyc";
-import { profileResource } from "@/entities/user/model/profile-resource";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { VerificationRequired } from "@/features/kyc";
+import { useKycGate } from "@/features/kyc/model/use-kyc-gate";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
@@ -29,13 +28,12 @@ export function WalletOverviewView() {
   // any of them shows the figure immediately and refreshes it behind the number. A failed
   // refresh reports itself without blanking what is already on screen.
   const { data: wallet, error: failure, isLoading: loading } = useResource(walletResource);
-  // Shared with the sidebar chip and every other screen, and prefetched at boot, so the tier
-  // is normally known on the first frame. A read that FAILED must not gate anything — a
-  // verified user would lose their rails to an unrelated blip — so only a settled `tier 0`
-  // closes the list, exactly as `deposit-view` decides it.
-  const { data: profile, error: profileError, isLoading: profileLoading } = useResource(profileResource);
-  const tierKnown = !profileLoading || profileError !== null;
-  const gated = tierKnown && isUnverified(profile);
+  // The tier from `/kyc/status` rather than from the profile's mirror of it, which lands a
+  // poll later: a reader coming back from the vendor used to watch the banner and the profile
+  // card update while this screen went on hiding rails the hub was already serving. A read
+  // that FAILED still gates nothing — see `features/kyc/lib/money-gate`, where that rule now
+  // lives as a predicate with tests instead of as this expression's third copy.
+  const { gated, loading: tierLoading } = useKycGate();
   const error = wallet ? null : failure ? errorMessage(failure, t) : null;
 
   const balance = wallet?.balance;
@@ -68,12 +66,14 @@ export function WalletOverviewView() {
       }
     >
       {error && (
-        <StaggerItem className={cn(WALLET_CARD, "flex gap-3 border-accent-error/50 p-4.5 lg:p-6")}>
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-accent-error" />
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-ink">{t("err.walletLoad")}</p>
-            <p className="text-xs text-ink-soft">{error}</p>
-          </div>
+        <StaggerItem>
+          {/* uikit's own destructive Alert. This screen's state matrix — loading, gated,
+              empty, list — is drawn from the kit throughout; the error was the one branch
+              still assembled out of a card, an icon and two paragraphs. */}
+          <Alert variant="destructive">
+            <AlertTitle>{t("err.walletLoad")}</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         </StaggerItem>
       )}
 
@@ -132,7 +132,7 @@ export function WalletOverviewView() {
           whichever of them it is showing, and giving each branch its own item would make
           the sequence depend on which one happened to render. */}
       <StaggerItem>
-        {loading || profileLoading ? (
+        {loading || tierLoading ? (
           <div className="grid gap-3.5 lg:grid-cols-2 lg:gap-5 xl:grid-cols-3">
             <Skeleton className="h-27 rounded-xl" />
             <Skeleton className="hidden h-31 rounded-xl lg:block" />
@@ -147,7 +147,17 @@ export function WalletOverviewView() {
           // and hiding it would say their money is gated when only the rails are.
           <VerificationRequired title={t("wallet.overviewVerifyTitle")} description={t("wallet.overviewVerifyBody")} />
         ) : rails.length === 0 ? (
-          <p className="text-sm text-ink-soft">{t("wallet.noRails")}</p>
+          // The other zero state of this same section, and it used to be the bare grey
+          // sentence the gated branch beside it was designed away from.
+          <Empty className="border md:p-6">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Waypoints />
+              </EmptyMedia>
+              <EmptyTitle>{t("wallet.noRailsTitle")}</EmptyTitle>
+              <EmptyDescription>{t("wallet.noRails")}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <div className="grid gap-3.5 lg:grid-cols-2 lg:gap-5 xl:grid-cols-3">
             {rails.map((network) => (

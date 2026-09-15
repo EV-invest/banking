@@ -6691,8 +6691,12 @@
     "en": "No deposit or withdrawal rails are available right now — check back soon.",
     "t": "Hiện không có kênh nạp hoặc rút tiền nào khả dụng — vui lòng quay lại sau."
   },
+  "wallet.noRailsTitle": {
+    "en": "No networks available yet",
+    "t": "Chưa có mạng nào khả dụng"
+  },
   "wallet.overviewVerifyTitle": {
-    "en": "Verify your identity to use these rails",
+    "en": "Verify your identity to use these networks",
     "t": "Xác minh danh tính để sử dụng các mạng này"
   },
   "wallet.overviewVerifyBody": {
