@@ -8274,6 +8274,11 @@
             "title": "updated_at",
             "format": "int64",
             "description": "unix seconds; 0 when the product has no policy row (the defaults)"
+          },
+          "allow_unbacked_trading": {
+            "type": "boolean",
+            "title": "allow_unbacked_trading",
+            "description": "See SetBookPolicyRequest.allow_unbacked_trading. When true the terminal tells buyers the\n units are not backed by fund cash and cannot be redeemed — the book is their only exit."
           }
         },
         "title": "BookPolicy",
@@ -11785,6 +11790,11 @@
             "type": "integer",
             "title": "market_slippage_bps",
             "description": "0..10000; how far past the best quote a market order may fill"
+          },
+          "allow_unbacked_trading": {
+            "type": "boolean",
+            "title": "allow_unbacked_trading",
+            "description": "The operator's acknowledgement that the book may trade units the fund holds no cash\n for (`Allocation.backing = in_kind`): a buyer pays cash for a claim on an asset held in\n kind and cannot redeem it. Required to open the book on an in_kind product, and\n checked again on every order — the backing can flip after the book opened (the first\n in-kind mint). Harmless on a cash product. The terminal shows buyers a notice when set."
           }
         },
         "title": "SetBookPolicyRequest",

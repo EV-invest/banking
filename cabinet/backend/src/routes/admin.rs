@@ -865,6 +865,9 @@ pub async fn retire_units(State(st): State<AppState>, jar: CookieJar, headers: H
 /// at nothing while the console answers "saved". `price_tick` and `lot_size` may be left
 /// out (the hub's defaults, `0.01` and `0.0001`); `market_slippage_bps` may be left out
 /// and is then zero, but if it is sent it has to be a whole number of bps.
+/// `allow_unbacked_trading` may be left out and is then `false` — the operator's
+/// acknowledgement that the book trades units the fund holds no cash for is given, never
+/// presumed; the hub refuses to open an `in_kind` product's book without it.
 pub async fn set_book_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::BookPolicy>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
@@ -892,6 +895,7 @@ pub async fn set_book_policy(State(st): State<AppState>, jar: CookieJar, headers
 		price_tick: editable(&v, "price_tick"),
 		lot_size: editable(&v, "lot_size"),
 		market_slippage_bps,
+		allow_unbacked_trading: bool_field(&v, "allow_unbacked_trading"),
 	};
 	Ok(Json(st.grpc.set_book_policy(&token, req).await?.into()))
 }

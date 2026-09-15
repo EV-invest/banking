@@ -166,9 +166,16 @@ pub async fn policy(store: &dyn BookStore, service: &ServiceId) -> Result<BookPo
 }
 
 /// Replace the terms (`AllocationManage` at the boundary). The allocation must be
-/// registered, in any state.
+/// registered, in any state. Opening the book on an `in_kind` product needs the
+/// operator's acknowledgement (`allow_unbacked_trading`); refused as a `Precondition`
+/// with nothing written, so the terms in force stay whatever they were. The same gate
+/// runs again on every placement ([`BookPolicy::ensure_tradable_for`]) — this one is the
+/// early, legible refusal at the console; that one is the backstop.
 pub async fn set_policy(allocations: &dyn AllocationRegistry, store: &dyn BookStore, service: &ServiceId, policy: BookPolicy) -> Result<BookPolicyRecord, DomainError> {
-	allocations_app::get(allocations, service).await?;
+	let allocation = allocations_app::get(allocations, service).await?;
+	if policy.book_open() {
+		policy.ensure_tradable_for(service, allocation.backing())?;
+	}
 	store.set_policy(service, &policy).await
 }
 
@@ -179,7 +186,8 @@ async fn current_nav(nav: &dyn NavMarks, service: &ServiceId) -> Result<Nav, Dom
 }
 
 /// Place an order for `user`. Gates in order: the registry (registered, visible, and
-/// `invest` for this caller), the policy (`book_open`), the grid (tick and lot), the
+/// `invest` for this caller), the policy (`book_open`, and the unbacked-trading
+/// acknowledgement when the units are held in kind), the grid (tick and lot), the
 /// pricing of a market order off the best opposite quote, the idempotency read, and the
 /// Read-First on what the order escrows — a sell needs the units free in the holding, a
 /// buy the worst-case cash (notional at the limit plus the taker fee) free in the claim.
@@ -199,11 +207,9 @@ pub async fn place_order(ports: &BookPorts<'_>, user: UserId, request: PlaceOrde
 	if ports.outflow.standing(user).await?.is_some_and(|standing| standing.blocked) {
 		return Err(DomainError::Forbidden("account is frozen".into()));
 	}
-	require_tradable(ports.allocations, &request.service, user).await?;
+	let allocation = require_tradable(ports.allocations, &request.service, user).await?;
 	let policy = policy(ports.store, &request.service).await?.policy;
-	if !policy.book_open() {
-		return Err(DomainError::Precondition(format!("the book for '{}' is closed", request.service)));
-	}
+	policy.ensure_tradable_for(&request.service, allocation.backing())?;
 	let size = policy.size(request.size)?;
 	let price = match request.kind {
 		OrderKind::Limit => policy.price(request.price.ok_or_else(|| DomainError::Validation("a limit order needs a price".into()))?)?,

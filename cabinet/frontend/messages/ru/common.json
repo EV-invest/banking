@@ -135,6 +135,22 @@
     "en": "Order book",
     "t": "Книга заявок"
   },
+  "admin.alloc.book.unbacked.ack": {
+    "en": "Allow trading of units not backed by fund cash",
+    "t": "Разрешить торговлю юнитами, не обеспеченными кэшем фонда"
+  },
+  "admin.alloc.book.unbacked.acknowledged": {
+    "en": "Unbacked trading acknowledged",
+    "t": "Необеспеченная торговля подтверждена"
+  },
+  "admin.alloc.book.unbacked.required": {
+    "en": "This product is held in kind: tick the acknowledgement before opening its book.",
+    "t": "Этот продукт держится in kind: поставьте галочку подтверждения, прежде чем открывать его книгу."
+  },
+  "admin.alloc.book.unbacked.warning": {
+    "en": "Buyers pay cash for a claim on an asset held in kind and cannot redeem it — the book is their only exit",
+    "t": "Покупатели платят кэш за право на актив, который держится in kind, и не могут его погасить — книга для них единственный выход"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Закрыть"
@@ -6014,6 +6030,10 @@
   "trade.ticker.volume": {
     "en": "24h volume",
     "t": "Объём 24 ч"
+  },
+  "trade.unbackedNotice": {
+    "en": "Units of this product are a claim on an off-platform asset and cannot be redeemed for fund cash — the book is the only exit.",
+    "t": "Юниты этого продукта — право на актив вне платформы; их нельзя погасить за кэш фонда — книга является единственным выходом."
   },
   "ui.account": {
     "en": "Account",

@@ -135,6 +135,22 @@
     "en": "Order book",
     "t": "Orderbuch"
   },
+  "admin.alloc.book.unbacked.ack": {
+    "en": "Allow trading of units not backed by fund cash",
+    "t": "Handel mit Anteilen erlauben, die nicht durch Fondsbargeld gedeckt sind"
+  },
+  "admin.alloc.book.unbacked.acknowledged": {
+    "en": "Unbacked trading acknowledged",
+    "t": "Ungedeckter Handel bestätigt"
+  },
+  "admin.alloc.book.unbacked.required": {
+    "en": "This product is held in kind: tick the acknowledgement before opening its book.",
+    "t": "Dieses Produkt wird in kind gehalten: Bestätigung ankreuzen, bevor das Buch geöffnet wird."
+  },
+  "admin.alloc.book.unbacked.warning": {
+    "en": "Buyers pay cash for a claim on an asset held in kind and cannot redeem it — the book is their only exit",
+    "t": "Käufer zahlen Bargeld für einen Anspruch auf einen in kind gehaltenen Vermögenswert und können ihn nicht zurückgeben — das Buch ist ihr einziger Ausstieg"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Schließen"
@@ -6014,6 +6030,10 @@
   "trade.ticker.volume": {
     "en": "24h volume",
     "t": "24h-Volumen"
+  },
+  "trade.unbackedNotice": {
+    "en": "Units of this product are a claim on an off-platform asset and cannot be redeemed for fund cash — the book is the only exit.",
+    "t": "Die Anteile dieses Produkts sind ein Anspruch auf einen Vermögenswert außerhalb der Plattform und können nicht gegen Fondsbargeld zurückgegeben werden — das Buch ist der einzige Ausstieg."
   },
   "ui.account": {
     "en": "Account",

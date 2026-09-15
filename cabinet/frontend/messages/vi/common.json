@@ -135,6 +135,22 @@
     "en": "Order book",
     "t": "Sổ lệnh"
   },
+  "admin.alloc.book.unbacked.ack": {
+    "en": "Allow trading of units not backed by fund cash",
+    "t": "Cho phép giao dịch các đơn vị không được bảo chứng bằng tiền mặt của quỹ"
+  },
+  "admin.alloc.book.unbacked.acknowledged": {
+    "en": "Unbacked trading acknowledged",
+    "t": "Đã xác nhận giao dịch không bảo chứng"
+  },
+  "admin.alloc.book.unbacked.required": {
+    "en": "This product is held in kind: tick the acknowledgement before opening its book.",
+    "t": "Sản phẩm này được nắm giữ bằng tài sản hiện vật: hãy tích xác nhận trước khi mở sổ lệnh."
+  },
+  "admin.alloc.book.unbacked.warning": {
+    "en": "Buyers pay cash for a claim on an asset held in kind and cannot redeem it — the book is their only exit",
+    "t": "Người mua trả tiền mặt cho quyền đối với tài sản hiện vật và không thể rút lại — sổ lệnh là lối thoát duy nhất của họ"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Đóng"
@@ -6014,6 +6030,10 @@
   "trade.ticker.volume": {
     "en": "24h volume",
     "t": "Khối lượng 24h"
+  },
+  "trade.unbackedNotice": {
+    "en": "Units of this product are a claim on an off-platform asset and cannot be redeemed for fund cash — the book is the only exit.",
+    "t": "Các đơn vị của sản phẩm này là quyền đối với một tài sản ngoài nền tảng và không thể rút thành tiền mặt của quỹ — sổ lệnh là lối thoát duy nhất."
   },
   "ui.account": {
     "en": "Account",
