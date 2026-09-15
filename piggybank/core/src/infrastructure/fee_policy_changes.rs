@@ -340,9 +340,11 @@ async fn notice_roster(conn: &mut PgConnection, service: &ServiceId) -> Result<V
 /// `fee-policy-notice:<change>:<user>` so a retried scheduling enqueues each exactly once.
 ///
 /// A holder with no mirrored identity-plane id is still queued, with an empty
-/// `subject_user_id`: the worker retires that row loudly ("recipient has no mirrored
-/// concierge user id") rather than this path silently skipping someone the notice period
-/// exists to protect.
+/// `subject_user_id`, rather than this path silently skipping someone the notice period
+/// exists to protect. The worker names the addressee from the mirror at SEND time, so a
+/// holder mirrored after the scheduling (a first cabinet login) is still reached; one still
+/// unmirrored when the worker gets to the row is retired loudly ("recipient has no mirrored
+/// concierge user id"). The id written here is what the row shows until then.
 async fn enqueue_notices(conn: &mut PgConnection, change: &FeePolicyChange, from: Option<&FeePolicy>, holders: &[Holder]) -> Result<(), DomainError> {
 	let fund = fee_mail_fund(allocation_title(conn, &change.service).await?.as_deref(), &change.service);
 	let link = product_page_path(&change.service);

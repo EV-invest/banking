@@ -13,8 +13,12 @@
 //! [`exclusive`] and starts from a cleared roster; products, holders and changes are all
 //! per test.
 
-use std::sync::Arc;
+use std::sync::{
+	Arc,
+	atomic::{AtomicBool, Ordering},
+};
 
+use async_trait::async_trait;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
 	auth::AuthSubject,
@@ -31,6 +35,7 @@ use piggybank_core::{
 	infrastructure::{
 		allocations::PgAllocations,
 		consilium::PgConsilia,
+		consilium_mailer::ConsiliumMailer,
 		custody::StubCustody,
 		deposits::PgDeposits,
 		fee_policy_changes::PgFeePolicyChanges,
@@ -47,6 +52,7 @@ use piggybank_core::{
 		AllocationRegistry, ConsiliumRepository, PaymentRepository, UserRepository, WithdrawalRepository,
 		consilium::{MAX_CODE_ATTEMPTS, VoteAudit},
 		fees::{FeePolicies, FeePolicyChange, FeePolicyChanges, NewFeePolicyChange, PositionAccruals},
+		governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError},
 		ledger::Ledger,
 	},
 };
@@ -227,9 +233,16 @@ async fn install(h: &Harness, service: &ServiceId, policy: FeePolicy) {
 
 /// A provisioned investor with a mirrored identity-plane id, so a notice can be addressed.
 async fn investor(h: &Harness) -> UserId {
+	let id = unmirrored_investor(h).await;
+	mirror(h, id).await;
+	id
+}
+
+/// A provisioned investor the identity plane has not mirrored yet — a money-plane row with
+/// no `concierge_user_id`, as the bridge leaves one until the first cabinet login lands.
+async fn unmirrored_investor(h: &Harness) -> UserId {
 	let tag = Uuid::new_v4();
-	let id = h
-		.users
+	h.users
 		.provision(
 			AuthSubject::parse(&format!("fpc-{tag}")).unwrap(),
 			Email::parse(&format!("fpc-{}@example.test", tag.simple())).unwrap(),
@@ -237,14 +250,19 @@ async fn investor(h: &Harness) -> UserId {
 		)
 		.await
 		.unwrap()
-		.id();
+		.id()
+}
+
+/// Stand in for the bridge mirroring the investor's identity-plane id. Returns that id.
+async fn mirror(h: &Harness, user: UserId) -> Uuid {
+	let concierge_id = Uuid::new_v4();
 	sqlx::query("UPDATE users SET concierge_user_id = $2 WHERE id = $1")
-		.bind(id.raw())
-		.bind(Uuid::new_v4())
+		.bind(user.raw())
+		.bind(concierge_id)
 		.execute(&h.pool)
 		.await
 		.unwrap();
-	id
+	concierge_id
 }
 
 async fn fund_user(h: &Harness, user: UserId, amount: &str) {
@@ -326,6 +344,42 @@ async fn let_the_notice_run(h: &Harness, change: &FeePolicyChange) {
 		.execute(&h.pool)
 		.await
 		.unwrap();
+}
+
+/// The identity plane's relay, stood in for at the mailer's port: DOWN (every send
+/// deferred, as an unreachable concierge is) or UP (every send taken and kept, with the
+/// recipient it was addressed to), switched by the test.
+#[derive(Default)]
+struct SwitchedRelay {
+	down: AtomicBool,
+	seen: std::sync::Mutex<Vec<(Uuid, GovernanceMail)>>,
+}
+
+#[async_trait]
+impl GovernanceMailer for SwitchedRelay {
+	async fn send(&self, recipient: Uuid, _dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError> {
+		if self.down.load(Ordering::SeqCst) {
+			return Err(MailDeliveryError::Deferred("governance mail relay: status: Unavailable".into()));
+		}
+		self.seen.lock().unwrap().push((recipient, mail.clone()));
+		Ok(())
+	}
+}
+
+/// The queue is shared by every test in this binary and drained in batches of 100 by id, so
+/// a test that runs the mailer first retires the backlog the others left behind.
+async fn quiet_queue(h: &Harness) {
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE sent_at IS NULL").execute(&h.pool).await.unwrap();
+}
+
+/// One notice row as the mailer left it: `(attempts, last_error, sent, subject_user_id)`.
+async fn notice_row(h: &Harness, change: &FeePolicyChange, user: UserId) -> (i32, Option<String>, bool, String) {
+	sqlx::query_as("SELECT attempts, last_error, sent_at IS NOT NULL, payload ->> 'subject_user_id' FROM consilium_mail WHERE fee_policy_change_id = $1 AND user_id = $2")
+		.bind(change.id.raw())
+		.bind(user.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap()
 }
 
 /// Clear the global roster and the cooling-off clock, then seat `n` fresh owners.
@@ -560,6 +614,64 @@ async fn a_change_does_not_bind_while_a_holder_notice_has_been_given_up_on() {
 	assert!(h.changes.promote(change.id, now()).await.unwrap());
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
 	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Active);
+}
+
+/// A holder the identity plane had not mirrored when the change was scheduled (#325): the
+/// notice is queued with no addressee, and the worker names one from the mirror at SEND
+/// time — so the mirror landing after the scheduling is enough for the notice to go out,
+/// addressed to it, and the row is never charged for an empty name it could have filled.
+#[tokio::test]
+async fn a_holder_mirrored_after_the_scheduling_is_still_told() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	install(&h, &service, cheaper).await;
+	let late = unmirrored_investor(&h).await;
+	fund_user(&h, late, "1000").await;
+	subscribe(&h, late, &service, "1000").await;
+	quiet_queue(&h).await;
+
+	// A tightening, so that the notice is the one thing the change waits on.
+	let change = schedule(&h, UserId::new(), &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	let (_, mail) = notices(&h, &change).await.pop().expect("queued for the unmirrored holder all the same");
+	assert_eq!(mail["subject_user_id"], "", "no identity-plane id to name yet");
+
+	// Still unmirrored when the worker gets to it: charged, and the reason says what is
+	// missing — not that the relay refused a name.
+	let relay = Arc::new(SwitchedRelay::default());
+	let mailer = ConsiliumMailer::new(h.pool.clone(), relay.clone());
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	let (attempts, last_error, sent, _) = notice_row(&h, &change, late).await;
+	assert_eq!((attempts, sent), (1, false));
+	assert_eq!(last_error.as_deref(), Some("recipient has no mirrored concierge user id"));
+	assert!(relay.seen.lock().unwrap().is_empty(), "nothing was handed over without an address");
+
+	// The bridge mirrors the holder (a first cabinet login): the next pass reaches them,
+	// addressed to that id in the identity plane, and the row says so afterwards.
+	let concierge_id = mirror(&h, late).await;
+	assert_eq!(mailer.drain().await.unwrap(), 1);
+	let seen = relay.seen.lock().unwrap().clone();
+	let [(recipient, GovernanceMail::FeePolicyNotice(notice))] = seen.as_slice() else {
+		panic!("one notice, kept as it was handed over: {seen:?}");
+	};
+	assert_eq!(*recipient, concierge_id);
+	assert_eq!(
+		notice.subject_user_id,
+		concierge_id.to_string(),
+		"named as it is addressed — concierge refuses the two disagreeing"
+	);
+	assert_eq!(notice.proposed.management_bps, 200);
+	let (attempts, _, sent, subject) = notice_row(&h, &change, late).await;
+	assert_eq!((attempts, sent), (1, true), "delivered on the pass after the mirror landed");
+	assert_eq!(subject, concierge_id.to_string(), "the audit row names who it went to");
+
+	// Told, so the dearer terms bind once the period has run — with nobody's acknowledgement.
+	assert_eq!(change_of(&h, &change).await.undelivered_notices, 0);
+	let_the_notice_run(&h, &change).await;
+	assert!(h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
 }
 
 #[tokio::test]

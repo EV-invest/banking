@@ -219,6 +219,14 @@ the moment they bind and the cabinet-relative product page (`/invest/<service>`,
 concierge's own origin). On the administrator's path the same mails go out the moment the
 change is scheduled.
 
+A notice is queued for every holder with an account row, whether or not the identity plane
+has mirrored them yet. Its addressee (`subject_user_id`, which concierge checks against the
+recipient) is named by the mailer from `users.concierge_user_id` **at the moment it sends**,
+not from whatever the queue row was written with — so a holder whose mirror lands after the
+scheduling (a first cabinet login) is reached on the next pass, rather than the row being
+refused pass after pass for an empty name until the mailer gave up on it (#325). A holder
+still unmirrored when the mailer gets to the row is retired within minutes, as before.
+
 The owners, for their part, are told how the consilium ended: one outcome mail
 (`GovernanceMail::PayoutOutcome`) to the initiator and to every seat on each closed state —
 rejected, expired, cancelled, executed, execution failed — and one burn notice

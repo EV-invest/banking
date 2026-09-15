@@ -167,7 +167,7 @@ impl ConsiliumMailer {
 			let dedupe_key: String = row.try_get("dedupe_key").map_err(repo_err)?;
 			let payload: String = row.try_get("payload").map_err(repo_err)?;
 			let concierge_user_id: Option<Uuid> = row.try_get("concierge_user_id").map_err(repo_err)?;
-			let mail: GovernanceMail = match serde_json::from_str(&payload) {
+			let mut mail: GovernanceMail = match serde_json::from_str(&payload) {
 				Ok(mail) => mail,
 				Err(err) => {
 					// Nothing typed to redact: a payload this worker cannot read is one it
@@ -183,6 +183,15 @@ impl ConsiliumMailer {
 				self.fail(id, "recipient has no mirrored concierge user id", Some(&mail)).await?;
 				continue;
 			};
+			// A holder's notice names its addressee in the identity plane as a consent does,
+			// and concierge refuses the two disagreeing — but unlike a consent it is queued
+			// whether or not the holder was mirrored at the time (#325), so the name is taken
+			// from the mirror of THIS moment, the same row the address above came from. A
+			// holder mirrored after the change was scheduled is then reached on the next pass
+			// instead of the row being charged an attempt per pass for an empty name.
+			if let GovernanceMail::FeePolicyNotice(notice) = &mut mail {
+				notice.subject_user_id = recipient.to_string();
+			}
 			match self.mailer.send(recipient, &dedupe_key, &mail).await {
 				Ok(()) => {
 					let redacted = serde_json::to_string(&mail.redacted()).map_err(|e| DomainError::Repository(e.to_string()))?;
