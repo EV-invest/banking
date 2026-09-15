@@ -734,8 +734,8 @@ const CLEARTEXT_BRIDGE_NOTICE: &str = "CONCIERGE_BRIDGE_ADDR is cleartext to a n
 /// Split out of [`note_if_bridge_is_unauthenticated`] so the scoping is a value and not
 /// just an early `return` inside a function that reports nothing: this notice is the whole
 /// of the operational signal phase 1 leaves behind, and a guard that silently stopped
-/// matching (or started matching everywhere) is precisely the regression a test of the
-/// logging call cannot see.
+/// matching (or started matching everywhere) is precisely the regression to pin. At what
+/// level it is then emitted is the other half, and is asserted against a subscriber.
 fn cleartext_bridge_notice(app_env: &str, addr: &str) -> Option<&'static str> {
 	(app_env == "production" && bridge_transport(addr) == BridgeTransport::Cleartext).then_some(CLEARTEXT_BRIDGE_NOTICE)
 }
@@ -743,23 +743,24 @@ fn cleartext_bridge_notice(app_env: &str, addr: &str) -> Option<&'static str> {
 /// Record at boot that production pulls the lifecycle stream in cleartext from a peer it
 /// cannot authenticate.
 ///
-/// Neither a refusal nor a WARN, deliberately. Not a refusal because production runs on
-/// `http://concierge:55670` today (h2c, inside the cluster), and a hub that refuses to
-/// start would take the money plane down to fix a seam that is currently guarded by network
-/// reachability; the refusal is phase 2, once concierge terminates TLS and the CA is pinned
-/// here — the signer seam's non-loopback-requires-TLS check
-/// (`piggybank/signer/src/config.rs`) is the shape it takes.
+/// A WARN and not a refusal: production runs on `http://concierge:55670` today (h2c,
+/// inside the cluster), and a hub that refuses to start would take the money plane down to
+/// fix a seam currently held by network reachability. The refusal is phase 2, once
+/// concierge terminates TLS and the CA is pinned here — the signer seam's
+/// non-loopback-requires-TLS check (`piggybank/signer/src/config.rs`) is the shape it
+/// takes.
 ///
-/// Not a WARN because every warn-level line this service prints in production is an alert:
-/// the deploy generator routes `{service_name="piggybank-core", level="warn"}` to the
-/// `discord-banking-warn` contact point at a threshold of zero. This condition is constant
-/// until phase 2, so a WARN here would page that channel on every restart with nothing to
-/// act on — which is how a channel stops being read. INFO keeps the posture in the boot
-/// record an operator (or an incident) actually reads, and leaves the alert for the state
-/// that is new: a seam that was supposed to be TLS and is not.
+/// A WARN and not an INFO because warn is the level phase 1 of #199 is defined at, and
+/// because this is what the level is for: the one seam that can rewrite a KYC tier or an
+/// operator role is unauthenticated, and an unauthenticated money-plane seam has to be
+/// legible where production alerting looks, not only in a boot record nobody re-reads. The
+/// cost is real and taken knowingly — the deploy generator routes
+/// `{service_name="piggybank-core", level="warn"}` to the `discord-banking-warn` contact
+/// point at a threshold of zero, so this posts on every production restart until phase 2
+/// turns it into a refusal. That is the pressure, and an `https://` address ends it.
 pub fn note_if_bridge_is_unauthenticated(app_env: &str, addr: &str) {
 	if let Some(notice) = cleartext_bridge_notice(app_env, addr) {
-		tracing::info!(bridge_addr = %addr, "{notice}");
+		tracing::warn!(bridge_addr = %addr, "{notice}");
 	}
 }
 
@@ -914,12 +915,37 @@ gRI8JvM30gtx/NBsGEV927PGd7imCZpKdAlR1pYzGA==
 		);
 	}
 
-	/// The boot notice is production-only and cleartext-only: it must fire on the one shape
-	/// production actually runs (a cluster DNS name over h2c) and stay silent everywhere
-	/// else — in dev, where the address is loopback anyway, and once concierge terminates
-	/// TLS — or it stops being read. Dropping or inverting the guard flips one of these.
+	/// Every event `note_if_bridge_is_unauthenticated` emits for this environment and
+	/// address, by level — captured from a real subscriber, because the level is decided by
+	/// which macro the function reaches for and no value it returns can show that.
+	fn levels_recorded_by_the_boot_notice(app_env: &str, addr: &str) -> Vec<tracing::Level> {
+		use std::sync::{Arc, Mutex};
+
+		use tracing_subscriber::{layer::Context, prelude::*};
+
+		struct Capture(Arc<Mutex<Vec<tracing::Level>>>);
+		impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Capture {
+			fn on_event(&self, event: &tracing::Event<'_>, _: Context<'_, S>) {
+				self.0.lock().expect("nothing panics while holding this lock").push(*event.metadata().level());
+			}
+		}
+
+		let seen = Arc::new(Mutex::new(Vec::new()));
+		let subscriber = tracing_subscriber::registry().with(Capture(Arc::clone(&seen)));
+		tracing::subscriber::with_default(subscriber, || note_if_bridge_is_unauthenticated(app_env, addr));
+		seen.lock().expect("the notice is emitted on this thread and the guard released").clone()
+	}
+
+	/// The boot notice is production-only, cleartext-only, and a WARN — the three things
+	/// phase 1 of #199 leaves behind. It must fire on the one shape production actually runs
+	/// (a cluster DNS name over h2c) and stay silent everywhere else — in dev, where the
+	/// address is loopback anyway, and once concierge terminates TLS. The level is asserted
+	/// against a live subscriber and not inferred: production alerting collects warn-level
+	/// lines from this service, so demoting this one leaves an unauthenticated money-plane
+	/// seam recorded where nobody is watching, while inverting the guard pages on every dev
+	/// boot until the channel stops being read.
 	#[test]
-	fn the_bridge_boot_notice_is_scoped_to_production_cleartext() {
+	fn the_bridge_boot_notice_warns_and_only_for_production_cleartext() {
 		assert_eq!(
 			cleartext_bridge_notice("production", "http://concierge:55670"),
 			Some(CLEARTEXT_BRIDGE_NOTICE),
@@ -930,12 +956,22 @@ gRI8JvM30gtx/NBsGEV927PGd7imCZpKdAlR1pYzGA==
 			Some(CLEARTEXT_BRIDGE_NOTICE),
 			"an address nobody can parse is not a reason to go quiet"
 		);
+		assert_eq!(
+			levels_recorded_by_the_boot_notice("production", "http://concierge:55670"),
+			vec![tracing::Level::WARN],
+			"the one unauthenticated seam on the money plane is a warn, which is what production alerting collects"
+		);
 		for addr in ["https://concierge:55670", "HTTPS://concierge:55670"] {
 			assert_eq!(cleartext_bridge_notice("production", addr), None, "{addr} authenticates the peer, so there is nothing to report");
+			assert!(levels_recorded_by_the_boot_notice("production", addr).is_empty(), "{addr} must not page anyone");
 		}
 		assert_eq!(cleartext_bridge_notice("production", "http://127.0.0.1:55670"), None, "a loopback stream never reaches a network");
 		for env in ["development", "staging", ""] {
 			assert_eq!(cleartext_bridge_notice(env, "http://concierge:55670"), None, "{env} is not production");
+			assert!(
+				levels_recorded_by_the_boot_notice(env, "http://concierge:55670").is_empty(),
+				"{env} has no production alerting to reach"
+			);
 		}
 	}
 
