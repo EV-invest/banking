@@ -4819,6 +4819,26 @@
     "en": "Contact {contact}",
     "t": "Contacter {contact}"
   },
+  "profile.kyc.caseTitle": {
+    "en": "Verification in progress",
+    "t": "Vérification en cours"
+  },
+  "profile.kyc.casePill": {
+    "en": "In review",
+    "t": "En examen"
+  },
+  "profile.kyc.caseResumeSub": {
+    "en": "You've already started — pick up where you left off",
+    "t": "Vous avez déjà commencé — reprenez là où vous vous êtes arrêté"
+  },
+  "profile.kyc.caseReviewSub": {
+    "en": "Your documents are with our reviewers — we'll email you the decision",
+    "t": "Vos documents sont en cours d'examen — nous vous enverrons la décision par e-mail"
+  },
+  "profile.kyc.continue": {
+    "en": "Continue",
+    "t": "Continuer"
+  },
   "profile.kyc.start": {
     "en": "Start",
     "t": "Commencer"
