@@ -349,7 +349,17 @@
               GRPC_ADDR = "0.0.0.0:50051";
               AUTH_GRPC_ADDR = "0.0.0.0:50052";
               SIGNER_GRPC_ADDR = "http://127.0.0.1:50053";
-              CONCIERGE_BRIDGE_ADDR = "http://concierge:55670";
+              # The lifecycle bridge dials concierge's TLS listener (55672, not the h2c
+              # 55670 the cabinet BFF still uses) and pins its CA: in production the hub
+              # REFUSES to boot on a cleartext or unpinned bridge (EV-invest/banking#199,
+              # phase 2). devops mounts every key of the `kubernetes-ev-banking-piggybank`
+              # Secret as a file at /etc/settings/<KEY>; BRIDGE_TLS_CA_PEM is written into
+              # that Secret from sops (rpi5.nix scopes.nix). Rollout order, and it is not
+              # optional: rpi5.nix secrets + rebuild → concierge release with the listener
+              # → devops Service/NetworkPolicy for 55672 + this pin → THIS banking release
+              # last. Shipped ahead of any of those, the hub refuses to start, by design.
+              CONCIERGE_BRIDGE_ADDR = "https://concierge:55672";
+              BRIDGE_TLS_CA_PEM_FILE = "/etc/settings/BRIDGE_TLS_CA_PEM";
               APP_ENV = "production";
             };
           };
