@@ -24,6 +24,7 @@
 
 import { apiPath } from "@/shared/config/base-path";
 import { csrfHeader } from "@/shared/lib/csrf-client";
+import { replaying } from "@/shared/lib/replay";
 import { cachedSession, refreshIfStale, refreshSession, sessionGeneration } from "@/shared/lib/session";
 
 /** The session is provably gone — offer sign-in, not a retry. */
@@ -196,13 +197,16 @@ export async function requestJson<T>(path: `/${string}`, req: JsonRequest = {}):
   await refreshIfStale();
   const generation = sessionGeneration();
 
-  let res = await send(url, init);
+  // A rollout blip (502/503/504, dropped connection) is retried for reads only — a
+  // mutation that half-executed must not run twice; the why lives in `./replay.ts`.
+  const replayable = method === "GET";
+  let res = await replaying(() => send(url, init), replayable);
   if (res.status === 401) {
     // Heal: if the shell already answered while this request was in flight, the replay
     // just uses the cookie that answer re-set; otherwise refresh first.
     const session = sessionGeneration() > generation ? cachedSession() : await refreshSession();
     if (session && !session.authenticated) throw new SessionExpiredError();
-    res = await send(url, init);
+    res = await replaying(() => send(url, init), replayable);
   }
 
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
