@@ -233,7 +233,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
     <StaggerItem as={Card} className={cn("flex-1 gap-4 lg:gap-5 xl:h-full", CARD_FROM_LG, className)}>
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
         <div className="flex min-w-0 flex-col gap-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-primary">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-primary-ink">
             {t("dash.portfolioValue")}
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
           </p>
@@ -258,7 +258,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
               onClick={() => setRange(r)}
               className={cn(
                 "rounded-md py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:px-3 lg:py-1.5 lg:text-xs",
-                r === range ? "bg-primary/15 font-semibold text-primary" : "font-medium text-ink-soft hover:text-ink",
+                r === range ? "bg-primary/15 font-semibold text-primary-ink" : "font-medium text-ink-soft hover:text-ink",
               )}
             >
               {t(RANGE_LABEL_KEYS[r])}
