@@ -23,7 +23,7 @@ use crate::{
 	evm_tx,
 	kek_guard::short_fp,
 	key_vault::Vault,
-	policy::SignerPolicy,
+	policy::{FeeQuote, SignerPolicy},
 	provision,
 	secrets::{NewTurnkeySecret, WalletSecrets},
 	ton_tx, tron_tx,
@@ -40,7 +40,7 @@ const TREASURY_WALLET: Uuid = Uuid::nil();
 
 /// The signer service: the key [`backend`](crate::backend) every signature goes through, the
 /// loaded [`Vault`] and `wallet_secrets` store the KEK-epoch diagnostics still read directly,
-/// and the independent spend [`SignerPolicy`] (the second gate — cap/allowlist).
+/// and the independent spend [`SignerPolicy`] (the second gate — cap/allowlist/fee budget).
 pub struct Signer {
 	backend: Arc<dyn KeyBackend>,
 	/// The custody minter the phase-4 migration path needs, when this signer is composed with
@@ -147,6 +147,13 @@ impl SignerService for Signer {
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let gas_price: u128 = req.gas_price.parse().map_err(|_| Status::invalid_argument("gas_price must be a u128 decimal"))?;
+		self.policy.check_fee_budget(
+			network,
+			FeeQuote::Evm {
+				gas_price,
+				gas_limit: req.gas_limit,
+			},
+		)?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let data = evm_tx::erc20_transfer_calldata(&to, amount);
@@ -175,6 +182,13 @@ impl SignerService for Signer {
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let gas_price: u128 = req.gas_price.parse().map_err(|_| Status::invalid_argument("gas_price must be a u128 decimal"))?;
+		self.policy.check_fee_budget(
+			network,
+			FeeQuote::Evm {
+				gas_price,
+				gas_limit: req.gas_limit,
+			},
+		)?;
 		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
 		// A native transfer carries the value directly and no calldata.
@@ -204,6 +218,7 @@ impl SignerService for Signer {
 		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
+		self.policy.check_fee_budget(network, FeeQuote::Tron { fee_limit: req.fee_limit })?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let handle = KeyHandle { wallet_id, network };
@@ -225,6 +240,8 @@ impl SignerService for Signer {
 		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
+		// No fee budget to check: a TRX transfer is bandwidth-only and carries no caller-supplied
+		// fee field (`build_unsigned_trx` omits `fee_limit`), so the amount is all it can spend.
 		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
 		let handle = KeyHandle { wallet_id, network };
@@ -245,6 +262,13 @@ impl SignerService for Signer {
 		let network = require_ton(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
+		self.policy.check_fee_budget(
+			network,
+			FeeQuote::Ton {
+				msg_value: req.msg_value,
+				forward_ton_amount: req.forward_ton_amount,
+			},
+		)?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let handle = KeyHandle { wallet_id, network };
@@ -273,6 +297,9 @@ impl SignerService for Signer {
 		let network = require_ton(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal (nanotons)"))?;
+		// No fee budget to check: a native TON transfer carries no caller-supplied fee field —
+		// the wallet contract pays the forwarding fee out of its balance, and the amount is the
+		// only value the caller chooses.
 		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
 		let handle = KeyHandle { wallet_id, network };
