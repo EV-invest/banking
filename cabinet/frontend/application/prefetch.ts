@@ -22,7 +22,6 @@ import {
   cabinetConfigResource,
   fundRevenueResource,
   mfeRegistryResource,
-  overviewResource,
   parkedEventsResource,
   redemptionQueueResource,
   revenuePayoutsResource,
@@ -42,13 +41,6 @@ import { depositsResource, walletResource, withdrawalsResource } from "@/entitie
 // Zone-relative paths, exactly as the rail writes them (basePath is not part of these).
 // Ordered longest-prefix-first so `/wallet/activity` isn't answered by `/wallet`.
 const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = [
-  {
-    prefix: "/admin/overview",
-    warm: () => {
-      overviewResource.prefetch();
-      parkedEventsResource.prefetch();
-    },
-  },
   { prefix: "/admin/users", warm: () => usersResource.prefetch({}) },
   {
     prefix: "/admin/cabinet",
@@ -59,6 +51,7 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
   },
   { prefix: "/admin/treasury", warm: () => treasuryResource.prefetch() },
   { prefix: "/admin/withdrawals", warm: () => withdrawalQueueResource.prefetch() },
+  { prefix: "/admin/outbox", warm: () => parkedEventsResource.prefetch() },
   {
     prefix: "/admin/payments",
     warm: () => {

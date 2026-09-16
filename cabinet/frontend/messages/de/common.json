@@ -1171,131 +1171,51 @@
     "en": "Verified",
     "t": "Verifiziert"
   },
-  "admin.overview.col.event": {
+  "admin.outbox.col.event": {
     "en": "Event",
     "t": "Ereignis"
   },
-  "admin.overview.col.kind": {
-    "en": "Kind",
-    "t": "Art"
-  },
-  "admin.overview.col.parked": {
+  "admin.outbox.col.parked": {
     "en": "Parked",
     "t": "Geparkt"
   },
-  "admin.overview.col.reason": {
+  "admin.outbox.col.reason": {
     "en": "Reason",
     "t": "Grund"
   },
-  "admin.overview.col.seq": {
+  "admin.outbox.col.seq": {
     "en": "Seq",
     "t": "Seq"
   },
-  "admin.overview.col.service": {
-    "en": "Service",
-    "t": "Service"
-  },
-  "admin.overview.compensated": {
+  "admin.outbox.compensated": {
     "en": "compensated",
     "t": "kompensiert"
   },
-  "admin.overview.errorsAnalytics": {
-    "en": "Errors & analytics",
-    "t": "Fehler & Analytics"
-  },
-  "admin.overview.fleetHealth": {
-    "en": "Fleet health",
-    "t": "Systemzustand"
-  },
-  "admin.overview.fleetHealthSub": {
-    "en": "Central hub · datastores · microservices",
-    "t": "Zentraler Hub · Datenspeicher · Microservices"
-  },
-  "admin.overview.kpi.deadKeySignings": {
-    "en": "Dead-key signings",
-    "t": "Tote-Schlüssel-Signaturen"
-  },
-  "admin.overview.kpi.deadKeySigningsHint": {
-    "en": "Signer couldn't unseal a key — funds stranded",
-    "t": "Signer konnte einen Schlüssel nicht entsiegeln — Mittel blockiert"
-  },
-  "admin.overview.kpi.dispatchBacklog": {
-    "en": "Dispatch backlog",
-    "t": "Versand-Rückstau"
-  },
-  "admin.overview.kpi.dispatchBacklogHint": {
-    "en": "Undispatched outbox rows",
-    "t": "Nicht versendete Outbox-Zeilen"
-  },
-  "admin.overview.kpi.oldestBacklog": {
-    "en": "Oldest backlog",
-    "t": "Ältester Rückstau"
-  },
-  "admin.overview.kpi.oldestBacklogHint": {
-    "en": "Age of the oldest undispatched row",
-    "t": "Alter der ältesten nicht versendeten Zeile"
-  },
-  "admin.overview.kpi.oldestBacklogValue": {
-    "en": "{n}s",
-    "t": "{n} s"
-  },
-  "admin.overview.kpi.parkedRows": {
-    "en": "Parked rows",
-    "t": "Geparkte Zeilen"
-  },
-  "admin.overview.kpi.parkedRowsHint": {
-    "en": "Money the relay couldn't apply",
-    "t": "Geld, das das Relay nicht verbuchen konnte"
-  },
-  "admin.overview.kpi.servicesHealthy": {
-    "en": "Services healthy",
-    "t": "Gesunde Services"
-  },
-  "admin.overview.noParkedEvents": {
+  "admin.outbox.noParkedEvents": {
     "en": "No parked events — the relay is clean.",
     "t": "Keine geparkten Ereignisse — das Relay ist sauber."
   },
-  "admin.overview.obs.eventStream": {
-    "en": "A live outbox/event feed renders here when streaming is enabled.",
-    "t": "Ein Live-Feed für Outbox und Ereignisse erscheint hier, sobald Streaming aktiviert ist."
-  },
-  "admin.overview.obs.eventStreamLabel": {
-    "en": "Event stream",
-    "t": "Ereignis-Stream"
-  },
-  "admin.overview.obs.posthog": {
-    "en": "Active investors, sessions and top events surface here once POSTHOG_KEY is configured.",
-    "t": "Aktive Investoren, Sitzungen und die häufigsten Ereignisse erscheinen hier, sobald POSTHOG_KEY konfiguriert ist."
-  },
-  "admin.overview.obs.sentry": {
-    "en": "Unresolved issues across the fleet surface here once SENTRY_DSN is configured.",
-    "t": "Ungelöste Probleme der gesamten Flotte erscheinen hier, sobald SENTRY_DSN konfiguriert ist."
-  },
-  "admin.overview.parkedEvents": {
+  "admin.outbox.parkedEvents": {
     "en": "Parked events",
     "t": "Geparkte Ereignisse"
   },
-  "admin.overview.parkedEventsSub": {
+  "admin.outbox.parkedEventsSub": {
     "en": "Outbox rows the relay couldn't apply — fix the cause, then unpark to re-drive",
     "t": "Outbox-Zeilen, die das Relay nicht verbuchen konnte — Ursache beheben, dann entparken und erneut durchlaufen lassen"
   },
-  "admin.overview.runHealthCheck": {
-    "en": "Run health check",
-    "t": "Zustandsprüfung starten"
+  "admin.outbox.subtitle": {
+    "en": "Stuck outbox rows — what the relay couldn't apply, and the action that re-drives them",
+    "t": "Hängende Outbox-Zeilen — was das Relay nicht verbuchen konnte, und die Aktion, die sie erneut durchlaufen lässt"
   },
-  "admin.overview.subtitle": {
-    "en": "Central service and microservices — health and throughput",
-    "t": "Zentraler Service und Microservices — Zustand und Durchsatz"
-  },
-  "admin.overview.unpark": {
+  "admin.outbox.unpark": {
     "en": "Unpark",
     "t": "Entparken"
   },
-  "admin.overview.unparkRefetchFailed": {
-    "en": "Unparked, but refreshing the list failed: {error} — run a health check to resync.",
-    "t": "Entparkt, aber das Aktualisieren der Liste ist fehlgeschlagen: {error} — führen Sie eine Zustandsprüfung aus, um neu zu synchronisieren."
+  "admin.outbox.unparkRefetchFailed": {
+    "en": "Unparked, but refreshing the list failed: {error} — press Refresh to resync.",
+    "t": "Entparkt, aber das Aktualisieren der Liste ist fehlgeschlagen: {error} — drücken Sie „Aktualisieren“, um neu zu synchronisieren."
   },
-  "admin.overview.unparked": {
+  "admin.outbox.unparked": {
     "en": "unparked",
     "t": "entparkt"
   },
@@ -4259,9 +4179,9 @@
     "en": "Operations",
     "t": "Vorgänge"
   },
-  "nav.overview": {
-    "en": "Overview",
-    "t": "Übersicht"
+  "nav.outbox": {
+    "en": "Outbox",
+    "t": "Outbox"
   },
   "nav.payments": {
     "en": "Payments",
@@ -5335,67 +5255,35 @@
     "en": "Read-only mode",
     "t": "Nur-Lese-Modus"
   },
-  "tips.admin.overview.kpi.dead-key-signings.body": {
-    "en": "The signer couldn't unseal a wallet key (wrong or rotated KEK epoch), so those funds can't be moved. Nonzero is a money-safety alarm — page an operator.",
-    "t": "Der Signer konnte einen Wallet-Schlüssel nicht entsiegeln (falsche oder rotierte KEK-Epoche), daher lassen sich diese Mittel nicht bewegen. Ein Wert über null ist ein Geldsicherheits-Alarm — rufen Sie einen Operator."
-  },
-  "tips.admin.overview.kpi.dead-key-signings.title": {
-    "en": "Dead-key signings",
-    "t": "Tote-Schlüssel-Signaturen"
-  },
-  "tips.admin.overview.kpi.dispatch-backlog.body": {
-    "en": "Undispatched outbox rows — events written but not yet relayed. A healthy relay keeps this near zero.",
-    "t": "Nicht versendete Outbox-Zeilen — geschriebene, aber noch nicht weitergeleitete Ereignisse. Ein gesundes Relay hält diesen Wert nahe null."
-  },
-  "tips.admin.overview.kpi.dispatch-backlog.title": {
-    "en": "Dispatch backlog",
-    "t": "Versand-Rückstau"
-  },
-  "tips.admin.overview.kpi.oldest-backlog.body": {
-    "en": "Age of the oldest undispatched row. A growing age means the relay is stalled or falling behind.",
-    "t": "Alter der ältesten nicht versendeten Zeile. Ein steigendes Alter bedeutet, dass das Relay steht oder zurückfällt."
-  },
-  "tips.admin.overview.kpi.oldest-backlog.title": {
-    "en": "Oldest backlog",
-    "t": "Ältester Rückstau"
-  },
-  "tips.admin.overview.kpi.parked-rows.body": {
-    "en": "Money the relay couldn't apply — outbox rows stuck until unparked. Nonzero turns the tile red.",
-    "t": "Geld, das das Relay nicht verbuchen konnte — Outbox-Zeilen, die feststecken, bis sie entparkt werden. Ein Wert über null färbt die Kachel rot."
-  },
-  "tips.admin.overview.kpi.parked-rows.title": {
-    "en": "Parked rows",
-    "t": "Geparkte Zeilen"
-  },
-  "tips.admin.overview.parked-events.body": {
+  "tips.admin.outbox.parked-events.body": {
     "en": "A row parks when the relay hits a terminal apply error. Fix the cause shown in the Reason column first, then unpark to re-drive it — otherwise it just re-parks.",
     "t": "Eine Zeile wird geparkt, wenn das Relay auf einen endgültigen Verbuchungsfehler stößt. Beheben Sie zuerst die in der Spalte Grund genannte Ursache und entparken Sie sie dann, um sie erneut durchlaufen zu lassen — sonst parkt sie nur wieder."
   },
-  "tips.admin.overview.parked-events.title": {
+  "tips.admin.outbox.parked-events.title": {
     "en": "Parked events",
     "t": "Geparkte Ereignisse"
   },
-  "tips.admin.overview.parked.compensated.body": {
+  "tips.admin.outbox.parked.compensated.body": {
     "en": "This row's saga was already reversed, so its money effect is undone. Unpark is disabled to avoid re-applying an entry that was intentionally rolled back.",
     "t": "Die Saga dieser Zeile wurde bereits rückabgewickelt, ihre Geldwirkung ist also aufgehoben. Entparken ist deaktiviert, damit kein Eintrag erneut verbucht wird, der absichtlich zurückgerollt wurde."
   },
-  "tips.admin.overview.parked.compensated.title": {
+  "tips.admin.outbox.parked.compensated.title": {
     "en": "Compensated",
     "t": "Kompensiert"
   },
-  "tips.admin.overview.parked.reason.body": {
+  "tips.admin.outbox.parked.reason.body": {
     "en": "The relay's failure cause for this parked row — the thing you must fix before unparking.",
     "t": "Die Fehlerursache des Relays für diese geparkte Zeile — das, was Sie vor dem Entparken beheben müssen."
   },
-  "tips.admin.overview.parked.reason.title": {
+  "tips.admin.outbox.parked.reason.title": {
     "en": "Reason",
     "t": "Grund"
   },
-  "tips.admin.overview.parked.unpark.body": {
+  "tips.admin.outbox.parked.unpark.body": {
     "en": "Re-drives this outbox row through the relay after you've fixed its cause. Disabled when the row was compensated, already unparked this session, or while another unpark is in flight.",
     "t": "Lässt diese Outbox-Zeile erneut durch das Relay laufen, nachdem Sie ihre Ursache behoben haben. Deaktiviert, wenn die Zeile kompensiert wurde, in dieser Sitzung bereits entparkt wurde oder während ein anderes Entparken läuft."
   },
-  "tips.admin.overview.parked.unpark.title": {
+  "tips.admin.outbox.parked.unpark.title": {
     "en": "Unpark",
     "t": "Entparken"
   },

@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Gavel, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UserRound, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Gavel, Home, Inbox, Landmark, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UserRound, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
@@ -57,8 +57,10 @@ const FUND: NavItem[] = [
 // ADMINISTER group — the operator console. Rendered only for a non-investor session
 // role (the BFF's `/api/auth/session` `isAdmin`); every screen is also authorized
 // server-side, so hiding the nav is cosmetic, not the security boundary.
+//
+// No dashboard row: fleet health and the relay KPIs are read in Grafana, not here. Users
+// opens the group because it is the first thing an operator is asked to act on.
 const ADMIN: NavItem[] = [
-  { href: "/admin/overview", label: "Overview", key: "nav.overview", icon: LayoutGrid, active: (p) => p.startsWith("/admin/overview") },
   { href: "/admin/users", label: "Users", key: "nav.users", icon: UsersRound, active: (p) => p.startsWith("/admin/users") },
   { href: "/admin/cabinet", label: "Cabinet", key: "nav.cabinet", icon: PanelsTopLeft, active: (p) => p.startsWith("/admin/cabinet") },
   { href: "/admin/treasury", label: "Treasury", key: "nav.treasury", icon: Landmark, active: (p) => p.startsWith("/admin/treasury") },
@@ -67,6 +69,10 @@ const ADMIN: NavItem[] = [
   // every tier, authorised by whoever the money belongs to. Beside Withdrawals because
   // an external order becomes one.
   { href: "/admin/payments", label: "Payments", key: "nav.payments", icon: ArrowLeftRight, active: (p) => p.startsWith("/admin/payments") },
+  // The third queue, after the two money queues: outbox rows the relay parked on a
+  // terminal error, waiting for an operator to fix the cause and unpark them. The only
+  // piece of the old dashboard that could not move to Grafana — unparking is an action.
+  { href: "/admin/outbox", label: "Outbox", key: "nav.outbox", icon: Inbox, active: (p) => p.startsWith("/admin/outbox") },
   // Sits next to Treasury, not to Withdrawals: the question it answers is "what did the
   // fund earn", which belongs with the chart of accounts rather than with the user queue.
   // Statistics only since Payments took over the proposal; it links there and to Treasury.

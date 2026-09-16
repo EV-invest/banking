@@ -1171,131 +1171,51 @@
     "en": "Verified",
     "t": "Đã xác minh"
   },
-  "admin.overview.col.event": {
+  "admin.outbox.col.event": {
     "en": "Event",
     "t": "Sự kiện"
   },
-  "admin.overview.col.kind": {
-    "en": "Kind",
-    "t": "Loại"
-  },
-  "admin.overview.col.parked": {
+  "admin.outbox.col.parked": {
     "en": "Parked",
     "t": "Bị treo"
   },
-  "admin.overview.col.reason": {
+  "admin.outbox.col.reason": {
     "en": "Reason",
     "t": "Nguyên nhân"
   },
-  "admin.overview.col.seq": {
+  "admin.outbox.col.seq": {
     "en": "Seq",
     "t": "Seq"
   },
-  "admin.overview.col.service": {
-    "en": "Service",
-    "t": "Dịch vụ"
-  },
-  "admin.overview.compensated": {
+  "admin.outbox.compensated": {
     "en": "compensated",
     "t": "đã bù trừ"
   },
-  "admin.overview.errorsAnalytics": {
-    "en": "Errors & analytics",
-    "t": "Lỗi & phân tích"
-  },
-  "admin.overview.fleetHealth": {
-    "en": "Fleet health",
-    "t": "Tình trạng hệ thống"
-  },
-  "admin.overview.fleetHealthSub": {
-    "en": "Central hub · datastores · microservices",
-    "t": "Hub trung tâm · kho dữ liệu · microservice"
-  },
-  "admin.overview.kpi.deadKeySignings": {
-    "en": "Dead-key signings",
-    "t": "Lần ký khóa hỏng"
-  },
-  "admin.overview.kpi.deadKeySigningsHint": {
-    "en": "Signer couldn't unseal a key — funds stranded",
-    "t": "Bộ ký không mở được khóa — tiền bị mắc kẹt"
-  },
-  "admin.overview.kpi.dispatchBacklog": {
-    "en": "Dispatch backlog",
-    "t": "Tồn đọng gửi đi"
-  },
-  "admin.overview.kpi.dispatchBacklogHint": {
-    "en": "Undispatched outbox rows",
-    "t": "Số bản ghi outbox chưa được gửi"
-  },
-  "admin.overview.kpi.oldestBacklog": {
-    "en": "Oldest backlog",
-    "t": "Tồn đọng lâu nhất"
-  },
-  "admin.overview.kpi.oldestBacklogHint": {
-    "en": "Age of the oldest undispatched row",
-    "t": "Thời gian tồn của bản ghi chưa gửi lâu nhất"
-  },
-  "admin.overview.kpi.oldestBacklogValue": {
-    "en": "{n}s",
-    "t": "{n} giây"
-  },
-  "admin.overview.kpi.parkedRows": {
-    "en": "Parked rows",
-    "t": "Bản ghi bị treo"
-  },
-  "admin.overview.kpi.parkedRowsHint": {
-    "en": "Money the relay couldn't apply",
-    "t": "Dòng tiền bộ chuyển tiếp không áp dụng được"
-  },
-  "admin.overview.kpi.servicesHealthy": {
-    "en": "Services healthy",
-    "t": "Dịch vụ khỏe mạnh"
-  },
-  "admin.overview.noParkedEvents": {
+  "admin.outbox.noParkedEvents": {
     "en": "No parked events — the relay is clean.",
     "t": "Không có sự kiện bị treo — bộ chuyển tiếp sạch."
   },
-  "admin.overview.obs.eventStream": {
-    "en": "A live outbox/event feed renders here when streaming is enabled.",
-    "t": "Luồng outbox/sự kiện trực tiếp sẽ hiển thị ở đây khi bật chế độ phát trực tuyến."
-  },
-  "admin.overview.obs.eventStreamLabel": {
-    "en": "Event stream",
-    "t": "Luồng sự kiện"
-  },
-  "admin.overview.obs.posthog": {
-    "en": "Active investors, sessions and top events surface here once POSTHOG_KEY is configured.",
-    "t": "Nhà đầu tư đang hoạt động, phiên và các sự kiện nổi bật sẽ xuất hiện ở đây khi POSTHOG_KEY được cấu hình."
-  },
-  "admin.overview.obs.sentry": {
-    "en": "Unresolved issues across the fleet surface here once SENTRY_DSN is configured.",
-    "t": "Các sự cố chưa xử lý trên toàn hệ thống sẽ xuất hiện ở đây khi SENTRY_DSN được cấu hình."
-  },
-  "admin.overview.parkedEvents": {
+  "admin.outbox.parkedEvents": {
     "en": "Parked events",
     "t": "Sự kiện bị treo"
   },
-  "admin.overview.parkedEventsSub": {
+  "admin.outbox.parkedEventsSub": {
     "en": "Outbox rows the relay couldn't apply — fix the cause, then unpark to re-drive",
     "t": "Các bản ghi outbox mà bộ chuyển tiếp không áp dụng được — khắc phục nguyên nhân, rồi gỡ treo để chạy lại"
   },
-  "admin.overview.runHealthCheck": {
-    "en": "Run health check",
-    "t": "Chạy kiểm tra tình trạng"
+  "admin.outbox.subtitle": {
+    "en": "Stuck outbox rows — what the relay couldn't apply, and the action that re-drives them",
+    "t": "Các bản ghi outbox bị kẹt — những gì bộ chuyển tiếp không áp dụng được, và thao tác chạy lại chúng"
   },
-  "admin.overview.subtitle": {
-    "en": "Central service and microservices — health and throughput",
-    "t": "Dịch vụ trung tâm và các microservice — tình trạng và thông lượng"
-  },
-  "admin.overview.unpark": {
+  "admin.outbox.unpark": {
     "en": "Unpark",
     "t": "Gỡ treo"
   },
-  "admin.overview.unparkRefetchFailed": {
-    "en": "Unparked, but refreshing the list failed: {error} — run a health check to resync.",
-    "t": "Đã gỡ treo, nhưng làm mới danh sách thất bại: {error} — hãy chạy kiểm tra tình trạng để đồng bộ lại."
+  "admin.outbox.unparkRefetchFailed": {
+    "en": "Unparked, but refreshing the list failed: {error} — press Refresh to resync.",
+    "t": "Đã gỡ treo, nhưng làm mới danh sách thất bại: {error} — hãy nhấn Làm mới để đồng bộ lại."
   },
-  "admin.overview.unparked": {
+  "admin.outbox.unparked": {
     "en": "unparked",
     "t": "đã gỡ treo"
   },
@@ -4259,9 +4179,9 @@
     "en": "Operations",
     "t": "Giao dịch"
   },
-  "nav.overview": {
-    "en": "Overview",
-    "t": "Tổng quan"
+  "nav.outbox": {
+    "en": "Outbox",
+    "t": "Hàng đợi outbox"
   },
   "nav.payments": {
     "en": "Payments",
@@ -5335,67 +5255,35 @@
     "en": "Read-only mode",
     "t": "Chế độ chỉ đọc"
   },
-  "tips.admin.overview.kpi.dead-key-signings.body": {
-    "en": "The signer couldn't unseal a wallet key (wrong or rotated KEK epoch), so those funds can't be moved. Nonzero is a money-safety alarm — page an operator.",
-    "t": "Bộ ký không mở được khóa ví (sai KEK hoặc KEK đã xoay vòng), nên số tiền đó không thể dịch chuyển. Khác không là báo động an toàn tiền — hãy gọi ngay nhân sự vận hành."
-  },
-  "tips.admin.overview.kpi.dead-key-signings.title": {
-    "en": "Dead-key signings",
-    "t": "Lần ký khóa hỏng"
-  },
-  "tips.admin.overview.kpi.dispatch-backlog.body": {
-    "en": "Undispatched outbox rows — events written but not yet relayed. A healthy relay keeps this near zero.",
-    "t": "Các bản ghi outbox chưa được gửi đi — sự kiện đã ghi nhưng chưa được chuyển tiếp. Một bộ chuyển tiếp khỏe mạnh giữ con số này gần bằng không."
-  },
-  "tips.admin.overview.kpi.dispatch-backlog.title": {
-    "en": "Dispatch backlog",
-    "t": "Tồn đọng gửi đi"
-  },
-  "tips.admin.overview.kpi.oldest-backlog.body": {
-    "en": "Age of the oldest undispatched row. A growing age means the relay is stalled or falling behind.",
-    "t": "Thời gian tồn của bản ghi chưa gửi lâu nhất. Con số tăng dần nghĩa là bộ chuyển tiếp đang tắc hoặc tụt lại phía sau."
-  },
-  "tips.admin.overview.kpi.oldest-backlog.title": {
-    "en": "Oldest backlog",
-    "t": "Tồn đọng lâu nhất"
-  },
-  "tips.admin.overview.kpi.parked-rows.body": {
-    "en": "Money the relay couldn't apply — outbox rows stuck until unparked. Nonzero turns the tile red.",
-    "t": "Dòng tiền mà bộ chuyển tiếp không áp dụng được — các bản ghi outbox kẹt lại cho tới khi được gỡ treo. Khác không sẽ làm ô này chuyển đỏ."
-  },
-  "tips.admin.overview.kpi.parked-rows.title": {
-    "en": "Parked rows",
-    "t": "Bản ghi bị treo"
-  },
-  "tips.admin.overview.parked-events.body": {
+  "tips.admin.outbox.parked-events.body": {
     "en": "A row parks when the relay hits a terminal apply error. Fix the cause shown in the Reason column first, then unpark to re-drive it — otherwise it just re-parks.",
     "t": "Một bản ghi bị treo khi bộ chuyển tiếp gặp lỗi áp dụng không thể phục hồi. Hãy khắc phục nguyên nhân nêu ở cột Nguyên nhân trước, rồi gỡ treo để chạy lại — nếu không nó sẽ lại bị treo."
   },
-  "tips.admin.overview.parked-events.title": {
+  "tips.admin.outbox.parked-events.title": {
     "en": "Parked events",
     "t": "Sự kiện bị treo"
   },
-  "tips.admin.overview.parked.compensated.body": {
+  "tips.admin.outbox.parked.compensated.body": {
     "en": "This row's saga was already reversed, so its money effect is undone. Unpark is disabled to avoid re-applying an entry that was intentionally rolled back.",
     "t": "Saga của bản ghi này đã được đảo ngược, nên tác động tiền tệ của nó đã được hoàn tác. Gỡ treo bị vô hiệu hóa để tránh áp dụng lại một bút toán đã cố ý quay lui."
   },
-  "tips.admin.overview.parked.compensated.title": {
+  "tips.admin.outbox.parked.compensated.title": {
     "en": "Compensated",
     "t": "Đã bù trừ"
   },
-  "tips.admin.overview.parked.reason.body": {
+  "tips.admin.outbox.parked.reason.body": {
     "en": "The relay's failure cause for this parked row — the thing you must fix before unparking.",
     "t": "Nguyên nhân lỗi mà bộ chuyển tiếp ghi nhận cho bản ghi bị treo này — điều bạn phải khắc phục trước khi gỡ treo."
   },
-  "tips.admin.overview.parked.reason.title": {
+  "tips.admin.outbox.parked.reason.title": {
     "en": "Reason",
     "t": "Nguyên nhân"
   },
-  "tips.admin.overview.parked.unpark.body": {
+  "tips.admin.outbox.parked.unpark.body": {
     "en": "Re-drives this outbox row through the relay after you've fixed its cause. Disabled when the row was compensated, already unparked this session, or while another unpark is in flight.",
     "t": "Chạy lại bản ghi outbox này qua bộ chuyển tiếp sau khi bạn đã khắc phục nguyên nhân. Bị vô hiệu hóa khi bản ghi đã được bù trừ, đã gỡ treo trong phiên này, hoặc khi một thao tác gỡ treo khác đang chạy."
   },
-  "tips.admin.overview.parked.unpark.title": {
+  "tips.admin.outbox.parked.unpark.title": {
     "en": "Unpark",
     "t": "Gỡ treo"
   },

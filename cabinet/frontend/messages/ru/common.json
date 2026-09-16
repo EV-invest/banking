@@ -1171,131 +1171,51 @@
     "en": "Verified",
     "t": "Верификация"
   },
-  "admin.overview.col.event": {
+  "admin.outbox.col.event": {
     "en": "Event",
     "t": "Событие"
   },
-  "admin.overview.col.kind": {
-    "en": "Kind",
-    "t": "Тип"
-  },
-  "admin.overview.col.parked": {
+  "admin.outbox.col.parked": {
     "en": "Parked",
     "t": "Отложено"
   },
-  "admin.overview.col.reason": {
+  "admin.outbox.col.reason": {
     "en": "Reason",
     "t": "Причина"
   },
-  "admin.overview.col.seq": {
+  "admin.outbox.col.seq": {
     "en": "Seq",
     "t": "Seq"
   },
-  "admin.overview.col.service": {
-    "en": "Service",
-    "t": "Сервис"
-  },
-  "admin.overview.compensated": {
+  "admin.outbox.compensated": {
     "en": "compensated",
     "t": "компенсация"
   },
-  "admin.overview.errorsAnalytics": {
-    "en": "Errors & analytics",
-    "t": "Ошибки и аналитика"
-  },
-  "admin.overview.fleetHealth": {
-    "en": "Fleet health",
-    "t": "Состояние парка сервисов"
-  },
-  "admin.overview.fleetHealthSub": {
-    "en": "Central hub · datastores · microservices",
-    "t": "Центральный хаб · хранилища · микросервисы"
-  },
-  "admin.overview.kpi.deadKeySignings": {
-    "en": "Dead-key signings",
-    "t": "Подписи мёртвым ключом"
-  },
-  "admin.overview.kpi.deadKeySigningsHint": {
-    "en": "Signer couldn't unseal a key — funds stranded",
-    "t": "Подписант не смог расшифровать ключ — средства заблокированы"
-  },
-  "admin.overview.kpi.dispatchBacklog": {
-    "en": "Dispatch backlog",
-    "t": "Очередь отправки"
-  },
-  "admin.overview.kpi.dispatchBacklogHint": {
-    "en": "Undispatched outbox rows",
-    "t": "Неотправленные записи outbox"
-  },
-  "admin.overview.kpi.oldestBacklog": {
-    "en": "Oldest backlog",
-    "t": "Самая старая запись"
-  },
-  "admin.overview.kpi.oldestBacklogHint": {
-    "en": "Age of the oldest undispatched row",
-    "t": "Возраст самой старой неотправленной записи"
-  },
-  "admin.overview.kpi.oldestBacklogValue": {
-    "en": "{n}s",
-    "t": "{n} с"
-  },
-  "admin.overview.kpi.parkedRows": {
-    "en": "Parked rows",
-    "t": "Отложенные записи"
-  },
-  "admin.overview.kpi.parkedRowsHint": {
-    "en": "Money the relay couldn't apply",
-    "t": "Деньги, которые релей не смог провести"
-  },
-  "admin.overview.kpi.servicesHealthy": {
-    "en": "Services healthy",
-    "t": "Исправных сервисов"
-  },
-  "admin.overview.noParkedEvents": {
+  "admin.outbox.noParkedEvents": {
     "en": "No parked events — the relay is clean.",
     "t": "Отложенных событий нет — релей чист."
   },
-  "admin.overview.obs.eventStream": {
-    "en": "A live outbox/event feed renders here when streaming is enabled.",
-    "t": "Живая лента outbox и событий появится здесь, когда включён стриминг."
-  },
-  "admin.overview.obs.eventStreamLabel": {
-    "en": "Event stream",
-    "t": "Поток событий"
-  },
-  "admin.overview.obs.posthog": {
-    "en": "Active investors, sessions and top events surface here once POSTHOG_KEY is configured.",
-    "t": "Активные инвесторы, сеансы и топ событий появятся здесь после настройки POSTHOG_KEY."
-  },
-  "admin.overview.obs.sentry": {
-    "en": "Unresolved issues across the fleet surface here once SENTRY_DSN is configured.",
-    "t": "Нерешённые проблемы по всему парку сервисов появятся здесь после настройки SENTRY_DSN."
-  },
-  "admin.overview.parkedEvents": {
+  "admin.outbox.parkedEvents": {
     "en": "Parked events",
     "t": "Отложенные события"
   },
-  "admin.overview.parkedEventsSub": {
+  "admin.outbox.parkedEventsSub": {
     "en": "Outbox rows the relay couldn't apply — fix the cause, then unpark to re-drive",
     "t": "Записи outbox, которые релей не смог провести, — устраните причину и верните их в обработку"
   },
-  "admin.overview.runHealthCheck": {
-    "en": "Run health check",
-    "t": "Проверить состояние"
+  "admin.outbox.subtitle": {
+    "en": "Stuck outbox rows — what the relay couldn't apply, and the action that re-drives them",
+    "t": "Застрявшие записи outbox — то, что релей не смог провести, и действие, возвращающее их в обработку"
   },
-  "admin.overview.subtitle": {
-    "en": "Central service and microservices — health and throughput",
-    "t": "Центральный сервис и микросервисы — состояние и пропускная способность"
-  },
-  "admin.overview.unpark": {
+  "admin.outbox.unpark": {
     "en": "Unpark",
     "t": "Вернуть"
   },
-  "admin.overview.unparkRefetchFailed": {
-    "en": "Unparked, but refreshing the list failed: {error} — run a health check to resync.",
-    "t": "Запись возвращена в обработку, но обновить список не удалось: {error} — запустите проверку состояния для синхронизации."
+  "admin.outbox.unparkRefetchFailed": {
+    "en": "Unparked, but refreshing the list failed: {error} — press Refresh to resync.",
+    "t": "Запись возвращена в обработку, но обновить список не удалось: {error} — нажмите «Обновить» для синхронизации."
   },
-  "admin.overview.unparked": {
+  "admin.outbox.unparked": {
     "en": "unparked",
     "t": "возвращено"
   },
@@ -4259,9 +4179,9 @@
     "en": "Operations",
     "t": "Операции"
   },
-  "nav.overview": {
-    "en": "Overview",
-    "t": "Обзор"
+  "nav.outbox": {
+    "en": "Outbox",
+    "t": "Очередь outbox"
   },
   "nav.payments": {
     "en": "Payments",
@@ -5335,67 +5255,35 @@
     "en": "Read-only mode",
     "t": "Режим только для чтения"
   },
-  "tips.admin.overview.kpi.dead-key-signings.body": {
-    "en": "The signer couldn't unseal a wallet key (wrong or rotated KEK epoch), so those funds can't be moved. Nonzero is a money-safety alarm — page an operator.",
-    "t": "Подписант не смог расшифровать ключ кошелька (неверная или сменившаяся эпоха KEK), поэтому эти средства нельзя двигать. Ненулевое значение — сигнал угрозы сохранности денег: вызовите оператора."
-  },
-  "tips.admin.overview.kpi.dead-key-signings.title": {
-    "en": "Dead-key signings",
-    "t": "Подписи мёртвым ключом"
-  },
-  "tips.admin.overview.kpi.dispatch-backlog.body": {
-    "en": "Undispatched outbox rows — events written but not yet relayed. A healthy relay keeps this near zero.",
-    "t": "Неотправленные записи outbox — события записаны, но ещё не переданы. Исправный релей держит это значение около нуля."
-  },
-  "tips.admin.overview.kpi.dispatch-backlog.title": {
-    "en": "Dispatch backlog",
-    "t": "Очередь отправки"
-  },
-  "tips.admin.overview.kpi.oldest-backlog.body": {
-    "en": "Age of the oldest undispatched row. A growing age means the relay is stalled or falling behind.",
-    "t": "Возраст самой старой неотправленной записи. Растущий возраст означает, что релей остановился или не справляется."
-  },
-  "tips.admin.overview.kpi.oldest-backlog.title": {
-    "en": "Oldest backlog",
-    "t": "Самая старая запись"
-  },
-  "tips.admin.overview.kpi.parked-rows.body": {
-    "en": "Money the relay couldn't apply — outbox rows stuck until unparked. Nonzero turns the tile red.",
-    "t": "Деньги, которые релей не смог провести: записи outbox остаются заблокированными, пока их не вернут в обработку. Ненулевое значение окрашивает плитку в красный."
-  },
-  "tips.admin.overview.kpi.parked-rows.title": {
-    "en": "Parked rows",
-    "t": "Отложенные записи"
-  },
-  "tips.admin.overview.parked-events.body": {
+  "tips.admin.outbox.parked-events.body": {
     "en": "A row parks when the relay hits a terminal apply error. Fix the cause shown in the Reason column first, then unpark to re-drive it — otherwise it just re-parks.",
     "t": "Запись откладывается, когда релей получает неустранимую ошибку применения. Сначала устраните причину из столбца «Причина», затем верните запись в обработку — иначе она отложится снова."
   },
-  "tips.admin.overview.parked-events.title": {
+  "tips.admin.outbox.parked-events.title": {
     "en": "Parked events",
     "t": "Отложенные события"
   },
-  "tips.admin.overview.parked.compensated.body": {
+  "tips.admin.outbox.parked.compensated.body": {
     "en": "This row's saga was already reversed, so its money effect is undone. Unpark is disabled to avoid re-applying an entry that was intentionally rolled back.",
     "t": "Сага этой записи уже развёрнута, поэтому её денежный эффект отменён. Возврат в обработку недоступен, чтобы не применить повторно проводку, которую намеренно откатили."
   },
-  "tips.admin.overview.parked.compensated.title": {
+  "tips.admin.outbox.parked.compensated.title": {
     "en": "Compensated",
     "t": "Компенсация"
   },
-  "tips.admin.overview.parked.reason.body": {
+  "tips.admin.outbox.parked.reason.body": {
     "en": "The relay's failure cause for this parked row — the thing you must fix before unparking.",
     "t": "Причина сбоя релея для этой отложенной записи — то, что нужно устранить до возврата в обработку."
   },
-  "tips.admin.overview.parked.reason.title": {
+  "tips.admin.outbox.parked.reason.title": {
     "en": "Reason",
     "t": "Причина"
   },
-  "tips.admin.overview.parked.unpark.body": {
+  "tips.admin.outbox.parked.unpark.body": {
     "en": "Re-drives this outbox row through the relay after you've fixed its cause. Disabled when the row was compensated, already unparked this session, or while another unpark is in flight.",
     "t": "Повторно прогоняет эту запись outbox через релей после того, как вы устранили причину. Недоступно, если запись была компенсирована, уже возвращена в этом сеансе или пока выполняется другой возврат."
   },
-  "tips.admin.overview.parked.unpark.title": {
+  "tips.admin.outbox.parked.unpark.title": {
     "en": "Unpark",
     "t": "Возврат в обработку"
   },

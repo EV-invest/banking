@@ -32,23 +32,6 @@ export interface SessionInfo {
   user?: SessionUser;
 }
 
-// ── overview ──────────────────────────────────────────────────────────────────
-export interface FleetService {
-  name: string;
-  kind: string;
-  status: string;
-  detail: string;
-}
-
-export interface AdminOverview {
-  services: FleetService[];
-  parked_rows: string;
-  backlog: string;
-  oldest_backlog_age_secs: string;
-  /** Signer unseal failures since hub boot — non-zero means a dead key was asked to sign (funds stranded). */
-  unseal_failures: string;
-}
-
 // ── users ─────────────────────────────────────────────────────────────────────
 export interface AdminUserSummary {
   user_id: string;

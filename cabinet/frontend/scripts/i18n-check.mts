@@ -83,8 +83,8 @@ const SHARED_TERMS: ReadonlySet<string> = new Set([
 
 // Strings that coincide with English in *one* language — loanwords, shared Latin
 // roots, or a term the locale's own catalogue already uses untranslated
-// ("Wallet", "Treasury" and "Cabinet" in German; "wallet" and "rail" in French;
-// "email" and "consilium" in Vietnamese). Keyed by value, not by key: whether
+// ("Wallet", "Treasury", "Cabinet" and "Outbox" in German; "wallet", "rail" and
+// "outbox" in French; "email" and "consilium" in Vietnamese). Keyed by value, not by key: whether
 // "Status" is a German word does not depend on which screen shows it.
 const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
   de: new Set([
@@ -109,6 +109,7 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Operator",
     "ORDERS",
     "{n, plural, one {# Order} other {# Orders}}",
+    "Outbox",
     "Performance",
     "{amount} Performance",
     "Portfolio",
@@ -134,6 +135,7 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Feature flags",
     "Max",
     "Onboarding",
+    "Outbox",
     "Performance",
     "Rail",
     "Service",

@@ -6,7 +6,6 @@
 import { getJson, postJson } from "@/shared/lib/api-client";
 import type {
   AcknowledgeUndeliveredNoticesRequest,
-  AdminOverview,
   Allocation,
   AllocationAccessGrant,
   AllocationAccessGrantList,
@@ -46,9 +45,6 @@ import type {
 import type { BookPolicy, SetBookPolicyBody } from "@/shared/contracts/book";
 import type { Consilium } from "@/shared/contracts/governance";
 import type { MfeEntry } from "@/shared/mfe/types";
-
-// ── overview ──────────────────────────────────────────────────────────────────
-export const fetchOverview = (): Promise<AdminOverview> => getJson("/api/admin/overview");
 
 // ── outbox ────────────────────────────────────────────────────────────────────
 export const fetchParkedEvents = (): Promise<ParkedEventList> => getJson("/api/admin/outbox/parked");
