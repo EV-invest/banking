@@ -42,18 +42,22 @@ export function formatMoment(stamp: string | null | undefined, locale: Locale): 
 }
 
 /**
- * An RFC 3339 stamp as the same moment {@link formatMoment} renders.
+ * An RFC 3339 stamp as the moment {@link formatMoment} renders, but in UTC and saying so:
+ * "16 Sept 2026, 09:54 UTC".
  *
  * The one wire that does not carry unix seconds: `/api/admin/deployments` relays what git
- * and the GitHub API say, and both speak RFC 3339. Kept beside `formatMoment` rather than
- * in the admin view so the two shapes still render one way — same locale mapping, same
- * fields — and so an unparseable stamp is a dash here too, not "Invalid Date".
+ * and the GitHub API say, and both speak RFC 3339. Rendered in UTC, not the browser's zone:
+ * a release time is compared against CI runs, Flux commits and pod logs, all of which are
+ * stamped UTC, and the operators reading it sit in different zones — a local rendering
+ * gives each of them a different number for the same tag. Kept beside `formatMoment` so
+ * the two shapes still share the locale mapping and the fields, and so an unparseable
+ * stamp is a dash here too, not "Invalid Date".
  */
 export function formatRfc3339Moment(stamp: string | null | undefined, locale: Locale): string {
   if (!stamp) return "—";
   const at = new Date(stamp);
   if (Number.isNaN(at.getTime())) return "—";
-  return at.toLocaleString(intlLocale(locale), MOMENT);
+  return at.toLocaleString(intlLocale(locale), { ...MOMENT, timeZone: "UTC", timeZoneName: "short" });
 }
 
 /** A unix-seconds stamp as a date alone: "12 Mar 2026". */
