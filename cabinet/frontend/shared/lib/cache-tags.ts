@@ -74,7 +74,8 @@ export const TAG = {
   payments: "payments",
 
   // ── operator console ──────────────────────────────────────────────────────────
-  /** Fleet health and the parked-event backlog — one screen, two reads that move together. */
+  /** Fleet health, the parked-event backlog and the deployed versions — one screen, three
+   *  reads that "Run health check" refreshes together. */
   adminFleet: "admin.fleet",
   /** Custody and claim balances across the rails. */
   adminTreasury: "admin.treasury",

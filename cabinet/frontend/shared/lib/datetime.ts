@@ -26,17 +26,34 @@ import type { Locale, Translate } from "@evinvest/i18n";
 import { intlLocale } from "@/shared/lib/intl-locale";
 import { hasUnixStamp, unixStampToDate } from "@/shared/lib/unix-stamp";
 
+const MOMENT: Intl.DateTimeFormatOptions = {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+};
+
 /** A unix-seconds stamp as an absolute local moment: "12 Mar 2026, 14:03". */
 export function formatMoment(stamp: string | null | undefined, locale: Locale): string {
   const at = toDate(stamp);
   if (!at) return "—";
-  return at.toLocaleString(intlLocale(locale), {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return at.toLocaleString(intlLocale(locale), MOMENT);
+}
+
+/**
+ * An RFC 3339 stamp as the same moment {@link formatMoment} renders.
+ *
+ * The one wire that does not carry unix seconds: `/api/admin/deployments` relays what git
+ * and the GitHub API say, and both speak RFC 3339. Kept beside `formatMoment` rather than
+ * in the admin view so the two shapes still render one way — same locale mapping, same
+ * fields — and so an unparseable stamp is a dash here too, not "Invalid Date".
+ */
+export function formatRfc3339Moment(stamp: string | null | undefined, locale: Locale): string {
+  if (!stamp) return "—";
+  const at = new Date(stamp);
+  if (Number.isNaN(at.getTime())) return "—";
+  return at.toLocaleString(intlLocale(locale), MOMENT);
 }
 
 /** A unix-seconds stamp as a date alone: "12 Mar 2026". */

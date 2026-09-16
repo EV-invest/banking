@@ -17,6 +17,7 @@ import {
   fetchAllocationAccessGrants,
   fetchAllocations as fetchAdminAllocations,
   fetchCabinet,
+  fetchDeployments,
   fetchFundRevenue,
   fetchMfeRegistry,
   fetchOverview,
@@ -52,6 +53,16 @@ export const overviewResource = defineResource({
   name: "admin.overview",
   fetch: fetchOverview,
   revalidate: OPERATIONAL,
+  tags: [TAG.adminFleet],
+});
+
+// A rollout is minutes apart from the next one at the fastest, and the read costs a
+// GitHub call per component on the BFF side — so a full minute, not the operational
+// window, and the fleet tag so "Run health check" re-reads it with the grid.
+export const deploymentsResource = defineResource({
+  name: "admin.deployments",
+  fetch: fetchDeployments,
+  revalidate: 60,
   tags: [TAG.adminFleet],
 });
 

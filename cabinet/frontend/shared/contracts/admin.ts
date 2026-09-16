@@ -49,6 +49,51 @@ export interface AdminOverview {
   unseal_failures: string;
 }
 
+// ── deployments ───────────────────────────────────────────────────────────────
+// What is running in production, per component — read from the version catalogue the
+// deploy mounts beside the BFF (`GET /api/admin/deployments`) and enriched from GitHub.
+// Unlike the money-plane DTOs above, every stamp here is RFC 3339 — the source is git
+// and the GitHub API, not the proto wire's unix-seconds `int64`.
+
+export interface DeployedPullRequest {
+  number: string;
+  title: string;
+  url: string;
+  merged_at: string | null;
+}
+
+export interface DeployedRelease {
+  commit_sha: string;
+  commit_url: string;
+  committed_at: string;
+  pr: DeployedPullRequest | null;
+}
+
+export interface DeployedComponent {
+  /** The workload as the deploy names it — "ev-banking-piggybank". */
+  name: string;
+  /** The image reference without its tag — "ghcr.io/ev-invest/ev_banking-piggybank". */
+  image: string;
+  /** The image tag actually running — "v0.17.0". */
+  tag: string;
+  /** Owning GitHub repository, "owner/name"; null when the image is not one of ours. */
+  repo: string | null;
+  repo_url: string | null;
+  tag_url: string | null;
+  /** The commit and PR the running tag points at; null when GitHub could not be asked. */
+  release: DeployedRelease | null;
+  /** The newest tag in the repository. Equal to `tag` when everything is rolled out. */
+  latest_tag: { tag: string; url: string } | null;
+  github_error: string | null;
+}
+
+export interface AdminDeployments {
+  /** False when the version catalogue is not mounted — local development, not a fault. */
+  available: boolean;
+  fetched_at: string;
+  components: DeployedComponent[];
+}
+
 // ── users ─────────────────────────────────────────────────────────────────────
 export interface AdminUserSummary {
   user_id: string;
