@@ -14,6 +14,16 @@
 //! (commit) or drops the window (rollback). The lock is transaction-scoped, so a dropped
 //! window releases it.
 //!
+//! A recorded row is a reservation, not yet a fact: it is written BEFORE the backend is
+//! asked to sign, so that a refusal never touches a key and a concurrent request sees the
+//! window as taken. If the request then fails before a signature exists — the backend
+//! refuses, the key is not provisioned, a later window is full — the handler
+//! [`NativeSpendLedger::release`]s what it charged, and the window is as it was. A signature
+//! that was produced leaves its row whatever happens afterwards: the only way a signed
+//! transaction reaches a chain is through the response the hub is waiting on, so a failure
+//! after the signature exists means nothing was broadcast — but the conservative side of
+//! that call is to keep the row, and it is one row per lost response.
+//!
 //! Amounts cross the wire as decimal text: a `u128` wei figure fits neither `i64` nor any
 //! sqlx-native numeric type, and `NUMERIC(39,0)` round-trips it exactly.
 
@@ -48,6 +58,13 @@ impl Asset {
 #[derive(Clone)]
 pub struct NativeSpendLedger {
 	pool: PgPool,
+}
+
+/// A row [`SpendWindow::record`] wrote — the handle [`NativeSpendLedger::release`] deletes
+/// it by, when the request it was charged for fails before a signature exists.
+#[derive(Debug)]
+pub struct SpendReservation {
+	id: i64,
 }
 
 /// An open, locked view of one `(wallet, network, asset)` window: the spend already recorded
@@ -107,6 +124,15 @@ impl NativeSpendLedger {
 			spent,
 		})
 	}
+
+	/// Give a reservation back: the request it was charged for produced no signature. Needs
+	/// no lock — a concurrent open of the same window either summed the row (and was refused
+	/// or admitted on that basis, conservatively) or will not see it; neither lets two
+	/// requests through on one allowance.
+	pub async fn release(&self, reservation: SpendReservation) -> Result<(), SignerError> {
+		sqlx::query("DELETE FROM native_spend WHERE id = $1").bind(reservation.id).execute(&self.pool).await?;
+		Ok(())
+	}
 }
 
 impl SpendWindow<'_> {
@@ -115,17 +141,18 @@ impl SpendWindow<'_> {
 		self.spent
 	}
 
-	/// Record `spend` in the window and commit — the point of no return: from here the amount
-	/// counts against the window whether or not the signature that follows succeeds.
-	pub async fn record(mut self, spend: u128) -> Result<(), SignerError> {
-		sqlx::query("INSERT INTO native_spend (wallet_id, network, asset, spend) VALUES ($1, $2, $3, $4::numeric)")
+	/// Record `spend` in the window and commit. From here the amount counts against the
+	/// window for every concurrent request; the returned reservation is how the caller gives
+	/// it back if its request fails before a signature exists.
+	pub async fn record(mut self, spend: u128) -> Result<SpendReservation, SignerError> {
+		let id: i64 = sqlx::query_scalar("INSERT INTO native_spend (wallet_id, network, asset, spend) VALUES ($1, $2, $3, $4::numeric) RETURNING id")
 			.bind(self.wallet_id)
 			.bind(self.network.as_str())
 			.bind(self.asset.as_str())
 			.bind(spend.to_string())
-			.execute(&mut *self.tx)
+			.fetch_one(&mut *self.tx)
 			.await?;
 		self.tx.commit().await?;
-		Ok(())
+		Ok(SpendReservation { id })
 	}
 }

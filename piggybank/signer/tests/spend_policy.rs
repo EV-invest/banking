@@ -1,7 +1,8 @@
 //! The per-wallet-class spend rules, end to end: real Postgres, the real local vault, the real
 //! handlers (no mocks). One harness for #183 (wallet classes), #184 (treasury native + token
 //! pin), #369 (the native spend window) and the security review of that branch (the treasury
-//! USDT window, jetton wallets pinned on first use).
+//! USDT window, jetton wallets pinned on first use, reservations released on a failed
+//! signature).
 //!
 //! Every refusal here is `PermissionDenied`, and where the sending wallet is deliberately
 //! left unprovisioned it is still `PermissionDenied` — not `FailedPrecondition` — which proves
@@ -186,6 +187,16 @@ fn jetton_via(from_wallet: Uuid, our_jetton_wallet: &str, to: &str, response_des
 	let mut req = jetton(from_wallet, to, response_destination, 1, 100_000_000).into_inner();
 	req.our_jetton_wallet = our_jetton_wallet.to_owned();
 	Request::new(req)
+}
+
+/// How many ledger rows `(wallet, asset)` holds — what a wallet's windows are charged with.
+async fn ledger_rows(db: &common::TestDb, wallet: Uuid, asset: &str) -> i64 {
+	sqlx::query_scalar("SELECT count(*) FROM native_spend WHERE wallet_id = $1 AND asset = $2")
+		.bind(wallet)
+		.bind(asset)
+		.fetch_one(&db.pool)
+		.await
+		.expect("count native_spend rows")
 }
 
 /// The `jetton_wallets` pin for `(wallet, ton)`, if learned.
@@ -925,6 +936,115 @@ async fn treasury_usdt_window_is_raised_by_its_variable_and_counted_in_chain_pre
 		.sign_trc20_transfer(trc20(TREASURY, USDT_TRC20, OTHER_TRON, 6_000_000, 1_000_000))
 		.await
 		.expect("the remaining 6 USDT of the hour is signed");
+	db.cleanup().await;
+}
+
+// === review: a failed signature gives its reservations back =======================
+
+#[tokio::test]
+async fn a_backend_failure_releases_the_windows_it_charged() {
+	let db = db_or_skip!();
+	// Tron: a deposit wallet but NO gas station provisioned, and room for exactly two drips.
+	let secrets = WalletSecrets::new(db.pool.clone());
+	let user = Uuid::new_v4();
+	let user_address = provision::provision(&test_vault(), &secrets, user, Network::Trc20)
+		.await
+		.expect("provision a deposit wallet")
+		.address;
+	let signer = Signer::new(test_vault(), secrets.clone(), policy(&[("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TRC20", "60000000")]));
+
+	// Every policy check passes (the destination IS held), the window is charged, and then the
+	// backend has no key for the station: the charge must not survive that.
+	let status = signer
+		.sign_trx_transfer(trx(GAS_STATION, &user_address, 30_000_000))
+		.await
+		.expect_err("no key for the gas station");
+	assert_eq!(status.code(), Code::FailedPrecondition, "{status:?}");
+	assert_eq!(ledger_rows(&db, GAS_STATION, "native").await, 0, "the failed attempt was released");
+
+	provision::provision(&test_vault(), &secrets, GAS_STATION, Network::Trc20)
+		.await
+		.expect("provision the gas station");
+	for n in 1..=2 {
+		signer
+			.sign_trx_transfer(trx(GAS_STATION, &user_address, 30_000_000))
+			.await
+			.unwrap_or_else(|status| panic!("drip {n} of 2 must fit the window the failure gave back: {status:?}"));
+	}
+	denied(signer.sign_trx_transfer(trx(GAS_STATION, &user_address, 30_000_000)).await, "the third drip");
+	assert_eq!(ledger_rows(&db, GAS_STATION, "native").await, 2);
+
+	// EVM treasury payout: both windows (USDT and native) are charged before the signature,
+	// and both are given back when the backend refuses.
+	let bare = Signer::new(test_vault(), secrets.clone(), policy(&[("SIGNER_MAX_TREASURY_USDT_PER_HOUR", "100")]));
+	let hundred_usdt: u128 = 100 * 1_000_000_000_000_000_000;
+	let status = bare
+		.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, hundred_usdt, GWEI, 60_000))
+		.await
+		.expect_err("no key for the treasury");
+	assert_eq!(status.code(), Code::FailedPrecondition, "{status:?}");
+	assert_eq!(ledger_rows(&db, TREASURY, "usdt").await, 0);
+	assert_eq!(ledger_rows(&db, TREASURY, "native").await, 0);
+	provision::provision(&test_vault(), &secrets, TREASURY, Network::Bep20).await.expect("provision the treasury");
+	bare.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, hundred_usdt, GWEI, 60_000))
+		.await
+		.expect("the whole hour is still available after the failed attempt");
+	assert_eq!(ledger_rows(&db, TREASURY, "usdt").await, 1);
+	assert_eq!(ledger_rows(&db, TREASURY, "native").await, 1);
+	// A signature that succeeded keeps its rows: the next payout is refused on the hour.
+	denied(
+		bare.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000)).await,
+		"a payout after the hour is spent",
+	);
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_refusal_on_the_second_window_releases_the_first() {
+	let db = db_or_skip!();
+	// The USDT window admits the payout; the native window (1 wei) refuses its gas. The USDT
+	// charge made first must not stay behind.
+	let rail = Rail::new(&db, Network::Bep20, policy(&[("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20", "1")])).await;
+	let status = denied(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000)).await,
+		"a payout over the native window",
+	);
+	assert!(status.message().contains("native spend window"), "{status:?}");
+	assert_eq!(ledger_rows(&db, TREASURY, "usdt").await, 0, "the USDT charge was released");
+	assert_eq!(ledger_rows(&db, TREASURY, "native").await, 0);
+	db.cleanup().await;
+}
+
+// === review: the top-up gate's address lookup is indexed ==========================
+
+#[tokio::test]
+async fn held_address_lookup_uses_the_active_address_index() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
+	// The planner would seq-scan a three-row table whatever the index; forbidding that shows
+	// whether the query's expression matches the index at all (migration 0008).
+	let mut conn = db.pool.acquire().await.expect("a connection");
+	sqlx::query("SET enable_seqscan = off").execute(&mut *conn).await.expect("disable seq scans");
+	let plan: Vec<String> = sqlx::query_scalar("EXPLAIN SELECT address FROM wallet_secrets WHERE network = $1 AND superseded_at IS NULL AND lower(address) = lower($2)")
+		.bind("bep20")
+		.bind(rail.user_address.to_ascii_lowercase())
+		.fetch_all(&mut *conn)
+		.await
+		.expect("explain the lookup");
+	let plan = plan.join("\n");
+	assert!(plan.contains("wallet_secrets_active_network_lower_address"), "{plan}");
+	drop(conn);
+	// And the lookup still finds the EIP-55 row from a lowercase spelling, and only active rows.
+	assert_eq!(
+		rail.secrets
+			.find_active_by_address(Network::Bep20, &rail.user_address.to_ascii_lowercase())
+			.await
+			.unwrap()
+			.as_deref(),
+		Some(rail.user_address.as_str())
+	);
+	assert!(rail.secrets.supersede(rail.user, Network::Bep20).await.unwrap());
+	assert_eq!(rail.secrets.find_active_by_address(Network::Bep20, &rail.user_address).await.unwrap(), None);
 	db.cleanup().await;
 }
 

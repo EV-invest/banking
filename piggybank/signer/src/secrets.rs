@@ -258,19 +258,22 @@ impl WalletSecrets {
 	/// gate's question. Watch-only data; never the sealed blob.
 	///
 	/// The comparison is done on the stored rendering ([`provision::stored_rendering`]) so
-	/// it is one equality lookup, not a scan; the caller re-confirms the hit with
-	/// [`provision::addresses_agree`] before treating it as held. A string that is not an
-	/// address of `network` is simply not held.
+	/// it is one equality lookup on `wallet_secrets_active_network_lower_address` (migration
+	/// 0008 — `lower(address)` on every rail, since the store holds EIP-55 on the EVM ones),
+	/// not a scan. Tron's Base58Check is case-sensitive, so on that rail the lowercase key
+	/// only narrows to candidates and the caller's [`provision::addresses_agree`] is what
+	/// decides; the caller re-confirms every hit with it before treating it as held. A string
+	/// that is not an address of `network` is simply not held.
 	pub async fn find_active_by_address(&self, network: Network, address: &str) -> Result<Option<String>, SignerError> {
 		let Some(key) = provision::stored_rendering(network, address) else {
 			return Ok(None);
 		};
-		let sql = match network {
-			Network::Bep20 | Network::Polygon => "SELECT address FROM wallet_secrets WHERE network = $1 AND superseded_at IS NULL AND lower(address) = $2",
-			Network::Trc20 | Network::Ton => "SELECT address FROM wallet_secrets WHERE network = $1 AND superseded_at IS NULL AND address = $2",
-		};
-		let stored = sqlx::query_scalar::<_, String>(sql).bind(network.as_str()).bind(key).fetch_optional(&self.pool).await?;
-		Ok(stored)
+		let candidates = sqlx::query_scalar::<_, String>("SELECT address FROM wallet_secrets WHERE network = $1 AND superseded_at IS NULL AND lower(address) = lower($2)")
+			.bind(network.as_str())
+			.bind(&key)
+			.fetch_all(&self.pool)
+			.await?;
+		Ok(candidates.into_iter().find(|stored| provision::addresses_agree(network, stored, address)))
 	}
 
 	/// The watch-only `(address, public_key)` for the active `(user, network)` key, if
