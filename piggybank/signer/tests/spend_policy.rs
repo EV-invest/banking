@@ -1,7 +1,7 @@
 //! The per-wallet-class spend rules, end to end: real Postgres, the real local vault, the real
 //! handlers (no mocks). One harness for #183 (wallet classes), #184 (treasury native + token
 //! pin), #369 (the native spend window) and the security review of that branch (the treasury
-//! USDT window).
+//! USDT window, jetton wallets pinned on first use).
 //!
 //! Every refusal here is `PermissionDenied`, and where the sending wallet is deliberately
 //! left unprovisioned it is still `PermissionDenied` — not `FailedPrecondition` — which proves
@@ -33,6 +33,8 @@ const OTHER_TON: &str = "EQB3ncyBUTjZUA5EnFKR5_EnOMI9V1tTEAAPaiU71gc4TiUt";
 const USDT_BEP20: &str = "0x55d398326f99059fF775485246999027B3197955";
 const USDT_TRC20: &str = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const JETTON_WALLET: &str = "0:e4d954ef9f4e1250a26b5bbad76a1cdd17cfd08babad6f4c23e372270aef6f76";
+/// A second, unrelated jetton wallet — what a forged transfer would name after the first pinned.
+const OTHER_JETTON_WALLET: &str = "0:1111111111111111111111111111111111111111111111111111111111111111";
 
 fn test_vault() -> Vault {
 	Vault::from_hex(&hex::encode([9u8; 32])).unwrap()
@@ -177,6 +179,22 @@ fn jetton(from_wallet: Uuid, to: &str, response_destination: &str, amount: u128,
 		is_testnet: false,
 		wallet_version: String::new(),
 	})
+}
+
+/// [`jetton`] with an explicit `our_jetton_wallet`.
+fn jetton_via(from_wallet: Uuid, our_jetton_wallet: &str, to: &str, response_destination: &str) -> Request<SignJettonTransferRequest> {
+	let mut req = jetton(from_wallet, to, response_destination, 1, 100_000_000).into_inner();
+	req.our_jetton_wallet = our_jetton_wallet.to_owned();
+	Request::new(req)
+}
+
+/// The `jetton_wallets` pin for `(wallet, ton)`, if learned.
+async fn pinned_jetton_wallet(db: &common::TestDb, wallet: Uuid) -> Option<String> {
+	sqlx::query_scalar("SELECT jetton_wallet FROM jetton_wallets WHERE wallet_id = $1 AND network = 'ton'")
+		.bind(wallet)
+		.fetch_optional(&db.pool)
+		.await
+		.expect("read jetton_wallets")
 }
 
 fn ton(from_wallet: Uuid, to: &str, amount: u128) -> Request<SignTonTransferRequest> {
@@ -432,8 +450,8 @@ async fn treasury_allowlist_accepts_the_listed_address_in_another_rendering() {
 		"unlisted destination",
 	);
 
-	// TON: listed base64, sent raw. `our_jetton_wallet` is held to the list unless pinned, so
-	// pin it — the intended posture: pinned jetton wallet + allowlist.
+	// TON: listed base64, sent raw. The jetton wallet is pinned by the operator here — the
+	// intended posture (the allowlist has no say over it either way).
 	let raw = tonlib_core::TonAddress::from_str(OTHER_TON).unwrap().to_hex();
 	let pinned = policy(&[("SIGNER_DESTINATION_ALLOWLIST", OTHER_TON), ("SIGNER_TON_TREASURY_JETTON_WALLET", JETTON_WALLET)]);
 	let ton_rail = Rail::new(&db, Network::Ton, pinned).await;
@@ -686,6 +704,156 @@ async fn native_spend_window_counts_fees_of_token_transfers_too() {
 		rail.signer.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, 1, 1, 21_000)).await,
 		"any further sweep",
 	);
+	db.cleanup().await;
+}
+
+// === review: jetton wallets are pinned on first use ================================
+
+#[tokio::test]
+async fn first_sweep_pins_the_jetton_wallet_and_later_sweeps_are_held_to_it() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Ton, policy(&[])).await;
+	let to = &rail.treasury_address;
+	let excess = &rail.gas_station_address;
+	assert_eq!(pinned_jetton_wallet(&db, rail.user).await, None);
+
+	// Whatever the first sweep names is learned — in the stored raw rendering.
+	rail.signer
+		.sign_jetton_transfer(jetton_via(rail.user, &base64_of(OTHER_JETTON_WALLET), to, excess))
+		.await
+		.expect("the first sweep is signed and pins its jetton wallet");
+	assert_eq!(pinned_jetton_wallet(&db, rail.user).await.as_deref(), Some(OTHER_JETTON_WALLET));
+
+	// From then on only that address, in either rendering.
+	let status = denied(
+		rail.signer.sign_jetton_transfer(jetton_via(rail.user, JETTON_WALLET, to, excess)).await,
+		"a sweep via another jetton wallet",
+	);
+	assert!(status.message().contains("first use"), "{status:?}");
+	rail.signer
+		.sign_jetton_transfer(jetton_via(rail.user, OTHER_JETTON_WALLET, to, excess))
+		.await
+		.expect("the pinned jetton wallet in the raw rendering is signed");
+	rail.signer
+		.sign_jetton_transfer(jetton_via(rail.user, &base64_of(OTHER_JETTON_WALLET), to, excess))
+		.await
+		.expect("the pinned jetton wallet in the base64 rendering is signed");
+	// The refusal did not move the pin.
+	assert_eq!(pinned_jetton_wallet(&db, rail.user).await.as_deref(), Some(OTHER_JETTON_WALLET));
+
+	// Every wallet has its own pin: another deposit wallet's first sweep names a different one.
+	let (other, _) = rail.another_user(Network::Ton).await;
+	rail.signer
+		.sign_jetton_transfer(jetton_via(other, JETTON_WALLET, to, excess))
+		.await
+		.expect("another wallet pins its own jetton wallet");
+	assert_eq!(pinned_jetton_wallet(&db, other).await.as_deref(), Some(JETTON_WALLET));
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn treasury_operator_pin_outranks_the_first_use_table() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Ton, policy(&[("SIGNER_TON_TREASURY_JETTON_WALLET", JETTON_WALLET)])).await;
+	let excess = &base64_of(&rail.treasury_address);
+	// A first-use row already exists for the treasury, naming a different jetton wallet.
+	sqlx::query("INSERT INTO jetton_wallets (wallet_id, network, jetton_wallet) VALUES ($1, 'ton', $2)")
+		.bind(TREASURY)
+		.bind(OTHER_JETTON_WALLET)
+		.execute(&db.pool)
+		.await
+		.expect("seed a first-use row");
+
+	// The operator's pin is what counts: the table's address is refused, the pin is signed.
+	let status = denied(
+		rail.signer.sign_jetton_transfer(jetton_via(TREASURY, OTHER_JETTON_WALLET, OTHER_TON, excess)).await,
+		"the table's jetton wallet against an operator pin",
+	);
+	assert!(status.message().contains("SIGNER_TON_TREASURY_JETTON_WALLET"), "{status:?}");
+	rail.signer
+		.sign_jetton_transfer(jetton_via(TREASURY, &base64_of(JETTON_WALLET), OTHER_TON, excess))
+		.await
+		.expect("the operator's pin is signed");
+	// And the table was neither consulted nor rewritten.
+	assert_eq!(pinned_jetton_wallet(&db, TREASURY).await.as_deref(), Some(OTHER_JETTON_WALLET));
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn unpinned_treasury_pins_on_first_use_and_the_allowlist_has_no_say() {
+	let db = db_or_skip!();
+	// The production posture today: no operator pin. An allowlist that does NOT list the
+	// jetton wallet used to refuse every TON withdrawal; it is not the jetton wallet's gate.
+	let rail = Rail::new(&db, Network::Ton, policy(&[("SIGNER_DESTINATION_ALLOWLIST", OTHER_TON)])).await;
+	let excess = &base64_of(&rail.treasury_address);
+
+	rail.signer
+		.sign_jetton_transfer(jetton_via(TREASURY, JETTON_WALLET, OTHER_TON, excess))
+		.await
+		.expect("the treasury's first withdrawal pins its jetton wallet");
+	assert_eq!(pinned_jetton_wallet(&db, TREASURY).await.as_deref(), Some(JETTON_WALLET));
+	let status = denied(
+		rail.signer.sign_jetton_transfer(jetton_via(TREASURY, OTHER_JETTON_WALLET, OTHER_TON, excess)).await,
+		"a treasury withdrawal via another jetton wallet",
+	);
+	assert!(status.message().contains("first use"), "{status:?}");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_request_refused_before_the_pin_learns_nothing() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Ton, policy(&[])).await;
+	let to = &rail.treasury_address;
+	let excess = &rail.gas_station_address;
+
+	// Not a TON address: malformed, never pinned (pinning it would refuse every later sweep).
+	let status = rail
+		.signer
+		.sign_jetton_transfer(jetton_via(rail.user, "not-an-address", to, excess))
+		.await
+		.expect_err("garbage is not pinned");
+	assert_eq!(status.code(), Code::InvalidArgument, "{status:?}");
+	// Refused on a cheaper rule (a sweep elsewhere): the jetton wallet it named is not learned.
+	denied(
+		rail.signer.sign_jetton_transfer(jetton_via(rail.user, OTHER_JETTON_WALLET, OTHER_TON, excess)).await,
+		"a sweep elsewhere",
+	);
+	assert_eq!(pinned_jetton_wallet(&db, rail.user).await, None);
+	// So the legitimate first sweep still gets to pin.
+	rail.signer
+		.sign_jetton_transfer(jetton_via(rail.user, JETTON_WALLET, to, excess))
+		.await
+		.expect("the first legitimate sweep pins");
+	assert_eq!(pinned_jetton_wallet(&db, rail.user).await.as_deref(), Some(JETTON_WALLET));
+	db.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_first_sweeps_pin_exactly_one_jetton_wallet() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Ton, policy(&[])).await;
+	let signer = std::sync::Arc::new(rail.signer);
+
+	// Eight first sweeps race, naming two different jetton wallets. Whichever wins the INSERT
+	// is the pin; every signature must have named it.
+	let mut set = tokio::task::JoinSet::new();
+	for n in 0..8 {
+		let signer = std::sync::Arc::clone(&signer);
+		let (to, excess) = (rail.treasury_address.clone(), rail.gas_station_address.clone());
+		let via = if n % 2 == 0 { JETTON_WALLET } else { OTHER_JETTON_WALLET };
+		set.spawn(async move { signer.sign_jetton_transfer(jetton_via(rail.user, via, &to, &excess)).await.map(|_| via) });
+	}
+	let mut signed_via = Vec::new();
+	while let Some(outcome) = set.join_next().await {
+		match outcome.expect("task panicked") {
+			Ok(via) => signed_via.push(via),
+			Err(status) => assert_eq!(status.code(), Code::PermissionDenied, "{status:?}"),
+		}
+	}
+	let pinned = pinned_jetton_wallet(&db, rail.user).await.expect("one jetton wallet was pinned");
+	assert!(!signed_via.is_empty(), "the winner's own sweep is signed");
+	assert!(signed_via.iter().all(|via| *via == pinned), "every signature named the pin {pinned}: {signed_via:?}");
 	db.cleanup().await;
 }
 

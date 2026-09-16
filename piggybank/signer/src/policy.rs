@@ -15,10 +15,10 @@
 //!     legitimate flow at all and is always refused. On TON the hub points a sweep's
 //!     `response_destination` at the gas station (the excess Toncoin tops the station back
 //!     up), so that field may name the sending wallet, the gas station or the treasury — all
-//!     three derived by the signer. `our_jetton_wallet` cannot be derived for a sweep (it is
-//!     the user's jetton wallet, a contract address the signer never computes); it is
-//!     bounded instead by the fee budget on `msg_value` — the only Toncoin that message
-//!     carries — and by the native spend window (#369).
+//!     three derived by the signer. `our_jetton_wallet` cannot be derived (it is the user's
+//!     jetton wallet, a contract address the hub resolves through an indexer and the signer
+//!     never computes); it is **pinned on first use** instead — see the jetton wallet rule
+//!     below.
 //!   - **Gas station** (`Uuid::from_u128(1)`, the hub's reserved id): it only ever tops up
 //!     deposit wallets with the native coin, so it signs **native transfers only**, the
 //!     destination must be an address the signer itself holds a key for on that network
@@ -50,8 +50,20 @@
 //!         Toncoin, and both are held to the same list: the `response_destination` (the excess
 //!         returns there — always the sending wallet itself on a legitimate withdrawal, so that
 //!         is accepted with or without a list) and `our_jetton_wallet` (the internal message's
-//!         destination, which receives `msg_value` — pinned with
-//!         `SIGNER_TON_TREASURY_JETTON_WALLET`, or else it must be on the list).
+//!         destination, which receives `msg_value` — pinned, never allowlisted; below).
+//!
+//! **The jetton wallet is pinned, for every class** ([`check_jetton_wallet_pin`]). A jetton
+//! transfer is an internal message TO `our_jetton_wallet` carrying `msg_value` in Toncoin,
+//! and whatever contract sits at that address receives it. The treasury's is pinned by the
+//! operator (`SIGNER_TON_TREASURY_JETTON_WALLET`) when set; otherwise — and for every deposit
+//! wallet always — the first transfer a `(wallet, network)` signs pins the address it named
+//! in the signer's own `jetton_wallets` table ([`crate::jetton_wallets`]), and every later
+//! transfer must agree with it (rendering-aware). The allowlist plays no part: a jetton
+//! wallet is the wallet's identity, not a destination. **Residual risk:** the first message
+//! per wallet — each deposit wallet's first sweep, and the treasury's first withdrawal after
+//! the deploy if the operator pin is unset — trusts the hub once, for at most the fee
+//! budget's `msg_value` ceiling (0.1 TON). Deriving the address from the jetton master's
+//! StateInit is the follow-up that removes even that.
 //!
 //! **Native (gas-coin) transfers from the treasury are refused by default.** No core flow
 //! sends native funds FROM the treasury (gas top-ups are signed from the gas station), and
@@ -135,8 +147,9 @@ pub struct SignerPolicy {
 	/// [`provision::addresses_agree`], not string equality). Empty ⇒ any destination is
 	/// allowed (the default withdrawal model).
 	destination_allowlist: Vec<String>,
-	/// The treasury's own USDT jetton wallet, when pinned: a treasury jetton transfer's
-	/// `our_jetton_wallet` must be this address. `None` ⇒ it falls back to the allowlist.
+	/// The treasury's own USDT jetton wallet, when the operator pinned it: a treasury jetton
+	/// transfer's `our_jetton_wallet` must be this address. `None` ⇒ pinned on first use like
+	/// every other wallet's.
 	ton_treasury_jetton_wallet: Option<String>,
 	/// The always-on ceiling on the fee side of every signed transaction.
 	fee_budget: FeeBudget,
@@ -570,6 +583,31 @@ pub fn evm_native_spend(network: Network, gas_price: u128, gas_limit: u64, value
 		.ok_or_else(|| Status::permission_denied(format!("native spend of the transaction overflows the signer's window on {network}")))
 }
 
+/// Who pinned a jetton wallet — only the refusal's wording differs, so an operator reading
+/// the hub's parked withdrawal knows which pin to look at.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum JettonPinSource {
+	/// `SIGNER_TON_TREASURY_JETTON_WALLET`.
+	Operator,
+	/// The `jetton_wallets` row the wallet's first transfer wrote.
+	FirstUse,
+}
+
+/// Enforce a jetton transfer's `our_jetton_wallet` against the pin held for the sending
+/// wallet — the internal message's destination, which receives `msg_value` in native Toncoin
+/// whatever contract sits there. Pure: the caller resolved which pin applies (the operator's
+/// for the treasury when set, else the first-use row) and passes it in; the comparison is
+/// rendering-aware, so the raw and base64 spellings of one address agree.
+pub fn check_jetton_wallet_pin(pinned: &str, our_jetton_wallet: &str, source: JettonPinSource) -> Result<(), Status> {
+	if provision::addresses_agree(Network::Ton, pinned, our_jetton_wallet) {
+		return Ok(());
+	}
+	Err(Status::permission_denied(match source {
+		JettonPinSource::Operator => "our_jetton_wallet is not the treasury's jetton wallet pinned by SIGNER_TON_TREASURY_JETTON_WALLET",
+		JettonPinSource::FirstUse => "our_jetton_wallet is not the jetton wallet this wallet pinned on first use",
+	}))
+}
+
 /// A native transfer out of a deposit wallet: no core flow does this (a sweep moves USDT, and
 /// its gas arrives FROM the gas station), so there is nothing to allow.
 pub fn refuse_deposit_native(network: Network) -> Status {
@@ -638,6 +676,13 @@ impl SignerPolicy {
 
 	pub fn treasury_jetton_wallet_pinned(&self) -> bool {
 		self.ton_treasury_jetton_wallet.is_some()
+	}
+
+	/// The operator's pin for the treasury's jetton wallet, when set. It outranks the
+	/// first-use pin: with it set, the `jetton_wallets` table is not consulted for the
+	/// treasury at all.
+	pub fn treasury_jetton_wallet(&self) -> Option<&str> {
+		self.ton_treasury_jetton_wallet.as_deref()
 	}
 
 	pub fn max_transfer_usdt(&self) -> u64 {
@@ -788,20 +833,6 @@ impl SignerPolicy {
 		Err(Status::permission_denied(
 			"treasury transfer response_destination must be the sending wallet or on the signer's allowlist",
 		))
-	}
-
-	/// Enforce the policy on a treasury jetton transfer's `our_jetton_wallet` — the internal
-	/// message's destination, which receives `msg_value` in native Toncoin whatever contract
-	/// sits there. Pinned ⇒ it must be the pinned address (either rendering); unpinned ⇒ it is
-	/// held to the destination allowlist like `to_address` (a no-op while the list is empty).
-	pub fn check_treasury_jetton_wallet(&self, our_jetton_wallet: &str) -> Result<(), Status> {
-		match &self.ton_treasury_jetton_wallet {
-			Some(pinned) if provision::addresses_agree(Network::Ton, pinned, our_jetton_wallet) => Ok(()),
-			Some(_) => Err(Status::permission_denied("our_jetton_wallet is not the treasury's pinned jetton wallet")),
-			None => self
-				.check_allowlist(Network::Ton, our_jetton_wallet)
-				.map_err(|_| Status::permission_denied("our_jetton_wallet is neither pinned nor on the signer's allowlist")),
-		}
 	}
 
 	fn check_allowlist(&self, network: Network, to_address: &str) -> Result<(), Status> {
@@ -1551,28 +1582,38 @@ mod tests {
 	}
 
 	#[test]
-	fn pinned_jetton_wallet_admits_only_itself_in_either_rendering() {
+	fn jetton_wallet_pin_admits_only_itself_in_either_rendering() {
+		for source in [JettonPinSource::Operator, JettonPinSource::FirstUse] {
+			assert!(check_jetton_wallet_pin(JETTON_WALLET_RAW, JETTON_WALLET_RAW, source).is_ok());
+			assert!(check_jetton_wallet_pin(JETTON_WALLET_RAW, &jetton_wallet_base64(), source).is_ok());
+			assert!(check_jetton_wallet_pin(&jetton_wallet_base64(), JETTON_WALLET_RAW, source).is_ok());
+			let status = denied(check_jetton_wallet_pin(JETTON_WALLET_RAW, FOREIGN, source));
+			assert!(status.message().contains("our_jetton_wallet"), "{status:?}");
+			denied(check_jetton_wallet_pin(JETTON_WALLET_RAW, "garbage", source));
+		}
+		// The wording names the pin to look at.
+		assert!(
+			denied(check_jetton_wallet_pin(JETTON_WALLET_RAW, FOREIGN, JettonPinSource::Operator))
+				.message()
+				.contains("SIGNER_TON_TREASURY_JETTON_WALLET")
+		);
+		assert!(
+			denied(check_jetton_wallet_pin(JETTON_WALLET_RAW, FOREIGN, JettonPinSource::FirstUse))
+				.message()
+				.contains("first use")
+		);
+	}
+
+	#[test]
+	fn operator_pin_is_exposed_only_when_set() {
 		let p = SignerPolicy {
 			ton_treasury_jetton_wallet: Some(JETTON_WALLET_RAW.to_owned()),
 			..policy(1000, &[FOREIGN])
 		};
 		assert!(p.treasury_jetton_wallet_pinned());
-		assert!(p.check_treasury_jetton_wallet(JETTON_WALLET_RAW).is_ok());
-		assert!(p.check_treasury_jetton_wallet(&jetton_wallet_base64()).is_ok());
-		// Allowlisted, but not the pin: the pin wins.
-		let status = denied(p.check_treasury_jetton_wallet(FOREIGN));
-		assert!(status.message().contains("pinned"), "{status:?}");
-		denied(p.check_treasury_jetton_wallet("garbage"));
-	}
-
-	#[test]
-	fn unpinned_jetton_wallet_falls_back_to_the_allowlist() {
-		// No list, no pin: the default posture, unchecked (as `to_address` is).
-		assert!(policy(1000, &[]).check_treasury_jetton_wallet(FOREIGN).is_ok());
-		// A list without the jetton wallet on it refuses — the operator must list or pin it.
-		let status = denied(policy(1000, &[FOREIGN]).check_treasury_jetton_wallet(JETTON_WALLET_RAW));
-		assert!(status.message().contains("our_jetton_wallet"), "{status:?}");
-		assert!(policy(1000, &[JETTON_WALLET_RAW]).check_treasury_jetton_wallet(JETTON_WALLET_RAW).is_ok());
+		assert_eq!(p.treasury_jetton_wallet(), Some(JETTON_WALLET_RAW));
+		// The allowlist has no say over the jetton wallet: unpinned is unpinned, listed or not.
+		assert_eq!(policy(1000, &[JETTON_WALLET_RAW]).treasury_jetton_wallet(), None);
 	}
 
 	// === policy: env parsing ===================================================
@@ -1593,7 +1634,7 @@ mod tests {
 		assert_eq!(p.max_transfer_usdt(), 500);
 		assert_eq!(p.allowlist_len(), 2);
 		assert!(p.treasury_jetton_wallet_pinned());
-		assert!(p.check_treasury_jetton_wallet(&jetton_wallet_base64()).is_ok());
+		assert!(check_jetton_wallet_pin(p.treasury_jetton_wallet().unwrap(), &jetton_wallet_base64(), JettonPinSource::Operator).is_ok());
 
 		// An empty pin is unset; a pin that is not a TON address does not boot.
 		assert!(

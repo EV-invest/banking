@@ -21,10 +21,11 @@ use uuid::Uuid;
 use crate::{
 	backend::{Curve, CustodyMinter, KeyBackend, KeyHandle, LocalVault},
 	evm_tx,
+	jetton_wallets::{JettonWalletPin, JettonWallets},
 	kek_guard::short_fp,
 	key_vault::Vault,
 	native_spend::{Asset, NativeSpendLedger},
-	policy::{self, FeeQuote, SignerPolicy},
+	policy::{self, FeeQuote, JettonPinSource, SignerPolicy},
 	provision,
 	secrets::{NewTurnkeySecret, WalletSecrets},
 	ton_tx, tron_tx,
@@ -85,6 +86,8 @@ pub struct Signer {
 	/// The spend-window ledger (native coin per wallet, USDT per treasury rail), over the
 	/// same database as `secrets`.
 	ledger: NativeSpendLedger,
+	/// The first-use jetton wallet pins, over the same database.
+	jetton_wallets: JettonWallets,
 	policy: SignerPolicy,
 }
 
@@ -99,6 +102,7 @@ impl Signer {
 			custodian: None,
 			vault,
 			ledger: NativeSpendLedger::new(secrets.pool().clone()),
+			jetton_wallets: JettonWallets::new(secrets.pool().clone()),
 			secrets,
 			policy,
 		}
@@ -116,6 +120,7 @@ impl Signer {
 			custodian,
 			vault,
 			ledger: NativeSpendLedger::new(secrets.pool().clone()),
+			jetton_wallets: JettonWallets::new(secrets.pool().clone()),
 			secrets,
 			policy,
 		}
@@ -177,15 +182,31 @@ impl Signer {
 		}
 	}
 
-	/// Apply the class rule to a jetton transfer's `our_jetton_wallet` — the internal message's
-	/// destination, which receives `msg_value` in Toncoin whatever contract sits there. Pinned
-	/// for the treasury; underivable for a sweep (it is the user's jetton wallet), where the fee
-	/// budget on `msg_value` is what bounds it.
-	fn guard_jetton_wallet(&self, class: WalletClass, our_jetton_wallet: &str) -> Result<(), Status> {
+	/// Apply the pin rule to a jetton transfer's `our_jetton_wallet` — the internal message's
+	/// destination, which receives `msg_value` in Toncoin whatever contract sits there. The
+	/// operator's pin for the treasury when set; otherwise, for the treasury and every deposit
+	/// wallet, the address the wallet's first transfer named, learned here if this is it.
+	/// Runs after the pure checks on the request and before any window is charged or any key
+	/// touched, so a request refused on anything cheaper never pins, and a pin is never learned
+	/// from a request the backend then refuses to sign.
+	async fn guard_jetton_wallet(&self, class: WalletClass, wallet_id: Uuid, our_jetton_wallet: &str) -> Result<(), Status> {
 		match class {
-			WalletClass::Treasury => self.policy.check_treasury_jetton_wallet(our_jetton_wallet),
-			WalletClass::GasStation => Err(policy::refuse_gas_station_token(Network::Ton)),
-			WalletClass::Deposit => Ok(()),
+			WalletClass::GasStation => return Err(policy::refuse_gas_station_token(Network::Ton)),
+			WalletClass::Treasury =>
+				if let Some(pinned) = self.policy.treasury_jetton_wallet() {
+					return policy::check_jetton_wallet_pin(pinned, our_jetton_wallet, JettonPinSource::Operator);
+				},
+			WalletClass::Deposit => {}
+		}
+		// Pinning garbage would refuse every later legitimate transfer from this wallet, so a
+		// string that is not a TON address is malformed, not learned.
+		let rendering = provision::stored_rendering(Network::Ton, our_jetton_wallet).ok_or_else(|| Status::invalid_argument("our_jetton_wallet must be a TON address"))?;
+		match self.jetton_wallets.learn_or_read(wallet_id, Network::Ton, &rendering).await? {
+			JettonWalletPin::Learned => {
+				tracing::info!(%wallet_id, jetton_wallet = %rendering, "pinned a jetton wallet on first use");
+				Ok(())
+			}
+			JettonWalletPin::Pinned(pinned) => policy::check_jetton_wallet_pin(&pinned, our_jetton_wallet, JettonPinSource::FirstUse),
 		}
 	}
 
@@ -391,7 +412,7 @@ impl SignerService for Signer {
 		)?;
 		let class = WalletClass::of(wallet_id);
 		self.guard_token_transfer(class, network, None, &req.to_address, amount).await?;
-		self.guard_jetton_wallet(class, &req.our_jetton_wallet)?;
+		self.guard_jetton_wallet(class, wallet_id, &req.our_jetton_wallet).await?;
 		self.reserve_treasury_usdt(class, network, amount).await?;
 
 		let handle = KeyHandle { wallet_id, network };

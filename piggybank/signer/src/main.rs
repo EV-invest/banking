@@ -70,8 +70,11 @@ async fn run() -> color_eyre::Result<()> {
 		treasury_native = ?policy.treasury_native(),
 		native_spend_per_hour = ?policy.native_spend(),
 		tron_signing_enabled = policy.tron_signing_enabled(),
-		"signer spend policy active: sweeps only to the treasury, gas top-ups only to own addresses, no native out of deposit wallets, treasury native off unless opted in, treasury USDT capped per payout and per hour, native spend windowed per wallet"
+		"signer spend policy active: sweeps only to the treasury, gas top-ups only to own addresses, no native out of deposit wallets, treasury native off unless opted in, treasury USDT capped per payout and per hour, native spend windowed per wallet, jetton wallets pinned on first use"
 	);
+	if !policy.treasury_jetton_wallet_pinned() {
+		tracing::warn!("treasury jetton wallet will be pinned on first use — set SIGNER_TON_TREASURY_JETTON_WALLET");
+	}
 
 	// Where NEW keys are minted and existing ones signed. `local` is the default and the
 	// rollback: flipping KEY_BACKEND back restores the previous behaviour with no data change,
