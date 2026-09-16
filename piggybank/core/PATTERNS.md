@@ -1079,11 +1079,15 @@ rather than wedges when its `eth_getLogs` endpoint refuses it. A window refused 
 is halved down to a floor (the cap is static, so the window never widens again). A window
 refused because the provider has **pruned** that history (`-32701`, "pruned" — shared nodes
 keep a bounded suffix of the chain) can never succeed at any width, so the live scan bisects
-for the oldest block still served, jumps the cursor there, and files the skipped range as a
-Sentry-shipped `error!` with its `from`/`to` — those deposits are **not credited** and the
-operator reconciles the window by hand with `RecordDeposit`. Retrying the pruned window
+for the oldest block still served, jumps the cursor **past** it, and files the skipped range
+as a Sentry-shipped `error!` with its `from`/`to` — those deposits are **not credited** and
+the operator reconciles the window by hand with `RecordDeposit`. Retrying the pruned window
 instead (the pre-#309 behaviour: cycle backoff to 300 s, forever) loses every deposit after
-the gap as well. The skip is persisted only on a boundary the provider **confirmed**: the
+the gap as well. "Past", not "to": the boundary is an edge moving with the chain, and a scan
+resumed exactly on it is refused again before its first chunk lands — v0.16.0 livelocked on
+BSC that way, clamping 10–40 blocks every cycle with the lag frozen at the provider's window.
+The jump adds a slack (`PRUNE_SLACK_BLOCKS`, 256 blocks, doubled per further clamp in one
+scan) that the incident's range includes. The skip is persisted only on a boundary the provider **confirmed**: the
 refused block is re-probed (a refusal that does not repeat is one backend's opinion), the
 head is probed rather than assumed, and the block under the boundary is probed once more —
 a provider refusing everything (index off) or a keyed pool answering the same block both
