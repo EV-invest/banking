@@ -33,6 +33,13 @@ const FAILURE_TTL: Duration = Duration::from_secs(2 * 60);
 /// Per-request bound on the GitHub API — the page is interactive, and the router's outer
 /// deadline is 15 s for the whole request.
 const GITHUB_TIMEOUT: Duration = Duration::from_secs(5);
+/// Bound on all the GitHub questions one repository asks in one page load. They run in
+/// sequence — up to [`TAG_PAGES`] tag pages plus three calls per deployed tag — so a
+/// GitHub that answers slowly but within [`GITHUB_TIMEOUT`] could hold the page for
+/// 40 s, past the router's 15 s deadline, and the whole page would be a 504 instead of
+/// one degraded row. Ten seconds leaves the manifest read and the response inside that
+/// deadline; repositories run in parallel, so the bound is per page load, not per repository.
+const ENRICH_TIMEOUT: Duration = Duration::from_secs(10);
 const GITHUB_API: &str = "https://api.github.com";
 /// How many pages of the tag listing (100 tags each) are read for the newest release tag.
 /// GitHub lists tags by name, not by version, so the newest can sit on any page and every
@@ -269,6 +276,8 @@ pub struct Deployments {
 	http: reqwest::Client,
 	api_base: String,
 	token: Option<String>,
+	/// [`ENRICH_TIMEOUT`], a field so a test can shorten it.
+	enrich_timeout: Duration,
 	/// (repository, tag) → release. A tag is immutable once deployed, so a value never expires.
 	releases: Mutex<HashMap<(String, String), Cached<Release>>>,
 	/// repository → newest release tag (`None` when the repository has no `vX.Y.Z` tag).
@@ -295,6 +304,7 @@ impl Deployments {
 			http,
 			api_base: api_base.trim_end_matches('/').to_owned(),
 			token: github_token,
+			enrich_timeout: ENRICH_TIMEOUT,
 			releases: Mutex::new(HashMap::new()),
 			latest: Mutex::new(HashMap::new()),
 			refresh: tokio::sync::Mutex::new(()),
@@ -388,23 +398,25 @@ impl Deployments {
 
 	/// Everything one repository contributes: its newest tag, and each deployed tag's
 	/// release. Within a repository the calls run in sequence — there is rarely more than
-	/// one tag — while repositories run in parallel from [`Self::report`].
+	/// one tag — under one [`ENRICH_TIMEOUT`] deadline, while repositories run in parallel
+	/// from [`Self::report`].
 	async fn enrich_repo(&self, repo: String, tags: BTreeSet<String>) -> (String, RepoEnrichment) {
-		let latest = self.latest_tag(&repo).await;
+		let deadline = tokio::time::Instant::now() + self.enrich_timeout;
+		let latest = self.latest_tag(&repo, deadline).await;
 		let mut releases = HashMap::new();
 		for tag in tags {
-			let release = self.release(&repo, &tag).await;
+			let release = self.release(&repo, &tag, deadline).await;
 			releases.insert(tag, release);
 		}
 		(repo, RepoEnrichment { latest, releases })
 	}
 
-	async fn release(&self, repo: &str, tag: &str) -> Result<Release, String> {
+	async fn release(&self, repo: &str, tag: &str, deadline: tokio::time::Instant) -> Result<Release, String> {
 		let key = (repo.to_owned(), tag.to_owned());
 		if let Some(cached) = self.releases.lock().expect("releases cache is never poisoned").get(&key).and_then(|c| c.fresh(None)) {
 			return cached;
 		}
-		let result = self.fetch_release(repo, tag).await;
+		let result = self.bounded(deadline, &format!("/repos/{repo}/commits/{tag}"), self.fetch_release(repo, tag)).await;
 		if let Err(error) = &result {
 			tracing::warn!(%repo, %tag, %error, "GitHub release lookup failed");
 		}
@@ -412,16 +424,30 @@ impl Deployments {
 		result
 	}
 
-	async fn latest_tag(&self, repo: &str) -> Result<Option<String>, String> {
+	async fn latest_tag(&self, repo: &str, deadline: tokio::time::Instant) -> Result<Option<String>, String> {
 		if let Some(cached) = self.latest.lock().expect("latest cache is never poisoned").get(repo).and_then(|c| c.fresh(Some(LATEST_TAG_TTL))) {
 			return cached;
 		}
-		let result = self.fetch_latest_tag(repo).await;
+		let result = self.bounded(deadline, &format!("/repos/{repo}/tags"), self.fetch_latest_tag(repo)).await;
 		if let Err(error) = &result {
 			tracing::warn!(%repo, %error, "GitHub tag listing failed");
 		}
 		self.latest.lock().expect("latest cache is never poisoned").insert(repo.to_owned(), Cached::from_result(&result));
 		result
+	}
+
+	/// One question under the repository's deadline. Past it nothing is sent at all: the
+	/// answer could no longer reach this page load, and the request would only spend the
+	/// budget. The error is cached by the caller like any other, so a slow GitHub is left
+	/// alone for [`FAILURE_TTL`] rather than re-asked on every load.
+	async fn bounded<T>(&self, deadline: tokio::time::Instant, what: &str, fetch: impl Future<Output = Result<T, String>>) -> Result<T, String> {
+		let budget = self.enrich_timeout;
+		if tokio::time::Instant::now() >= deadline {
+			return Err(format!("{what}: not asked, GitHub had already spent the {budget:?} allowed per page load"));
+		}
+		tokio::time::timeout_at(deadline, fetch)
+			.await
+			.unwrap_or_else(|_| Err(format!("{what}: GitHub did not answer within the {budget:?} allowed per page load")))
 	}
 
 	async fn fetch_release(&self, repo: &str, tag: &str) -> Result<Release, String> {
@@ -679,11 +705,14 @@ mod tests {
 		/// page `n` holding `v0.<n>.0` — so the newest release is always on the last page. `0`
 		/// keeps the single-page fixture.
 		tag_pages: usize,
+		/// Answer every request only after this long.
+		delay: Duration,
 	}
 
 	async fn fake_github(State(fake): State<Fake>, uri: axum::http::Uri) -> axum::response::Response {
 		let path = uri.path_and_query().map(|p| p.as_str().to_owned()).unwrap_or_default();
 		fake.hits.lock().unwrap().push(path.clone());
+		tokio::time::sleep(fake.delay).await;
 		if fake.rate_limited {
 			return (StatusCode::FORBIDDEN, [("x-ratelimit-remaining", "0")], "rate limited").into_response();
 		}
@@ -859,15 +888,54 @@ mod tests {
 		assert_eq!(latest.as_deref(), Some("v0.5.0"), "the newest of the pages read, not of the listing");
 	}
 
+	#[tokio::test]
+	async fn a_slow_github_is_cut_off_at_the_deadline_and_the_cut_is_remembered() {
+		// Every page takes 300 ms against a 500 ms budget: the listing is cut on its second
+		// page, and the release lookup that follows is not even sent.
+		let fake = Fake {
+			tag_pages: 8,
+			delay: Duration::from_millis(300),
+			..Fake::default()
+		};
+		let hits = fake.hits.clone();
+		let addr = serve(fake).await;
+		let dir = banking_volume();
+		let mut deployments = Deployments::with_api_base(dir.clone(), None, format!("http://{addr}"));
+		deployments.enrich_timeout = Duration::from_millis(500);
+		let deployments = Arc::new(deployments);
+
+		let report = deployments.report().await;
+		let piggybank = &report.components[0];
+		assert!(piggybank.latest_tag.is_none() && piggybank.release.is_none());
+		let error = piggybank.github_error.as_deref().expect("the cut-off is shown");
+		assert!(error.contains("/repos/ev-invest/banking/tags: GitHub did not answer within the 500ms"), "{error}");
+		assert!(error.contains("/repos/ev-invest/banking/commits/v0.17.0: not asked"), "{error}");
+		let (tag_hits, commit_hits) = {
+			let hits = hits.lock().unwrap();
+			(
+				hits.iter().filter(|p| p.starts_with("/repos/ev-invest/banking/tags")).count(),
+				hits.iter().filter(|p| p.starts_with("/repos/ev-invest/banking/commits")).count(),
+			)
+		};
+		assert!(tag_hits > 0 && tag_hits < TAG_PAGES, "tag pages requested: {tag_hits}");
+		assert_eq!(commit_hits, 0, "a question past the deadline is never sent");
+
+		let first_round = hits.lock().unwrap().len();
+		deployments.report().await;
+		assert_eq!(hits.lock().unwrap().len(), first_round, "the cut-off is remembered like any other failure");
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
 	/// The real API over real TLS — the one thing the fake cannot vouch for. Off by
 	/// default: it needs the network and spends the anonymous budget.
 	#[tokio::test]
 	#[ignore = "network: hits api.github.com"]
 	async fn live_github_answers_over_tls() {
 		let deployments = Deployments::new(PathBuf::from("/nonexistent"), std::env::var("GITHUB_TOKEN").ok());
-		let latest = deployments.latest_tag("EV-invest/banking").await.expect("the tag listing succeeds");
+		let deadline = tokio::time::Instant::now() + ENRICH_TIMEOUT;
+		let latest = deployments.latest_tag("EV-invest/banking", deadline).await.expect("the tag listing succeeds");
 		assert!(latest.as_deref().is_some_and(|t| semver(t).is_some()), "{latest:?}");
-		let release = deployments.release("EV-invest/banking", "v0.17.0").await.expect("the release lookup succeeds");
+		let release = deployments.release("EV-invest/banking", "v0.17.0", deadline).await.expect("the release lookup succeeds");
 		assert!(!release.commit_sha.is_empty() && release.committed_at.ends_with('Z'), "{release:?}");
 		assert!(release.pr.is_some(), "a tag on a merge commit has a linked pull request: {release:?}");
 	}
