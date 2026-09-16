@@ -90,6 +90,7 @@ export function ScheduleFields({
             minutes: t("ui.dateTime.minutes"),
             clear: t("ui.dateTime.clear"),
             dialog: t("ui.dateTime.dialog"),
+            close: t("ui.close"),
           }}
           disabled={disabled}
           className="tabular-nums"
