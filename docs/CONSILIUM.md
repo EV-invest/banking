@@ -560,7 +560,10 @@ mails **nobody**: the outcome kinds concierge renders are addressed to a seated 
 consent-decided order's initiator may be an admin who holds no seat. The initiator reads
 the verdict and its reason on the payments screen. Telling them by mail needs a kind
 concierge does not yet have, and is deliberately not faked through `PAYOUT_OUTCOME`, which
-concierge would refuse for a non-owner recipient after ten charged attempts.
+concierge would refuse for a non-owner recipient after ten charged attempts. An order
+closed without a verdict — withdrawn by its operator, or expired — takes back the consent
+invitation the relay has not delivered yet, token and code blanked, before the order is
+locked, exactly as a closing consilium takes back its invitations (#368).
 
 ---
 
