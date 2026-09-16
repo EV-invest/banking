@@ -69,7 +69,7 @@ export function OrderFormFields({
             {t("trade.form.size")}
           </Label>
           {!buying && position?.units && !isZero(position.units) && (
-            <button type="button" className="text-xs text-primary hover:underline" disabled={disabled} onClick={() => onChange((d) => ({ ...d, size: position.units ?? "" }))}>
+            <button type="button" className="text-xs text-primary-ink hover:underline" disabled={disabled} onClick={() => onChange((d) => ({ ...d, size: position.units ?? "" }))}>
               {t("ui.max")}
             </button>
           )}
