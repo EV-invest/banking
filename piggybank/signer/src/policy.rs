@@ -37,6 +37,8 @@ use std::collections::HashSet;
 use domain::money::{Network, Usdt};
 use tonic::Status;
 
+use crate::provision;
+
 /// Canonical base units per whole USDT (the domain's 18-dp representation).
 const CANONICAL_PER_USDT: u128 = 1_000_000_000_000_000_000;
 
@@ -270,6 +272,22 @@ impl SignerPolicy {
 		self.check_allowlist(to_address)
 	}
 
+	/// Enforce the destination allowlist on a treasury jetton transfer's
+	/// `response_destination` — the address the excess Toncoin returns to, and so a second
+	/// destination on the same signed message. The hub legitimately points it at the treasury
+	/// itself on a withdrawal, so the sending wallet's own address is always accepted, in
+	/// either of its renderings (the raw `0:<hex>` the signer stores, the base64 the hub may
+	/// carry); anything else must be on the allowlist like `to_address`.
+	pub fn check_treasury_response_destination(&self, own_address: &str, response_destination: &str) -> Result<(), Status> {
+		if self.destination_allowlist.is_empty() || provision::addresses_agree(Network::Ton, own_address, response_destination) {
+			return Ok(());
+		}
+		self.check_allowlist(response_destination)
+			.map_err(|_| Status::permission_denied("treasury transfer response_destination is neither the sending wallet nor on the signer's allowlist"))
+	}
+
+	/// Verbatim membership on purpose: a rendering-aware comparison (EIP-55 casing, TON raw vs
+	/// base64) is #183's change, not this one.
 	fn check_allowlist(&self, to_address: &str) -> Result<(), Status> {
 		if !self.destination_allowlist.is_empty() && !self.destination_allowlist.contains(to_address) {
 			return Err(Status::permission_denied("treasury transfer destination is not on the signer's allowlist"));
@@ -546,5 +564,45 @@ mod tests {
 				assert!(err.to_string().contains(name), "{err}");
 			}
 		}
+	}
+
+	// === response_destination ==================================================
+
+	// A real v4R2 wallet in both renderings (the vector `key_vault` pins): the raw form the
+	// signer stores for its own address, and the user-friendly base64 the hub may send back.
+	const OWN_BASE64: &str = "UQCS65EGyiApUTLOYXDs4jOLoQNCE0o8oNnkmfIcm0iX5FRT";
+	const FOREIGN: &str = "EQB3ncyBUTjZUA5EnFKR5_EnOMI9V1tTEAAPaiU71gc4TiUt";
+
+	fn own_raw() -> String {
+		use std::str::FromStr as _;
+		tonlib_core::TonAddress::from_str(OWN_BASE64).unwrap().to_hex()
+	}
+
+	#[test]
+	fn response_destination_accepts_the_wallet_itself_in_either_rendering() {
+		let p = policy(None, &["EQsomeone_else"]);
+		let own = own_raw();
+		assert!(own.starts_with("0:"));
+		// Spelled differently from the stored raw form, and not on the allowlist — still the
+		// wallet's own address.
+		assert!(p.check_treasury_response_destination(&own, OWN_BASE64).is_ok());
+		assert!(p.check_treasury_response_destination(&own, &own).is_ok());
+	}
+
+	#[test]
+	fn response_destination_refuses_a_foreign_address_unless_allowlisted() {
+		let own = own_raw();
+		let status = denied(policy(None, &["EQsomeone_else"]).check_treasury_response_destination(&own, FOREIGN));
+		assert!(status.message().contains("response_destination"), "{status:?}");
+		assert!(policy(None, &[FOREIGN]).check_treasury_response_destination(&own, FOREIGN).is_ok());
+		// Garbage is not the wallet's own address either.
+		denied(policy(None, &[FOREIGN]).check_treasury_response_destination(&own, "not-an-address"));
+	}
+
+	#[test]
+	fn response_destination_is_unchecked_without_an_allowlist() {
+		let p = policy(Some(1000), &[]);
+		assert!(p.check_treasury_response_destination(&own_raw(), FOREIGN).is_ok());
+		assert!(p.check_treasury_response_destination(&own_raw(), "anything").is_ok());
 	}
 }

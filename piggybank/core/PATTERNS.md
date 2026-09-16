@@ -715,8 +715,9 @@ holds keys. [`StubCustody`] no-ops until the real MPC/HSM service exists — the
 ledger, and the RPCs are complete and unchanged when it lands. The **signer** applies its own
 spend policy as an independent second gate (holds even if the hub is compromised): a
 per-transfer USDT cap (`SIGNER_MAX_TRANSFER_USDT`) and an optional destination allowlist
-(`SIGNER_DESTINATION_ALLOWLIST`) on treasury-sourced transfers — both no-ops until configured,
-so set the cap before scaling real liquidity — plus an always-on **fee budget** on every signed transaction from every
+(`SIGNER_DESTINATION_ALLOWLIST`, also applied to a jetton transfer's `response_destination`)
+on treasury-sourced transfers — both no-ops until configured, so set the cap before scaling
+real liquidity — plus an always-on **fee budget** on every signed transaction from every
 wallet (`SIGNER_MAX_GAS_LIMIT`, `SIGNER_MAX_GAS_PRICE_GWEI_{BEP20,POLYGON}`,
 `SIGNER_MAX_TRON_FEE_LIMIT_SUN`, `SIGNER_MAX_TON_{MSG_VALUE,FORWARD}_NANO`), so a forged
 1 USDT transfer cannot burn the native balance as gas.

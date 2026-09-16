@@ -103,6 +103,18 @@ impl Signer {
 		Ok(())
 	}
 
+	/// Apply the destination allowlist to a treasury jetton transfer's `response_destination`
+	/// — the second address on the same signed message, where the excess Toncoin returns. The
+	/// sending wallet's own address (derived from the key that will sign) is always fine; the
+	/// hub sets exactly that on a withdrawal. Sweeps are signed from user wallets and pass.
+	fn guard_treasury_response_destination(&self, wallet_id: Uuid, public_key: &[u8], response_destination: &str) -> Result<(), Status> {
+		if wallet_id == TREASURY_WALLET {
+			let (own_address, _) = provision::render_address(Network::Ton, public_key)?;
+			self.policy.check_treasury_response_destination(&own_address, response_destination)?;
+		}
+		Ok(())
+	}
+
 	/// Resolve the sending wallet id from the wire `from_user_id`: empty ⇒ the treasury hot
 	/// wallet (nil), else a parsed UUID (a real user's deposit address, or the gas station).
 	fn resolve_wallet(from_user_id: &str) -> Result<Uuid, Status> {
@@ -272,7 +284,10 @@ impl SignerService for Signer {
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let handle = KeyHandle { wallet_id, network };
+		// The key comes before the second allowlist check: the wallet's own address, which a
+		// withdrawal's `response_destination` legitimately is, is derived from it.
 		let public_key = self.ton_public_key(handle).await?;
+		self.guard_treasury_response_destination(wallet_id, &public_key, &req.response_destination)?;
 		let (parts, digest) = ton_tx::build_unsigned_jetton(
 			&public_key,
 			&ton_tx::JettonTransfer {
