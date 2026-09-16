@@ -475,6 +475,43 @@ async fn only_the_initiator_may_withdraw_their_own_consilium() {
 	assert_eq!(state_of(&h, c.consilium.id()).await, ConsiliumState::Open);
 }
 
+/// Every mail of one kind queued for a consilium as the queue holds it: `(sent, withdrawn,
+/// code)` — the code blank where the row carries none, or no longer.
+async fn mail_states(h: &Harness, consilium: ConsiliumId, kind: &str) -> Vec<(bool, bool, String)> {
+	sqlx::query_as("SELECT sent_at IS NOT NULL, withdrawn_at IS NOT NULL, COALESCE(payload->>'code', '') FROM consilium_mail WHERE consilium_id = $1 AND kind = $2")
+		.bind(consilium.raw())
+		.bind(kind)
+		.fetch_all(&h.pool)
+		.await
+		.unwrap()
+}
+
+/// A payout consilium withdrawn by its initiator while nothing has left the queue — no
+/// worker runs here, which is a relay outage from the queue's side (#342): the seats'
+/// `payout_approval` invitations are withdrawn with their secrets blanked, and the
+/// `payout_outcome` verdict the withdrawal queues for the initiator and every seat is not.
+#[tokio::test]
+async fn withdrawing_a_payout_consilium_withdraws_its_undelivered_invitations() {
+	let _lock = exclusive_governance().await;
+	let Some(h) = harness().await else { return };
+	reset_governance(&h).await;
+	let roster = owners(&h, 3).await;
+	let c = open_payout(&h, roster[0], "500").await;
+	let id = c.consilium.id();
+	let invitations = mail_states(&h, id, "payout_approval").await;
+	assert_eq!(invitations.len(), 2);
+	assert!(invitations.iter().all(|(sent, withdrawn, code)| !sent && !withdrawn && !code.is_empty()), "{invitations:?}");
+
+	consilium_app::cancel(h.consilia.as_ref(), id, roster[0], now()).await.unwrap();
+	assert_eq!(state_of(&h, id).await, ConsiliumState::Cancelled);
+	let invitations = mail_states(&h, id, "payout_approval").await;
+	assert_eq!(invitations.len(), 2);
+	assert!(invitations.iter().all(|(sent, withdrawn, code)| !sent && *withdrawn && code.is_empty()), "{invitations:?}");
+	let outcomes = mail_states(&h, id, "payout_outcome").await;
+	assert_eq!(outcomes.len(), 3, "the initiator and both seats");
+	assert!(outcomes.iter().all(|(sent, withdrawn, _)| !sent && !withdrawn), "{outcomes:?}");
+}
+
 #[tokio::test]
 async fn five_wrong_codes_burn_the_token_and_a_burned_one_looks_unknown() {
 	let _lock = exclusive_governance().await;
@@ -1503,8 +1540,9 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 	for _ in 0..2 {
 		match consilium_app::execute_payment(&ports(&h), &view.consilium, subject.clone(), now()).await.unwrap() {
 			ExecutionOutcome::Executed(ConsiliumEffect::Payment(id)) => assert_eq!(id, subject.payment_id),
-			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_)) =>
-				panic!("a payment consilium produces neither a withdrawal nor a mark and schedules no change"),
+			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_)) => {
+				panic!("a payment consilium produces neither a withdrawal nor a mark and schedules no change")
+			}
 			ExecutionOutcome::Failed(why) => panic!("an approved order must be believed: {why}"),
 		}
 	}
