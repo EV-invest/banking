@@ -9,7 +9,8 @@
 //!
 //! GitHub is optional and rate-limited (60 requests/hour without a token), so every
 //! answer is cached in-process: a (repository, tag) never changes and is kept for the
-//! process lifetime; the newest tag is re-asked every [`LATEST_TAG_TTL`]; a failure is
+//! process lifetime; the newest tag is re-asked every [`LATEST_TAG_TTL`] and costs up to
+//! [`TAG_PAGES`] requests, because the tag listing is not ordered by version; a failure is
 //! remembered for [`FAILURE_TTL`] so a broken or exhausted API is not hammered on every
 //! page load. A GitHub failure degrades the row (`github_error`), never the page.
 
@@ -33,6 +34,13 @@ const FAILURE_TTL: Duration = Duration::from_secs(2 * 60);
 /// deadline is 15 s for the whole request.
 const GITHUB_TIMEOUT: Duration = Duration::from_secs(5);
 const GITHUB_API: &str = "https://api.github.com";
+/// How many pages of the tag listing (100 tags each) are read for the newest release tag.
+/// GitHub lists tags by name, not by version, so the newest can sit on any page and every
+/// page must be read — but each page is one request against the anonymous 60/hour budget
+/// shared by everything behind the pod's IP, and the newest tag is re-asked per repository
+/// every [`LATEST_TAG_TTL`]. Five pages is 500 tags — years of releases at this cadence —
+/// while a worst-case refresh of one repository stays under a tenth of the hourly budget.
+const TAG_PAGES: usize = 5;
 
 /// One `<name>.image` (+ optional `<name>.repo`) pair from the mounted directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,6 +203,24 @@ pub fn semver(tag: &str) -> Option<(u64, u64, u64)> {
 /// The highest release tag among `tags`, or `None` when there is no release tag at all.
 pub fn newest_semver<'a>(tags: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
 	tags.into_iter().filter_map(|tag| semver(tag).map(|v| (v, tag))).max_by_key(|(v, _)| *v).map(|(_, tag)| tag)
+}
+
+/// The `rel="next"` target of a `Link` header, reduced to its path and query. GitHub hands
+/// out absolute `api.github.com` URLs; re-rooting them on the configured origin keeps the
+/// token from ever following a link elsewhere, and lets a test stand in for the API.
+pub fn next_page(link: &str) -> Option<String> {
+	link.split(',').find_map(|entry| {
+		let (target, params) = entry.split_once(';')?;
+		let target = target.trim().strip_prefix('<')?.strip_suffix('>')?;
+		let is_next = params.split(';').any(|param| matches!(param.trim(), "rel=\"next\"" | "rel=next"));
+		is_next.then(|| match reqwest::Url::parse(target) {
+			Ok(url) => match url.query() {
+				Some(query) => format!("{}?{query}", url.path()),
+				None => url.path().to_owned(),
+			},
+			Err(_) => target.to_owned(),
+		})
+	})
 }
 
 /// When GitHub links no pull request to the tag's commit (a squash merge from a fork, an
@@ -414,15 +440,32 @@ impl Deployments {
 		})
 	}
 
+	/// The listing is walked page by page through its `Link: rel="next"` chain, at most
+	/// [`TAG_PAGES`] deep; a repository past that bound reports the newest of what was read.
 	async fn fetch_latest_tag(&self, repo: &str) -> Result<Option<String>, String> {
-		let tags = self.get_json(&format!("/repos/{repo}/tags?per_page=100")).await?;
-		let names = tags.as_array().ok_or("tags: not a list")?.iter().filter_map(|t| t.get("name").and_then(Value::as_str));
-		Ok(newest_semver(names).map(str::to_owned))
+		let mut names: Vec<String> = Vec::new();
+		let mut path = format!("/repos/{repo}/tags?per_page=100");
+		for _ in 0..TAG_PAGES {
+			let response = self.get(&path).await?;
+			let next = response.headers().get(reqwest::header::LINK).and_then(|v| v.to_str().ok()).and_then(next_page);
+			let tags: Value = response.json().await.map_err(|e| format!("{path}: {}", e.without_url()))?;
+			let page = tags.as_array().ok_or_else(|| format!("{path}: tags: not a list"))?;
+			names.extend(page.iter().filter_map(|t| t.get("name").and_then(Value::as_str)).map(str::to_owned));
+			match next {
+				Some(next) if !page.is_empty() => path = next,
+				_ => break,
+			}
+		}
+		Ok(newest_semver(names.iter().map(String::as_str)).map(str::to_owned))
 	}
 
-	/// One GET against the API. The error string is what the page shows an admin, so it
-	/// names the path and the reason and nothing else — never the token.
 	async fn get_json(&self, path: &str) -> Result<Value, String> {
+		self.get(path).await?.json().await.map_err(|e| format!("{path}: {}", e.without_url()))
+	}
+
+	/// One GET against the API, checked for status. The error string is what the page shows
+	/// an admin, so it names the path and the reason and nothing else — never the token.
+	async fn get(&self, path: &str) -> Result<reqwest::Response, String> {
 		let mut request = self
 			.http
 			.get(format!("{}{path}", self.api_base))
@@ -441,7 +484,7 @@ impl Deployments {
 				format!("{path}: HTTP {status}")
 			});
 		}
-		response.json().await.map_err(|e| format!("{path}: {}", e.without_url()))
+		Ok(response)
 	}
 }
 
@@ -515,6 +558,17 @@ mod tests {
 		assert_eq!(newest_semver(["v1.2.0-rc1", "main"]), None);
 		assert_eq!(semver("v01.2.3"), Some((1, 2, 3)));
 		assert_eq!(semver("v1.2.3.4"), None);
+	}
+
+	#[test]
+	fn the_next_page_is_the_rel_next_link_reduced_to_its_path() {
+		let link = "<https://api.github.com/repositories/1/tags?per_page=100&page=1>; rel=\"prev\", \
+		            <https://api.github.com/repositories/1/tags?per_page=100&page=3>; rel=\"next\", \
+		            <https://api.github.com/repositories/1/tags?per_page=100&page=5>; rel=\"last\"";
+		assert_eq!(next_page(link).as_deref(), Some("/repositories/1/tags?per_page=100&page=3"));
+		assert_eq!(next_page("<https://api.github.com/repositories/1/tags?page=1>; rel=\"prev\""), None);
+		assert_eq!(next_page("</repos/o/r/tags?page=2>; rel=next").as_deref(), Some("/repos/o/r/tags?page=2"));
+		assert_eq!(next_page(""), None);
 	}
 
 	fn pull(number: u64, merged_at: Option<&str>) -> Pull {
@@ -617,6 +671,10 @@ mod tests {
 		hits: Arc<Mutex<Vec<String>>>,
 		/// Answer every request with 403 + an exhausted rate-limit header.
 		rate_limited: bool,
+		/// Spread the banking tag listing over this many pages chained by `Link: rel="next"`,
+		/// page `n` holding `v0.<n>.0` — so the newest release is always on the last page. `0`
+		/// keeps the single-page fixture.
+		tag_pages: usize,
 	}
 
 	async fn fake_github(State(fake): State<Fake>, uri: axum::http::Uri) -> axum::response::Response {
@@ -624,6 +682,22 @@ mod tests {
 		fake.hits.lock().unwrap().push(path.clone());
 		if fake.rate_limited {
 			return (StatusCode::FORBIDDEN, [("x-ratelimit-remaining", "0")], "rate limited").into_response();
+		}
+		if let Some(rest) = path.strip_prefix("/repos/ev-invest/banking/tags?per_page=100").filter(|_| fake.tag_pages > 0) {
+			let page: usize = rest.strip_prefix("&page=").map_or(1, |n| n.parse().unwrap());
+			let body = json!([{ "name": format!("v0.{page}.0") }, { "name": format!("v0.{page}.1-rc1") }]);
+			if page >= fake.tag_pages {
+				return axum::Json(body).into_response();
+			}
+			// GitHub's own shape: absolute URLs, `prev` first from page 2 on, `next` in the middle.
+			let at = |n: usize, rel: &str| format!("<https://api.github.com/repos/ev-invest/banking/tags?per_page=100&page={n}>; rel=\"{rel}\"");
+			let mut link = Vec::new();
+			if page > 1 {
+				link.push(at(page - 1, "prev"));
+			}
+			link.push(at(page + 1, "next"));
+			link.push(at(fake.tag_pages, "last"));
+			return ([(axum::http::header::LINK, link.join(", "))], axum::Json(body)).into_response();
 		}
 		let body = match path.as_str() {
 			"/repos/ev-invest/banking/commits/v0.17.0" => json!({
@@ -746,6 +820,39 @@ mod tests {
 		deployments.report().await;
 		assert_eq!(hits.lock().unwrap().len(), first_round, "a fresh failure is remembered, not retried on the next load");
 		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	async fn banking_latest_tag(tag_pages: usize) -> (Option<String>, Vec<String>) {
+		let fake = Fake { tag_pages, ..Fake::default() };
+		let hits = fake.hits.clone();
+		let addr = serve(fake).await;
+		let dir = banking_volume();
+		let deployments = Arc::new(Deployments::with_api_base(dir.clone(), None, format!("http://{addr}")));
+		let report = deployments.report().await;
+		std::fs::remove_dir_all(dir).unwrap();
+		let piggybank = &report.components[0];
+		assert_eq!(piggybank.repo.as_deref(), Some("ev-invest/banking"));
+		assert!(piggybank.github_error.is_none(), "{:?}", piggybank.github_error);
+		let tag_hits = hits.lock().unwrap().iter().filter(|p| p.starts_with("/repos/ev-invest/banking/tags")).cloned().collect();
+		(piggybank.latest_tag.clone(), tag_hits)
+	}
+
+	#[tokio::test]
+	async fn the_newest_tag_is_found_past_the_first_page() {
+		let (latest, tag_hits) = banking_latest_tag(2).await;
+		assert_eq!(latest.as_deref(), Some("v0.2.0"), "the newest release sits on page 2");
+		assert_eq!(
+			tag_hits,
+			["/repos/ev-invest/banking/tags?per_page=100", "/repos/ev-invest/banking/tags?per_page=100&page=2"],
+			"the next link is followed against the configured origin, not api.github.com"
+		);
+	}
+
+	#[tokio::test]
+	async fn the_tag_listing_is_read_at_most_five_pages_deep() {
+		let (latest, tag_hits) = banking_latest_tag(8).await;
+		assert_eq!(tag_hits.len(), TAG_PAGES, "requests: {tag_hits:?}");
+		assert_eq!(latest.as_deref(), Some("v0.5.0"), "the newest of the pages read, not of the listing");
 	}
 
 	/// The real API over real TLS — the one thing the fake cannot vouch for. Off by
