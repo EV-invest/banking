@@ -123,9 +123,54 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	// `with_connect_info` so the public approval routes have a peer address to fall back
 	// on when no proxy header is present — an audit field and a rate-limit key, never an
 	// authorization input.
+	//
+	// Graceful on SIGTERM: the kubelet sends it on every rollout of this pod, and without
+	// this the listener and every in-flight response died with the process — a read that
+	// was a millisecond from its answer became a bodyless proxy error in the cabinet.
+	// Now the listener closes, the in-flight requests finish (each already bounded by
+	// the router's outer deadline), and only then does the process exit;
+	// `terminationGracePeriodSeconds` remains the SIGKILL backstop.
 	axum::serve(listener, routes::router(state).into_make_service_with_connect_info::<std::net::SocketAddr>())
+		.with_graceful_shutdown(shutdown_signal())
 		.await
 		.context("cabinet BFF HTTP server error")
+}
+
+/// Resolve on the first of `SIGINT` (ctrl_c) or, on Unix, `SIGTERM` — the same pair
+/// piggybank drains on. A failed SIGTERM registration is logged and the wait falls back
+/// to ctrl_c alone rather than refusing to boot: the process can still be force-killed.
+async fn shutdown_signal() {
+	#[cfg(unix)]
+	{
+		use tokio::signal::unix::{SignalKind, signal};
+		match signal(SignalKind::terminate()) {
+			Ok(mut term) => {
+				tokio::select! {
+					result = tokio::signal::ctrl_c() => {
+						if let Err(err) = result {
+							tracing::error!("failed to listen for ctrl_c: {err}");
+							// ctrl_c is gone but SIGTERM still works; keep serving until it.
+							term.recv().await;
+						}
+					},
+					_ = term.recv() => {},
+				}
+			}
+			Err(err) => {
+				tracing::error!("failed to install SIGTERM handler: {err}");
+				if let Err(err) = tokio::signal::ctrl_c().await {
+					tracing::error!("failed to listen for ctrl_c: {err}");
+					std::future::pending::<()>().await;
+				}
+			}
+		}
+	}
+	#[cfg(not(unix))]
+	if let Err(err) = tokio::signal::ctrl_c().await {
+		tracing::error!("failed to listen for ctrl_c: {err}");
+		std::future::pending::<()>().await;
+	}
+	tracing::info!("shutdown signal received — draining");
 }
 
 // Returns the OTel guard (flushes/shuts down on drop); bind it in `main`. `None`

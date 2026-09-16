@@ -385,7 +385,12 @@
           };
           containers.cabinet-backend = {
             port = 50062;
-            healthPath = "/api/health";
+            # The SHALLOW check on purpose: `healthPath` feeds all three kubelet probes, and
+            # `/api/health` (the deep smoke path) forwards to piggybank's gRPC health. With one
+            # replica, a probe that depends on piggybank turns every piggybank rollout into a
+            # NotReady BFF: the zone proxy meets ECONNREFUSED and answers a bodyless 500, which
+            # the cabinet renders as "temporarily unavailable" until the operator reloads.
+            healthPath = "/api/health/live";
             criticality = "normal";
             entrypoint = [ "/bin/cabinet-backend" ];
             contents = [ bankingBins mfeRegistryRoot ];

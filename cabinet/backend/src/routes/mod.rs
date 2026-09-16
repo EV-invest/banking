@@ -64,6 +64,9 @@ pub fn router(state: AppState) -> Router {
 fn requests(state: AppState) -> Router {
 	Router::new()
 		.route("/api/health", get(system::health))
+		// The kubelet's probe target: no session, no CSRF, no upstream. `/api/health` is
+		// the deep check and must NOT be a probe — see `system::live`.
+		.route("/api/health/live", get(system::live))
 		.route("/api/mfe-registry", get(system::mfe_registry))
 		.route("/api/platform", get(platform::status))
 		.route("/api/users", get(identity::get_me).patch(identity::update_profile))
