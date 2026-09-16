@@ -23,11 +23,12 @@ use evbanking_contracts::{
 use evconcierge_contracts::concierge::v1 as cc;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use tonic::Status;
 
 use crate::{
 	dto,
 	error::ApiError,
-	routes::{editable, parse_body, require_admin, require_fee_admin, require_money_token, require_token, required, required_u32, verify_csrf},
+	routes::{editable, parse_body, require_admin, require_fee_admin, require_identity, require_money_token, require_token, required, required_u32, verify_csrf},
 	state::AppState,
 };
 
@@ -233,6 +234,17 @@ pub async fn revoke_sessions(State(st): State<AppState>, jar: CookieJar, headers
 	Ok(Json(json!({ "token_version": res.token_version.to_string() })))
 }
 
+/// The error string `set_kyc` answers when the caller named themselves.
+///
+/// A CODE, not a sentence, and that is the difference from the role gates in
+/// `routes/mod.rs`, which answer prose. Those name a role and are read by whoever tripped
+/// them; this one is read by an operator mid-task who needs to know who CAN do it instead,
+/// and a sentence fixed in English here would be English in all five locales. The cabinet
+/// maps it in the `FRIENDLY` table of `cabinet/frontend/shared/lib/api-client.ts` — a
+/// client that does not know the code still gets a 403 and the code itself, which is worse
+/// prose than this file could write but is never the wrong language.
+const KYC_SELF_DENIED: &str = "kyc_self";
+
 /// `POST /api/admin/users/kyc` — set a user's KYC level.
 ///
 /// The tier is REQUIRED and range-checked here, before the request costs anything
@@ -241,16 +253,36 @@ pub async fn revoke_sessions(State(st): State<AppState>, jar: CookieJar, headers
 /// `200 {"kyc_level":0}`: banking gates deposit-address issuance and withdrawals on
 /// `>= 1`, so the operator's mistake silently locked the user out of their own money
 /// while the console reported success.
+///
+/// **The caller may not name themselves.** A `KycManage` holder who can raise their own
+/// tier can walk themselves past every `>= 1` gate banking has, so the identity plane
+/// refuses it — and this refuses it one hop earlier, the same way the fee gate refuses an
+/// operator rather than letting the console discover it from the plane's 403. The hub
+/// never sees the request.
+///
+/// The comparison is against the VERIFIED JWT subject, never a field of the body: the
+/// signature check in [`require_identity`] is the whole reason the left side of it means
+/// anything. Both sides are concierge ids — `user_id` is the handle the console carries
+/// from the plane's `ListUsers`, which is what `sub` is minted from.
+///
+/// Decided after the CSRF check rather than before it, which is the one place this departs
+/// from the fee gate's written rule. That gate reads a role and needs no body; this one is
+/// a fact ABOUT the body, and acting on a body whose double-submit has not been checked is
+/// acting on a form a third-party page may have composed. The part of the rule that
+/// matters is kept: nothing upstream is called, and the answer names who can act.
 pub async fn set_kyc(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
-	let token = require_token(&st, &jar).await?;
+	let (token, claims) = require_identity(&st, &jar).await?;
 	let v = parse_body(&body);
 	let Some(user_id) = required(&v, "user_id") else {
 		return Err(ApiError::BadRequest("user_id is required".into()));
 	};
+	if user_id == claims.sub {
+		return Err(ApiError::Grpc(Status::permission_denied(KYC_SELF_DENIED)));
+	}
 	let Some(kyc_level) = required_u32(&v, "kyc_level") else {
 		return Err(ApiError::BadRequest(format!("kyc_level is required and must be a whole number in 0..={MAX_KYC_LEVEL}")));
 	};
@@ -2678,6 +2710,40 @@ mod admin_route_tests {
 			let forwarded = seen.lock().unwrap().set_kyc.clone().expect("the hub saw the write");
 			assert_eq!((forwarded.user_id.as_str(), forwarded.kyc_level), ("u1", level), "the tier must reach the hub unchanged");
 		}
+	}
+
+	/// The one target a `KycManage` holder may not name is themselves.
+	///
+	/// A tier they can raise on their own row is every `>= 1` gate banking has, walked past
+	/// without anyone else in the room — so the identity plane refuses it. Before this the
+	/// console forwarded the call anyway and the operator met the hub's 403 through a live
+	/// selector; the refusal belongs here, where the screen can be told about it.
+	///
+	/// Pinned on all three halves of that: the status, the CODE the frontend translates
+	/// (prose fixed here would be English in all five locales), and the hub having seen
+	/// nothing at all. `user-1` is the subject the signed test cookie carries — every other
+	/// KYC test targets `u1`, so the caller and the target were never the same account and
+	/// the stub hub accepted what the real one now refuses.
+	#[tokio::test]
+	async fn an_operator_may_not_set_their_own_kyc_tier() {
+		let hub = Hub::new("operator");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for level in 0..=MAX_KYC_LEVEL {
+			let body = format!(r#"{{"user_id":"user-1","kyc_level":{level}}}"#);
+			let (status, response) = send(&app, signed("POST", "/api/admin/users/kyc", Some(body.as_str()), true)).await;
+			assert_eq!(status, StatusCode::FORBIDDEN, "tier {level} on the caller's own row must be refused");
+			assert_eq!(response["error"], KYC_SELF_DENIED, "the refusal must carry the code the console translates");
+		}
+
+		assert!(seen.lock().unwrap().set_kyc.is_none(), "a caller naming themselves must never reach the hub");
+
+		// The gate is on the pairing, not on the route: the same session still administers
+		// everybody else's tier.
+		let (status, _) = send(&app, signed("POST", "/api/admin/users/kyc", Some(r#"{"user_id":"u1","kyc_level":2}"#), true)).await;
+		assert_eq!(status, StatusCode::OK, "another account's tier is still this operator's to set");
+		assert_eq!(seen.lock().unwrap().set_kyc.as_ref().expect("the hub saw the write").user_id, "u1");
 	}
 
 	// ── allocation access ───────────────────────────────────────────────────────

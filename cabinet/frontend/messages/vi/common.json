@@ -1943,6 +1943,10 @@
     "en": "L{n}",
     "t": "L{n}"
   },
+  "admin.users.kycSelf": {
+    "en": "Your own verification tier is not set from here. Another holder of KycManage has to change it.",
+    "t": "Cấp xác minh của chính bạn không được đặt từ đây. Một người khác nắm quyền KycManage phải thay đổi nó."
+  },
   "admin.users.liftHold": {
     "en": "Lift hold",
     "t": "Gỡ tạm giữ"
@@ -3750,6 +3754,10 @@
   "err.kycStartFailed": {
     "en": "We couldn't start verification. Please try again.",
     "t": "Không thể bắt đầu xác minh. Vui lòng thử lại."
+  },
+  "err.kycSelf": {
+    "en": "You can't set your own verification tier — another holder of KycManage has to.",
+    "t": "Bạn không thể tự đặt cấp xác minh của mình — một người khác nắm quyền KycManage phải làm việc đó."
   },
   "err.kycThrottled": {
     "en": "You've started verification too many times today. Try again tomorrow.",
