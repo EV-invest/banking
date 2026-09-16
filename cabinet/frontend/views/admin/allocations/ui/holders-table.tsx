@@ -6,7 +6,7 @@
 
 import { PieChart } from "lucide-react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Progress } from "@evinvest/uikit";
 
 import type { UnitHolders } from "@/shared/contracts/admin";
@@ -15,6 +15,7 @@ import { pct } from "@/shared/lib/rate";
 
 export function HoldersTable({ holders }: { holders: UnitHolders }) {
   const t = useT();
+  const locale = useLocale();
   const outstanding = holders.units_outstanding;
 
   if (shareBps(outstanding, outstanding) === 0) {
@@ -32,7 +33,7 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
           // relay — the same figure that keeps "Pin cap" disabled next door.
           <EmptyContent>
             <p className="text-sm tabular-nums">
-              {t("admin.alloc.holders.queued")} · {formatUnits(holders.queued_units)}
+              {t("admin.alloc.holders.queued")} · {formatUnits(holders.queued_units, locale)}
             </p>
           </EmptyContent>
         )}
@@ -50,7 +51,7 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
     <dl className="space-y-3 text-sm">
       <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2">
         <dt className="text-ink-soft">{t("admin.alloc.holders.outstanding")}</dt>
-        <dd className="font-semibold tabular-nums">{formatUnits(outstanding)}</dd>
+        <dd className="font-semibold tabular-nums">{formatUnits(outstanding, locale)}</dd>
       </div>
       {classes.map((c) => {
         const bps = shareBps(c.units, outstanding);
@@ -60,7 +61,7 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
               <dt className="text-ink-soft">{c.label}</dt>
               <dd className="tabular-nums">
                 <span className="font-medium">{pct(bps)}</span>
-                <span className="text-xs text-ink-soft"> · {formatUnits(c.units)}</span>
+                <span className="text-xs text-ink-soft"> · {formatUnits(c.units, locale)}</span>
               </dd>
             </div>
             <Progress value={bps / 100} className="h-1.5" aria-hidden />
@@ -72,7 +73,7 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
         // measured against, so a percentage here would be a lie either way.
         <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2">
           <dt className="text-ink-soft">{t("admin.alloc.holders.queued")}</dt>
-          <dd className="tabular-nums text-ink-soft">{formatUnits(holders.queued_units)}</dd>
+          <dd className="tabular-nums text-ink-soft">{formatUnits(holders.queued_units, locale)}</dd>
         </div>
       )}
     </dl>

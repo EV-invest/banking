@@ -12,7 +12,7 @@
 import { ArrowRightLeft, Loader2, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button } from "@evinvest/uikit";
 
 import { transferCompanyStake } from "@/entities/admin/api/admin-client";
@@ -30,6 +30,7 @@ type Step = "closed" | "editing" | "confirming";
 
 export function TransferStakeAction({ allocation, holders }: { allocation: Allocation; holders: UnitHolders }) {
   const t = useT();
+  const locale = useLocale();
   const [step, setStep] = useState<Step>("closed");
   const [draft, setDraft] = useState<TransferDraft>(EMPTY_TRANSFER_DRAFT);
   const [busy, setBusy] = useState(false);
@@ -86,7 +87,7 @@ export function TransferStakeAction({ allocation, holders }: { allocation: Alloc
       {step === "editing" && <TransferStakeForm draft={draft} companyUnits={holders.company_units} onChange={setDraft} onReview={() => setStep("confirming")} onCancel={close} />}
       {step === "confirming" && draft.recipient && (
         <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
-          <p className="text-xs tabular-nums">{t("admin.alloc.transfer.confirm", { units: formatUnits(draft.units.trim()), holder: draft.recipient.label })}</p>
+          <p className="text-xs tabular-nums">{t("admin.alloc.transfer.confirm", { units: formatUnits(draft.units.trim(), locale), holder: draft.recipient.label })}</p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy} onClick={() => setStep("editing")}>
               {t("ui.back")}

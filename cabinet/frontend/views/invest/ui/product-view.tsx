@@ -13,7 +13,7 @@
 // the open catalog, because a `hidden` product this caller was granted is not listed
 // (`selectProduct`).
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { ArrowDownToLine, ArrowLeft, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useState } from "react";
@@ -199,16 +199,17 @@ function BackLink() {
 
 function HoldingStats({ position }: { position: Position }) {
   const t = useT();
+  const locale = useLocale();
   const loss = isNegative(position.pnl);
   const flat = isZero(position.pnl);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Stat label={t("invest.units")} value={formatUnits(position.units)} tip="invest.position.units" />
-      <Stat label={t("invest.nav")} value={formatUsdt(position.nav)} tip="invest.position.nav" />
-      <Stat label={t("invest.value")} value={`${formatUsdt(position.value)} USDT`} emphasis tip="invest.position.value" />
+      <Stat label={t("invest.units")} value={formatUnits(position.units, locale)} tip="invest.position.units" />
+      <Stat label={t("invest.nav")} value={formatUsdt(position.nav, locale)} tip="invest.position.nav" />
+      <Stat label={t("invest.value")} value={`${formatUsdt(position.value, locale)} USDT`} emphasis tip="invest.position.value" />
       <Stat
         label={t("invest.pnl")}
-        value={`${formatSignedUsdt(position.pnl)} USDT`}
+        value={`${formatSignedUsdt(position.pnl, locale)} USDT`}
         tip="invest.position.pnl"
         emphasis
         tone={loss && !flat ? "text-chart-4" : "text-positive"}
@@ -221,6 +222,7 @@ function HoldingStats({ position }: { position: Position }) {
 /** A product the caller holds nothing in: the price is all there is to show. */
 function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: boolean }) {
   const t = useT();
+  const locale = useLocale();
   return (
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-4 py-6">
@@ -229,7 +231,7 @@ function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: boolean }
             {t("invest.navPerUnit")}
             <TipAnchor anchor="invest.position.nav" />
           </p>
-          <p className="text-2xl font-semibold tabular-nums">{nav ? `${formatUsdt(nav.nav)} USDT` : "—"}</p>
+          <p className="text-2xl font-semibold tabular-nums">{nav ? `${formatUsdt(nav.nav, locale)} USDT` : "—"}</p>
         </div>
         <p className="max-w-sm text-sm text-ink-soft">{t(unmarked ? "invest.notYetValuedHint" : "invest.noUnitsInFund")}</p>
       </CardContent>

@@ -12,7 +12,7 @@
 import { Flame, Loader2, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button } from "@evinvest/uikit";
 
 import { retireUnits } from "@/entities/admin/api/admin-client";
@@ -31,6 +31,7 @@ type Step = "closed" | "editing" | "confirming";
 
 export function RetireAction({ allocation, holders }: { allocation: Allocation; holders: UnitHolders }) {
   const t = useT();
+  const locale = useLocale();
   const [step, setStep] = useState<Step>("closed");
   const [draft, setDraft] = useState<RetireDraft>(EMPTY_RETIRE_DRAFT);
   const [busy, setBusy] = useState(false);
@@ -91,7 +92,7 @@ export function RetireAction({ allocation, holders }: { allocation: Allocation; 
       {step === "editing" && <RetireForm draft={draft} companyUnits={holders.company_units} onChange={setDraft} onReview={() => setStep("confirming")} onCancel={() => { setStep("closed"); setError(null); }} />}
       {step === "confirming" && draft.holder && (
         <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
-          <p className="text-xs tabular-nums">{t("admin.alloc.retire.confirm", { units: formatUnits(draft.units.trim()), holder: holderLabel })}</p>
+          <p className="text-xs tabular-nums">{t("admin.alloc.retire.confirm", { units: formatUnits(draft.units.trim(), locale), holder: holderLabel })}</p>
           {live && (
             <p className="flex items-start gap-2 text-xs text-accent-warn">
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.retire.forceConfirm")}

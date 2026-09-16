@@ -39,7 +39,7 @@ use uuid::Uuid;
 use crate::{
 	config::{TronConfig, TronSweepConfig},
 	infrastructure::{
-		rails::{self, GAS_STATION, SweepError, read_err},
+		rails::{self, GAS_STATION, HoldKey, RefusalBackoff, SweepError, read_err, signer_err},
 		tron_rpc::{RefBlockParams, TronRpc, TronRpcError},
 	},
 };
@@ -55,6 +55,8 @@ pub struct TronSweep {
 	treasury: OnceCell<String>,
 	gas_station: OnceCell<String>,
 	state: Mutex<SweepState>,
+	/// Addresses the signer refused on the merits, each held back with a growing backoff.
+	refusals: Mutex<RefusalBackoff>,
 }
 impl TronSweep {
 	pub fn new(pool: PgPool, channel: Channel, service_token: Option<ServiceTokenSource>, tron: &TronConfig, config: TronSweepConfig) -> Self {
@@ -69,6 +71,7 @@ impl TronSweep {
 			treasury: OnceCell::new(),
 			gas_station: OnceCell::new(),
 			state: Mutex::new(SweepState::default()),
+			refusals: Mutex::new(RefusalBackoff::default()),
 		}
 	}
 
@@ -104,11 +107,56 @@ impl TronSweep {
 			if address == treasury || address == gas_station {
 				continue; // never sweep a system wallet into itself.
 			}
-			if let Err(err) = self.sweep_address(user_id, &address, &treasury).await {
-				warn!(%address, "tron sweep: address cycle failed (continuing): {err}");
+			let key = HoldKey::Address(address.clone());
+			if self.is_held(&key) {
+				continue;
+			}
+			match self.sweep_address(user_id, &address, &treasury).await {
+				Ok(()) => self.release(&key),
+				Err(SweepError::SignerRefused { detail, activity_id, key }) => self.hold(key, &detail, activity_id.as_deref()),
+				Err(err) => warn!(%address, "tron sweep: address cycle failed (continuing): {err}"),
 			}
 		}
 		Ok(())
+	}
+
+	/// Back the refused `key` off after a terminal signer refusal. The FIRST refusal is the
+	/// alert — with the custodian's activity id when there is one, so the operator can find it
+	/// on the custodian's side — and every later one is the routine note that the hold keeps
+	/// growing.
+	fn hold(&self, key: HoldKey, detail: &str, activity_id: Option<&str>) {
+		let Ok(mut held) = self.refusals.lock() else {
+			return;
+		};
+		let strike = held.strike(key.clone(), Instant::now(), Duration::from_secs(self.config.poll_secs));
+		let retry_in_secs = strike.hold.as_secs();
+		let activity_id = activity_id.unwrap_or("none");
+		if strike.strikes == 1 {
+			error!(
+				?key,
+				activity_id,
+				retry_in_secs,
+				"tron sweep: signer refused on the merits — address held back with exponential backoff; an activity id means a human must approve it at the custodian: {detail}"
+			);
+		} else {
+			warn!(
+				?key,
+				activity_id,
+				strikes = strike.strikes,
+				retry_in_secs,
+				"tron sweep: signer refused again — hold extended: {detail}"
+			);
+		}
+	}
+
+	fn is_held(&self, key: &HoldKey) -> bool {
+		self.refusals.lock().is_ok_and(|held| held.is_held(key, Instant::now()))
+	}
+
+	fn release(&self, key: &HoldKey) {
+		if let Ok(mut held) = self.refusals.lock() {
+			held.release(key);
+		}
 	}
 
 	async fn sweep_address(&self, user_id: Uuid, address: &str, treasury: &str) -> Result<(), SweepError> {
@@ -140,9 +188,15 @@ impl TronSweep {
 		if self.recently(address, |s| &mut s.recent_topups, self.config.topup_grace_secs) {
 			return Ok(());
 		}
+		// The station is ONE key for every address: while the signer refuses it, no address
+		// gets a top-up, or each would mint its own pending activity per cycle.
+		if self.is_held(&HoldKey::GasStation) {
+			return Ok(());
+		}
 		// The signer resolves the gas-station key from its reserved id, so the address isn't needed.
 		let refs = self.rpc.ref_block_params().await.map_err(read_err)?;
 		let signed = self.sign_native(address, self.config.min_trx_drop_sun, &refs).await?;
+		self.release(&HoldKey::GasStation);
 		self.mark(address, |s| &mut s.recent_topups);
 		info!(%address, drop_sun = self.config.min_trx_drop_sun, "tron sweep: topping up TRX for a deposit address");
 		self.broadcast(&signed, "gas", address).await;
@@ -172,7 +226,7 @@ impl TronSweep {
 			.await
 			.map_err(|s| {
 				super::telemetry::note_signer_error("sweep", address, s.message());
-				SweepError::Signer(format!("sweep {address}: {}", s.message()))
+				signer_err(format!("sweep {address}"), HoldKey::Address(address.to_owned()), &s)
 			})?
 			.into_inner();
 		Ok(response.signed_tx)
@@ -199,7 +253,7 @@ impl TronSweep {
 			.await
 			.map_err(|s| {
 				super::telemetry::note_signer_error("gas top-up", "gas-station", s.message());
-				SweepError::Signer(format!("gas top-up {to}: {}", s.message()))
+				signer_err(format!("gas top-up {to}"), HoldKey::GasStation, &s)
 			})?
 			.into_inner();
 		Ok(response.signed_tx)

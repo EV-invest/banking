@@ -25,7 +25,9 @@ repo="$(git rev-parse --show-toplevel)"
 remote="https://github.com/EV-invest/concierge.git"
 list="$repo/contracts/concierge-protos.txt"
 
-mapfile -t protos < <(grep -Ev '^[[:space:]]*(#|$)' "$list")
+# No `mapfile`: the shebang resolves to bash 3.2 on a stock mac (issue #321).
+protos=()
+while IFS= read -r l; do protos+=("$l"); done < <(grep -Ev '^[[:space:]]*(#|$)' "$list")
 if [ "${#protos[@]}" -eq 0 ]; then
 	echo "::error::$list lists no protos" >&2
 	exit 1

@@ -1535,6 +1535,34 @@
     "en": "Payouts are paused while the roster settles",
     "t": "Auszahlungen pausieren, bis sich die Eigentümerliste gesetzt hat"
   },
+  "admin.refusal.feePolicy.coolingBody": {
+    "en": "The list of owners changed within the last 48 hours. The owners can be asked again at {at}. The pause is deliberate: it keeps a change of ownership and a change of terms as two separate, visible events rather than one motion.",
+    "t": "Die Eigentümerliste hat sich in den letzten 48 Stunden geändert. Die Eigentümer können ab {at} erneut gefragt werden. Die Pause ist Absicht: Ein Eigentümerwechsel und eine Änderung der Konditionen bleiben zwei getrennte, sichtbare Ereignisse statt eines einzigen Zuges."
+  },
+  "admin.refusal.feePolicy.coolingBodyNoTime": {
+    "en": "The list of owners changed within the last 48 hours, and changes of terms stay paused until that period lifts. The pause is deliberate: it keeps a change of ownership and a change of terms as two separate, visible events rather than one motion.",
+    "t": "Die Eigentümerliste hat sich in den letzten 48 Stunden geändert, und Änderungen der Konditionen bleiben pausiert, bis diese Frist abläuft. Die Pause ist Absicht: Ein Eigentümerwechsel und eine Änderung der Konditionen bleiben zwei getrennte, sichtbare Ereignisse statt eines einzigen Zuges."
+  },
+  "admin.refusal.feePolicy.coolingTitle": {
+    "en": "Changes of terms are paused while the roster settles",
+    "t": "Änderungen der Konditionen sind pausiert, bis sich die Eigentümerliste gesetzt hat"
+  },
+  "admin.refusal.feePolicy.floorBody": {
+    "en": "Tightening the terms beyond the house envelope needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it; a change within the envelope needs no vote.",
+    "t": "Eine Verschärfung der Konditionen über den Hausrahmen hinaus braucht die Zustimmung von mehr als der Hälfte der Eigentümer, und mit {n, plural, one {# Eigentümer} other {# Eigentümern}} ist diese Hürde nie zu nehmen. Weitere Eigentümer stellen sie wieder her; eine Änderung innerhalb des Rahmens braucht keine Abstimmung."
+  },
+  "admin.refusal.feePolicy.floorBodyNoCount": {
+    "en": "Tightening the terms beyond the house envelope needs more than half of the owners to agree, and this fund has too few owners for that bar to be met. Adding owners restores it; a change within the envelope needs no vote.",
+    "t": "Eine Verschärfung der Konditionen über den Hausrahmen hinaus braucht die Zustimmung von mehr als der Hälfte der Eigentümer, und dieser Fonds hat dafür zu wenige Eigentümer. Weitere Eigentümer stellen die Hürde wieder her; eine Änderung innerhalb des Rahmens braucht keine Abstimmung."
+  },
+  "admin.refusal.feePolicy.floorTitle": {
+    "en": "This fund cannot put a change of terms to its owners",
+    "t": "Dieser Fonds kann seinen Eigentümern keine Änderung der Konditionen vorlegen"
+  },
+  "admin.refusal.feePolicy.mailBody": {
+    "en": "Owners receive their approval link by email, and no mailer is wired — so a proposal opened now could never be voted on and would simply expire. This has to be configured before the owners can be asked about a change of terms.",
+    "t": "Die Eigentümer erhalten ihren Freigabelink per E-Mail, und es ist kein Mailer angebunden — ein jetzt eröffneter Vorschlag könnte nie abgestimmt werden und würde einfach verfallen. Das muss eingerichtet sein, bevor die Eigentümer zu einer Änderung der Konditionen befragt werden können."
+  },
   "admin.refusal.floorBody": {
     "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it.",
     "t": "Eine Auszahlung braucht die Zustimmung von mehr als der Hälfte der Eigentümer, und mit {n, plural, one {# Eigentümer} other {# Eigentümern}} kann diese Hürde nie genommen werden. Weitere Eigentümer stellen sie wieder her."

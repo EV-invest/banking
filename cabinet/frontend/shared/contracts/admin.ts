@@ -278,6 +278,13 @@ export interface FeePolicyChange extends FeeTerms {
    * `null` until someone did. Operators only — blank for everyone else even once given.
    */
   notices_waived_by: string | null;
+  /**
+   * The same operator by the email the directory knows them by — what a reader is shown,
+   * the id being a fact for the record and a tooltip. Always present on the wire; `null`
+   * when nobody acknowledged, when the reader is not an operator, or when the directory
+   * cannot name the id (a directory outage never fails the page).
+   */
+  notices_waived_by_email: string | null;
   /** Unix seconds as a string the (latest) acknowledgement was given; `"0"` until someone gave it. */
   notices_waived_at: string;
   /** The banking user ids whose notice the mailer had given up on by that moment — exactly

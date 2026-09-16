@@ -1535,6 +1535,34 @@
     "en": "Payouts are paused while the roster settles",
     "t": "Chi trả tạm dừng trong khi danh sách chủ sở hữu ổn định lại"
   },
+  "admin.refusal.feePolicy.coolingBody": {
+    "en": "The list of owners changed within the last 48 hours. The owners can be asked again at {at}. The pause is deliberate: it keeps a change of ownership and a change of terms as two separate, visible events rather than one motion.",
+    "t": "Danh sách chủ sở hữu đã thay đổi trong 48 giờ qua. Có thể hỏi lại các chủ sở hữu vào {at}. Việc tạm dừng là có chủ ý: nó giữ cho việc thay đổi chủ sở hữu và thay đổi điều khoản là hai sự kiện riêng biệt, rõ ràng thay vì một động thái duy nhất."
+  },
+  "admin.refusal.feePolicy.coolingBodyNoTime": {
+    "en": "The list of owners changed within the last 48 hours, and changes of terms stay paused until that period lifts. The pause is deliberate: it keeps a change of ownership and a change of terms as two separate, visible events rather than one motion.",
+    "t": "Danh sách chủ sở hữu đã thay đổi trong 48 giờ qua, và việc thay đổi điều khoản tiếp tục tạm dừng cho đến khi hết thời hạn đó. Việc tạm dừng là có chủ ý: nó giữ cho việc thay đổi chủ sở hữu và thay đổi điều khoản là hai sự kiện riêng biệt, rõ ràng thay vì một động thái duy nhất."
+  },
+  "admin.refusal.feePolicy.coolingTitle": {
+    "en": "Changes of terms are paused while the roster settles",
+    "t": "Việc thay đổi điều khoản tạm dừng cho đến khi danh sách chủ sở hữu ổn định"
+  },
+  "admin.refusal.feePolicy.floorBody": {
+    "en": "Tightening the terms beyond the house envelope needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it; a change within the envelope needs no vote.",
+    "t": "Siết chặt điều khoản vượt quá khung mặc định cần hơn một nửa số chủ sở hữu đồng ý, và với {n, plural, one {# chủ sở hữu} other {# chủ sở hữu}} ngưỡng đó không bao giờ đạt được. Thêm chủ sở hữu sẽ khôi phục lại; thay đổi trong khung không cần bỏ phiếu."
+  },
+  "admin.refusal.feePolicy.floorBodyNoCount": {
+    "en": "Tightening the terms beyond the house envelope needs more than half of the owners to agree, and this fund has too few owners for that bar to be met. Adding owners restores it; a change within the envelope needs no vote.",
+    "t": "Siết chặt điều khoản vượt quá khung mặc định cần hơn một nửa số chủ sở hữu đồng ý, và quỹ này có quá ít chủ sở hữu để đạt ngưỡng đó. Thêm chủ sở hữu sẽ khôi phục lại; thay đổi trong khung không cần bỏ phiếu."
+  },
+  "admin.refusal.feePolicy.floorTitle": {
+    "en": "This fund cannot put a change of terms to its owners",
+    "t": "Quỹ này không thể đưa thay đổi điều khoản ra cho các chủ sở hữu"
+  },
+  "admin.refusal.feePolicy.mailBody": {
+    "en": "Owners receive their approval link by email, and no mailer is wired — so a proposal opened now could never be voted on and would simply expire. This has to be configured before the owners can be asked about a change of terms.",
+    "t": "Các chủ sở hữu nhận liên kết phê duyệt qua email, và chưa có dịch vụ gửi thư nào được kết nối — một đề xuất mở ra lúc này sẽ không bao giờ được bỏ phiếu và sẽ đơn giản hết hạn. Việc này phải được cấu hình trước khi có thể hỏi các chủ sở hữu về thay đổi điều khoản."
+  },
   "admin.refusal.floorBody": {
     "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it.",
     "t": "Một khoản chi trả cần hơn một nửa số chủ sở hữu đồng ý, và với {n, plural, one {# chủ sở hữu} other {# chủ sở hữu}} thì ngưỡng đó không bao giờ đạt được. Thêm chủ sở hữu sẽ khôi phục lại."

@@ -70,7 +70,7 @@ async fn harness() -> Option<Harness> {
 /// milliseconds a clean drain takes.
 #[tokio::test]
 async fn run_finishes_its_drain_then_stops_on_cancellation() {
-	let _relay_owner = common::relay_exclusive().await;
+	let _relay_owner = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
 	let relay = Relay::new(h.pool.clone(), ledger_for(&h.pool), Arc::new(StubCustody), h.notify.clone());
 	drain_the_shared_backlog(&relay).await;

@@ -49,11 +49,11 @@ export function OrdersTable({ orders, busyId, onCancel }: { orders: Order[]; bus
                 {t(order.kind === "market" ? "trade.form.market" : "trade.form.limit")}
                 {order.kind !== "market" && order.tif && <span className="ml-1 uppercase text-ink-soft">{order.tif}</span>}
               </TableCell>
-              <TableCell className={cn(CELL, "text-right")}>{formatUsdt(order.price)}</TableCell>
-              <TableCell className={cn(CELL, "text-right")}>{formatUnits(order.size)}</TableCell>
-              <TableCell className={cn(CELL, "text-right")}>{formatUnits(order.filled)}</TableCell>
-              <TableCell className={cn(CELL, "text-right")}>{order.avg_fill_price ? formatUsdt(order.avg_fill_price) : "—"}</TableCell>
-              <TableCell className={cn(CELL, "text-right")}>{formatUsdt(order.fee_paid)}</TableCell>
+              <TableCell className={cn(CELL, "text-right")}>{formatUsdt(order.price, locale)}</TableCell>
+              <TableCell className={cn(CELL, "text-right")}>{formatUnits(order.size, locale)}</TableCell>
+              <TableCell className={cn(CELL, "text-right")}>{formatUnits(order.filled, locale)}</TableCell>
+              <TableCell className={cn(CELL, "text-right")}>{order.avg_fill_price ? formatUsdt(order.avg_fill_price, locale) : "—"}</TableCell>
+              <TableCell className={cn(CELL, "text-right")}>{formatUsdt(order.fee_paid, locale)}</TableCell>
               {/* An unmapped state falls back to the wire word — a value the hub added that
                   this build has no word for, shown rather than swallowed. */}
               <TableCell className={cn(CELL, order.state === "rejected" && "text-accent-error")} title={order.reject_reason || undefined}>

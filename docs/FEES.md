@@ -219,6 +219,21 @@ the moment they bind and the cabinet-relative product page (`/invest/<service>`,
 concierge's own origin). On the administrator's path the same mails go out the moment the
 change is scheduled.
 
+A notice is queued for every holder with an account row, whether or not the identity plane
+has mirrored them yet. Its addressee (`subject_user_id`, which concierge checks against the
+recipient) is named by the mailer from `users.concierge_user_id` **at the moment it sends**,
+not from whatever the queue row was written with (#325). Until the mirror lands, the notice
+is **deferred**, not charged — units can be issued days before the holder's first cabinet
+login, and a row charged an attempt per pass would be given up on five minutes after the
+scheduling — so a mirror landing anywhere inside the notice period is reached on the next
+pass (within the hour: the deferral backoff caps there). A holder still unmirrored a full
+`DEFERRAL_CEILING` (24 hours, the notice period) after the scheduling is given up on with
+the reason "recipient has no mirrored concierge user id", the row the acknowledgement below
+is offered over. Only the notice is treated this way: an approval or a consent to an
+unmirrored recipient is still charged per pass and retired within minutes — its token is
+bound to a subject the caller had to resolve when it opened, so an empty mirror there is a
+fault worth an alert, not a login still to come.
+
 The owners, for their part, are told how the consilium ended: one outcome mail
 (`GovernanceMail::PayoutOutcome`) to the initiator and to every seat on each closed state —
 rejected, expired, cancelled, executed, execution failed — and one burn notice
@@ -261,7 +276,16 @@ says to cancel the pending one first. `CancelFeePolicyChange` withdraws a schedu
 and, for one still awaiting the owners, withdraws its consilium in the same transaction —
 which is why a consilium-gated change may be withdrawn only by the owner who proposed it or
 by another owner: an administrator who could not open the quorum must not be able to close
-it.
+it. Withdrawing a scheduled change also withdraws, in the same transaction, every holder
+notice the mailer has not delivered yet (`consilium_mail.withdrawn_at`, migration `0043`): a
+notice still queued behind a relay outage would otherwise tell its holder, once the relay
+is back, that terms which will never bind "change on <date>" (#319). A withdrawn notice is
+terminal — never drained, never counted as owed — and distinct from one given up on: nobody
+failed to reach anybody. Notices already delivered stand; this plane sends no "cancelled"
+mail after them. The mailer holds each row's lock across the relay call, so a cancel that
+lands while a notice is being handed over waits for the outcome and then withdraws nothing
+delivered — never a notice sent after the fact was taken back, never a delivered one on
+record as withdrawn.
 
 Every transaction over a product's terms — scheduling, the owners carrying, promotion —
 opens by locking the product's `allocations` row. The requirement an operator's request
@@ -311,9 +335,9 @@ been told. Only the holders of the moment count — a recipient who has since re
 unit holds nothing back.
 
 A loosening binds regardless, with a `warn!` naming the undelivered count: nobody is worse
-off, and a holder the identity plane cannot reach (an unverified mailbox, no mirrored id —
-their notice is retired within minutes of every scheduling) would otherwise pin a product's
-terms forever, the lowering of a legacy rate above today's ceiling included. A tightening
+off, and a holder the identity plane cannot reach (an unverified mailbox; a mirror that
+never lands, on which every notice to them is given up on a day after its scheduling) would
+otherwise pin a product's terms forever, the lowering of a legacy rate above today's ceiling included. A tightening
 over such a holder has one way through: the relay coming back promotes it by itself on the
 next tick; for a holder who stays unreachable, an operator takes responsibility explicitly.
 
@@ -364,6 +388,6 @@ performance half is the remaining work.
 | Settling the accrual before a basis moves | `piggybank/core/src/infrastructure/fee_accrual.rs` |
 | The periodic worker | `piggybank/core/src/infrastructure/fee_sweeper.rs` |
 | Changing the terms: history, notice, promotion | `piggybank/core/src/infrastructure/fee_policy_changes.rs` |
-| Schema | `piggybank/core/migrations/0023_fee_policy.sql`, `0036_fee_policy_changes.sql`, `0041_fee_assessment_deferred_charge.sql`, `0042_fee_policy_notice_waiver.sql` |
+| Schema | `piggybank/core/migrations/0023_fee_policy.sql`, `0036_fee_policy_changes.sql`, `0041_fee_assessment_deferred_charge.sql`, `0042_fee_policy_notice_waiver.sql`, `0043_consilium_mail_withdrawn.sql` |
 | Wire contract | `contracts/proto/banking/v1/fees.proto` |
 | Integration tests (real PG + TigerBeetle) | `piggybank/core/tests/fee_policy.rs` |

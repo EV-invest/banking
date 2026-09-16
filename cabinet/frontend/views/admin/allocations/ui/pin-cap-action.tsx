@@ -8,8 +8,8 @@
 import { Loader2, Pin, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
-import type { Translate } from "@evinvest/i18n";
-import { useT } from "@evinvest/i18n/react";
+import type { Locale, Translate } from "@evinvest/i18n";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button } from "@evinvest/uikit";
 
 import { setAllocationUnitCap } from "@/entities/admin/api/admin-client";
@@ -25,6 +25,7 @@ const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 export function PinCapAction({ allocation, holders }: { allocation: Allocation; holders: UnitHolders }) {
   const t = useT();
+  const locale = useLocale();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,13 +50,13 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
     }
   };
 
-  const hint = disabledReason(verdict, t);
+  const hint = disabledReason(verdict, t, locale);
 
   return (
     <div className="space-y-2">
       {confirming && verdict.kind === "pinnable" ? (
         <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
-          <p className="text-xs tabular-nums">{t("admin.alloc.pinCap.confirm", { from: compactUnits(verdict.from), to: formatUnits(verdict.to) })}</p>
+          <p className="text-xs tabular-nums">{t("admin.alloc.pinCap.confirm", { from: compactUnits(verdict.from, locale), to: formatUnits(verdict.to, locale) })}</p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy} onClick={() => setConfirming(false)}>
               {t("ui.cancel")}
@@ -83,10 +84,10 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
 }
 
 /** Why the button is greyed out — one sentence per non-pinnable verdict, none otherwise. */
-function disabledReason(verdict: PinCapVerdict, t: Translate): string | null {
+function disabledReason(verdict: PinCapVerdict, t: Translate, locale: Locale): string | null {
   switch (verdict.kind) {
     case "queuedPending":
-      return t("admin.alloc.pinCap.queued", { units: formatUnits(verdict.queued) });
+      return t("admin.alloc.pinCap.queued", { units: formatUnits(verdict.queued, locale) });
     case "nothingIssued":
       return t("admin.alloc.pinCap.nothingIssued");
     case "alreadyPinned":

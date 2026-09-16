@@ -8,7 +8,7 @@
 
 import { CheckCircle2, Clock } from "lucide-react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
 import type { UnitIssuance, UnitIssuanceSource } from "@/shared/contracts/admin";
 import { formatUnits } from "@/shared/lib/money";
@@ -33,8 +33,9 @@ const SOURCE: Record<UnitIssuanceSource, string> = {
 
 export function IssuanceResult({ outcome, kind }: { outcome: IssuanceOutcome; kind: keyof typeof COPY }) {
   const t = useT();
+  const locale = useLocale();
   const applied = outcome.issuance.state === "applied";
-  const args = { units: formatUnits(outcome.issuance.units), holder: outcome.holderLabel };
+  const args = { units: formatUnits(outcome.issuance.units, locale), holder: outcome.holderLabel };
   return (
     <p className="flex items-start gap-2 text-xs text-positive">
       {applied ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" /> : <Clock className="mt-0.5 size-3.5 shrink-0" />}

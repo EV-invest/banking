@@ -19,6 +19,7 @@ import { scheduleFeePolicy } from "@/entities/admin/api/admin-client";
 import type { FeePolicy, FeePolicyChange } from "@/shared/contracts/admin";
 import { RequestError, errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
+import { classifyConsiliumRefusal, coolingOffLiftsAt, type ConsiliumRefusal } from "@/shared/lib/consilium-refusal";
 import { formatMoment } from "@/shared/lib/datetime";
 import { revalidateTag } from "@/shared/lib/resource";
 import { isPendingChange } from "@/views/admin/fees/lib/format";
@@ -26,6 +27,7 @@ import { FIELD_LABEL_KEY, draftBps, draftProblem, draftRequirement, toRequest, t
 import { useTermsDraft } from "@/views/admin/fees/model/use-terms-draft";
 import { ScheduleFields } from "@/views/admin/fees/ui/schedule-fields";
 import { TermsFields } from "@/views/admin/fees/ui/terms-fields";
+import { RefusalNotice } from "@/views/admin/ui/refusal-notice";
 
 export function PolicyCard({
   service,
@@ -52,11 +54,18 @@ export function PolicyCard({
   // click of a double-click does; the ref is read in the same tick and closes the gap.
   const inFlight = useRef(false);
   const [problem, setProblem] = useState<string | null>(null);
+  /** A refusal of the owners' consilium we have specific words for (the same three the
+   *  payments form meets — `shared/lib/consilium-refusal.ts`), with the cooling-off
+   *  deadline resolved at arrival. Anything else stays a `problem` in the hub's words. */
+  const [refusal, setRefusal] = useState<{ detail: ConsiliumRefusal; liftsAt: string | null } | null>(null);
   // The plane's refusal is about the draft as it was sent; the first edit makes it stale,
-  // and a red sentence that outlives the mistake it named reads as a second mistake.
+  // and a red sentence that outlives the mistake it named reads as a second mistake. The
+  // consilium notice goes the same way: whether the owners are asked at all depends on
+  // the draft, and a loosened one may need no consilium for the roster to refuse.
   const edit = useCallback(
     <K extends keyof TermsDraft>(field: K, value: TermsDraft[K]) => {
       setProblem(null);
+      setRefusal(null);
       set(field, value);
     },
     [set],
@@ -103,6 +112,7 @@ export function PolicyCard({
     inFlight.current = true;
     setBusy(true);
     setProblem(null);
+    setRefusal(null);
     try {
       const change = await scheduleFeePolicy(toRequest(service, draft));
       // The policy list now carries the change as `pending`, and the history grew a row.
@@ -112,7 +122,14 @@ export function PolicyCard({
       onScheduled(change);
       reset();
     } catch (e) {
-      setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feePolicySave"));
+      // The hub refuses to open the owners' consilium in a sentence with a transport prefix
+      // on it ("validation failed: a fee-policy consilium needs at least 3 owners…"). The
+      // classifier reads the condition out of the prose whatever the status — the owner
+      // floor arrives as a 400, the cooling-off as a 409 — and the notice says what to do
+      // about it in the reader's language; anything unrecognised is shown as it came.
+      const detail = classifyConsiliumRefusal(e);
+      if (detail) setRefusal({ detail, liftsAt: detail.kind === "cooling-off" ? coolingOffLiftsAt(detail) : null });
+      else setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feePolicySave"));
       // "Already pending" means a colleague got there first, and this screen still shows
       // the fund without their change. The re-read brings their pending card in and
       // blocks this form for the right reason, instead of leaving a red sentence about a
@@ -151,6 +168,7 @@ export function PolicyCard({
 
         {blocked && <p className="text-xs text-ink-soft">{t("admin.fees.pendingBlocks")}</p>}
         {rateProblem && !blocked && <p className="text-xs text-accent-error">{rateProblem}</p>}
+        {refusal && <RefusalNotice subject="feePolicy" refusal={refusal.detail} liftsAt={refusal.liftsAt} />}
         {problem && <p className="text-xs text-accent-error">{problem}</p>}
 
         <Button type="button" onClick={schedule} disabled={busy || blocked || invalid}>
