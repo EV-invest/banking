@@ -56,24 +56,22 @@ async fn run() -> color_eyre::Result<()> {
 
 	// The signer's independent spend policy — the second gate that holds even if the hub is
 	// compromised. The per-class rules (sweep → treasury only, gas station → own addresses
-	// only, deposit native never), the fee budget and the top-up cap are always on; the
-	// treasury cap/allowlist are no-ops until an operator sets them.
+	// only, deposit native never), the fee budget, the top-up cap, the treasury USDT caps and
+	// the spend windows are always on; only the allowlist is a no-op until an operator sets it.
 	let policy = SignerPolicy::from_env().context("failed to load signer spend policy")?;
 	tracing::info!(
 		fee_budget = ?policy.fee_budget(),
 		gas_topup_caps = ?policy.gas_topup(),
 		token_pins = ?policy.token_pins(),
-		max_transfer_usdt = ?policy.max_transfer_usdt(),
+		max_transfer_usdt = policy.max_transfer_usdt(),
+		treasury_usdt_per_hour = policy.treasury_usdt_per_hour(),
 		allowlisted_destinations = policy.allowlist_len(),
 		treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(),
 		treasury_native = ?policy.treasury_native(),
 		native_spend_per_hour = ?policy.native_spend(),
 		tron_signing_enabled = policy.tron_signing_enabled(),
-		"signer spend policy active: sweeps only to the treasury, gas top-ups only to own addresses, no native out of deposit wallets, treasury native off unless opted in, native spend windowed per wallet"
+		"signer spend policy active: sweeps only to the treasury, gas top-ups only to own addresses, no native out of deposit wallets, treasury native off unless opted in, treasury USDT capped per payout and per hour, native spend windowed per wallet"
 	);
-	if policy.max_transfer_usdt().is_none() {
-		tracing::warn!("signer treasury cap unset — a single treasury payout is unbounded (set SIGNER_MAX_TRANSFER_USDT before scaling liquidity)");
-	}
 
 	// Where NEW keys are minted and existing ones signed. `local` is the default and the
 	// rollback: flipping KEY_BACKEND back restores the previous behaviour with no data change,

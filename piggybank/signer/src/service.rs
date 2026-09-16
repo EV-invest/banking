@@ -23,7 +23,7 @@ use crate::{
 	evm_tx,
 	kek_guard::short_fp,
 	key_vault::Vault,
-	native_spend::NativeSpendLedger,
+	native_spend::{Asset, NativeSpendLedger},
 	policy::{self, FeeQuote, SignerPolicy},
 	provision,
 	secrets::{NewTurnkeySecret, WalletSecrets},
@@ -82,7 +82,8 @@ pub struct Signer {
 	custodian: Option<Arc<dyn CustodyMinter>>,
 	vault: Arc<Vault>,
 	secrets: WalletSecrets,
-	/// The native-spend window ledger, over the same database as `secrets`.
+	/// The spend-window ledger (native coin per wallet, USDT per treasury rail), over the
+	/// same database as `secrets`.
 	ledger: NativeSpendLedger,
 	policy: SignerPolicy,
 }
@@ -120,15 +121,29 @@ impl Signer {
 		}
 	}
 
-	/// Charge `spend` (native base units) to `(wallet_id, network)`'s sliding window, or refuse.
-	/// Called after every other policy check and BEFORE the backend is asked for anything, so
-	/// a refusal never touches a key; the ledger's lock makes the read-check-write atomic
-	/// against a concurrent request on the same wallet.
-	async fn reserve_native_spend(&self, wallet_id: Uuid, network: Network, spend: u128) -> Result<(), Status> {
-		let window = self.ledger.open(wallet_id, network, policy::NATIVE_SPEND_WINDOW).await?;
-		self.policy.check_native_spend_window(network, window.spent(), spend)?;
+	/// Charge `spend` (base units of `asset`) to `(wallet_id, network, asset)`'s sliding
+	/// window, or refuse. Called after every other policy check and BEFORE the backend is
+	/// asked for anything, so a refusal never touches a key; the ledger's lock makes the
+	/// read-check-write atomic against a concurrent request on the same window.
+	async fn reserve_spend(&self, wallet_id: Uuid, network: Network, asset: Asset, spend: u128) -> Result<(), Status> {
+		let window = self.ledger.open(wallet_id, network, asset, policy::SPEND_WINDOW).await?;
+		match asset {
+			Asset::Native => self.policy.check_native_spend_window(network, window.spent(), spend)?,
+			Asset::Usdt => self.policy.check_treasury_usdt_window(network, window.spent(), spend)?,
+		}
 		window.record(spend).await?;
 		Ok(())
+	}
+
+	/// Charge a treasury payout's USDT (`amount_base_units`, on-chain decimals) to the
+	/// treasury's window on `network`. A sweep moves USDT INTO the treasury and the gas
+	/// station never moves any, so the other classes have nothing to charge. Called once the
+	/// pure checks on the request have passed and before any key is touched.
+	async fn reserve_treasury_usdt(&self, class: WalletClass, network: Network, amount_base_units: u128) -> Result<(), Status> {
+		match class {
+			WalletClass::Treasury => self.reserve_spend(TREASURY_WALLET, network, Asset::Usdt, amount_base_units).await,
+			WalletClass::GasStation | WalletClass::Deposit => Ok(()),
+		}
 	}
 
 	/// Apply the class rule to a USDT/token transfer: a treasury payout (pinned token + cap +
@@ -244,9 +259,10 @@ impl SignerService for Signer {
 				gas_limit: req.gas_limit,
 			},
 		)?;
-		self.guard_token_transfer(WalletClass::of(wallet_id), network, Some(&req.token_contract), &req.to_address, amount)
-			.await?;
-		self.reserve_native_spend(wallet_id, network, policy::evm_native_spend(network, gas_price, req.gas_limit, 0)?)
+		let class = WalletClass::of(wallet_id);
+		self.guard_token_transfer(class, network, Some(&req.token_contract), &req.to_address, amount).await?;
+		self.reserve_treasury_usdt(class, network, amount).await?;
+		self.reserve_spend(wallet_id, network, Asset::Native, policy::evm_native_spend(network, gas_price, req.gas_limit, 0)?)
 			.await?;
 
 		let data = evm_tx::erc20_transfer_calldata(&to, amount);
@@ -284,7 +300,7 @@ impl SignerService for Signer {
 			},
 		)?;
 		self.guard_native_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
-		self.reserve_native_spend(wallet_id, network, policy::evm_native_spend(network, gas_price, req.gas_limit, amount)?)
+		self.reserve_spend(wallet_id, network, Asset::Native, policy::evm_native_spend(network, gas_price, req.gas_limit, amount)?)
 			.await?;
 
 		// A native transfer carries the value directly and no calldata.
@@ -316,11 +332,12 @@ impl SignerService for Signer {
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
 		self.policy.check_fee_budget(network, FeeQuote::Tron { fee_limit: req.fee_limit })?;
-		self.guard_token_transfer(WalletClass::of(wallet_id), network, Some(&req.token_contract), &req.to_address, amount)
-			.await?;
+		let class = WalletClass::of(wallet_id);
+		self.guard_token_transfer(class, network, Some(&req.token_contract), &req.to_address, amount).await?;
+		self.reserve_treasury_usdt(class, network, amount).await?;
 		// `fee_limit` is what the chain may burn for this call. The fee budget has already
 		// refused a negative one, so the fallback is unreachable — and fails closed if it ever is not.
-		self.reserve_native_spend(wallet_id, network, u128::try_from(req.fee_limit).unwrap_or(u128::MAX)).await?;
+		self.reserve_spend(wallet_id, network, Asset::Native, u128::try_from(req.fee_limit).unwrap_or(u128::MAX)).await?;
 
 		let handle = KeyHandle { wallet_id, network };
 		let owner = tron_tx::owner_address(&self.backend.public_key(handle).await?).map_err(sign_status("trc20 transfer"))?;
@@ -345,7 +362,7 @@ impl SignerService for Signer {
 		// No fee budget to check: a TRX transfer is bandwidth-only and carries no caller-supplied
 		// fee field (`build_unsigned_trx` omits `fee_limit`), so the amount is all it can spend.
 		self.guard_native_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
-		self.reserve_native_spend(wallet_id, network, amount).await?;
+		self.reserve_spend(wallet_id, network, Asset::Native, amount).await?;
 
 		let handle = KeyHandle { wallet_id, network };
 		let owner = tron_tx::owner_address(&self.backend.public_key(handle).await?).map_err(sign_status("trx transfer"))?;
@@ -375,6 +392,7 @@ impl SignerService for Signer {
 		let class = WalletClass::of(wallet_id);
 		self.guard_token_transfer(class, network, None, &req.to_address, amount).await?;
 		self.guard_jetton_wallet(class, &req.our_jetton_wallet)?;
+		self.reserve_treasury_usdt(class, network, amount).await?;
 
 		let handle = KeyHandle { wallet_id, network };
 		// The key comes before the last check: the wallet's own address, which a withdrawal's
@@ -382,7 +400,7 @@ impl SignerService for Signer {
 		let public_key = self.ton_public_key(handle).await?;
 		self.guard_response_destination(class, &public_key, &req.response_destination).await?;
 		// `msg_value` is every nanoton this message carries (`forward_ton_amount` is paid out of it).
-		self.reserve_native_spend(wallet_id, network, u128::from(req.msg_value)).await?;
+		self.reserve_spend(wallet_id, network, Asset::Native, u128::from(req.msg_value)).await?;
 		let (parts, digest) = ton_tx::build_unsigned_jetton(
 			&public_key,
 			&ton_tx::JettonTransfer {
@@ -411,7 +429,7 @@ impl SignerService for Signer {
 		// the wallet contract pays the forwarding fee out of its balance, and the amount is the
 		// only value the caller chooses.
 		self.guard_native_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
-		self.reserve_native_spend(wallet_id, network, amount).await?;
+		self.reserve_spend(wallet_id, network, Asset::Native, amount).await?;
 
 		let handle = KeyHandle { wallet_id, network };
 		let public_key = self.ton_public_key(handle).await?;

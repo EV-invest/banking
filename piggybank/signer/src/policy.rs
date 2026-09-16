@@ -33,9 +33,14 @@
 //!         8-decimal token would get a cap of `N × 10^10` whole units); pinning the contract is
 //!         what makes the cap mean what its name says. On TON the same role is played by the
 //!         pinned jetton wallet. Sweeps are not pinned — their destination is the treasury;
-//!       - a **per-transfer USDT cap** (`SIGNER_MAX_TRANSFER_USDT`) — a single signed
-//!         treasury transfer can move at most this much, so one forged request can't drain
-//!         the hot wallet;
+//!       - a **per-transfer USDT cap** (`SIGNER_MAX_TRANSFER_USDT`, default 100) — a single
+//!         signed treasury transfer can move at most this much, so one forged request can't
+//!         drain the hot wallet. Always on: unset is the default, `0` is a boot error;
+//!       - a **USDT window** (`SIGNER_MAX_TREASURY_USDT_PER_HOUR`, default 1_000) — the most
+//!         USDT the treasury may pay out on one rail over a sliding hour, counted in the
+//!         signer's own ledger ([`crate::native_spend`], `asset = 'usdt'`) the way the native
+//!         window below is. The per-transfer cap bounds one payout; this bounds how many of
+//!         them a compromised hub gets before an operator notices;
 //!       - an optional **destination allowlist** (`SIGNER_DESTINATION_ALLOWLIST`) — when set,
 //!         treasury transfers may only go to pre-registered addresses (a hardened/staged
 //!         posture; off by default, since the normal withdrawal model sends to arbitrary user
@@ -56,14 +61,13 @@
 //! non-empty destination allowlist and a ceiling in the network's base units
 //! (`SIGNER_MAX_TREASURY_NATIVE_{BEP20,POLYGON,TRC20,TON}`; a network without one stays
 //! refused) — the boot fails otherwise, since "allowed, unbounded, to anywhere" is the hole
-//! this closes. The cap and the allowlist are **no-ops until configured**, so dev/CI and
-//! existing deployments are unaffected until an operator opts in — the same convention as
-//! the observability seams. An operator enabling the allowlist must either pin the
+//! this closes. The allowlist is a **no-op until configured** — the normal withdrawal model
+//! sends to arbitrary user addresses. An operator enabling it must either pin the
 //! treasury's jetton wallet or put it on the list, or every TON withdrawal is refused.
 //!
-//! Three controls are the opposite — **on by default** with ceilings an honest hub never
-//! reaches, and an operator may raise them via their `SIGNER_MAX_*` variables but cannot
-//! switch them off (`0` is a boot error, not "disabled"):
+//! Everything else is **on by default** with ceilings an honest hub never reaches, and an
+//! operator may raise them via their `SIGNER_MAX_*` variables but cannot switch them off
+//! (`0` is a boot error, not "disabled"). Besides the two USDT ceilings above:
 //!
 //!   - the **fee budget** ([`FeeBudget`]) — a ceiling on the gas/fee side of EVERY signed
 //!     transaction, on every wallet class. The amount caps above bound what leaves in USDT;
@@ -106,11 +110,26 @@ const WEI_PER_GWEI: u128 = 1_000_000_000;
 const DEFAULT_MAX_GAS_PRICE_GWEI_BEP20: u64 = 100;
 const DEFAULT_MAX_GAS_PRICE_GWEI_POLYGON: u64 = 5_000;
 
+/// The default per-transfer treasury cap, in whole USDT: what production runs
+/// (`SIGNER_MAX_TRANSFER_USDT` in `flake.nix`), so an unset variable is that posture rather
+/// than "unbounded". Sized to the hot float, not to ambition — raise it as liquidity grows.
+const DEFAULT_MAX_TRANSFER_USDT: u64 = 100;
+
+/// The default treasury USDT window, in whole USDT per rail per sliding hour: ten payouts at
+/// the per-transfer cap. An honest hour of withdrawals is a handful; a compromised hub
+/// asking for the ceiling back to back gets ten of them, not an unbounded stream, before an
+/// operator's alert fires. Raised together with the float via
+/// `SIGNER_MAX_TREASURY_USDT_PER_HOUR`.
+const DEFAULT_MAX_TREASURY_USDT_PER_HOUR: u64 = 1_000;
+
 /// The signer's spend policy, loaded once at boot and consulted on every signing request.
-#[derive(Clone, Debug, Default)]
+/// [`Default`] is the production posture with every variable unset — not "everything off".
+#[derive(Clone, Debug)]
 pub struct SignerPolicy {
-	/// Max USDT (whole units) a single treasury transfer may move. `None` ⇒ uncapped.
-	max_transfer_usdt: Option<u64>,
+	/// Max USDT (whole units) a single treasury transfer may move. Always on.
+	max_transfer_usdt: u64,
+	/// Max USDT (whole units) the treasury may pay out per rail over [`SPEND_WINDOW`].
+	treasury_usdt_per_hour: u64,
 	/// If non-empty, a treasury transfer's destination must agree with one of these (wire
 	/// address strings in any rendering — membership goes through
 	/// [`provision::addresses_agree`], not string equality). Empty ⇒ any destination is
@@ -128,14 +147,32 @@ pub struct SignerPolicy {
 	/// `Some` only when an operator opted in to native transfers FROM the treasury; carries
 	/// the per-rail ceilings. `None` ⇒ every such transfer is refused.
 	treasury_native: Option<TreasuryNativeCaps>,
-	/// The always-on ceiling on native spend per `(wallet, network)` over [`NATIVE_SPEND_WINDOW`].
+	/// The always-on ceiling on native spend per `(wallet, network)` over [`SPEND_WINDOW`].
 	native_spend: NativeSpendWindow,
 	/// Whether the Tron handlers sign at all (`SIGNER_TRON_SIGNING_ENABLED`, default off).
 	tron_signing_enabled: bool,
 }
 
-/// The sliding window every [`NativeSpendWindow`] ceiling is measured over.
-pub const NATIVE_SPEND_WINDOW: Duration = Duration::from_secs(60 * 60);
+impl Default for SignerPolicy {
+	fn default() -> Self {
+		Self {
+			max_transfer_usdt: DEFAULT_MAX_TRANSFER_USDT,
+			treasury_usdt_per_hour: DEFAULT_MAX_TREASURY_USDT_PER_HOUR,
+			destination_allowlist: Vec::new(),
+			ton_treasury_jetton_wallet: None,
+			fee_budget: FeeBudget::default(),
+			gas_topup: GasTopupCaps::default(),
+			token_pins: TokenPins::default(),
+			treasury_native: None,
+			native_spend: NativeSpendWindow::default(),
+			tron_signing_enabled: false,
+		}
+	}
+}
+
+/// The sliding window every ledger ceiling — [`NativeSpendWindow`] and the treasury USDT
+/// window — is measured over.
+pub const SPEND_WINDOW: Duration = Duration::from_secs(60 * 60);
 
 /// Ceilings on the native coin one `(wallet, network)` may commit to per sliding hour, in
 /// base units (`SIGNER_MAX_NATIVE_SPEND_PER_HOUR_{BEP20,POLYGON,TRC20,TON}`).
@@ -437,6 +474,16 @@ impl FeeBudget {
 	}
 }
 
+/// A whole-USDT ceiling lowered to `network`'s on-chain base units, so it compares
+/// like-for-like with a wire amount. A whole number of USDT is representable on every rail,
+/// so the dust refusal is unreachable; it maps to `internal` because reaching it would be
+/// our bug, not a policy verdict.
+fn usdt_cap_onchain(network: Network, whole_usdt: u64) -> Result<u128, Status> {
+	Usdt::from_base_units(u128::from(whole_usdt).saturating_mul(CANONICAL_PER_USDT))
+		.to_onchain(network)
+		.map_err(|_| Status::internal("signer cap is not representable on this network"))
+}
+
 /// Lossless: `u64::MAX` gwei is ~1.8e28 wei, well inside `u128`.
 const fn gwei_to_wei(gwei: u64) -> u128 {
 	gwei as u128 * WEI_PER_GWEI
@@ -543,13 +590,8 @@ impl SignerPolicy {
 	/// Build the policy from `lookup` (the environment in production; a map in tests, which
 	/// must not mutate the process environment under a parallel test runner).
 	pub fn from_lookup(lookup: &impl Fn(&str) -> Option<String>) -> color_eyre::Result<Self> {
-		let max_transfer_usdt = match lookup("SIGNER_MAX_TRANSFER_USDT").filter(|s| !s.is_empty()) {
-			Some(raw) => Some(
-				raw.parse::<u64>()
-					.map_err(|_| color_eyre::eyre::eyre!("SIGNER_MAX_TRANSFER_USDT must be a whole number of USDT"))?,
-			),
-			None => None,
-		};
+		let max_transfer_usdt = env_cap(lookup, "SIGNER_MAX_TRANSFER_USDT", DEFAULT_MAX_TRANSFER_USDT)?;
+		let treasury_usdt_per_hour = env_cap(lookup, "SIGNER_MAX_TREASURY_USDT_PER_HOUR", DEFAULT_MAX_TREASURY_USDT_PER_HOUR)?;
 		let destination_allowlist: Vec<String> = lookup("SIGNER_DESTINATION_ALLOWLIST")
 			.map(|raw| raw.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect())
 			.unwrap_or_default();
@@ -582,6 +624,7 @@ impl SignerPolicy {
 		let tron_signing_enabled = env_flag(lookup, "SIGNER_TRON_SIGNING_ENABLED")?;
 		Ok(Self {
 			max_transfer_usdt,
+			treasury_usdt_per_hour,
 			destination_allowlist,
 			ton_treasury_jetton_wallet,
 			fee_budget,
@@ -597,8 +640,12 @@ impl SignerPolicy {
 		self.ton_treasury_jetton_wallet.is_some()
 	}
 
-	pub fn max_transfer_usdt(&self) -> Option<u64> {
+	pub fn max_transfer_usdt(&self) -> u64 {
 		self.max_transfer_usdt
+	}
+
+	pub fn treasury_usdt_per_hour(&self) -> u64 {
+		self.treasury_usdt_per_hour
 	}
 
 	pub fn allowlist_len(&self) -> usize {
@@ -656,6 +703,23 @@ impl SignerPolicy {
 		Ok(())
 	}
 
+	/// Enforce the treasury USDT window on `network`: `spent` is what the treasury's window on
+	/// that rail already holds in on-chain base units (read under the ledger's lock), `spend`
+	/// the payout being decided, in the same units. Pure, like the native check above.
+	pub fn check_treasury_usdt_window(&self, network: Network, spent: u128, spend: u128) -> Result<(), Status> {
+		let cap = usdt_cap_onchain(network, self.treasury_usdt_per_hour)?;
+		let total = spent
+			.checked_add(spend)
+			.ok_or_else(|| Status::permission_denied(format!("USDT spend {spend} overflows the signer's window on {network}")))?;
+		if total > cap {
+			return Err(Status::permission_denied(format!(
+				"treasury transfer of {spend} would bring the treasury's last hour on {network} to {total}, over the signer's treasury USDT window cap of {} USDT ({cap} on {network})",
+				self.treasury_usdt_per_hour
+			)));
+		}
+		Ok(())
+	}
+
 	/// Enforce the fee budget on a transaction about to be signed — from ANY wallet.
 	pub fn check_fee_budget(&self, network: Network, quote: FeeQuote) -> Result<(), Status> {
 		self.fee_budget.check(network, quote)
@@ -677,15 +741,12 @@ impl SignerPolicy {
 			// The handlers know which rails carry a contract; a mismatch here is our bug.
 			(Some(_), None) | (None, Some(_)) => return Err(Status::internal(format!("token pin and wire contract disagree on presence for {network}"))),
 		}
-		if let Some(cap_usdt) = self.max_transfer_usdt {
-			let cap = Usdt::from_base_units(u128::from(cap_usdt).saturating_mul(CANONICAL_PER_USDT))
-				.to_onchain(network)
-				.map_err(|_| Status::internal("signer cap is not representable on this network"))?;
-			if amount_base_units > cap {
-				return Err(Status::permission_denied(format!(
-					"treasury transfer of {amount_base_units} exceeds the signer's per-transfer cap of {cap_usdt} USDT ({cap} on {network})"
-				)));
-			}
+		let cap = usdt_cap_onchain(network, self.max_transfer_usdt)?;
+		if amount_base_units > cap {
+			return Err(Status::permission_denied(format!(
+				"treasury transfer of {amount_base_units} exceeds the signer's per-transfer cap of {} USDT ({cap} on {network})",
+				self.max_transfer_usdt
+			)));
 		}
 		self.check_allowlist(network, to_address)
 	}
@@ -814,17 +875,11 @@ mod tests {
 
 	use super::*;
 
-	fn policy(max: Option<u64>, allow: &[&str]) -> SignerPolicy {
+	fn policy(max: u64, allow: &[&str]) -> SignerPolicy {
 		SignerPolicy {
 			max_transfer_usdt: max,
 			destination_allowlist: allow.iter().map(|s| (*s).to_owned()).collect(),
-			ton_treasury_jetton_wallet: None,
-			fee_budget: FeeBudget::default(),
-			gas_topup: GasTopupCaps::default(),
-			token_pins: TokenPins::default(),
-			treasury_native: None,
-			native_spend: NativeSpendWindow::default(),
-			tron_signing_enabled: false,
+			..SignerPolicy::default()
 		}
 	}
 
@@ -846,18 +901,53 @@ mod tests {
 	}
 
 	#[test]
-	fn unconfigured_policy_allows_everything() {
+	fn unconfigured_policy_caps_a_payout_at_the_production_default() {
 		let p = SignerPolicy::default();
-		// 1e30 base units, any address — no cap, no allowlist ⇒ allowed.
-		assert!(
-			p.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), "0xanything", 1_000_000_000_000_000_000_000_000_000_000)
-				.is_ok()
-		);
+		// No allowlist: any address. But never uncapped — 100 USDT is the unset posture.
+		assert_eq!(p.max_transfer_usdt(), 100);
+		assert_eq!(p.treasury_usdt_per_hour(), 1_000);
+		assert!(p.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), "0xanything", 100 * CANONICAL_PER_USDT).is_ok());
+		let status = denied(p.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), "0xanything", 100 * CANONICAL_PER_USDT + 1));
+		assert!(status.message().contains("per-transfer cap of 100 USDT"), "{status:?}");
+	}
+
+	#[test]
+	fn treasury_usdt_window_admits_up_to_the_cap_in_each_chain_precision() {
+		let p = SignerPolicy::default();
+		// 1_000 USDT per hour: 18 dp on BEP20, 6 dp on Tron/TON.
+		let cap_bep20 = 1_000 * CANONICAL_PER_USDT;
+		assert!(p.check_treasury_usdt_window(Network::Bep20, 0, cap_bep20).is_ok());
+		assert!(p.check_treasury_usdt_window(Network::Bep20, cap_bep20 - 1, 1).is_ok());
+		let status = denied(p.check_treasury_usdt_window(Network::Bep20, cap_bep20, 1));
+		assert!(status.message().contains("treasury USDT window"), "{status:?}");
+		assert!(p.check_treasury_usdt_window(Network::Trc20, 900_000_000, 100_000_000).is_ok());
+		denied(p.check_treasury_usdt_window(Network::Trc20, 900_000_001, 100_000_000));
+		assert!(p.check_treasury_usdt_window(Network::Ton, 0, 1_000_000_000).is_ok());
+		denied(p.check_treasury_usdt_window(Network::Ton, 0, 1_000_000_001));
+		let status = denied(p.check_treasury_usdt_window(Network::Polygon, u128::MAX, 1));
+		assert!(status.message().contains("overflows"), "{status:?}");
+	}
+
+	#[test]
+	fn usdt_caps_come_from_env_and_refuse_zero() {
+		let p = SignerPolicy::from_lookup(&lookup(&[("SIGNER_MAX_TRANSFER_USDT", "250"), ("SIGNER_MAX_TREASURY_USDT_PER_HOUR", "2500")])).unwrap();
+		assert_eq!(p.max_transfer_usdt(), 250);
+		assert_eq!(p.treasury_usdt_per_hour(), 2_500);
+		assert!(p.check_treasury_usdt_window(Network::Ton, 0, 2_500_000_000).is_ok());
+		denied(p.check_treasury_usdt_window(Network::Ton, 0, 2_500_000_001));
+		// Unset or empty is the default, never "off"; zero and garbage do not boot.
+		assert_eq!(SignerPolicy::from_lookup(&lookup(&[("SIGNER_MAX_TRANSFER_USDT", "")])).unwrap().max_transfer_usdt(), 100);
+		for name in ["SIGNER_MAX_TRANSFER_USDT", "SIGNER_MAX_TREASURY_USDT_PER_HOUR"] {
+			for bad in ["0", "x", "-5", "1.5"] {
+				let err = SignerPolicy::from_lookup(&lookup(&[(name, bad)])).expect_err(&format!("{name}={bad} must not boot"));
+				assert!(err.to_string().contains(name), "{err}");
+			}
+		}
 	}
 
 	#[test]
 	fn cap_is_scaled_to_each_chain_precision() {
-		let p = policy(Some(1000), &[]);
+		let p = policy(1000, &[]);
 		// BEP20 USDT is 18-dp: 1000 USDT = 1000e18 base units.
 		let cap_bep20 = 1000u128 * CANONICAL_PER_USDT;
 		assert!(p.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), "0xto", cap_bep20).is_ok());
@@ -870,7 +960,7 @@ mod tests {
 
 	#[test]
 	fn allowlist_pins_destinations_when_set() {
-		let p = policy(None, &["0xgood", "0xalsogood"]);
+		let p = policy(1000, &["0xgood", "0xalsogood"]);
 		assert!(p.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), "0xgood", 1).is_ok());
 		assert!(p.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), "0xbad", 1).is_err());
 	}
@@ -878,7 +968,7 @@ mod tests {
 	#[test]
 	fn treasury_native_is_refused_by_default_whatever_else_is_set() {
 		// Allowlisted, capped, tiny: still refused — nothing but the opt-in enables the flow.
-		let p = policy(Some(1), &["0xgood"]);
+		let p = policy(1, &["0xgood"]);
 		let status = denied(p.check_treasury_native_transfer(Network::Bep20, "0xgood", 1));
 		assert!(status.message().contains("SIGNER_ALLOW_TREASURY_NATIVE"), "{status:?}");
 		denied(SignerPolicy::default().check_treasury_native_transfer(Network::Ton, "anything", 0));
@@ -887,7 +977,7 @@ mod tests {
 	fn native_opted_in(allow: &[&str], caps: TreasuryNativeCaps) -> SignerPolicy {
 		SignerPolicy {
 			treasury_native: Some(caps),
-			..policy(None, allow)
+			..policy(1000, allow)
 		}
 	}
 
@@ -969,7 +1059,7 @@ mod tests {
 		denied(p.check_treasury_transfer(Network::Trc20, Some(TRON), TRON, 1));
 		// The pin outranks the allowlist and the cap: a listed destination under the cap with the
 		// wrong token is still refused.
-		denied(policy(Some(1000), &[OTHER_EVM]).check_treasury_transfer(Network::Bep20, Some(OTHER_EVM), OTHER_EVM, 1));
+		denied(policy(1000, &[OTHER_EVM]).check_treasury_transfer(Network::Bep20, Some(OTHER_EVM), OTHER_EVM, 1));
 		// Presence mismatches are our bug, not a policy verdict.
 		assert_eq!(p.check_treasury_transfer(Network::Ton, Some(OWN_BASE64), OWN_BASE64, 1).unwrap_err().code(), Code::Internal);
 		assert_eq!(p.check_treasury_transfer(Network::Bep20, None, OTHER_EVM, 1).unwrap_err().code(), Code::Internal);
@@ -1056,7 +1146,7 @@ mod tests {
 				assert!(err.to_string().contains(name), "{err}");
 			}
 		}
-		assert_eq!(NATIVE_SPEND_WINDOW, Duration::from_secs(3600));
+		assert_eq!(SPEND_WINDOW, Duration::from_secs(3600));
 	}
 
 	// === tron: frozen by default ==================================================
@@ -1082,7 +1172,7 @@ mod tests {
 
 	#[test]
 	fn allowlist_membership_ignores_eip55_casing_on_evm() {
-		let p = policy(None, &[EIP55]);
+		let p = policy(1000, &[EIP55]);
 		assert!(p.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), &EIP55.to_ascii_lowercase(), 1).is_ok());
 		assert!(
 			p.check_treasury_transfer(Network::Polygon, usdt(Network::Polygon), &EIP55.to_ascii_uppercase().replace("0X", "0x"), 1)
@@ -1090,7 +1180,7 @@ mod tests {
 		);
 		// The list may be spelled lowercase while the hub sends EIP-55.
 		assert!(
-			policy(None, &[&EIP55.to_ascii_lowercase()])
+			policy(1000, &[&EIP55.to_ascii_lowercase()])
 				.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), EIP55, 1)
 				.is_ok()
 		);
@@ -1100,12 +1190,12 @@ mod tests {
 	#[test]
 	fn allowlist_membership_spans_ton_raw_and_base64_but_keeps_tron_case_sensitive() {
 		let raw = own_raw();
-		assert!(policy(None, &[&raw]).check_treasury_transfer(Network::Ton, usdt(Network::Ton), OWN_BASE64, 1).is_ok());
-		assert!(policy(None, &[OWN_BASE64]).check_treasury_transfer(Network::Ton, usdt(Network::Ton), &raw, 1).is_ok());
-		denied(policy(None, &[OWN_BASE64]).check_treasury_transfer(Network::Ton, usdt(Network::Ton), FOREIGN, 1));
+		assert!(policy(1000, &[&raw]).check_treasury_transfer(Network::Ton, usdt(Network::Ton), OWN_BASE64, 1).is_ok());
+		assert!(policy(1000, &[OWN_BASE64]).check_treasury_transfer(Network::Ton, usdt(Network::Ton), &raw, 1).is_ok());
+		denied(policy(1000, &[OWN_BASE64]).check_treasury_transfer(Network::Ton, usdt(Network::Ton), FOREIGN, 1));
 		// Tron's Base58Check is case-sensitive: a re-cased string is a different (invalid) address.
-		assert!(policy(None, &[TRON]).check_treasury_transfer(Network::Trc20, usdt(Network::Trc20), TRON, 1).is_ok());
-		denied(policy(None, &[TRON]).check_treasury_transfer(Network::Trc20, usdt(Network::Trc20), &TRON.to_ascii_lowercase(), 1));
+		assert!(policy(1000, &[TRON]).check_treasury_transfer(Network::Trc20, usdt(Network::Trc20), TRON, 1).is_ok());
+		denied(policy(1000, &[TRON]).check_treasury_transfer(Network::Trc20, usdt(Network::Trc20), &TRON.to_ascii_lowercase(), 1));
 	}
 
 	// === deposit: sweep ===========================================================
@@ -1200,7 +1290,7 @@ mod tests {
 
 	#[test]
 	fn cap_and_allowlist_compose() {
-		let p = policy(Some(1000), &["0xgood"]);
+		let p = policy(1000, &["0xgood"]);
 		// On the allowlist but over the cap → denied.
 		assert!(p.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), "0xgood", 2000 * CANONICAL_PER_USDT).is_err());
 		// Under the cap but off the allowlist → denied.
@@ -1424,7 +1514,7 @@ mod tests {
 
 	#[test]
 	fn response_destination_accepts_the_wallet_itself_in_either_rendering() {
-		let p = policy(None, &["EQsomeone_else"]);
+		let p = policy(1000, &["EQsomeone_else"]);
 		let own = own_raw();
 		assert!(own.starts_with("0:"));
 		// Spelled differently from the stored raw form, and not on the allowlist — still the
@@ -1436,17 +1526,17 @@ mod tests {
 	#[test]
 	fn response_destination_refuses_a_foreign_address_unless_allowlisted() {
 		let own = own_raw();
-		let status = denied(policy(None, &["EQsomeone_else"]).check_treasury_response_destination(&own, FOREIGN));
+		let status = denied(policy(1000, &["EQsomeone_else"]).check_treasury_response_destination(&own, FOREIGN));
 		assert!(status.message().contains("response_destination"), "{status:?}");
-		assert!(policy(None, &[FOREIGN]).check_treasury_response_destination(&own, FOREIGN).is_ok());
+		assert!(policy(1000, &[FOREIGN]).check_treasury_response_destination(&own, FOREIGN).is_ok());
 		// Garbage is not the wallet's own address either.
-		denied(policy(None, &[FOREIGN]).check_treasury_response_destination(&own, "not-an-address"));
+		denied(policy(1000, &[FOREIGN]).check_treasury_response_destination(&own, "not-an-address"));
 	}
 
 	#[test]
 	fn response_destination_must_be_the_own_wallet_without_an_allowlist() {
 		// The default (prod) posture: no allowlist, yet the excess may only return to the wallet.
-		let p = policy(Some(1000), &[]);
+		let p = policy(1000, &[]);
 		assert!(p.check_treasury_response_destination(&own_raw(), OWN_BASE64).is_ok());
 		denied(p.check_treasury_response_destination(&own_raw(), FOREIGN));
 		denied(p.check_treasury_response_destination(&own_raw(), "anything"));
@@ -1464,7 +1554,7 @@ mod tests {
 	fn pinned_jetton_wallet_admits_only_itself_in_either_rendering() {
 		let p = SignerPolicy {
 			ton_treasury_jetton_wallet: Some(JETTON_WALLET_RAW.to_owned()),
-			..policy(None, &[FOREIGN])
+			..policy(1000, &[FOREIGN])
 		};
 		assert!(p.treasury_jetton_wallet_pinned());
 		assert!(p.check_treasury_jetton_wallet(JETTON_WALLET_RAW).is_ok());
@@ -1478,11 +1568,11 @@ mod tests {
 	#[test]
 	fn unpinned_jetton_wallet_falls_back_to_the_allowlist() {
 		// No list, no pin: the default posture, unchecked (as `to_address` is).
-		assert!(policy(None, &[]).check_treasury_jetton_wallet(FOREIGN).is_ok());
+		assert!(policy(1000, &[]).check_treasury_jetton_wallet(FOREIGN).is_ok());
 		// A list without the jetton wallet on it refuses — the operator must list or pin it.
-		let status = denied(policy(None, &[FOREIGN]).check_treasury_jetton_wallet(JETTON_WALLET_RAW));
+		let status = denied(policy(1000, &[FOREIGN]).check_treasury_jetton_wallet(JETTON_WALLET_RAW));
 		assert!(status.message().contains("our_jetton_wallet"), "{status:?}");
-		assert!(policy(None, &[JETTON_WALLET_RAW]).check_treasury_jetton_wallet(JETTON_WALLET_RAW).is_ok());
+		assert!(policy(1000, &[JETTON_WALLET_RAW]).check_treasury_jetton_wallet(JETTON_WALLET_RAW).is_ok());
 	}
 
 	// === policy: env parsing ===================================================
@@ -1490,7 +1580,7 @@ mod tests {
 	#[test]
 	fn policy_from_lookup_reads_cap_allowlist_and_pin() {
 		let p = SignerPolicy::from_lookup(&lookup(&[])).unwrap();
-		assert_eq!(p.max_transfer_usdt(), None);
+		assert_eq!(p.max_transfer_usdt(), 100);
 		assert_eq!(p.allowlist_len(), 0);
 		assert!(!p.treasury_jetton_wallet_pinned());
 
@@ -1500,7 +1590,7 @@ mod tests {
 			("SIGNER_TON_TREASURY_JETTON_WALLET", JETTON_WALLET_RAW),
 		]))
 		.unwrap();
-		assert_eq!(p.max_transfer_usdt(), Some(500));
+		assert_eq!(p.max_transfer_usdt(), 500);
 		assert_eq!(p.allowlist_len(), 2);
 		assert!(p.treasury_jetton_wallet_pinned());
 		assert!(p.check_treasury_jetton_wallet(&jetton_wallet_base64()).is_ok());
@@ -1513,6 +1603,5 @@ mod tests {
 		);
 		let err = SignerPolicy::from_lookup(&lookup(&[("SIGNER_TON_TREASURY_JETTON_WALLET", "not-an-address")])).unwrap_err();
 		assert!(err.to_string().contains("SIGNER_TON_TREASURY_JETTON_WALLET"), "{err}");
-		assert!(SignerPolicy::from_lookup(&lookup(&[("SIGNER_MAX_TRANSFER_USDT", "x")])).is_err());
 	}
 }

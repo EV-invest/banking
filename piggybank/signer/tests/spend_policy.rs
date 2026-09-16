@@ -1,6 +1,7 @@
 //! The per-wallet-class spend rules, end to end: real Postgres, the real local vault, the real
 //! handlers (no mocks). One harness for #183 (wallet classes), #184 (treasury native + token
-//! pin) and #369 (the native spend window).
+//! pin), #369 (the native spend window) and the security review of that branch (the treasury
+//! USDT window).
 //!
 //! Every refusal here is `PermissionDenied`, and where the sending wallet is deliberately
 //! left unprovisioned it is still `PermissionDenied` — not `FailedPrecondition` — which proves
@@ -685,6 +686,77 @@ async fn native_spend_window_counts_fees_of_token_transfers_too() {
 		rail.signer.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, 1, 1, 21_000)).await,
 		"any further sweep",
 	);
+	db.cleanup().await;
+}
+
+// === review: treasury USDT is capped per payout AND per hour ======================
+
+#[tokio::test]
+async fn treasury_usdt_window_admits_ten_payouts_at_the_cap_then_refuses_the_eleventh() {
+	let db = db_or_skip!();
+	// The real defaults: 100 USDT per payout, 1_000 USDT per hour — nothing configured.
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
+	let hundred_usdt: u128 = 100 * 1_000_000_000_000_000_000;
+
+	for n in 1..=10 {
+		rail.signer
+			.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, hundred_usdt, GWEI, 60_000))
+			.await
+			.unwrap_or_else(|status| panic!("payout {n} of 10 within the hour must be signed: {status:?}"));
+	}
+	let status = denied(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, hundred_usdt, GWEI, 60_000)).await,
+		"the eleventh payout",
+	);
+	assert!(status.message().contains("treasury USDT window"), "{status:?}");
+	// Even the smallest payout: the hour is spent, and the per-transfer cap alone (100 USDT)
+	// would have admitted it.
+	denied(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000)).await,
+		"a 1-unit payout after the hour is spent",
+	);
+	// A payout over the per-transfer cap is refused on that cap, before the window is even
+	// consulted — the message names the cap, not the window.
+	let status = denied(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, hundred_usdt + 1, GWEI, 60_000)).await,
+		"a payout over the per-transfer cap",
+	);
+	assert!(status.message().contains("per-transfer cap of 100 USDT"), "{status:?}");
+
+	// The USDT window is per rail: the treasury's Polygon hour is untouched.
+	let polygon = Rail::new(&db, Network::Polygon, policy(&[])).await;
+	// Polygon USDT is 6-dp, unlike BSC: 100 USDT is 1e8 base units there.
+	let mut req = erc20(TREASURY, "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", OTHER_EVM, 100_000_000, GWEI, 60_000).into_inner();
+	req.network = "polygon".to_owned();
+	req.chain_id = 137;
+	polygon.signer.sign_erc20_transfer(Request::new(req)).await.expect("the treasury's Polygon hour is untouched");
+	// And a sweep INTO the treasury on the spent rail is not a payout: signed.
+	rail.signer
+		.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, hundred_usdt, GWEI, 60_000))
+		.await
+		.expect("a sweep into the treasury is not charged to its payout window");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn treasury_usdt_window_is_raised_by_its_variable_and_counted_in_chain_precision() {
+	let db = db_or_skip!();
+	// 6-dp Tron: 30 USDT per hour is 30_000_000 base units; 12 USDT payouts, two and a half fit.
+	let rail = Rail::new(&db, Network::Trc20, policy(&[("SIGNER_MAX_TREASURY_USDT_PER_HOUR", "30")])).await;
+	for _ in 0..2 {
+		rail.signer
+			.sign_trc20_transfer(trc20(TREASURY, USDT_TRC20, OTHER_TRON, 12_000_000, 1_000_000))
+			.await
+			.expect("a payout within the raised hour is signed");
+	}
+	denied(
+		rail.signer.sign_trc20_transfer(trc20(TREASURY, USDT_TRC20, OTHER_TRON, 12_000_000, 1_000_000)).await,
+		"a third 12 USDT payout against a 30 USDT hour",
+	);
+	rail.signer
+		.sign_trc20_transfer(trc20(TREASURY, USDT_TRC20, OTHER_TRON, 6_000_000, 1_000_000))
+		.await
+		.expect("the remaining 6 USDT of the hour is signed");
 	db.cleanup().await;
 }
 
