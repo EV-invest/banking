@@ -6281,16 +6281,18 @@ export type ConciergeV1PayoutApprovalMail = {
 /**
  * PayoutOutcomeMail
  *
- * How a consilium ended — over a revenue payout, over a payment, or over a fund's fee
- * terms — and, under APPROVAL_TOKEN_BURNED, that one of its tokens burned.
+ * How a consilium ended — over a revenue payout, over a payment, over a fund's fee
+ * terms, or over a fund's NAV mark — and, under APPROVAL_TOKEN_BURNED, that one of its
+ * tokens burned.
  *
- * ONE message for three subjects, additively. The burn notice already rides this shape
+ * ONE message for four subjects, additively. The burn notice already rides this shape
  * under its own kind, so a payment consilium's outcome and burn ride it too, and so do a
- * fee-policy consilium's, rather than each growing a message of their own: `network` +
- * `address` describe a payout, `source` + `destination` (+ `tier`, `reason`) describe a
- * payment, `fund` + `proposed` (+ `current`, `reason`) describe fee terms, and the
- * renderer switches on which description is filled. A caller fills exactly one and
- * leaves the other two empty.
+ * fee-policy consilium's and a valuation override's, rather than each growing a message
+ * of their own: `network` + `address` describe a payout, `source` + `destination`
+ * (+ `tier`, `reason`) describe a payment, `fund` + `proposed` (+ `current`, `reason`)
+ * describe fee terms, `fund` + `mark` (+ `reason`) describe a NAV mark, and the renderer
+ * switches on which description is filled. A caller fills exactly one and leaves the
+ * others empty.
  */
 export type ConciergeV1PayoutOutcomeMail = {
     /**
@@ -6361,6 +6363,17 @@ export type ConciergeV1PayoutOutcomeMail = {
      * proposed
      */
     proposed?: ConciergeV1FeeTerms;
+    /**
+     * mark
+     *
+     * The NAV mark description: `fund` as above, and the value the consilium was asked to
+     * mark it at, spelled by the money plane as an amount is (`5 000.00 USDT`). Empty for
+     * the other three. A mark used to ride the payment tuple (`Amount: 5000`, `To: AUM
+     * 5000 USDT`, `Type: service`), which told the owners money had moved when a mark
+     * moves none; with this field filled the relay renders it as the value it is. Same
+     * rules as an amount: one line, and it may not carry a link.
+     */
+    mark?: string;
 };
 
 /**
