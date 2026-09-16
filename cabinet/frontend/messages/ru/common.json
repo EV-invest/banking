@@ -1191,6 +1191,10 @@
     "en": "compensated",
     "t": "компенсация"
   },
+  "admin.outbox.deadKey": {
+    "en": "Signing key unavailable — engineering has been alerted; unparking will fail until the key is rotated",
+    "t": "Ключ подписи недоступен — инженеры уже оповещены; возврат в обработку не сработает, пока ключ не заменят"
+  },
   "admin.outbox.noParkedEvents": {
     "en": "No parked events — the relay is clean.",
     "t": "Отложенных событий нет — релей чист."
