@@ -5,7 +5,7 @@
 // page stays the decision ("what do I do about this product?") and this stays the
 // reference material that decision is read against.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Loader2 } from "lucide-react";
 
 import { Card, CardContent } from "@evinvest/uikit";
@@ -27,6 +27,7 @@ import { FeePendingNote } from "@/views/invest/ui/fee-pending-note";
  */
 export function SupplyCard({ nav }: { nav: FundNav | null }) {
   const t = useT();
+  const locale = useLocale();
   if (!nav) {
     return (
       <Card>
@@ -45,14 +46,14 @@ export function SupplyCard({ nav }: { nav: FundNav | null }) {
         <dl className="space-y-2.5 border-t border-border pt-4 text-sm">
           <Row
             label={t("invest.remainingCapacity")}
-            value={t("dash.unitsAmount", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity) })}
+            value={t("dash.unitsAmount", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity, locale) })}
           />
           {/* The share of the issued supply that is neither this holder's nor the market's —
               stated here, beside the figures it is a share OF, and only when there is one:
               a "0%" row would read as a fact about most funds that is really an absence. */}
-          {stake !== null && <Row label={t("invest.companyStake")} value={t("invest.companyStakeValue", { pct: pct(stake), units: compactUnits(nav.company_units) })} />}
-          <Row label={t("invest.navPerUnit")} value={`${formatUsdt(nav.nav)} USDT`} />
-          <Row label={t("invest.fundAum")} value={nav.aum ? `${formatUsdt(nav.aum)} USDT` : t("invest.notYetValued")} />
+          {stake !== null && <Row label={t("invest.companyStake")} value={t("invest.companyStakeValue", { pct: pct(stake), units: compactUnits(nav.company_units, locale) })} />}
+          <Row label={t("invest.navPerUnit")} value={`${formatUsdt(nav.nav, locale)} USDT`} />
+          <Row label={t("invest.fundAum")} value={nav.aum ? `${formatUsdt(nav.aum, locale)} USDT` : t("invest.notYetValued")} />
         </dl>
         <p className="text-xs text-ink-soft">{t("invest.supplyNote")}</p>
       </CardContent>
@@ -78,6 +79,7 @@ export function SupplyCard({ nav }: { nav: FundNav | null }) {
  */
 export function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: AccruedFees | null }) {
   const t = useT();
+  const locale = useLocale();
   if (!policy?.configured) return null;
   const owed = accrued?.configured ? accrued : null;
   return (
@@ -105,11 +107,11 @@ export function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued
                 to disambiguate inline would wrap onto two lines in this column. */}
             <p className="text-xs uppercase tracking-wide text-ink-soft">{t("invest.accruedOnHolding")}</p>
             <dl className="space-y-2.5 text-sm">
-              <Row label={t("admin.fees.field.management")} value={`${formatUsdt(owed.management)} USDT`} />
-              <Row label={t("admin.fees.field.performance")} value={`${formatUsdt(owed.performance)} USDT`} />
-              {isZero(owed.debt) ? null : <Row label={t("invest.carriedOver")} value={`${formatUsdt(owed.debt)} USDT`} />}
-              <Row label={t("ui.total")} value={`${formatUsdt(owed.total)} USDT`} />
-              <Row label={t("invest.yourMark")} value={`${formatUsdt(owed.high_water_mark)} USDT`} />
+              <Row label={t("admin.fees.field.management")} value={`${formatUsdt(owed.management, locale)} USDT`} />
+              <Row label={t("admin.fees.field.performance")} value={`${formatUsdt(owed.performance, locale)} USDT`} />
+              {isZero(owed.debt) ? null : <Row label={t("invest.carriedOver")} value={`${formatUsdt(owed.debt, locale)} USDT`} />}
+              <Row label={t("ui.total")} value={`${formatUsdt(owed.total, locale)} USDT`} />
+              <Row label={t("invest.yourMark")} value={`${formatUsdt(owed.high_water_mark, locale)} USDT`} />
             </dl>
           </div>
         )}

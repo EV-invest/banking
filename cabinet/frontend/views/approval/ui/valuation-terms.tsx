@@ -8,7 +8,7 @@
 // The product is its slug only. This page is reached from an email with no session, so
 // there is no catalog to resolve a title from — and the slug is what the digest binds.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Separator } from "@evinvest/uikit";
 
 import type { ValuationOverride } from "@/shared/contracts/governance";
@@ -27,13 +27,14 @@ export function renderableValuation(terms: ValuationOverride | null | undefined)
 
 export function ValuationTermsBlock({ terms, payloadHash }: { terms: ValuationOverride; payloadHash: string }) {
   const t = useT();
+  const locale = useLocale();
   return (
     <>
       <div className="flex flex-col gap-1.5">
         <FieldCaption>{t("approval.valuation.aum")}</FieldCaption>
         <p className="text-4xl font-semibold leading-none tabular-nums text-ink">
           {/* The wire string, digit for digit — `payload_hash` covers the exact decimal. */}
-          {formatExactUsdt(terms.aum)}
+          {formatExactUsdt(terms.aum, locale)}
           <span className="ml-2 text-base font-medium text-ink-soft">USDT</span>
         </p>
       </div>

@@ -7,7 +7,7 @@
 
 import { Banknote } from "lucide-react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Spinner } from "@evinvest/uikit";
 
 import type { RevenuePayout } from "@/shared/contracts/admin";
@@ -83,6 +83,7 @@ export function PayoutHistory({
 
 function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: boolean; onCancel: () => void }) {
   const t = useT();
+  const locale = useLocale();
   const open = OPEN_STATES.has(payout.state);
   return (
     <tr>
@@ -95,7 +96,7 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
           {shortAddress(payout.address)}
         </p>
       </td>
-      <td className="px-5 py-3 tabular-nums">{formatUsd(payout.amount)}</td>
+      <td className="px-5 py-3 tabular-nums">{formatUsd(payout.amount, locale)}</td>
       <td className="px-5 py-3">
         <span className={stateTone(payout.state)}>{stateLabel(payout.state, t)}</span>
       </td>

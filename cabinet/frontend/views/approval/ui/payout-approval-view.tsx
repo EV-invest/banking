@@ -37,6 +37,7 @@ import type { PayoutDecision } from "@/shared/contracts/governance";
 import { errorMessage } from "@/shared/lib/api-client";
 import { expiresIn, formatMoment, hasExpired } from "@/shared/lib/datetime";
 import { settledPayout } from "@/shared/lib/decision";
+import { stripTransportPrefix, wrongCodeAttempts } from "@/shared/lib/hub-refusal";
 import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
 import {
@@ -111,12 +112,19 @@ export function PayoutApprovalView({ token }: { token: string }) {
       }
       setActionError(cause);
       setCode("");
-      // A refused code may come back as an error rather than as a 200 that did not decide.
+      // A refused code may come back as an error rather than as a 200 that did not decide:
+      // "validation failed: incorrect code — 4 attempts remaining", the plane's own count
+      // behind the BFF's prefix (banking#324). The figure is the server's, so it goes under
+      // the field at once instead of reaching the owner as that sentence.
+      const attemptsLeft = wrongCodeAttempts(cause);
+      if (attemptsLeft !== null) setRejectedAttempts(attemptsLeft);
       // Either way the authority on how many attempts are left is the server, so ask it
-      // rather than assuming this failure consumed one — a network error did not.
+      // rather than assuming this failure consumed one — a network error did not. Read
+      // through `settledPayout`: an open seat arrives as the truthy "pending", and a bare
+      // `!decision` never fired here, which is how the sentence above reached the screen.
       await summary.refresh();
       const fresh = payoutApprovalResource.peek(token);
-      if (fresh && attemptsBefore !== null && fresh.attempts_remaining < attemptsBefore && !fresh.decision) {
+      if (fresh && attemptsBefore !== null && fresh.attempts_remaining < attemptsBefore && !settledPayout(fresh.decision)) {
         setRejectedAttempts(fresh.attempts_remaining);
       }
     } finally {
@@ -256,7 +264,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
             <CodeField value={code} onChange={setCode} disabled={pending !== null} attemptsRemaining={rejectedAttempts} />
 
             {actionError !== null && rejectedAttempts === null && (
-              <ResourceError message={errorMessage(actionError, t)} />
+              <ResourceError message={stripTransportPrefix(errorMessage(actionError, t))} />
             )}
 
             {/* Two answers, deliberately unequal in weight as well as colour. Approving is

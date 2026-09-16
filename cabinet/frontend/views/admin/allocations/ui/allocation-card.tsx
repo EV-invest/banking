@@ -5,7 +5,7 @@
 // operator came for — the actions — so the row becomes a card and the actions a wrapping
 // button row that is always in view.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { ProductIcon } from "@/shared/ui/icons/products";
 import { compactUnits } from "@/views/admin/lib/format";
@@ -19,6 +19,7 @@ import { BackingBadge } from "@/views/admin/allocations/ui/backing-badge";
 
 export function AllocationCard({ row, busy, editing, onEdit, onSave, onToggle, onSetAccess, onOpenPanel }: AllocationRowProps) {
   const t = useT();
+  const locale = useLocale();
   // Same cache-age caveat as in `AllocationRow`: `view` is the hub's default for an unset product.
   const access = row.access ?? "view";
 
@@ -45,7 +46,7 @@ export function AllocationCard({ row, busy, editing, onEdit, onSave, onToggle, o
         </div>
         <div className="flex items-center justify-between gap-2">
           <dt className="text-xs text-ink-soft">{t("admin.alloc.col.unitCap")}</dt>
-          <dd className="tabular-nums text-ink-soft">{compactUnits(row.unit_cap)}</dd>
+          <dd className="tabular-nums text-ink-soft">{compactUnits(row.unit_cap, locale)}</dd>
         </div>
       </dl>
       <AllocationRowActions state={row.state} busy={busy} editing={editing} onOpenPanel={onOpenPanel} onEdit={onEdit} onToggle={onToggle} className="justify-start" />

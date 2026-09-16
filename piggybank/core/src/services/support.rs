@@ -283,4 +283,18 @@ mod tests {
 		assert_eq!(code(5, Some(&target(false, 5)), false), None, "at the floor");
 		assert_eq!(code(6, Some(&target(false, 5)), false), None, "above the floor");
 	}
+
+	/// A signer `RequiresApproval` reaches the operator as `FailedPrecondition` with the
+	/// custodian's activity id in the message — and ONLY in the message: the status is
+	/// rebuilt from the domain error, so the signer's `turnkey-activity-id` trailer never
+	/// crosses the hub's boundary.
+	#[test]
+	fn a_precondition_keeps_its_message_and_carries_no_signer_trailer() {
+		let status = map_err(DomainError::Precondition(
+			"signer rotation requires custodian approval (activity 0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b)".into(),
+		));
+		assert_eq!(status.code(), Code::FailedPrecondition);
+		assert!(status.message().contains("0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b"), "{}", status.message());
+		assert!(status.metadata().get("turnkey-activity-id").is_none());
+	}
 }

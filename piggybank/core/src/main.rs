@@ -363,10 +363,12 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// pool clone so its polling reads don't compete with request traffic on the
 	// relay pool.
 	let bridge = {
-		let endpoint = Endpoint::from_shared(config.concierge_bridge_addr.clone())
-			.context("CONCIERGE_BRIDGE_ADDR must be a valid URL, e.g. http://127.0.0.1:50061")?
-			.connect_timeout(Duration::from_secs(3))
-			.timeout(Duration::from_secs(10));
+		// Record at boot when production pulls this stream from a peer it cannot
+		// authenticate. A log line and not a refusal: production runs on h2c inside the
+		// cluster today, and refusing to boot would take the money plane down to fix a seam
+		// that is currently guarded by network reachability (#199, phase 1).
+		config::note_if_bridge_is_unauthenticated(&config.app_env, &config.concierge_bridge_addr);
+		let endpoint = bridge_endpoint(&config.concierge_bridge_addr)?;
 		let channel = endpoint.connect_lazy();
 		Some(BridgeConsumer::new(
 			pool.clone(),
@@ -680,10 +682,10 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 fn governance_mail_adapter(config: &config::AppConfig) -> Option<Arc<dyn piggybank_core::ports::GovernanceMailer>> {
 	#[cfg(feature = "concierge_governance_mail")]
 	{
-		let endpoint = Endpoint::from_shared(config.concierge_bridge_addr.clone())
-			.ok()?
-			.connect_timeout(Duration::from_secs(3))
-			.timeout(Duration::from_secs(10));
+		// The SAME endpoint builder as the lifecycle bridge, TLS included: one address, one
+		// trust relationship. Building it separately is how an `https://` bridge would have
+		// quietly left the mail seam on a channel that never negotiates TLS.
+		let endpoint = bridge_endpoint(&config.concierge_bridge_addr).ok()?;
 		Some(Arc::new(governance_mail::wired::ConciergeGovernanceMailer::new(
 			endpoint.connect_lazy(),
 			config.bridge_service_token.clone(),
@@ -833,6 +835,63 @@ async fn await_signal(shutdown: CancellationToken) {
 	shutdown.cancel();
 }
 
+/// The concierge endpoint both cross-plane seams dial — the lifecycle bridge and the
+/// governance-mail relay, which share one address and one shared secret.
+///
+/// Explicit deadlines so a half-open concierge surfaces as a bounded error instead of
+/// stalling a poll. An `https://` address is the operator saying the peer is off-host (or
+/// behind a mesh that terminates TLS), so the channel authenticates the server rather than
+/// trusting service discovery — the same rule the signer seam already applies. Cleartext
+/// stays permitted: production is h2c inside the cluster today (#199).
+///
+/// Whether to encrypt is asked of [`config::bridge_transport`] — the same function that
+/// decides whether to say anything at boot. A second, stricter reading here (`starts_with`)
+/// would split on spelling: `HTTPS://concierge` classifies as TLS, so the boot notice stays
+/// silent, while `http::Uri` lowercases the scheme and hands tonic an https target with no
+/// TLS — every request then fails `HttpsUriWithoutTlsSupport` and a pinned
+/// `BRIDGE_TLS_CA_PEM_FILE` is dropped on the floor, with the hub still live and ready.
+fn bridge_endpoint(addr: &str) -> color_eyre::Result<Endpoint> {
+	let ca_file = std::env::var("BRIDGE_TLS_CA_PEM_FILE").ok().filter(|s| !s.is_empty());
+	bridge_endpoint_with_ca(addr, ca_file.as_deref())
+}
+
+/// The env-free half of [`bridge_endpoint`], so both halves of the decision — which
+/// addresses get TLS, and what a pinned CA does — are reachable from a test without
+/// mutating the process environment.
+fn bridge_endpoint_with_ca(addr: &str, ca_file: Option<&str>) -> color_eyre::Result<Endpoint> {
+	let endpoint = Endpoint::from_shared(addr.to_string())
+		.context("CONCIERGE_BRIDGE_ADDR must be a valid URL, e.g. http://127.0.0.1:50061")?
+		.connect_timeout(Duration::from_secs(3))
+		.timeout(Duration::from_secs(10));
+	if config::bridge_transport(addr) == config::BridgeTransport::Tls {
+		return endpoint.tls_config(bridge_client_tls(ca_file)?).context("failed to configure bridge TLS");
+	}
+	Ok(endpoint)
+}
+
+/// TLS for the hub's client side of the concierge seam. Trust anchors come from a pinned CA
+/// (`BRIDGE_TLS_CA_PEM_FILE`) when set — the private-CA case a cluster-internal concierge
+/// needs, and the thing that makes the channel prove *which* concierge answered — else the
+/// public webpki roots.
+///
+/// No client identity here, unlike the signer: the hub already proves itself with
+/// `BRIDGE_SERVICE_TOKEN`, and mTLS on this seam belongs with phase 2 of #199, once
+/// concierge terminates TLS at all.
+fn bridge_client_tls(ca_file: Option<&str>) -> color_eyre::Result<ClientTlsConfig> {
+	match ca_file {
+		Some(ca_file) => {
+			let ca = std::fs::read_to_string(ca_file).with_context(|| format!("failed to read BRIDGE_TLS_CA_PEM_FILE at {ca_file}"))?;
+			// A file that is not certificates builds an EMPTY root store and says nothing about
+			// it — see `config::check_pinned_ca_pem` for what that costs and what the check can
+			// and cannot prove. The variable and the path belong in the message: the operator
+			// fixing this is looking at a Secret, not at this file.
+			config::check_pinned_ca_pem(&ca).map_err(|problem| eyre!("BRIDGE_TLS_CA_PEM_FILE at {ca_file} is not a trust anchor: {problem}"))?;
+			Ok(ClientTlsConfig::new().ca_certificate(Certificate::from_pem(ca)))
+		}
+		None => Ok(ClientTlsConfig::new().with_enabled_roots()),
+	}
+}
+
 /// TLS for the hub's client side of an off-host signer seam. Trust anchors come from a
 /// pinned CA (`SIGNER_TLS_CA_PEM_FILE`) when set — the private-CA / mTLS case the
 /// architecture targets — else the public webpki roots. A client identity
@@ -876,4 +935,77 @@ fn init_tracing(environment: &str) -> Option<ev::otel::Telemetry> {
 		.with(otel_layers)
 		.init();
 	otel_guard
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// The smallest thing `config::check_pinned_ca_pem` accepts. What the body decodes to is
+	/// irrelevant here — this test proves the wiring (which addresses read the CA, and that a
+	/// refusal stops the boot), while the gate itself is pinned against a real certificate in
+	/// `config`'s own tests, next to the parser.
+	const TEST_CA_PEM: &str = "-----BEGIN CERTIFICATE-----\nZm9v\n-----END CERTIFICATE-----\n";
+
+	/// Writes `contents` to a unique temp file and hands back its path; the caller unlinks it.
+	fn temp_ca_file(contents: &str) -> std::path::PathBuf {
+		let path = std::env::temp_dir().join(format!("piggybank-bridge-ca-{}.pem", uuid::Uuid::new_v4()));
+		std::fs::write(&path, contents).expect("the temp dir must be writable, or this test proves nothing");
+		path
+	}
+
+	/// TLS is decided by [`config::bridge_transport`], which case-folds the scheme, and never
+	/// by the spelling of the address. A stricter second reading here (the
+	/// `starts_with("https://")` this function carried in 6c40c86) leaves `HTTPS://…`
+	/// classified as TLS by the notice and untouched by the builder: `http::Uri` lowercases
+	/// the scheme, tonic then gets an https target with no TLS, every request fails
+	/// `HttpsUriWithoutTlsSupport` while the hub stays live and ready, and the pinned CA is
+	/// dropped on the floor. An unreadable CA path is the probe — only the TLS branch
+	/// reads it.
+	#[test]
+	fn the_bridge_endpoint_negotiates_tls_for_every_spelling_of_https_and_for_nothing_else() {
+		let missing = "/nonexistent/piggybank-bridge-ca.pem";
+		for addr in ["https://concierge:55670", "HTTPS://concierge:55670", "https://concierge.apps.svc.cluster.local/"] {
+			let Err(err) = bridge_endpoint_with_ca(addr, Some(missing)) else {
+				panic!("{addr} must take the TLS branch, which reads the pinned CA");
+			};
+			assert!(
+				err.to_string().contains("BRIDGE_TLS_CA_PEM_FILE"),
+				"a CA that cannot be read must name itself and stop the boot, not fall back to the public roots: {err}"
+			);
+		}
+		for addr in ["http://concierge:55670", "http://127.0.0.1:55670"] {
+			assert!(
+				bridge_endpoint_with_ca(addr, Some(missing)).is_ok(),
+				"{addr} is cleartext, so the CA is irrelevant and must not be read"
+			);
+		}
+		assert!(
+			bridge_endpoint_with_ca("https://concierge:55670", None).is_ok(),
+			"an unpinned https seam falls back to the public roots"
+		);
+		assert!(bridge_endpoint_with_ca("not a url", None).is_err(), "an unusable CONCIERGE_BRIDGE_ADDR must stop the boot");
+	}
+
+	/// A pinned CA reaches `config::check_pinned_ca_pem` before it reaches tonic, and a file
+	/// that fails it stops the boot instead of building an endpoint with an EMPTY root store.
+	/// Which files are trust anchors is settled in `config`'s tests; what this one holds is
+	/// the wiring — that the verdict is consulted at all, and that the refusal names the
+	/// variable an operator has to go and fix.
+	#[test]
+	fn a_pinned_bridge_ca_is_parsed_at_boot_or_the_endpoint_is_refused() {
+		let good = temp_ca_file(TEST_CA_PEM);
+		let accepted = bridge_endpoint_with_ca("https://concierge:55670", Some(good.to_str().expect("a utf-8 temp path")));
+		// Best-effort cleanup: failing to unlink a temp file must not mask the assertion.
+		let _ = std::fs::remove_file(&good);
+		assert!(accepted.is_ok(), "a readable PEM CA must be accepted as the trust anchor: {:?}", accepted.err());
+
+		let junk = temp_ca_file("not a certificate\n");
+		let refused = bridge_endpoint_with_ca("https://concierge:55670", Some(junk.to_str().expect("a utf-8 temp path")));
+		let _ = std::fs::remove_file(&junk);
+		let Err(err) = refused else {
+			panic!("a CA file holding no certificate must fail the boot, not build an empty root store");
+		};
+		assert!(err.to_string().contains("BRIDGE_TLS_CA_PEM_FILE"), "the refusal must name the variable that caused it: {err}");
+	}
 }

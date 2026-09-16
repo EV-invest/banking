@@ -30,7 +30,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
   const StateIcon = STATE_ICONS[operation.state ?? ""];
   const at = seconds(operation.created_at);
   const steps = progressFor(operation, t, locale);
-  const sub = subheadline(operation, t);
+  const sub = subheadline(operation, t, locale);
 
   return (
     <div className="flex flex-col">
@@ -48,7 +48,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
           </Badge>
         </div>
         <p className="text-xs text-ink-soft">{context(operation, at, t, locale)}</p>
-        <p className={cn("pt-1 text-2xl font-semibold tabular-nums", amountTone(meta.direction))}>{headline(operation, t)}</p>
+        <p className={cn("pt-1 text-2xl font-semibold tabular-nums", amountTone(meta.direction))}>{headline(operation, t, locale)}</p>
         {sub && <p className="text-xs text-ink-soft">{sub}</p>}
       </header>
 
@@ -81,7 +81,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
             row pushed it straight through the panel's right edge and over the row above. */}
         {/* Keyed by position, not by the label: the labels are translated now, and two
             locales are free to render two rows with the same word. */}
-        {detailsFor(operation, t).map(([label, value], i) => (
+        {detailsFor(operation, t, locale).map(([label, value], i) => (
           <div key={i} className="flex items-start gap-3">
             <span className="shrink-0 text-xs text-ink-soft">{label}</span>
             <span className="min-w-0 flex-1 break-all text-right text-xs font-medium tabular-nums text-ink">{value}</span>
@@ -142,7 +142,7 @@ function progressFor(operation: Operation, t: Translate, locale: Locale): Step[]
       requested,
       state === "queued"
         ? { label: t("ops.step.awaitingFund"), meta: t("ops.step.awaitingFundMeta"), state: "active" }
-        : { label: t("ops.step.pricedAtSettle"), meta: operation.nav ? t("ops.step.perUnit", { nav: formatUsdt(operation.nav) }) : "—", state: "done" },
+        : { label: t("ops.step.pricedAtSettle"), meta: operation.nav ? t("ops.step.perUnit", { nav: formatUsdt(operation.nav, locale) }) : "—", state: "done" },
       state === "completed"
         ? { label: t("ops.step.cashPaidOut"), meta: t("ops.step.creditedToBalance"), state: "done" }
         : { label: t("ops.step.cashPaidOut"), meta: t("ops.step.waiting"), state: "todo" },
@@ -159,17 +159,17 @@ function context(operation: Operation, at: number, t: Translate, locale: Locale)
   return t("ops.context.fund", { when });
 }
 
-function headline(operation: Operation, t: Translate): string {
+function headline(operation: Operation, t: Translate, locale: Locale): string {
   // An unsettled redemption has no cash figure at all, so the units it reserved are the
   // only true headline available.
-  if (!operation.amount) return t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: formatUnits(operation.units) });
+  if (!operation.amount) return t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: formatUnits(operation.units, locale) });
   const { direction } = kindMeta(operation.kind);
   const sign = direction === "in" ? "+" : direction === "out" ? "−" : "";
-  return `${sign}${formatUsdt(operation.amount)} USDT`;
+  return `${sign}${formatUsdt(operation.amount, locale)} USDT`;
 }
 
-function subheadline(operation: Operation, t: Translate): string | null {
-  if (operation.kind === "withdrawal" && operation.net_amount) return t("ops.detail.netArrives", { amount: formatUsdt(operation.net_amount) });
+function subheadline(operation: Operation, t: Translate, locale: Locale): string | null {
+  if (operation.kind === "withdrawal" && operation.net_amount) return t("ops.detail.netArrives", { amount: formatUsdt(operation.net_amount, locale) });
   if (operation.kind === "redemption" && !operation.amount) return t("ops.detail.pricedAtSettle");
   // A fee moves units between holders on the share ledger — no cash leaves the account and
   // NAV per unit does not move, so nobody else in the fund pays for it either.
@@ -195,42 +195,42 @@ function NetworkRow({ network }: { network: string | undefined }) {
 
 // A value is a node, not a string, because one of them is not text: the network row
 // carries the chain's mark beside its name, the same pairing the wallet uses.
-function detailsFor(operation: Operation, t: Translate): [string, ReactNode][] {
+function detailsFor(operation: Operation, t: Translate, locale: Locale): [string, ReactNode][] {
   const rows: [string, ReactNode][] = [];
   switch (operation.kind) {
     case "deposit":
-      rows.push([t("ops.detail.amountCredited"), `${formatUsdt(operation.amount)} USDT`]);
+      rows.push([t("ops.detail.amountCredited"), `${formatUsdt(operation.amount, locale)} USDT`]);
       rows.push([t("ui.network"), <NetworkRow key="network" network={operation.network} />]);
       if (operation.tx_ref) rows.push([t("ops.detail.reference"), operation.tx_ref]);
       break;
     case "withdrawal":
-      rows.push([t("ops.detail.amountDebited"), `${formatUsdt(operation.amount)} USDT`]);
-      if (operation.fee) rows.push([t("wallet.networkFee"), `${formatUsdt(operation.fee)} USDT`]);
-      if (operation.net_amount) rows.push([t("ops.detail.netSent"), `${formatUsdt(operation.net_amount)} USDT`]);
+      rows.push([t("ops.detail.amountDebited"), `${formatUsdt(operation.amount, locale)} USDT`]);
+      if (operation.fee) rows.push([t("wallet.networkFee"), `${formatUsdt(operation.fee, locale)} USDT`]);
+      if (operation.net_amount) rows.push([t("ops.detail.netSent"), `${formatUsdt(operation.net_amount, locale)} USDT`]);
       rows.push([t("ui.network"), <NetworkRow key="network" network={operation.network} />]);
       if (operation.address) rows.push([t("ops.detail.toAddress"), operation.address]);
       rows.push([t("ops.detail.reference"), operation.tx_ref || t("ops.detail.notYetBroadcast")]);
       break;
     case "subscription":
-      rows.push([t("ops.detail.cashIn"), `${formatUsdt(operation.amount)} USDT`]);
-      rows.push([t("ops.detail.unitsMinted"), formatUnits(operation.units)]);
-      if (operation.nav) rows.push([t("ops.detail.pricePerUnit"), `${formatUsdt(operation.nav)} USDT`]);
+      rows.push([t("ops.detail.cashIn"), `${formatUsdt(operation.amount, locale)} USDT`]);
+      rows.push([t("ops.detail.unitsMinted"), formatUnits(operation.units, locale)]);
+      if (operation.nav) rows.push([t("ops.detail.pricePerUnit"), `${formatUsdt(operation.nav, locale)} USDT`]);
       break;
     case "redemption":
-      rows.push([t("ops.detail.unitsRedeemed"), formatUnits(operation.units)]);
-      rows.push([t("ops.detail.pricePerUnit"), operation.nav ? `${formatUsdt(operation.nav)} USDT` : t("ops.detail.setAtSettle")]);
-      rows.push([t("ops.detail.cashOut"), operation.amount ? `${formatUsdt(operation.amount)} USDT` : t("ops.detail.setAtSettle")]);
+      rows.push([t("ops.detail.unitsRedeemed"), formatUnits(operation.units, locale)]);
+      rows.push([t("ops.detail.pricePerUnit"), operation.nav ? `${formatUsdt(operation.nav, locale)} USDT` : t("ops.detail.setAtSettle")]);
+      rows.push([t("ops.detail.cashOut"), operation.amount ? `${formatUsdt(operation.amount, locale)} USDT` : t("ops.detail.setAtSettle")]);
       break;
     case "fee":
       // The legs first, because they are what the charge WAS; the units are how it was
       // taken. Both legs are listed even at zero here (unlike the timeline row, where
       // space is short) — on a detail panel an explicit "0.00 performance" is the answer
       // to "was I charged for the gain?", not noise.
-      rows.push([t("ops.detail.managementFee"), `${formatUsdt(operation.management)} USDT`]);
-      rows.push([t("ops.detail.performanceFee"), `${formatUsdt(operation.performance)} USDT`]);
-      rows.push([t("admin.fees.col.unitsTaken"), formatUnits(operation.units)]);
-      if (operation.nav) rows.push([t("ops.detail.pricePerUnit"), `${formatUsdt(operation.nav)} USDT`]);
-      rows.push([t("ops.detail.valueTaken"), `${formatUsdt(operation.amount)} USDT`]);
+      rows.push([t("ops.detail.managementFee"), `${formatUsdt(operation.management, locale)} USDT`]);
+      rows.push([t("ops.detail.performanceFee"), `${formatUsdt(operation.performance, locale)} USDT`]);
+      rows.push([t("admin.fees.col.unitsTaken"), formatUnits(operation.units, locale)]);
+      if (operation.nav) rows.push([t("ops.detail.pricePerUnit"), `${formatUsdt(operation.nav, locale)} USDT`]);
+      rows.push([t("ops.detail.valueTaken"), `${formatUsdt(operation.amount, locale)} USDT`]);
       break;
     default:
       break;

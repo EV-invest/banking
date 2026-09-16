@@ -4,7 +4,7 @@
 // the whole address get the top of the card; everything past the separator is context.
 // The sibling of `payment-terms.tsx` — a consilium carries one or the other.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Separator } from "@evinvest/uikit";
 
 import type { RevenuePayout } from "@/shared/contracts/governance";
@@ -16,6 +16,7 @@ import { DetailRow, FieldCaption, FullAddress } from "@/views/approval/ui/approv
 /** A revenue payout's terms: the exact amount and the whole address get the top of the card. */
 export function PayoutTerms({ payout, payloadHash }: { payout: RevenuePayout | undefined; payloadHash: string }) {
   const t = useT();
+  const locale = useLocale();
   return (
     <>
       {/* The two things being agreed to get the whole top of the card: the exact amount
@@ -25,7 +26,7 @@ export function PayoutTerms({ payout, payloadHash }: { payout: RevenuePayout | u
         <p className="text-4xl font-semibold leading-none tabular-nums text-ink">
           {/* The wire string, digit for digit - `formatUsdt` caps at 6 dp and parses
               through a float, and `payload_hash` covers the exact decimal. */}
-          {formatExactUsdt(payout?.amount)}
+          {formatExactUsdt(payout?.amount, locale)}
           <span className="ml-2 text-base font-medium text-ink-soft">USDT</span>
         </p>
       </div>

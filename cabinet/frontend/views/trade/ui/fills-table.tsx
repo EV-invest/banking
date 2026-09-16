@@ -38,9 +38,9 @@ export function FillsTable({ trades }: { trades: Trade[] }) {
             <TableRow key={trade.id ?? i}>
               <TableCell className={cn(CELL, "text-ink-soft")}>{formatWhen(trade.executed_at, locale)}</TableCell>
               <TableCell className={cn(CELL, "font-semibold", sell ? "text-accent-error" : "text-positive")}>{t(sell ? "trade.form.sell" : "trade.form.buy")}</TableCell>
-              <TableCell className={cn(CELL, "text-right")}>{formatUsdt(trade.price)}</TableCell>
-              <TableCell className={cn(CELL, "text-right")}>{formatUnits(trade.size)}</TableCell>
-              <TableCell className={cn(CELL, "text-right")}>{trade.fee ? formatUsdt(trade.fee) : "—"}</TableCell>
+              <TableCell className={cn(CELL, "text-right")}>{formatUsdt(trade.price, locale)}</TableCell>
+              <TableCell className={cn(CELL, "text-right")}>{formatUnits(trade.size, locale)}</TableCell>
+              <TableCell className={cn(CELL, "text-right")}>{trade.fee ? formatUsdt(trade.fee, locale) : "—"}</TableCell>
               <TableCell className={cn(CELL, "text-ink-soft")}>{t(taker ? "trade.orders.taker" : "trade.orders.maker")}</TableCell>
             </TableRow>
           );

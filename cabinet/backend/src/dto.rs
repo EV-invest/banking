@@ -727,6 +727,10 @@ pub struct FeePolicyChange {
 	/// Who took responsibility for holders who could not be told — the latest to, when the
 	/// record was extended; `null` until someone did.
 	pub notices_waived_by: Option<String>,
+	/// How the identity plane names `notices_waived_by`; `null` when nobody did or the
+	/// directory cannot name the id (banking#328). Filled by the route, not the proto — the
+	/// money plane stores no email.
+	pub notices_waived_by_email: Option<String>,
 	/// When; `"0"` until someone did.
 	pub notices_waived_at: String,
 	/// The holders (banking user ids) the acknowledgement covers; empty until someone did.
@@ -761,6 +765,7 @@ impl From<bk::FeePolicyChange> for FeePolicyChange {
 			applied_at: c.applied_at.to_string(),
 			reason: c.reason,
 			notices_waived_by: non_empty(c.notices_waived_by),
+			notices_waived_by_email: None,
 			notices_waived_at: c.notices_waived_at.to_string(),
 			notices_waived_users: c.notices_waived_users,
 			undelivered_notices: c.undelivered_notices,

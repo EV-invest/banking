@@ -336,12 +336,12 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
         <ItemContent className="min-w-0 gap-0.5">
           <ItemTitle className="block w-auto truncate font-semibold">{title}</ItemTitle>
           <ItemDescription className="line-clamp-1 text-xs">
-            {rowSub(operation, t)}
+            {rowSub(operation, t, locale)}
             {at > 0 && ` · ${timeLabel(at, locale)}`}
           </ItemDescription>
         </ItemContent>
         <ItemActions className="shrink-0 flex-col items-end gap-1">
-          <span className={cn("text-sm font-semibold tabular-nums", amountTone(meta.direction))}>{rowAmount(operation)}</span>
+          <span className={cn("text-sm font-semibold tabular-nums", amountTone(meta.direction))}>{rowAmount(operation, locale)}</span>
           {/* No `capitalize`: the label is now a translated word, not a lowercase wire
               identifier — and `capitalize` title-cases every word ("Partly Deferred").
               i18n-max: 12. The mark doubles the tint so the state does not reach the
@@ -423,7 +423,7 @@ function nonZero(amount: string | undefined): boolean {
   return !!amount && Number(amount) > 0;
 }
 
-function rowSub(operation: Operation, t: Translate): string {
+function rowSub(operation: Operation, t: Translate, locale: Locale): string {
   switch (operation.kind) {
     case "deposit":
       // `USDT` is the ticker, not a word — it is the same mark in every locale.
@@ -436,21 +436,21 @@ function rowSub(operation: Operation, t: Translate): string {
       // What actually ships is the net; the row's figure is the gross debited, so the
       // fee is stated rather than left as an unexplained gap between the two.
       return operation.net_amount
-        ? t("ops.sub.withdrawalNet", { network, destination, amount: formatUsdt(operation.net_amount) })
+        ? t("ops.sub.withdrawalNet", { network, destination, amount: formatUsdt(operation.net_amount, locale) })
         : t("ops.sub.withdrawal", { network, destination });
     }
     case "subscription":
     case "redemption":
-      return t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: formatUnits(operation.units) });
+      return t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: formatUnits(operation.units, locale) });
     case "fee": {
       // The two legs answer the question the amount alone cannot: whether this was rent
       // on the capital or a share of the gain. A zero leg is omitted rather than printed,
       // because "0 performance" reads as a fee that was somehow waived.
       const legs = [
-        nonZero(operation.management) ? t("ops.sub.managementLeg", { amount: formatUsdt(operation.management) }) : null,
-        nonZero(operation.performance) ? t("ops.sub.performanceLeg", { amount: formatUsdt(operation.performance) }) : null,
+        nonZero(operation.management) ? t("ops.sub.managementLeg", { amount: formatUsdt(operation.management, locale) }) : null,
+        nonZero(operation.performance) ? t("ops.sub.performanceLeg", { amount: formatUsdt(operation.performance, locale) }) : null,
       ].filter(Boolean);
-      const taken = t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: formatUnits(operation.units) });
+      const taken = t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: formatUnits(operation.units, locale) });
       return legs.length ? `${taken} · ${legs.join(" + ")}` : taken;
     }
     default:
@@ -458,13 +458,13 @@ function rowSub(operation: Operation, t: Translate): string {
   }
 }
 
-function rowAmount(operation: Operation): string {
+function rowAmount(operation: Operation, locale: Locale): string {
   // A redemption is priced at settle, so a queued one genuinely has no cash figure —
   // rendered as an em dash rather than a zero that would read as "you got nothing".
   if (!operation.amount) return "—";
   const { direction } = kindMeta(operation.kind);
   const sign = direction === "in" ? "+" : direction === "out" ? "−" : "";
-  return `${sign}${formatUsdt(operation.amount)} USDT`;
+  return `${sign}${formatUsdt(operation.amount, locale)} USDT`;
 }
 
 // `id` is unique per kind (a UUID, or a deposit's tx_ref) but nothing guarantees it across

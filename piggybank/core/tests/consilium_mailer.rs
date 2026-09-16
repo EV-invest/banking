@@ -37,7 +37,10 @@ mod common;
 static QUEUE: std::sync::LazyLock<tokio::sync::Mutex<()>> = std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 async fn quiet_queue(pool: &PgPool) {
-	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE sent_at IS NULL").execute(pool).await.unwrap();
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE sent_at IS NULL AND withdrawn_at IS NULL")
+		.execute(pool)
+		.await
+		.unwrap();
 }
 
 /// A relay that answers every send the same way and counts how often it was asked.
