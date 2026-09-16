@@ -35,6 +35,14 @@ pub enum EvmTxError {
 	WrongSignatureKind,
 }
 
+/// Parse a `0x`-prefixed (or bare) hex string into a 20-byte EVM address. `None` if it is
+/// not valid hex of exactly 20 bytes. Casing is irrelevant here: EIP-55 is a display
+/// checksum, not part of the address.
+pub fn parse_address(value: &str) -> Option<[u8; 20]> {
+	let hex = value.strip_prefix("0x").unwrap_or(value);
+	hex::decode(hex).ok()?.as_slice().try_into().ok()
+}
+
 /// The calldata for an ERC-20 `transfer(to, amount)`: 4-byte selector + 32-byte left-padded
 /// recipient + 32-byte big-endian amount = 68 bytes.
 pub fn erc20_transfer_calldata(to: &[u8; 20], amount: u128) -> [u8; 68] {

@@ -713,17 +713,27 @@ settle: `user` falls by `gross`, `wallet:<net>` by `net`, `fee` rises by `fee`, 
 service ("broadcast this *already-reserved* withdrawal, idempotently by id"); the hub never
 holds keys. [`StubCustody`] no-ops until the real MPC/HSM service exists — the saga, the
 ledger, and the RPCs are complete and unchanged when it lands. The **signer** applies its own
-spend policy as an independent second gate (holds even if the hub is compromised): a
-per-transfer USDT cap (`SIGNER_MAX_TRANSFER_USDT`) and an optional destination allowlist
-(`SIGNER_DESTINATION_ALLOWLIST`) on treasury-sourced transfers — both no-ops until configured,
-so set the cap before scaling real liquidity. A TON jetton transfer names two more Toncoin
-sinks and the signer holds both: `response_destination` must be the treasury wallet itself
-(always on — or allowlisted), and `our_jetton_wallet` must be the pinned
-`SIGNER_TON_TREASURY_JETTON_WALLET` or, unpinned, allowlisted — so an operator enabling the
-allowlist must pin the jetton wallet or list it. Plus an always-on **fee budget** on every signed transaction from every
+spend policy as an independent second gate (holds even if the hub is compromised), always on
+and per wallet class (`piggybank/signer/src/policy.rs`): a **treasury** payout is held to a
+per-transfer USDT cap (`SIGNER_MAX_TRANSFER_USDT`, default 100), a per-hour USDT window
+(`SIGNER_MAX_TREASURY_USDT_PER_HOUR`, default 1000), the pinned USDT contract
+(`SIGNER_USDT_CONTRACT_{BEP20,POLYGON,TRC20}`, mainnet by default) and an optional destination
+allowlist (`SIGNER_DESTINATION_ALLOWLIST`); treasury-native transfers are refused unless
+`SIGNER_ALLOW_TREASURY_NATIVE` plus `SIGNER_TREASURY_NATIVE_ALLOWLIST` and `SIGNER_MAX_TREASURY_NATIVE_*` opt in (a window refusal parks the withdrawal — an alert, not a retry). A
+**sweep** (from a deposit address) may only go to the treasury address the signer holds for
+that network; a **gas top-up** (from the gas station) may only be native, only to an address
+the signer holds a key for, and at most `SIGNER_MAX_GAS_TOPUP_*`. Every wallet also has a
+sliding one-hour native-spend window (`SIGNER_MAX_NATIVE_SPEND_PER_HOUR_*`, fee + native
+value, counted in the signer's own database before the key is touched). A TON jetton
+transfer names two more Toncoin sinks: `response_destination` must be a wallet the signer
+holds (the sender, the treasury or the gas station), and `our_jetton_wallet` is pinned on
+first use per wallet (`jetton_wallets`), or for the treasury by
+`SIGNER_TON_TREASURY_JETTON_WALLET` when set (#377 derives it offline instead). Plus an
+always-on **fee budget** on every signed transaction from every
 wallet (`SIGNER_MAX_GAS_LIMIT`, `SIGNER_MAX_GAS_PRICE_GWEI_{BEP20,POLYGON}`,
 `SIGNER_MAX_TRON_FEE_LIMIT_SUN`, `SIGNER_MAX_TON_{MSG_VALUE,FORWARD}_NANO`), so a forged
-1 USDT transfer cannot burn the native balance as gas.
+1 USDT transfer cannot burn the native balance as gas. Tron signing is off until
+`SIGNER_TRON_SIGNING_ENABLED=true` (the rail is frozen on the hub side, #31).
 
 ### Revenue payout — the same saga, sourced from the fund
 
