@@ -90,6 +90,16 @@ const LAG_WARN_BLOCKS: u64 = 5_000;
 /// behind it and be refused once more; a provider that keeps refusing after this many
 /// bisections is not serving logs at all, and the cycle backoff is the right response.
 const PRUNE_CLAMPS_PER_SCAN: u32 = 3;
+/// Blocks skipped PAST a confirmed retention boundary before the scan resumes, doubled on
+/// each further clamp in the same scan. The boundary is not a line but an edge moving with
+/// the chain (~1.3 blocks/s on BSC): resuming exactly at the block the bisection confirmed
+/// puts the next chunk on that edge, and by the time it is requested the edge has passed it
+/// — refused again, another bisection, another 10–40-block "incident", three times, cycle
+/// failed, repeat. v0.16.0 sat in that livelock on BSC with the lag frozen at the width of
+/// the provider's window while Polygon (half the block rate) escaped on the first clamp. 256
+/// blocks is ~3 min of BSC or ~8 min of Polygon — nothing against a ~90k-block window, and
+/// the operator reconciles the slack with the rest of the skipped range.
+const PRUNE_SLACK_BLOCKS: u64 = 256;
 
 /// Whether a scan owns the persistent cursor. The live cycle does; a backfill must not
 /// touch it, or it would drag the live scan backwards or skip it past unread blocks.
@@ -246,10 +256,11 @@ impl DepositWatcher {
 	/// Safe to re-run over any window: crediting is idempotent by `tx_ref`, so an overlapping
 	/// or repeated backfill costs RPC calls and changes nothing else.
 	///
-	/// Pruned history is handled only for the live scan: it jumps the cursor to the oldest
-	/// block the provider still serves (see [`first_retained_block`]) and files the skipped
-	/// range as an incident, because the alternative — retrying the pruned window until the
-	/// backoff cap — loses every deposit after the gap as well. A backfill asked for a window
+	/// Pruned history is handled only for the live scan: it jumps the cursor past the oldest
+	/// block the provider still serves (see [`first_retained_block`] and
+	/// [`resume_after_prune`] for why "past" and not "to") and files the skipped range as an
+	/// incident, because the alternative — retrying the pruned window until the backoff cap —
+	/// loses every deposit after the gap as well. A backfill asked for a window
 	/// its endpoint no longer has gets the error back instead: the operator chose that window
 	/// deliberately, and "done, credited 0" would be a lie.
 	pub async fn scan_range(&self, from: u64, to: u64, cursor: CursorPolicy) -> Result<ScanSummary, WatcherError> {
@@ -292,20 +303,24 @@ impl DepositWatcher {
 						// recovered index still credits these blocks.
 						return Err(err);
 					};
-					let skipped_to = first - 1;
+					let resume = resume_after_prune(first, clamps, to);
+					let skipped_to = resume - 1;
 					// `error!`, not `warn!`: this is a money incident that reaches Sentry, and the
-					// from/to are what the operator needs to reconcile the window by hand.
+					// from/to are what the operator needs to reconcile the window by hand. The
+					// range INCLUDES the slack past the boundary: those blocks are not read either.
 					error!(
 						network = %network,
 						from = next,
 						to = skipped_to,
-						skipped_blocks = first - next,
-						"deposit watcher: provider has pruned history below block {first} — skipping blocks {next}..={skipped_to}; USDT deposits landing in that window were NOT credited and must be reconciled by hand (RecordDeposit, or a backfill on a full-history endpoint): {err}"
+						skipped_blocks = resume - next,
+						retained_from = first,
+						"deposit watcher: provider has pruned history below block {first} — skipping blocks {next}..={skipped_to} (boundary plus a {}-block slack to get off the moving edge); USDT deposits landing in that window were NOT credited and must be reconciled by hand (RecordDeposit, or a backfill on a full-history endpoint): {err}",
+						resume - first
 					);
 					// Persist the jump before anything else can fail, so the gap is filed exactly
 					// once: a later throttled chunk must not re-run the bisection and re-alert.
 					self.set_cursor(network, skipped_to).await?;
-					next = first;
+					next = resume;
 					continue;
 				}
 				Err(err) => return Err(err),
@@ -649,6 +664,19 @@ async fn first_retained_block<E>(pruned: u64, mut hi: u64, mut probe: impl Async
 	Ok(Some(hi))
 }
 
+/// Where the scan resumes after the `clamp`-th confirmed boundary of one scan: `first` plus
+/// [`PRUNE_SLACK_BLOCKS`], doubled per clamp (256 → 512 → 1024), never past `to`.
+///
+/// The bisection confirms a block that was served a moment ago, and the edge keeps moving
+/// while the confirmation probe and the chunk request go out — so "resume at `first`" is a
+/// request for the one block the provider is about to drop. The slack lands the next chunk
+/// well inside the window; doubling covers an edge that moves faster than the first slack
+/// assumed (a slower endpoint, a faster chain) without a per-rail knob.
+fn resume_after_prune(first: u64, clamp: u32, to: u64) -> u64 {
+	let slack = PRUNE_SLACK_BLOCKS.saturating_mul(1u64 << clamp.saturating_sub(1).min(63));
+	first.saturating_add(slack).min(to)
+}
+
 /// The refusal that only a LATER window can get past — see [`RpcAction::Pruned`].
 fn is_pruned(err: &WatcherError) -> bool {
 	matches!(err, WatcherError::Rpc(msg) if classify(msg) == RpcAction::Pruned)
@@ -931,6 +959,38 @@ mod tests {
 		.expect("probe never fails");
 		assert_eq!(first, None);
 		assert_eq!(probes, 1);
+	}
+
+	/// The v0.16.0 livelock on BSC: the retention edge moves with the chain, so the block the
+	/// bisection confirmed is behind the edge again by the time the next chunk asks for it.
+	/// Resuming AT the boundary is refused, clamp after clamp, with the lag frozen at the
+	/// width of the window; resuming past it with the slack is not.
+	#[tokio::test]
+	async fn the_resume_point_outruns_a_moving_retention_edge() {
+		// ~1 block per probe is what BSC does against a paced probe; modelled five times harsher.
+		let drift = 5u64;
+		let mut edge = 1_000_000u64;
+		let first = first_retained_block::<()>(500_000, 2_000_000, async |block| {
+			let served = block >= edge;
+			edge += drift;
+			Ok(served)
+		})
+		.await
+		.expect("probe never fails")
+		.expect("a moving edge is still a confirmed boundary");
+		// Without the slack the next chunk starts on a block the edge has already passed.
+		assert!(first < edge, "boundary {first} should be behind the edge {edge} by now");
+		// With it, the chunk starts inside the window, on the first clamp.
+		assert!(resume_after_prune(first, 1, 2_000_000) >= edge);
+	}
+
+	#[test]
+	fn the_slack_doubles_per_clamp_and_stops_at_the_window_end() {
+		assert_eq!(resume_after_prune(100, 1, 10_000), 100 + 256);
+		assert_eq!(resume_after_prune(100, 2, 10_000), 100 + 512);
+		assert_eq!(resume_after_prune(100, 3, 10_000), 100 + 1024);
+		assert_eq!(resume_after_prune(100, 1, 200), 200);
+		assert_eq!(resume_after_prune(u64::MAX - 1, 1, u64::MAX), u64::MAX);
 	}
 
 	/// An empty window returns `None` without asking anything.

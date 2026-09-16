@@ -46,8 +46,9 @@ Required to turn the rail on:
 - **Pruned history is skipped, not retried.** A shared keyed node (allnodes) keeps only a
   bounded window of logs and answers an older `fromBlock` with `-32701 History has been
   pruned for this block`. The scan bisects for the oldest block the node still serves, moves
-  the cursor there and logs `deposit watcher: provider has pruned history below block …`
-  at `error!` (Sentry) with the skipped `from`/`to`. Deposits in that window are **not
+  the cursor a few hundred blocks past it (the edge moves with the chain; resuming on it is
+  refused again) and logs `deposit watcher: provider has pruned history below block …`
+  at `error!` (Sentry) with the skipped `from`/`to` — the slack included. Deposits in that window are **not
   credited**: check the USDT contract's transfers to our addresses over that range on the
   explorer and record any hits with `RecordDeposit`. A watcher that keeps hitting this after
   a restart is a watcher that was down longer than the node's window — shorten the outage,
