@@ -71,10 +71,13 @@ pub async fn enqueue(conn: &mut PgConnection, subject: MailSubject, user_id: Uui
 /// across a delivery in flight ([`ConsiliumMailer::deliver`]): this waits for that outcome
 /// rather than withdrawing a mail that is being handed over.
 ///
-/// Not for a consilium: a closing consilium's queue holds its verdict mail and burn notices
-/// beside the invitations, and taking back everything undelivered would silence the first two.
-/// A consilium withdraws its invitations alone, through
-/// [`withdraw_undelivered_invitations`] — refused here rather than done wrong.
+/// Not for a consilium, and not for a payment. A closing consilium's queue holds its verdict
+/// mail and burn notices beside the invitations, and taking back everything undelivered would
+/// silence the first two; a consilium withdraws its invitations alone, through
+/// [`withdraw_undelivered_invitations`]. The one mail a payment queues is its consent
+/// invitation, which carries a token and a code, and withdrawing it without blanking them
+/// would leave a live credential on a row nobody will ever deliver; a payment withdraws it
+/// through [`withdraw_undelivered_consent`]. Both are refused here rather than done wrong.
 pub async fn withdraw_undelivered(conn: &mut PgConnection, subject: MailSubject) -> Result<u64, DomainError> {
 	let (sql, id) = match subject {
 		MailSubject::Consilium(_) => {
@@ -82,10 +85,11 @@ pub async fn withdraw_undelivered(conn: &mut PgConnection, subject: MailSubject)
 				"a consilium's undelivered mail is not withdrawn wholesale — see withdraw_undelivered_invitations".into(),
 			));
 		}
-		MailSubject::Payment(id) => (
-			"UPDATE consilium_mail SET withdrawn_at = now() WHERE payment_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
-			id,
-		),
+		MailSubject::Payment(_) => {
+			return Err(DomainError::Repository(
+				"a payment's undelivered consent mail is not withdrawn without redacting its secrets — see withdraw_undelivered_consent".into(),
+			));
+		}
 		MailSubject::FeePolicyChange(id) => (
 			"UPDATE consilium_mail SET withdrawn_at = now() WHERE fee_policy_change_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
 			id,
@@ -121,6 +125,37 @@ pub async fn withdraw_undelivered_invitations(conn: &mut PgConnection, consilium
 		 AND kind IN ('payout_approval', 'payment_approval', 'fee_policy_approval')",
 	)
 	.bind(consilium_id)
+	.execute(&mut *conn)
+	.await
+	.map_err(repo_err)?;
+	Ok(withdrawn.rows_affected())
+}
+
+/// Withdraw the consent INVITATION of a payment that the relay has not taken — the one mail
+/// carrying the subject's token and code (#368). The order is closing without a verdict (its
+/// operator withdrew it, or its window ran out); a consent still queued behind a relay outage
+/// would otherwise reach the investor later, asking them to consent to an order nobody can
+/// act on — with a token that still resolves. Only `payment_consent` goes: it is the one kind
+/// a payment queues today, and naming it keeps a future outcome or burn notice under a payment
+/// out of this withdrawal, as [`withdraw_undelivered_invitations`] keeps a consilium's.
+///
+/// The secrets go with the withdrawal, as they do when a row is given up on
+/// ([`ConsiliumMailer::retire`]): a token and a code that will never be delivered are a
+/// credential nobody legitimately holds. The two fields blanked are the ones
+/// [`GovernanceMail::redacted`] blanks for this kind.
+///
+/// Safe at any point of a transition, and NOT to be called while the order is held: the
+/// worker holds the invitation's row across the relay call and, once the message is taken,
+/// flips `payment_consent.notified` ([`ConsiliumMailer::deliver`]) — a transition holding the
+/// order while waiting on the mail row would deadlock with it. Taken BEFORE the `payments`
+/// row is locked, this waits only for a delivery in flight to finish, and its row is then a
+/// delivered one, left as it is.
+pub async fn withdraw_undelivered_consent(conn: &mut PgConnection, payment_id: Uuid) -> Result<u64, DomainError> {
+	let withdrawn = sqlx::query(
+		"UPDATE consilium_mail SET withdrawn_at = now(), payload = payload || '{\"approval_url\": \"\", \"code\": \"\"}'::jsonb \
+		 WHERE payment_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL AND kind = 'payment_consent'",
+	)
+	.bind(payment_id)
 	.execute(&mut *conn)
 	.await
 	.map_err(repo_err)?;
