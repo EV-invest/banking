@@ -9,7 +9,7 @@
 //!     treasury: this is not a treasury control) is signed.
 //!
 //! The same file also covers the treasury-only sinks of a jetton transfer (`our_jetton_wallet`,
-//! `response_destination`), since they share the harness.
+//! `response_destination`) and the EVM chain-id cross-check, since they share the harness.
 //!
 //! Runs when `SIGNER_DATABASE_URL`/`DATABASE_URL` is set; skips otherwise.
 
@@ -160,7 +160,7 @@ async fn jetton_transfer_is_bounded_by_the_ton_budget() {
 	db.cleanup().await;
 }
 
-// === treasury jetton sinks ==================================================
+// === treasury jetton sinks and the chain-id cross-check ======================
 
 const TREASURY_JETTON_WALLET: &str = "0:e4d954ef9f4e1250a26b5bbad76a1cdd17cfd08babad6f4c23e372270aef6f76";
 const FOREIGN_TON: &str = "0:8d8c9d8a8e8b8c8d8e8f808182838485868788898a8b8c8d8e8f80818283848f";
@@ -221,5 +221,28 @@ async fn treasury_jetton_transfer_refuses_an_unpinned_jetton_wallet() {
 	let refused = signer.sign_jetton_transfer(treasury_jetton(FOREIGN_TON, &treasury_base64)).await.unwrap_err();
 	assert_eq!(refused.code(), Code::PermissionDenied, "{refused:?}");
 	assert!(refused.message().contains("our_jetton_wallet"), "{refused:?}");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn evm_transfer_refuses_a_chain_id_from_the_other_rail() {
+	let Some(db) = common::throwaway_db().await else {
+		eprintln!("DATABASE_URL/SIGNER_DATABASE_URL unset — skipping signer fee budget test");
+		return;
+	};
+	let (signer, wallet) = signer_and_wallet(&db, Network::Polygon).await;
+
+	// (d) network=polygon with BSC's chain id: refused as malformed — before the gas-price
+	// ceiling, which would otherwise have been Polygon's on a BSC-valid transaction.
+	let mut req = native(wallet, 1, 21_000).into_inner();
+	req.chain_id = 56;
+	let refused = signer.sign_native_transfer(Request::new(req)).await.unwrap_err();
+	assert_eq!(refused.code(), Code::InvalidArgument, "{refused:?}");
+	assert!(refused.message().contains("chain_id"), "{refused:?}");
+
+	let mut req = erc20(wallet, 1, 21_000).into_inner();
+	req.chain_id = 137;
+	let refused = signer.sign_erc20_transfer(Request::new(req)).await.unwrap_err();
+	assert_eq!(refused.code(), Code::InvalidArgument, "{refused:?}");
 	db.cleanup().await;
 }

@@ -163,6 +163,7 @@ impl SignerService for Signer {
 	async fn sign_erc20_transfer(&self, request: Request<SignErc20TransferRequest>) -> Result<Response<SignErc20TransferResponse>, Status> {
 		let req = request.into_inner();
 		let network = require_evm(&req.network)?;
+		require_evm_chain(network, req.chain_id)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let token = parse_evm_address(&req.token_contract).ok_or_else(|| Status::invalid_argument("token_contract must be a 0x 20-byte address"))?;
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
@@ -199,6 +200,7 @@ impl SignerService for Signer {
 	async fn sign_native_transfer(&self, request: Request<SignNativeTransferRequest>) -> Result<Response<SignNativeTransferResponse>, Status> {
 		let req = request.into_inner();
 		let network = require_evm(&req.network)?;
+		require_evm_chain(network, req.chain_id)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
@@ -569,6 +571,29 @@ fn require_evm(raw: &str) -> Result<Network, Status> {
 	}
 }
 
+/// The EIP-155 chain ids each EVM rail runs on (mainnet | testnet) — the same four the hub
+/// classifies in its single-realm boot guard.
+const BEP20_CHAIN_IDS: [u64; 2] = [56, 97];
+const POLYGON_CHAIN_IDS: [u64; 2] = [137, 80002];
+
+/// Require `chain_id` to belong to `network`. The fee budget's gas-price ceiling is chosen by
+/// `network`, so a request naming one rail while carrying the other's chain id would get the
+/// wrong ceiling on a transaction that is valid on the chain it actually names. Fail-closed
+/// on purpose: an unlisted id (a local dev chain) is refused, not waved through.
+fn require_evm_chain(network: Network, chain_id: u64) -> Result<(), Status> {
+	let known = match network {
+		Network::Bep20 => BEP20_CHAIN_IDS,
+		Network::Polygon => POLYGON_CHAIN_IDS,
+		// Unreachable after `require_evm`; refusing is the safe shape if that ever changes.
+		Network::Trc20 | Network::Ton => return Err(Status::invalid_argument(format!("{network} is not an EVM network"))),
+	};
+	if known.contains(&chain_id) {
+		Ok(())
+	} else {
+		Err(Status::invalid_argument(format!("chain_id {chain_id} does not belong to network {network}")))
+	}
+}
+
 /// Parse the wire network and require a Tron rail — the TRC20/TRX signers unseal a secp256k1
 /// key and sign a Tron tx, so a TON network would feed an Ed25519 seed to the secp256k1 signer
 /// (the same curve-confusion hole `require_evm` guards on the EVM side).
@@ -621,7 +646,9 @@ fn parse_evm_address(value: &str) -> Option<[u8; 20]> {
 
 #[cfg(test)]
 mod tests {
-	use super::{parse_evm_address, require_evm, require_tron};
+	use domain::money::Network;
+
+	use super::{parse_evm_address, require_evm, require_evm_chain, require_tron};
 
 	#[test]
 	fn parses_evm_addresses() {
@@ -644,6 +671,19 @@ mod tests {
 		assert!(require_evm("ton").is_err());
 		assert!(require_evm("trc20").is_err());
 		assert!(require_evm("bogus").is_err());
+	}
+
+	#[test]
+	fn require_evm_chain_pins_the_chain_id_to_its_rail() {
+		assert!(require_evm_chain(Network::Bep20, 56).is_ok());
+		assert!(require_evm_chain(Network::Bep20, 97).is_ok());
+		assert!(require_evm_chain(Network::Polygon, 137).is_ok());
+		assert!(require_evm_chain(Network::Polygon, 80002).is_ok());
+		// The other rail's chain, and an unknown one, are both refused as malformed.
+		assert_eq!(require_evm_chain(Network::Polygon, 56).unwrap_err().code(), tonic::Code::InvalidArgument);
+		assert_eq!(require_evm_chain(Network::Bep20, 137).unwrap_err().code(), tonic::Code::InvalidArgument);
+		assert!(require_evm_chain(Network::Bep20, 31337).is_err());
+		assert!(require_evm_chain(Network::Ton, 56).is_err());
 	}
 
 	#[test]
