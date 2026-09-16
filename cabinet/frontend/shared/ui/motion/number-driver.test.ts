@@ -22,6 +22,7 @@ function world(opts: { hidden?: boolean } = {}) {
   const hiddenListeners = new Set<() => void>();
   const timers = new Map<number, { cb: () => void; ms: number }>();
   let nextTimer = 1;
+  let scheduledMs: number | null = null;
   const deps: NumberDriverDeps = {
     animate: (_from, _to, { onUpdate, onComplete }) => {
       frame = onUpdate;
@@ -35,6 +36,7 @@ function world(opts: { hidden?: boolean } = {}) {
     },
     setTimer: (cb, ms) => {
       const id = nextTimer++;
+      scheduledMs = ms;
       timers.set(id, { cb, ms });
       return () => timers.delete(id);
     },
@@ -45,6 +47,7 @@ function world(opts: { hidden?: boolean } = {}) {
     writes,
     shown,
     get stopped() { return stopped; },
+    get scheduledMs() { return scheduledMs; },
     get pendingTimers() { return timers.size; },
     get hiddenListeners() { return hiddenListeners.size; },
     tick: (v: number) => frame?.(v),
@@ -74,6 +77,7 @@ test("animation that never emits a frame: the fallback timer still writes the fi
   const w = world();
   w.run(0, 999.5);
   assert.deepEqual(w.writes, ["$0.00"]);
+  assert.equal(w.scheduledMs, w.deps.fallbackMs);
   w.fireTimers();
   assert.deepEqual(w.writes, ["$0.00", "$999.50"]);
   assert.equal(w.shown.at(-1), 999.5);

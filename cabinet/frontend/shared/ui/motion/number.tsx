@@ -18,9 +18,10 @@ export interface AnimatedNumberProps {
   className?: string;
 }
 
-// The browser-side deps of the driver, wired once. The fallback sits a little
-// past the count's own duration: in the normal case the animation completes
-// first and the timer is cancelled without ever firing.
+// The browser-side deps of the driver, wired once. The fallback sits past the
+// count's own duration by a margin wide enough that a long task during
+// hydration cannot let the timer beat the finishing frame: in the normal case
+// the animation completes first and the timer is cancelled without firing.
 const DOM_DEPS: NumberDriverDeps = {
   animate: (from, to, { onUpdate, onComplete }) =>
     animate(from, to, { duration: DUR.slow, ease: EASE.out, onUpdate, onComplete }),
@@ -36,7 +37,7 @@ const DOM_DEPS: NumberDriverDeps = {
     const id = setTimeout(cb, ms);
     return () => clearTimeout(id);
   },
-  fallbackMs: DUR.slow * 1000 + 100,
+  fallbackMs: DUR.slow * 1000 + 250,
 };
 
 /**
