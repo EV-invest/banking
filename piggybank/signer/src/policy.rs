@@ -515,21 +515,17 @@ mod tests {
 			},
 		));
 		assert!(inverted.message().contains("exceeds msg_value"), "{inverted:?}");
-	}
-
-	#[test]
-	fn fee_budget_applies_from_every_wallet() {
-		// The budget is not a treasury control: an unconfigured policy (no cap, no allowlist)
-		// still refuses an over-budget fee.
-		let p = SignerPolicy::default();
-		assert!(!p.is_active());
-		denied(p.check_fee_budget(
-			Network::Bep20,
-			FeeQuote::Evm {
-				gas_price: 1_000 * GWEI,
-				gas_limit: 21_000,
-			},
-		));
+		// Forwarding the whole value is the boundary, and it is allowed.
+		assert!(
+			p.check_fee_budget(
+				Network::Ton,
+				FeeQuote::Ton {
+					msg_value: 50_000_000,
+					forward_ton_amount: 50_000_000,
+				},
+			)
+			.is_ok()
+		);
 	}
 
 	// === fee budget: env parsing ===============================================
@@ -543,6 +539,14 @@ mod tests {
 	fn fee_budget_defaults_when_env_is_unset_or_empty() {
 		assert_eq!(FeeBudget::from_lookup(&lookup(&[])).unwrap(), FeeBudget::default());
 		assert_eq!(FeeBudget::from_lookup(&lookup(&[("SIGNER_MAX_GAS_LIMIT", "")])).unwrap(), FeeBudget::default());
+	}
+
+	#[test]
+	fn fee_budget_trims_a_padded_value_but_not_to_nothing() {
+		let padded = FeeBudget::from_lookup(&lookup(&[("SIGNER_MAX_GAS_LIMIT", " 100 ")])).unwrap();
+		assert_eq!(padded.max_gas_limit, 100);
+		// Whitespace alone is set-but-unparsable, not unset: it must not fall back to the default.
+		assert!(FeeBudget::from_lookup(&lookup(&[("SIGNER_MAX_GAS_LIMIT", " ")])).is_err());
 	}
 
 	#[test]

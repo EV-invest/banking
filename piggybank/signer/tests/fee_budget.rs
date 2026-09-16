@@ -232,17 +232,48 @@ async fn evm_transfer_refuses_a_chain_id_from_the_other_rail() {
 	};
 	let (signer, wallet) = signer_and_wallet(&db, Network::Polygon).await;
 
-	// (d) network=polygon with BSC's chain id: refused as malformed — before the gas-price
-	// ceiling, which would otherwise have been Polygon's on a BSC-valid transaction.
-	let mut req = native(wallet, 1, 21_000).into_inner();
+	// (d) network=polygon with BSC's chain id: refused as malformed — and BEFORE the fee
+	// budget, so a quote that is also over budget comes back InvalidArgument, not
+	// PermissionDenied. Otherwise the gas-price ceiling would have been Polygon's on a
+	// BSC-valid transaction.
+	let mut req = native(wallet, 5_000 * GWEI + 1, 21_000).into_inner();
 	req.chain_id = 56;
 	let refused = signer.sign_native_transfer(Request::new(req)).await.unwrap_err();
 	assert_eq!(refused.code(), Code::InvalidArgument, "{refused:?}");
 	assert!(refused.message().contains("chain_id"), "{refused:?}");
 
-	let mut req = erc20(wallet, 1, 21_000).into_inner();
+	// The mirror image from the BSC side: network=bep20 carrying Polygon's chain id.
+	let mut req = erc20(wallet, 100 * GWEI + 1, 100_000).into_inner();
 	req.chain_id = 137;
 	let refused = signer.sign_erc20_transfer(Request::new(req)).await.unwrap_err();
 	assert_eq!(refused.code(), Code::InvalidArgument, "{refused:?}");
+	assert!(refused.message().contains("chain_id"), "{refused:?}");
+	db.cleanup().await;
+}
+
+/// The hub's reserved gas-station wallet id (`piggybank/core/src/infrastructure/custody.rs`).
+const GAS_STATION: Uuid = Uuid::from_u128(1);
+
+#[tokio::test]
+async fn fee_budget_applies_to_the_treasury_and_the_gas_station_too() {
+	let Some(db) = common::throwaway_db().await else {
+		eprintln!("DATABASE_URL/SIGNER_DATABASE_URL unset — skipping signer fee budget test");
+		return;
+	};
+	let signer = Signer::new(test_vault(), WalletSecrets::new(db.pool.clone()), SignerPolicy::default());
+
+	// Neither wallet is provisioned: an over-budget quote is refused on the budget, not on
+	// the missing key, so the gate is not a treasury control and runs before any key lookup.
+	let mut req = erc20(Uuid::nil(), 100 * GWEI + 1, 100_000).into_inner();
+	req.from_user_id = String::new();
+	let refused = signer.sign_erc20_transfer(Request::new(req)).await.unwrap_err();
+	assert_eq!(refused.code(), Code::PermissionDenied, "treasury: {refused:?}");
+
+	let refused = signer.sign_native_transfer(native(GAS_STATION, 5_000 * GWEI + 1, 21_000)).await.unwrap_err();
+	assert_eq!(refused.code(), Code::PermissionDenied, "gas station: {refused:?}");
+	let refused = signer.sign_trc20_transfer(trc20(GAS_STATION, 100_000_001)).await.unwrap_err();
+	assert_eq!(refused.code(), Code::PermissionDenied, "gas station: {refused:?}");
+	let refused = signer.sign_jetton_transfer(jetton(GAS_STATION, 100_000_001, 1)).await.unwrap_err();
+	assert_eq!(refused.code(), Code::PermissionDenied, "gas station: {refused:?}");
 	db.cleanup().await;
 }
