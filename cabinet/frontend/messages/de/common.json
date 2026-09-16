@@ -1171,6 +1171,14 @@
     "en": "Verified",
     "t": "Verifiziert"
   },
+  "admin.overview.col.commit": {
+    "en": "Commit",
+    "t": "Commit"
+  },
+  "admin.overview.col.component": {
+    "en": "Component",
+    "t": "Komponente"
+  },
   "admin.overview.col.event": {
     "en": "Event",
     "t": "Ereignis"
@@ -1183,9 +1191,17 @@
     "en": "Parked",
     "t": "Geparkt"
   },
+  "admin.overview.col.pr": {
+    "en": "PR",
+    "t": "PR"
+  },
   "admin.overview.col.reason": {
     "en": "Reason",
     "t": "Grund"
+  },
+  "admin.overview.col.released": {
+    "en": "Released",
+    "t": "Veröffentlicht"
   },
   "admin.overview.col.seq": {
     "en": "Seq",
@@ -1195,9 +1211,49 @@
     "en": "Service",
     "t": "Service"
   },
+  "admin.overview.col.version": {
+    "en": "Version",
+    "t": "Version"
+  },
   "admin.overview.compensated": {
     "en": "compensated",
     "t": "kompensiert"
+  },
+  "admin.overview.deployed": {
+    "en": "Deployed versions",
+    "t": "Ausgerollte Versionen"
+  },
+  "admin.overview.deployedGithubError": {
+    "en": "GitHub: {error}",
+    "t": "GitHub: {error}"
+  },
+  "admin.overview.deployedNewer": {
+    "en": "Newer: {tag}",
+    "t": "Neuer: {tag}"
+  },
+  "admin.overview.deployedOtherImages": {
+    "en": "Other images",
+    "t": "Andere Images"
+  },
+  "admin.overview.deployedSub": {
+    "en": "What each component runs in production, against the newest tag in its repository",
+    "t": "Was jede Komponente in Produktion ausführt, gegen den neuesten Tag ihres Repositorys"
+  },
+  "admin.overview.deployedUnavailable": {
+    "en": "Version data is not available in this environment",
+    "t": "Versionsdaten sind in dieser Umgebung nicht verfügbar"
+  },
+  "admin.overview.deployedUnavailableHint": {
+    "en": "In production the deploy mounts a version catalogue beside the cabinet; a local run has none.",
+    "t": "In Produktion legt das Deployment einen Versionskatalog neben das Cabinet; ein lokaler Lauf hat keinen."
+  },
+  "admin.overview.deployedUpToDate": {
+    "en": "Up to date",
+    "t": "Aktuell"
+  },
+  "admin.overview.deployedUpdated": {
+    "en": "Updated {at}",
+    "t": "Aktualisiert {at}"
   },
   "admin.overview.errorsAnalytics": {
     "en": "Errors & analytics",
@@ -1270,6 +1326,10 @@
   "admin.overview.obs.sentry": {
     "en": "Unresolved issues across the fleet surface here once SENTRY_DSN is configured.",
     "t": "Ungelöste Probleme der gesamten Flotte erscheinen hier, sobald SENTRY_DSN konfiguriert ist."
+  },
+  "admin.overview.opensGithub": {
+    "en": "Opens on GitHub in a new tab",
+    "t": "Öffnet sich auf GitHub in einem neuen Tab"
   },
   "admin.overview.parkedEvents": {
     "en": "Parked events",
