@@ -2003,6 +2003,10 @@
     "en": "L{n}",
     "t": "N{n}"
   },
+  "admin.users.kycSelf": {
+    "en": "Your own verification tier is not set from here. Another holder of KycManage has to change it.",
+    "t": "Votre propre niveau de vérification ne se règle pas ici. Un autre détenteur de KycManage doit le modifier."
+  },
   "admin.users.liftHold": {
     "en": "Lift hold",
     "t": "Lever le blocage"
@@ -3810,6 +3814,10 @@
   "err.kycStartFailed": {
     "en": "We couldn't start verification. Please try again.",
     "t": "Impossible de démarrer la vérification. Veuillez réessayer."
+  },
+  "err.kycSelf": {
+    "en": "You can't set your own verification tier — another holder of KycManage has to.",
+    "t": "Vous ne pouvez pas définir votre propre niveau de vérification — un autre détenteur de KycManage doit le faire."
   },
   "err.kycThrottled": {
     "en": "You've started verification too many times today. Try again tomorrow.",

@@ -1,10 +1,10 @@
 "use client";
 
 import { KeyRound, Loader2, TriangleAlert, X } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Badge, Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Badge, Button, Card, CardContent, FieldDescription, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { revokeSessions, setKycLevel, type UserFilters } from "@/entities/admin/api/admin-client";
 import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
@@ -13,6 +13,7 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
+import { useSession } from "@/shared/lib/use-session";
 import { BreakGlassNotice } from "@/shared/ui/break-glass-notice";
 import { Panel, PanelPresence, PanelSwap, Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
@@ -263,6 +264,7 @@ function Avatar({ email }: { email: string }) {
 function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: () => void }) {
   const t = useT();
   const locale = useLocale();
+  const session = useSession();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -294,6 +296,18 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
   // Falls back to the row that opened this drawer, like `status` and `role` above, so the
   // provenance never contradicts the label it qualifies while the detail read is in flight.
   const breakGlass = profile?.role_is_break_glass ?? summary.role_is_break_glass;
+
+  // The identity plane refuses `SetKycLevel` on the caller's own account, and the BFF now
+  // refuses it one hop earlier — so the row the operator is standing on must not offer the
+  // control. `userId` is the same handle `AdminUserSummary.user_id` carries: both are the
+  // concierge subject, one read from the shell's session, the other from the plane's
+  // directory.
+  //
+  // `session === null` is "not resolved yet" and NOT "someone else" — the reading the admin
+  // layout already gives it. Unresolved therefore leaves the control live rather than
+  // greying every row for a frame: the refusal is the BFF's to make, and this is only what
+  // spares the operator a doomed press.
+  const isSelf = session?.user?.userId === summary.user_id;
 
   return (
     // Fixed width, NOT `w-full`, and this is the whole difference between the
@@ -356,6 +370,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           <KycField
             level={profile?.kyc_level ?? summary.kyc_level}
             busy={busy === "kyc"}
+            isSelf={isSelf}
             onSave={(next) => run("kyc", () => setKycLevel(summary.user_id, next))}
           />
           <Button type="button" variant="outline" size="sm" className="mt-2 w-full border-accent-error/40 text-accent-error hover:bg-accent-error/10" disabled={busy === "revoke"} onClick={() => run("revoke", () => revokeSessions(summary.user_id))}>
@@ -403,9 +418,18 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
  * during render on purpose — an effect would paint the stale tier for a frame first, and a
  * ref written in render is the pattern two of this app's standing lint errors are already
  * about.
+ *
+ * `isSelf` is the one row it refuses to be a control on at all. An operator holding
+ * `KycManage` can raise anybody's tier except their own, and the identity plane enforces
+ * that — so offering the selector here would be offering a press that answers 403. This is
+ * the same shape as the owner seat {@link RoleField} greys out, and the same reason: a
+ * console that offers a move the plane refuses is worse than one that explains the refusal.
+ * The sentence below the control is what carries the explanation; the BFF sends the same
+ * one back, keyed, for the caller that reaches it anyway.
  */
-function KycField({ level, busy, onSave }: { level: number; busy: boolean; onSave: (level: KycLevel) => void }) {
+function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolean; isSelf: boolean; onSave: (level: KycLevel) => void }) {
   const t = useT();
+  const hintId = useId();
   const [draft, setDraft] = useState(level);
   const [seated, setSeated] = useState(level);
   if (seated !== level) {
@@ -420,6 +444,13 @@ function KycField({ level, busy, onSave }: { level: number; busy: boolean; onSav
   const picked = KYC_LEVELS.find((l) => l === draft);
   const dirty = picked !== undefined && picked !== level;
 
+  // Two reasons a press is refused here, and they must not be announced the same way. `busy`
+  // is transient, so the native `disabled` is the honest state. `isSelf` is policy — and a
+  // control that leaves the tab order takes its explanation with it, leaving a keyboard or
+  // screen-reader operator with a gap where the reason should be. So the operator's own row
+  // keeps both controls focusable under `aria-disabled` (which also keeps the kit's
+  // `focus-visible:ring-ring`) and points them at the sentence below; the refusal itself is
+  // enforced by the controlled `open` and the `onClick` guard rather than by the browser.
   return (
     <div className="flex flex-col gap-1.5 py-1">
       {/* A `div` and not a `label`, for the reason `FilterSelect` gives: the uikit trigger
@@ -429,8 +460,25 @@ function KycField({ level, busy, onSave }: { level: number; busy: boolean; onSav
           {t("ui.kycLevel")}
           <TipAnchor anchor="admin.users.access.kyc-level" />
         </span>
-        <Select value={String(draft)} onValueChange={(v) => setDraft(Number(v))}>
-          <SelectTrigger size="sm" className="border-border bg-secondary" disabled={busy}>
+        <Select
+          value={String(draft)}
+          onValueChange={(v) => setDraft(Number(v))}
+          // Held shut at the root, not by a no-op handler on the trigger: the kit calls the
+          // trigger's `onClick` and then toggles `open` regardless, so a controlled `open` is
+          // the only thing that keeps the list closed while the trigger stays focusable.
+          open={isSelf ? false : undefined}
+        >
+          {/* The transient refusal is still `disabled`, and still on the trigger, which is the
+              button — `RoleField` spells out why the uikit `Select` root is not the place for
+              it. The tier the account already holds renders in every state, so the operator can
+              READ their own standing here. */}
+          <SelectTrigger
+            size="sm"
+            className="border-border bg-secondary aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            disabled={busy}
+            aria-disabled={isSelf ? true : undefined}
+            aria-describedby={isSelf ? hintId : undefined}
+          >
             <span className="truncate">{kycLevelLabel(draft, t)}</span>
           </SelectTrigger>
           <SelectContent>
@@ -450,15 +498,30 @@ function KycField({ level, busy, onSave }: { level: number; busy: boolean; onSav
         type="button"
         variant="outline"
         size="sm"
-        className="self-end"
-        disabled={busy || !dirty}
+        className="self-end aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        // Never the native attribute on the own row: that is the one refusal whose reason has
+        // to be reachable, and `disabled` would drop the button out of the tab order before
+        // `aria-describedby` could be read out.
+        disabled={!isSelf && (busy || !dirty)}
+        aria-disabled={isSelf ? true : undefined}
+        aria-describedby={isSelf ? hintId : undefined}
         onClick={() => {
-          if (picked !== undefined) onSave(picked);
+          if (isSelf || picked === undefined) return;
+          onSave(picked);
         }}
       >
         {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
         {t("ui.save")}
       </Button>
+      {/* Below the control rather than instead of it, the way the owner seat's sentence sits
+          under the role select: a greyed-out select with no sentence reads as a fault. The `id`
+          is what makes it the two controls' accessible description rather than a sentence only
+          a sighted reader knows to pair with them. */}
+      {isSelf && (
+        <FieldDescription id={hintId} className="text-xs leading-relaxed">
+          {t("admin.users.kycSelf")}
+        </FieldDescription>
+      )}
     </div>
   );
 }
