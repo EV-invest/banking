@@ -42,35 +42,18 @@ export function formatMoment(stamp: string | null | undefined, locale: Locale): 
 }
 
 /**
- * An RFC 3339 stamp as the local moment {@link formatMoment} renders, with the UTC reading
- * beside it whenever the browser's zone is not UTC: "16 Sept 2026, 16:54 (09:54 UTC)", or
- * "16 Sept 2026, 02:10 (15 Sept, 19:10 UTC)" when the two fall on different days.
+ * An RFC 3339 stamp as the same moment {@link formatMoment} renders.
  *
  * The one wire that does not carry unix seconds: `/api/admin/deployments` relays what git
- * and the GitHub API say, and both speak RFC 3339. The UTC reading is there because a
- * release time gets compared against CI runs, Flux commits and pod logs, all stamped UTC,
- * while the operators reading it sit in different zones; the local reading stays first
- * because that is how the rest of the cabinet tells time. Kept beside `formatMoment` so
- * the two shapes still share the locale mapping and the fields, and so an unparseable
- * stamp is a dash here too, not "Invalid Date".
+ * and the GitHub API say, and both speak RFC 3339. Kept beside `formatMoment` rather than
+ * in the admin view so the two shapes still render one way — same locale mapping, same
+ * fields — and so an unparseable stamp is a dash here too, not "Invalid Date".
  */
 export function formatRfc3339Moment(stamp: string | null | undefined, locale: Locale): string {
   if (!stamp) return "—";
   const at = new Date(stamp);
   if (Number.isNaN(at.getTime())) return "—";
-  const tag = intlLocale(locale);
-  const local = at.toLocaleString(tag, MOMENT);
-  // Offset is per instant, so DST is accounted for; zero means the browser already shows UTC.
-  if (at.getTimezoneOffset() === 0) return local;
-  const sameDay = at.getUTCDate() === at.getDate() && at.getUTCMonth() === at.getMonth() && at.getUTCFullYear() === at.getFullYear();
-  const utc = at.toLocaleString(tag, {
-    ...(sameDay ? {} : { day: "numeric", month: "short" }),
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-    timeZoneName: "short",
-  });
-  return `${local} (${utc})`;
+  return at.toLocaleString(intlLocale(locale), MOMENT);
 }
 
 /** A unix-seconds stamp as a date alone: "12 Mar 2026". */
