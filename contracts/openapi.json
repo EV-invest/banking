@@ -7849,8 +7849,8 @@
         "tags": [
           "concierge.v1.UserDirectory"
         ],
-        "summary": "SetKycLevel",
-        "description": "Admin (allowlist): set a user's KYC level. Emits KYC_CHANGED across the\n cross-plane bridge (so the money plane learns the new level). Echoes the\n level now in effect.",
+        "summary": "Admin (allowlist): set a user's KYC level. Emits KYC_CHANGED across the\n cross-plane bridge (so the money plane learns the new level). Echoes the\n level now in effect.",
+        "description": "Refuses with PERMISSION_DENIED when user_id is the CALLER's own account.\n KycManage is held by Admin as well as Owner, and tier 1 is the floor for\n withdrawals on the money plane, so without this an operator could lift their\n own money gate. A console must not offer this control on the operator's own\n row: the refusal is decided from the session alone and belongs in front of\n the call. Raising your own level goes through the verification front door,\n which reaches tier 1; above that, and for any downgrade, another holder of\n KycManage acts.",
         "operationId": "concierge.v1.UserDirectory.SetKycLevel",
         "parameters": [
           {
@@ -14190,11 +14190,16 @@
           "proposed": {
             "title": "proposed",
             "$ref": "#/components/schemas/concierge.v1.FeeTerms"
+          },
+          "mark": {
+            "type": "string",
+            "title": "mark",
+            "description": "The NAV mark description: `fund` as above, and the value the consilium was asked to\n mark it at, spelled by the money plane as an amount is (`5 000.00 USDT`). Empty for\n the other three. A mark used to ride the payment tuple (`Amount: 5000`, `To: AUM\n 5000 USDT`, `Type: service`), which told the owners money had moved when a mark\n moves none; with this field filled the relay renders it as the value it is. Same\n rules as an amount: one line, and it may not carry a link."
           }
         },
         "title": "PayoutOutcomeMail",
         "additionalProperties": false,
-        "description": "How a consilium ended — over a revenue payout, over a payment, or over a fund's fee\n terms — and, under APPROVAL_TOKEN_BURNED, that one of its tokens burned.\n\n ONE message for three subjects, additively. The burn notice already rides this shape\n under its own kind, so a payment consilium's outcome and burn ride it too, and so do a\n fee-policy consilium's, rather than each growing a message of their own: `network` +\n `address` describe a payout, `source` + `destination` (+ `tier`, `reason`) describe a\n payment, `fund` + `proposed` (+ `current`, `reason`) describe fee terms, and the\n renderer switches on which description is filled. A caller fills exactly one and\n leaves the other two empty."
+        "description": "How a consilium ended — over a revenue payout, over a payment, over a fund's fee\n terms, or over a fund's NAV mark — and, under APPROVAL_TOKEN_BURNED, that one of its\n tokens burned.\n\n ONE message for four subjects, additively. The burn notice already rides this shape\n under its own kind, so a payment consilium's outcome and burn ride it too, and so do a\n fee-policy consilium's and a valuation override's, rather than each growing a message\n of their own: `network` + `address` describe a payout, `source` + `destination`\n (+ `tier`, `reason`) describe a payment, `fund` + `proposed` (+ `current`, `reason`)\n describe fee terms, `fund` + `mark` (+ `reason`) describe a NAV mark, and the renderer\n switches on which description is filled. A caller fills exactly one and leaves the\n others empty."
       },
       "concierge.v1.ProposalVote": {
         "type": "string",
