@@ -70,12 +70,18 @@ pub async fn enqueue(conn: &mut PgConnection, subject: MailSubject, user_id: Uui
 /// how many rows were withdrawn. The UPDATE takes each row's lock, which the worker holds
 /// across a delivery in flight ([`ConsiliumMailer::deliver`]): this waits for that outcome
 /// rather than withdrawing a mail that is being handed over.
+///
+/// Not for a consilium: a closing consilium's queue holds its verdict mail and burn notices
+/// beside the invitations, and taking back everything undelivered would silence the first two.
+/// A consilium withdraws its invitations alone, through
+/// [`withdraw_undelivered_invitations`] — refused here rather than done wrong.
 pub async fn withdraw_undelivered(conn: &mut PgConnection, subject: MailSubject) -> Result<u64, DomainError> {
 	let (sql, id) = match subject {
-		MailSubject::Consilium(id) => (
-			"UPDATE consilium_mail SET withdrawn_at = now() WHERE consilium_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
-			id,
-		),
+		MailSubject::Consilium(_) => {
+			return Err(DomainError::Repository(
+				"a consilium's undelivered mail is not withdrawn wholesale — see withdraw_undelivered_invitations".into(),
+			));
+		}
 		MailSubject::Payment(id) => (
 			"UPDATE consilium_mail SET withdrawn_at = now() WHERE payment_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
 			id,
