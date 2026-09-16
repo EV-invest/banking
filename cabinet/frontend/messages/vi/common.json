@@ -4143,6 +4143,54 @@
     "en": "Verify now",
     "t": "Xác minh ngay"
   },
+  "kyc.banner.title": {
+    "en": "One step before your first top-up",
+    "t": "Một bước trước lần nạp tiền đầu tiên"
+  },
+  "kyc.banner.body": {
+    "en": "We can issue you a deposit address once your identity is verified. It takes a few minutes and is done once.",
+    "t": "Chúng tôi cấp địa chỉ nạp tiền sau khi danh tính của bạn được xác minh. Chỉ mất vài phút và làm một lần."
+  },
+  "kyc.banner.dismiss": {
+    "en": "Dismiss",
+    "t": "Ẩn đi"
+  },
+  "kyc.dialog.title": {
+    "en": "Verify your identity",
+    "t": "Xác minh danh tính"
+  },
+  "kyc.dialog.intro": {
+    "en": "A short identity check by our verification provider. Your deposit address and withdrawals open once it is done.",
+    "t": "Một bước kiểm tra danh tính ngắn tại nhà cung cấp của chúng tôi. Sau đó địa chỉ nạp tiền và rút tiền sẽ mở."
+  },
+  "kyc.dialog.needTitle": {
+    "en": "What you'll need",
+    "t": "Bạn cần chuẩn bị"
+  },
+  "kyc.dialog.needBody": {
+    "en": "A government-issued ID, and a phone or webcam for a selfie.",
+    "t": "Giấy tờ tùy thân do nhà nước cấp, cùng điện thoại hoặc webcam để chụp ảnh chân dung."
+  },
+  "kyc.dialog.timeTitle": {
+    "en": "How long it takes",
+    "t": "Mất bao lâu"
+  },
+  "kyc.dialog.timeBody": {
+    "en": "A few minutes to submit. Most checks are decided within the hour.",
+    "t": "Vài phút để gửi hồ sơ. Phần lớn được xét xong trong vòng một giờ."
+  },
+  "kyc.dialog.afterTitle": {
+    "en": "What happens next",
+    "t": "Tiếp theo là gì"
+  },
+  "kyc.dialog.afterBody": {
+    "en": "We'll email you the result. You can close the tab — the check keeps running without it.",
+    "t": "Chúng tôi sẽ gửi kết quả qua email. Bạn có thể đóng tab — việc kiểm tra vẫn tiếp tục."
+  },
+  "kyc.dialog.action": {
+    "en": "Start verification",
+    "t": "Bắt đầu xác minh"
+  },
   "lang.switch": {
     "en": "Language",
     "t": "Ngôn ngữ"

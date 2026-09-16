@@ -19,6 +19,15 @@ export interface StartVerification {
   state: StartState;
   starting: boolean;
   begin: () => Promise<void>;
+  /**
+   * Forget the last outcome.
+   *
+   * The dialog presentation is mounted beside its trigger and stays mounted while closed, so
+   * this state outlives a close — and `unavailable` is what nearly every reader gets today.
+   * Without this, opening the dialog a minute later re-announced a 503 from an attempt that
+   * had already been read and dismissed, as if a new one had just failed.
+   */
+  reset: () => void;
 }
 
 export function useStartVerification(): StartVerification {
@@ -39,5 +48,11 @@ export function useStartVerification(): StartVerification {
     setState(result);
   }
 
-  return { state, starting, begin };
+  function reset() {
+    // Not while a start is in flight: `begin` writes the outcome when it lands, and clearing
+    // in between would only mean the answer arrives into a state nobody is expecting.
+    if (!starting) setState({ kind: "idle" });
+  }
+
+  return { state, starting, begin, reset };
 }
