@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::{
-		consilium_mailer::{MailSubject, enqueue},
+		consilium_mailer::{MailSubject, enqueue, withdraw_undelivered_invitations},
 		fee_policy_changes, outbox, payments,
 	},
 	ports::{
@@ -118,6 +118,7 @@ impl PgConsilia {
 	/// probe and the lock, which is not a failure.
 	async fn expire_one(&self, id: Uuid, at: i64) -> Result<bool, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		withdraw_invitations(&mut tx, ConsiliumId::from_raw(id)).await?;
 		let (mut consilium, _) = locked(&mut tx, ConsiliumId::from_raw(id)).await?;
 		if !consilium.state().is_open() {
 			return Ok(false);
@@ -135,6 +136,7 @@ impl PgConsilia {
 	/// delay reads as the deliberate control it is rather than an unexplained disappearance.
 	async fn void_one(&self, id: Uuid, at: i64) -> Result<bool, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		withdraw_invitations(&mut tx, ConsiliumId::from_raw(id)).await?;
 		let (mut consilium, _) = locked(&mut tx, ConsiliumId::from_raw(id)).await?;
 		if !consilium.state().is_open() {
 			return Ok(false);
@@ -160,11 +162,12 @@ impl PgConsilia {
 /// it, and a quorum left collecting votes over nothing would carry into a refusal.
 ///
 /// The caller has NOT yet closed the subject when this runs — this is called first, so the
-/// consilium row is the first lock taken, as everywhere else — and `close_decided_subject`
-/// then closes it exactly as an owner's withdrawal would. A no-op — `false` — on a consilium
-/// that has already reached a verdict, so the caller can tell its own cascade from the
-/// owners' decision.
+/// consilium row is the first lock taken after the invitations' ([`withdraw_invitations`]),
+/// as everywhere else — and `close_decided_subject` then closes it exactly as an owner's
+/// withdrawal would. A no-op — `false` — on a consilium that has already reached a verdict,
+/// so the caller can tell its own cascade from the owners' decision.
 pub(crate) async fn withdraw_on(conn: &mut PgConnection, id: ConsiliumId, at: i64) -> Result<bool, DomainError> {
+	withdraw_invitations(conn, id).await?;
 	let (mut consilium, _) = locked(conn, id).await?;
 	if !consilium.state().is_open() {
 		return Ok(false);
@@ -827,8 +830,28 @@ pub(crate) async fn open_on(conn: &mut PgConnection, consilium: &mut Consilium, 
 	outbox::drain_to_outbox(conn, consilium, false).await
 }
 
+/// Take back the approval invitations a closing consilium still has queued (#342): an owner
+/// reached once the relay is back would be asked to vote on a consilium nobody can act on.
+/// Runs BEFORE [`locked`] in every path that closes a consilium without a verdict — the
+/// worker flips a seat's `notified` while it holds the invitation's row, so this must not
+/// wait on that row with the seats held ([`withdraw_undelivered_invitations`]). Nothing of
+/// the transition is decided yet: a consilium found already decided under the lock has lost
+/// nothing but invitations to a vote already over, and a rolled-back transition rolls this
+/// back with it.
+async fn withdraw_invitations(conn: &mut PgConnection, id: ConsiliumId) -> Result<(), DomainError> {
+	let withdrawn = withdraw_undelivered_invitations(conn, id.raw()).await?;
+	// `debug`, not `info`: the transaction is still open here and may yet roll back (an
+	// expiry racing a deciding vote), so this is what was ATTEMPTED, not what happened.
+	if withdrawn > 0 {
+		tracing::debug!(consilium_id = %id, withdrawn, "consilium: withdrawing undelivered approval invitations with the closing consilium");
+	}
+	Ok(())
+}
+
 /// Load a consilium `FOR UPDATE` with its seats — the opening move of every transition here.
-/// The consilium row is always locked first, so the transitions cannot deadlock each other.
+/// The consilium row is always locked first, so the transitions cannot deadlock each other;
+/// the one thing taken ahead of it is the invitations a closing path withdraws, which no
+/// transition touches once it holds the seats.
 async fn locked(conn: &mut PgConnection, id: ConsiliumId) -> Result<(Consilium, Vec<SeatRow>), DomainError> {
 	let row = sqlx::query(concat!("SELECT ", consilium_columns!(), " FROM consilium c WHERE c.id = $1 FOR UPDATE"))
 		.bind(id.raw())
@@ -990,6 +1013,7 @@ impl ConsiliumRepository for PgConsilia {
 
 	async fn cancel(&self, id: ConsiliumId, by: UserId, at: i64) -> Result<ConsiliumView, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		withdraw_invitations(&mut tx, id).await?;
 		let (mut consilium, seats) = locked(&mut tx, id).await?;
 		if consilium.initiator() != by {
 			return Err(DomainError::Forbidden("only the owner who opened this consilium may withdraw it".into()));

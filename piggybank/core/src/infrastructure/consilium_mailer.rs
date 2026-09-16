@@ -70,12 +70,18 @@ pub async fn enqueue(conn: &mut PgConnection, subject: MailSubject, user_id: Uui
 /// how many rows were withdrawn. The UPDATE takes each row's lock, which the worker holds
 /// across a delivery in flight ([`ConsiliumMailer::deliver`]): this waits for that outcome
 /// rather than withdrawing a mail that is being handed over.
+///
+/// Not for a consilium: a closing consilium's queue holds its verdict mail and burn notices
+/// beside the invitations, and taking back everything undelivered would silence the first two.
+/// A consilium withdraws its invitations alone, through
+/// [`withdraw_undelivered_invitations`] — refused here rather than done wrong.
 pub async fn withdraw_undelivered(conn: &mut PgConnection, subject: MailSubject) -> Result<u64, DomainError> {
 	let (sql, id) = match subject {
-		MailSubject::Consilium(id) => (
-			"UPDATE consilium_mail SET withdrawn_at = now() WHERE consilium_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
-			id,
-		),
+		MailSubject::Consilium(_) => {
+			return Err(DomainError::Repository(
+				"a consilium's undelivered mail is not withdrawn wholesale — see withdraw_undelivered_invitations".into(),
+			));
+		}
 		MailSubject::Payment(id) => (
 			"UPDATE consilium_mail SET withdrawn_at = now() WHERE payment_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
 			id,
@@ -86,6 +92,38 @@ pub async fn withdraw_undelivered(conn: &mut PgConnection, subject: MailSubject)
 		),
 	};
 	let withdrawn = sqlx::query(sql).bind(id).execute(&mut *conn).await.map_err(repo_err)?;
+	Ok(withdrawn.rows_affected())
+}
+
+/// Withdraw the approval INVITATIONS of a consilium that the relay has not taken — the mails
+/// carrying a seat's token and code — and nothing else about it (#342). The consilium is
+/// closing; an invitation still queued behind a relay outage would otherwise reach its owner
+/// later, asking for a vote nobody can cast. Only the token-bearing kinds go: the outcome mail
+/// the closing enqueues right after this must reach the audience, and a burn notice already
+/// queued reports a brute-force attempt that closing the consilium does not unmake. The kinds
+/// are the consilium-addressed ones of [`GovernanceMail::carries_a_token`].
+///
+/// The secrets go with the withdrawal, as they do when a row is given up on
+/// ([`ConsiliumMailer::retire`]): a token and a code that will never be delivered are a
+/// credential nobody legitimately holds. The two fields blanked are the ones
+/// [`GovernanceMail::redacted`] blanks for these kinds.
+///
+/// Safe at any point of a transition, and NOT to be called while the seats are held: the
+/// worker holds an invitation's row across the relay call and, once the message is taken,
+/// flips the seat's `notified` ([`ConsiliumMailer::deliver`]) — a transition holding the seats
+/// while waiting on the mail row would deadlock with it. Taken BEFORE the consilium and its
+/// seats are locked, this waits only for a delivery in flight to finish, and its row is then
+/// a delivered one, left as it is.
+pub async fn withdraw_undelivered_invitations(conn: &mut PgConnection, consilium_id: Uuid) -> Result<u64, DomainError> {
+	let withdrawn = sqlx::query(
+		"UPDATE consilium_mail SET withdrawn_at = now(), payload = payload || '{\"approval_url\": \"\", \"code\": \"\"}'::jsonb \
+		 WHERE consilium_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL \
+		 AND kind IN ('payout_approval', 'payment_approval', 'fee_policy_approval')",
+	)
+	.bind(consilium_id)
+	.execute(&mut *conn)
+	.await
+	.map_err(repo_err)?;
 	Ok(withdrawn.rows_affected())
 }
 

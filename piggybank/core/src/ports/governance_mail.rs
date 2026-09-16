@@ -292,3 +292,99 @@ impl From<MailDeliveryError> for DomainError {
 pub trait GovernanceMailer: Send + Sync {
 	async fn send(&self, concierge_user_id: uuid::Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError>;
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// The two JSON keys the queue blanks in SQL when an invitation is withdrawn
+	/// (`consilium_mailer::withdraw_undelivered_invitations`) are exactly the ones
+	/// [`GovernanceMail::redacted`] blanks, on every kind that carries a token; a kind that
+	/// renamed either field would have its secret survive the withdrawal.
+	#[test]
+	fn redacting_a_token_bearing_mail_blanks_approval_url_and_code_and_nothing_else() {
+		let secret = |mail: GovernanceMail| {
+			assert!(mail.carries_a_token());
+			let before = serde_json::to_value(&mail).unwrap();
+			assert_eq!(before["approval_url"], "https://example.test/a/t0k3n");
+			assert_eq!(before["code"], "ABCDEFGHJK");
+			let after = serde_json::to_value(mail.redacted()).unwrap();
+			assert_eq!(after["approval_url"], "");
+			assert_eq!(after["code"], "");
+			let (before, after) = (before.as_object().unwrap(), after.as_object().unwrap());
+			assert_eq!(before.len(), after.len(), "redaction removes no key");
+			for (key, value) in before {
+				if key != "approval_url" && key != "code" {
+					assert_eq!(&after[key], value, "{key} is not a secret and must survive");
+				}
+			}
+		};
+		let url = || "https://example.test/a/t0k3n".to_owned();
+		let code = || "ABCDEFGHJK".to_owned();
+		let terms = || FeePolicyTerms {
+			management_bps: 200,
+			performance_bps: 2_000,
+			hurdle_bps: 0,
+			basis: "invested_capital".to_owned(),
+			crystallization: "annual".to_owned(),
+		};
+		secret(GovernanceMail::PayoutApproval(PayoutApproval {
+			consilium_id: "c".to_owned(),
+			initiator_email: "o@example.test".to_owned(),
+			network: "bep20".to_owned(),
+			address: "0x0".to_owned(),
+			amount: "1".to_owned(),
+			memo: String::new(),
+			payload_hash: "h".to_owned(),
+			threshold: 2,
+			owner_count: 3,
+			expires_at: 1,
+			approval_url: url(),
+			code: code(),
+		}));
+		secret(GovernanceMail::PaymentConsent(PaymentConsent {
+			payment_id: "p".to_owned(),
+			subject_user_id: "u".to_owned(),
+			initiator_email: "o@example.test".to_owned(),
+			tier: "user".to_owned(),
+			source: "s".to_owned(),
+			destination: "d".to_owned(),
+			amount: "1".to_owned(),
+			reason: String::new(),
+			payload_hash: "h".to_owned(),
+			expires_at: 1,
+			approval_url: url(),
+			code: code(),
+		}));
+		secret(GovernanceMail::PaymentApproval(PaymentApproval {
+			consilium_id: "c".to_owned(),
+			payment_id: "p".to_owned(),
+			initiator_email: "o@example.test".to_owned(),
+			tier: "service".to_owned(),
+			source: "s".to_owned(),
+			destination: "d".to_owned(),
+			amount: "1".to_owned(),
+			reason: String::new(),
+			payload_hash: "h".to_owned(),
+			threshold: 2,
+			owner_count: 3,
+			expires_at: 1,
+			approval_url: url(),
+			code: code(),
+		}));
+		secret(GovernanceMail::FeePolicyApproval(FeePolicyApproval {
+			consilium_id: "c".to_owned(),
+			initiator_email: "o@example.test".to_owned(),
+			fund: "EV Trading".to_owned(),
+			current: None,
+			proposed: terms(),
+			reason: String::new(),
+			payload_hash: "h".to_owned(),
+			threshold: 2,
+			owner_count: 3,
+			expires_at: 1,
+			approval_url: url(),
+			code: code(),
+		}));
+	}
+}

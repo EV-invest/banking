@@ -1186,11 +1186,13 @@ async fn a_refused_or_withdrawn_quorum_closes_the_change() {
 	// Withdrawn by another owner: the change is cancelled and its consilium goes with it.
 	let change = schedule(&h, roster[0], &service, dearer(), 0, "withdrawn for the record").await.unwrap();
 	let consilium = change.consilium_id.unwrap();
+	// Read as the owner would have, from the invitation delivered before the withdrawal — the
+	// queue row's copy is blanked with the withdrawal.
+	let (token, code) = credentials(&h, consilium, roster[1]).await;
 	let cancelled = fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, roster[2], now()).await.unwrap();
 	assert_eq!(cancelled.state, FeePolicyChangeState::Cancelled);
 	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Cancelled);
 	// A vote arriving after the withdrawal lands on a closed consilium and changes nothing.
-	let (token, code) = credentials(&h, consilium, roster[1]).await;
 	let audit = VoteAudit {
 		client_ip: "203.0.113.7".to_owned(),
 		user_agent: "itest".to_owned(),
@@ -1506,6 +1508,163 @@ async fn a_consilium_gated_change_is_withdrawn_only_by_an_owner() {
 			.state,
 		FeePolicyChangeState::Cancelled
 	);
+}
+
+/// Every mail of one kind queued for a consilium as the queue holds it, by recipient:
+/// `(sent, withdrawn, code)` — the code blank where the row carries none, or no longer.
+async fn consilium_mail_states(h: &Harness, consilium: ConsiliumId, kind: &str) -> std::collections::HashMap<UserId, (bool, bool, String)> {
+	let rows: Vec<(Uuid, bool, bool, String)> =
+		sqlx::query_as("SELECT user_id, sent_at IS NOT NULL, withdrawn_at IS NOT NULL, COALESCE(payload->>'code', '') FROM consilium_mail WHERE consilium_id = $1 AND kind = $2")
+			.bind(consilium.raw())
+			.bind(kind)
+			.fetch_all(&h.pool)
+			.await
+			.unwrap();
+	rows.into_iter().map(|(user, sent, withdrawn, code)| (UserId::from_raw(user), (sent, withdrawn, code))).collect()
+}
+
+/// Stand in for a consilium's deferred rows' backoff having run out.
+async fn let_the_consilium_backoff_run(h: &Harness, consilium: ConsiliumId) {
+	sqlx::query("UPDATE consilium_mail SET next_attempt_at = NULL WHERE consilium_id = $1")
+		.bind(consilium.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+}
+
+/// Every seat's `notified` flag — what the worker recorded as delivered, by seat.
+async fn seats_notified(h: &Harness, consilium: ConsiliumId) -> std::collections::HashMap<UserId, bool> {
+	let rows: Vec<(Uuid, bool)> = sqlx::query_as("SELECT user_id, notified FROM consilium_voter WHERE consilium_id = $1")
+		.bind(consilium.raw())
+		.fetch_all(&h.pool)
+		.await
+		.unwrap();
+	rows.into_iter().map(|(user, notified)| (UserId::from_raw(user), notified)).collect()
+}
+
+/// A consilium closed while nothing had left the queue: both seats' invitations withdrawn
+/// with their secrets gone, the three verdict mails (initiator and both seats) untouched.
+async fn assert_invitations_withdrawn_and_verdict_kept(h: &Harness, consilium: ConsiliumId) {
+	let invitations = consilium_mail_states(h, consilium, "fee_policy_approval").await;
+	assert_eq!(invitations.len(), 2, "{invitations:?}");
+	assert!(invitations.values().all(|(sent, withdrawn, code)| !sent && *withdrawn && code.is_empty()), "{invitations:?}");
+	let outcomes = consilium_mail_states(h, consilium, "payout_outcome").await;
+	assert_eq!(outcomes.len(), 3, "{outcomes:?}");
+	assert!(outcomes.values().all(|(sent, withdrawn, _)| !sent && !withdrawn), "{outcomes:?}");
+}
+
+/// The relay is down when an owner proposes a tightening and still down when the change is
+/// withdrawn (#342): the seats' approval invitations are withdrawn with the consilium, so the
+/// relay coming back does not ask anybody to vote on a request nobody can act on. An
+/// invitation that had already gone out stands, and the verdict mail the withdrawal queues
+/// is not caught by it — the audience is still told how it ended. The same for every other
+/// way a consilium closes without a verdict: the owner's own withdrawal, the window running
+/// out, a roster change.
+#[tokio::test]
+async fn withdrawing_a_consilium_gated_change_withdraws_the_invitations_the_relay_has_not_taken() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let roster = owners(&h, 3).await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	quiet_queue(&h).await;
+
+	let relay = Arc::new(SwitchedRelay::default());
+	let mailer = ConsiliumMailer::new(h.pool.clone(), relay.clone());
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "withdrawn while the relay was down").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+	let (told, untold) = (roster[1], roster[2]);
+	assert_eq!(consilium_mail_states(&h, consilium, "fee_policy_approval").await.len(), 2, "one invitation per seat");
+	// One seat is reached before the outage — its invitation goes through the worker, so
+	// the row is a delivered one as the worker leaves it — while the other's is held back
+	// (its backoff not yet run) and then sits deferred behind the outage.
+	sqlx::query("UPDATE consilium_mail SET next_attempt_at = now() + interval '1 hour' WHERE consilium_id = $1 AND user_id = $2")
+		.bind(consilium.raw())
+		.bind(untold.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(mailer.drain().await.unwrap(), 1);
+	assert!(matches!(relay.seen.lock().unwrap().as_slice(), [(_, GovernanceMail::FeePolicyApproval(_))]));
+	relay.seen.lock().unwrap().clear();
+	relay.down.store(true, Ordering::SeqCst);
+	let_the_consilium_backoff_run(&h, consilium).await;
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert_eq!(
+		seats_notified(&h, consilium).await,
+		[(told, true), (untold, false)].into(),
+		"the worker's own record of who was told"
+	);
+
+	let cancelled = fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, roster[0], now()).await.unwrap();
+	assert_eq!(cancelled.state, FeePolicyChangeState::Cancelled);
+	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Cancelled);
+	let invitations = consilium_mail_states(&h, consilium, "fee_policy_approval").await;
+	assert_eq!(invitations.len(), 2);
+	let (sent, withdrawn, code) = &invitations[&told];
+	assert!(
+		*sent && !withdrawn && code.is_empty(),
+		"what was delivered stands, its secrets stripped on delivery: {invitations:?}"
+	);
+	let (sent, withdrawn, code) = &invitations[&untold];
+	assert!(
+		!sent && *withdrawn && code.is_empty(),
+		"what was not is withdrawn, not delivered, and its secrets are gone: {invitations:?}"
+	);
+	assert_eq!(
+		seats_notified(&h, consilium).await,
+		[(told, true), (untold, false)].into(),
+		"the withdrawal tells nobody and untells nobody"
+	);
+	let outcomes = consilium_mail_states(&h, consilium, "payout_outcome").await;
+	assert_eq!(outcomes.len(), 3, "the initiator and both seats are still told the verdict");
+	assert!(
+		outcomes.values().all(|(sent, withdrawn, _)| !sent && !withdrawn),
+		"the verdict mails queued by the withdrawal are not caught by it: {outcomes:?}"
+	);
+	assert_eq!(piggybank_core::infrastructure::consilium_mailer::pending_count(&h.pool).await.unwrap(), 3);
+
+	// The relay comes back: the verdict goes out, the withdrawn invitation does not — not now,
+	// not after its backoff.
+	relay.down.store(false, Ordering::SeqCst);
+	let_the_consilium_backoff_run(&h, consilium).await;
+	assert_eq!(mailer.drain().await.unwrap(), 3);
+	{
+		let seen = relay.seen.lock().unwrap();
+		assert_eq!(seen.len(), 3);
+		assert!(
+			seen.iter()
+				.all(|(_, mail)| matches!(mail, GovernanceMail::PayoutOutcome(outcome) if outcome.outcome == "CANCELLED")),
+			"only the verdict reaches the relay: {seen:?}"
+		);
+	}
+	assert!(consilium_mail_states(&h, consilium, "fee_policy_approval").await[&untold].1, "still withdrawn");
+	assert_eq!(piggybank_core::infrastructure::consilium_mailer::pending_count(&h.pool).await.unwrap(), 0);
+
+	// The owner who opened it withdraws it through the consilium itself: the same withdrawal.
+	relay.down.store(true, Ordering::SeqCst);
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "withdrawn by the initiator").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	consilium_app::cancel(h.consilia.as_ref(), consilium, roster[0], now()).await.unwrap();
+	assert_invitations_withdrawn_and_verdict_kept(&h, consilium).await;
+
+	// The window runs out on the next one.
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "expired").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert!(h.consilia.expire_due(now() + domain::consilium::TTL_SECS + 1).await.unwrap() >= 1);
+	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Expired);
+	assert_invitations_withdrawn_and_verdict_kept(&h, consilium).await;
+
+	// And the roster moves under the one after.
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "voided").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert!(h.consilia.void_open_for_roster_change(now(), now()).await.unwrap() >= 1);
+	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Cancelled);
+	assert_invitations_withdrawn_and_verdict_kept(&h, consilium).await;
 }
 
 #[tokio::test]
