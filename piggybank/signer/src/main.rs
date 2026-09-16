@@ -67,7 +67,9 @@ async fn run() -> color_eyre::Result<()> {
 		allowlisted_destinations = policy.allowlist_len(),
 		treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(),
 		treasury_native = ?policy.treasury_native(),
-		"signer spend policy active: sweeps only to the treasury, gas top-ups only to own addresses, no native out of deposit wallets, treasury native off unless opted in"
+		native_spend_per_hour = ?policy.native_spend(),
+		tron_signing_enabled = policy.tron_signing_enabled(),
+		"signer spend policy active: sweeps only to the treasury, gas top-ups only to own addresses, no native out of deposit wallets, treasury native off unless opted in, native spend windowed per wallet"
 	);
 	if policy.max_transfer_usdt().is_none() {
 		tracing::warn!("signer treasury cap unset — a single treasury payout is unbounded (set SIGNER_MAX_TRANSFER_USDT before scaling liquidity)");

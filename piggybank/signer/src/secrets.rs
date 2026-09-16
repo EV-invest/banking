@@ -130,6 +130,11 @@ impl WalletSecrets {
 		Self { pool }
 	}
 
+	/// The signer database's pool, for the sibling stores that live in the same database.
+	pub(crate) fn pool(&self) -> &PgPool {
+		&self.pool
+	}
+
 	/// Insert a sealed key, idempotent per ACTIVE `(user_id, network)`: a concurrent
 	/// racer that inserted first wins and this is a no-op (the caller re-reads the
 	/// canonical address). Never overwrites an existing active key.

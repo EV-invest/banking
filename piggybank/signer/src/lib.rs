@@ -17,6 +17,7 @@
 //!   kek_guard   — boot-time KEK-epoch enforcement (sentinel + per-row fingerprints)
 //!   turnkey     — the remote key-backend implementation (custody; off by default)
 //!   secrets     — the `wallet_secrets` driven store (signer's own database)
+//!   native_spend — the sliding-window native-spend ledger the policy consults (same database)
 
 pub mod backend;
 pub mod config;
@@ -24,6 +25,7 @@ pub mod error;
 pub mod evm_tx;
 pub mod kek_guard;
 pub mod key_vault;
+pub mod native_spend;
 pub mod policy;
 pub mod provision;
 pub mod secrets;

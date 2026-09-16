@@ -34,6 +34,12 @@ fn test_vault() -> Vault {
 	Vault::from_hex(&hex::encode([9u8; 32])).unwrap()
 }
 
+/// The default policy with Tron signing switched on — the rail is frozen by default (#369),
+/// and these tests are about the fee budget, which must be reachable on Tron too.
+fn policy() -> SignerPolicy {
+	SignerPolicy::from_lookup(&|name| (name == "SIGNER_TRON_SIGNING_ENABLED").then(|| "true".to_owned())).unwrap()
+}
+
 /// A signer with a deposit wallet, the treasury and the gas station all provisioned on one
 /// network, so a sweep (deposit → treasury) and a top-up (station → deposit) are both
 /// legitimate under the class rules.
@@ -51,7 +57,7 @@ async fn rail(db: &common::TestDb, network: Network) -> Rail {
 	let treasury_address = provision::provision(&test_vault(), &secrets, Uuid::nil(), network).await.expect("provision the treasury").address;
 	provision::provision(&test_vault(), &secrets, GAS_STATION, network).await.expect("provision the gas station");
 	Rail {
-		signer: Signer::new(test_vault(), secrets, SignerPolicy::default()),
+		signer: Signer::new(test_vault(), secrets, policy()),
 		user,
 		user_address,
 		treasury_address,
@@ -307,7 +313,7 @@ async fn fee_budget_applies_to_the_treasury_and_the_gas_station_too() {
 		eprintln!("DATABASE_URL/SIGNER_DATABASE_URL unset — skipping signer fee budget test");
 		return;
 	};
-	let signer = Signer::new(test_vault(), WalletSecrets::new(db.pool.clone()), SignerPolicy::default());
+	let signer = Signer::new(test_vault(), WalletSecrets::new(db.pool.clone()), policy());
 
 	// Neither wallet is provisioned: an over-budget quote is refused on the budget, not on
 	// the missing key, so the gate is not a treasury control and runs before any key lookup.

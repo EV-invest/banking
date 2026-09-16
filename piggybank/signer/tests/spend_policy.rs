@@ -37,6 +37,19 @@ fn test_vault() -> Vault {
 	Vault::from_hex(&hex::encode([9u8; 32])).unwrap()
 }
 
+/// A policy from `vars` on top of the defaults, with Tron signing switched on: the rail is
+/// frozen by default (#369) and these tests exercise the Tron handlers past that gate. The
+/// gate itself is tested with the real default below.
+fn policy(vars: &[(&str, &str)]) -> SignerPolicy {
+	SignerPolicy::from_lookup(&|name| {
+		if name == "SIGNER_TRON_SIGNING_ENABLED" {
+			return Some("true".to_owned());
+		}
+		vars.iter().find(|(k, _)| *k == name).map(|(_, v)| (*v).to_owned())
+	})
+	.unwrap()
+}
+
 /// `from_user_id` as the wire carries it: empty for the treasury.
 fn from(wallet: Uuid) -> String {
 	if wallet == TREASURY { String::new() } else { wallet.to_string() }
@@ -199,7 +212,7 @@ macro_rules! db_or_skip {
 #[tokio::test]
 async fn sweep_is_signed_to_the_treasury_and_refused_anywhere_else() {
 	let db = db_or_skip!();
-	let rail = Rail::new(&db, Network::Bep20, SignerPolicy::default()).await;
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
 
 	// The hub's shape, and the treasury spelled lowercase while the signer stores EIP-55.
 	rail.signer
@@ -230,7 +243,7 @@ async fn sweep_is_refused_while_the_treasury_is_not_provisioned_on_the_network()
 	let secrets = WalletSecrets::new(db.pool.clone());
 	let user = Uuid::new_v4();
 	provision::provision(&test_vault(), &secrets, user, Network::Trc20).await.expect("provision a deposit wallet");
-	let signer = Signer::new(test_vault(), secrets, SignerPolicy::default());
+	let signer = Signer::new(test_vault(), secrets, policy(&[]));
 
 	let status = denied(signer.sign_trc20_transfer(trc20(user, USDT_TRC20, OTHER_TRON, 1, 1_000_000)).await, "sweep with no treasury");
 	assert!(status.message().contains("not provisioned"), "{status:?}");
@@ -240,9 +253,9 @@ async fn sweep_is_refused_while_the_treasury_is_not_provisioned_on_the_network()
 #[tokio::test]
 async fn deposit_wallet_never_signs_a_native_transfer() {
 	let db = db_or_skip!();
-	let rail = Rail::new(&db, Network::Polygon, SignerPolicy::default()).await;
-	let ton_rail = Rail::new(&db, Network::Ton, SignerPolicy::default()).await;
-	let tron_rail = Rail::new(&db, Network::Trc20, SignerPolicy::default()).await;
+	let rail = Rail::new(&db, Network::Polygon, policy(&[])).await;
+	let ton_rail = Rail::new(&db, Network::Ton, policy(&[])).await;
+	let tron_rail = Rail::new(&db, Network::Trc20, policy(&[])).await;
 
 	// Not even to the treasury: a sweep moves USDT, and its gas arrives FROM the station.
 	denied(
@@ -262,7 +275,7 @@ async fn deposit_wallet_never_signs_a_native_transfer() {
 #[tokio::test]
 async fn ton_sweep_returns_excess_to_the_station_the_treasury_or_itself() {
 	let db = db_or_skip!();
-	let rail = Rail::new(&db, Network::Ton, SignerPolicy::default()).await;
+	let rail = Rail::new(&db, Network::Ton, policy(&[])).await;
 	let treasury_base64 = base64_of(&rail.treasury_address);
 
 	// The hub's shape: swept to the treasury (base64), excess back to the gas station.
@@ -296,7 +309,7 @@ async fn ton_sweep_returns_excess_to_the_station_the_treasury_or_itself() {
 #[tokio::test]
 async fn gas_topup_is_signed_to_a_held_address_and_refused_to_a_foreign_one() {
 	let db = db_or_skip!();
-	let rail = Rail::new(&db, Network::Bep20, SignerPolicy::default()).await;
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
 
 	// The hub sends the address as the signer handed it out; lowercase is the same address.
 	rail.signer
@@ -336,8 +349,8 @@ async fn gas_topup_is_signed_to_a_held_address_and_refused_to_a_foreign_one() {
 #[tokio::test]
 async fn gas_topup_on_ton_and_tron_resolves_the_held_address_in_any_rendering() {
 	let db = db_or_skip!();
-	let ton_rail = Rail::new(&db, Network::Ton, SignerPolicy::default()).await;
-	let tron_rail = Rail::new(&db, Network::Trc20, SignerPolicy::default()).await;
+	let ton_rail = Rail::new(&db, Network::Ton, policy(&[])).await;
+	let tron_rail = Rail::new(&db, Network::Trc20, policy(&[])).await;
 
 	// TON: the signer stores raw `0:<hex>`, the hub may send base64.
 	ton_rail
@@ -372,9 +385,9 @@ async fn gas_topup_on_ton_and_tron_resolves_the_held_address_in_any_rendering() 
 #[tokio::test]
 async fn gas_station_never_signs_a_token_transfer() {
 	let db = db_or_skip!();
-	let rail = Rail::new(&db, Network::Bep20, SignerPolicy::default()).await;
-	let ton_rail = Rail::new(&db, Network::Ton, SignerPolicy::default()).await;
-	let tron_rail = Rail::new(&db, Network::Trc20, SignerPolicy::default()).await;
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
+	let ton_rail = Rail::new(&db, Network::Ton, policy(&[])).await;
+	let tron_rail = Rail::new(&db, Network::Trc20, policy(&[])).await;
 
 	// Not even to the treasury, and however small.
 	let status = denied(
@@ -405,8 +418,7 @@ async fn gas_station_never_signs_a_token_transfer() {
 async fn treasury_allowlist_accepts_the_listed_address_in_another_rendering() {
 	let db = db_or_skip!();
 	// Listed lowercase; the hub sends EIP-55 (and vice versa).
-	let policy = SignerPolicy::from_lookup(&|name| (name == "SIGNER_DESTINATION_ALLOWLIST").then(|| OTHER_EVM.to_ascii_lowercase())).unwrap();
-	let rail = Rail::new(&db, Network::Bep20, policy).await;
+	let rail = Rail::new(&db, Network::Bep20, policy(&[("SIGNER_DESTINATION_ALLOWLIST", &OTHER_EVM.to_ascii_lowercase())])).await;
 
 	let eip55 = "0x024DA544A76714a3812096e9EF84D40b2C8863E8";
 	assert_ne!(eip55, OTHER_EVM);
@@ -422,12 +434,7 @@ async fn treasury_allowlist_accepts_the_listed_address_in_another_rendering() {
 	// TON: listed base64, sent raw. `our_jetton_wallet` is held to the list unless pinned, so
 	// pin it — the intended posture: pinned jetton wallet + allowlist.
 	let raw = tonlib_core::TonAddress::from_str(OTHER_TON).unwrap().to_hex();
-	let pinned = SignerPolicy::from_lookup(&|name| match name {
-		"SIGNER_DESTINATION_ALLOWLIST" => Some(OTHER_TON.to_owned()),
-		"SIGNER_TON_TREASURY_JETTON_WALLET" => Some(JETTON_WALLET.to_owned()),
-		_ => None,
-	})
-	.unwrap();
+	let pinned = policy(&[("SIGNER_DESTINATION_ALLOWLIST", OTHER_TON), ("SIGNER_TON_TREASURY_JETTON_WALLET", JETTON_WALLET)]);
 	let ton_rail = Rail::new(&db, Network::Ton, pinned).await;
 	let treasury_base64 = base64_of(&ton_rail.treasury_address);
 	ton_rail
@@ -451,7 +458,7 @@ async fn treasury_allowlist_accepts_the_listed_address_in_another_rendering() {
 async fn treasury_native_is_refused_by_default_on_every_rail() {
 	let db = db_or_skip!();
 	// Nothing provisioned at all: the refusal is the rule's, before any key is looked up.
-	let signer = Signer::new(test_vault(), WalletSecrets::new(db.pool.clone()), SignerPolicy::default());
+	let signer = Signer::new(test_vault(), WalletSecrets::new(db.pool.clone()), policy(&[]));
 
 	let status = denied(
 		signer.sign_native_transfer(native(TREASURY, "polygon", 137, OTHER_EVM, 1, GWEI, 21_000)).await,
@@ -470,15 +477,13 @@ async fn treasury_native_is_refused_by_default_on_every_rail() {
 #[tokio::test]
 async fn treasury_native_opted_in_signs_to_the_allowlist_under_the_ceiling() {
 	let db = db_or_skip!();
-	let policy = SignerPolicy::from_lookup(&|name| match name {
-		"SIGNER_ALLOW_TREASURY_NATIVE" => Some("true".to_owned()),
-		"SIGNER_DESTINATION_ALLOWLIST" => Some(OTHER_EVM.to_owned()),
-		"SIGNER_MAX_TREASURY_NATIVE_POLYGON" => Some("1000000000000000000".to_owned()),
-		_ => None,
-	})
-	.unwrap();
-	let rail = Rail::new(&db, Network::Polygon, policy.clone()).await;
-	let bsc = Rail::new(&db, Network::Bep20, policy).await;
+	let opted_in = policy(&[
+		("SIGNER_ALLOW_TREASURY_NATIVE", "true"),
+		("SIGNER_DESTINATION_ALLOWLIST", OTHER_EVM),
+		("SIGNER_MAX_TREASURY_NATIVE_POLYGON", "1000000000000000000"),
+	]);
+	let rail = Rail::new(&db, Network::Polygon, opted_in.clone()).await;
+	let bsc = Rail::new(&db, Network::Bep20, opted_in).await;
 
 	// Allowlisted (in another rendering) and at the ceiling: signed.
 	rail.signer
@@ -516,8 +521,8 @@ async fn treasury_native_opted_in_signs_to_the_allowlist_under_the_ceiling() {
 #[tokio::test]
 async fn treasury_token_transfer_must_name_the_pinned_usdt_contract() {
 	let db = db_or_skip!();
-	let rail = Rail::new(&db, Network::Bep20, SignerPolicy::default()).await;
-	let tron_rail = Rail::new(&db, Network::Trc20, SignerPolicy::default()).await;
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
+	let tron_rail = Rail::new(&db, Network::Trc20, policy(&[])).await;
 
 	rail.signer
 		.sign_erc20_transfer(erc20(TREASURY, &USDT_BEP20.to_ascii_lowercase(), OTHER_EVM, 1, GWEI, 60_000))
@@ -543,5 +548,164 @@ async fn treasury_token_transfer_must_name_the_pinned_usdt_contract() {
 		.sign_erc20_transfer(erc20(rail.user, OTHER_EVM, &rail.treasury_address, 1, GWEI, 60_000))
 		.await
 		.expect("a sweep of any token into the treasury is signed");
+	db.cleanup().await;
+}
+
+// === #369: native spend is bounded per wallet over a sliding hour ==============
+
+#[tokio::test]
+async fn native_spend_window_admits_n_signatures_then_refuses_the_next_from_that_wallet() {
+	let db = db_or_skip!();
+	// One top-up commits 21_000 wei of gas (1 wei × 21_000) + 1 wei of value; three fit exactly.
+	let per_topup: u128 = 21_000 + 1;
+	let cap = (per_topup * 3).to_string();
+	let rail = Rail::new(&db, Network::Bep20, policy(&[("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20", &cap)])).await;
+
+	for n in 1..=3 {
+		rail.signer
+			.sign_native_transfer(native(GAS_STATION, "bep20", 56, &rail.user_address, 1, 1, 21_000))
+			.await
+			.unwrap_or_else(|status| panic!("top-up {n} of 3 within the window must be signed: {status:?}"));
+	}
+	let status = denied(
+		rail.signer.sign_native_transfer(native(GAS_STATION, "bep20", 56, &rail.user_address, 1, 1, 21_000)).await,
+		"the fourth top-up",
+	);
+	assert!(status.message().contains("native spend window"), "{status:?}");
+	// Even the smallest possible signature from that wallet: the window is spent, not "nearly".
+	denied(
+		rail.signer.sign_native_transfer(native(GAS_STATION, "bep20", 56, &rail.user_address, 0, 1, 1)).await,
+		"a 1-wei signature after the window is spent",
+	);
+
+	// Another wallet on the same rail has its own window: a sweep from the deposit wallet
+	// (21_000 × 1 wei of gas, no value) is signed.
+	rail.signer
+		.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, 1, 1, 21_000))
+		.await
+		.expect("another wallet's window is untouched");
+	// And the same wallet on another rail too.
+	let polygon = Rail::new(&db, Network::Polygon, policy(&[("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20", &cap)])).await;
+	polygon
+		.signer
+		.sign_native_transfer(native(GAS_STATION, "polygon", 137, &polygon.user_address, 1, 1, 21_000))
+		.await
+		.expect("the gas station's Polygon window is untouched");
+	db.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn native_spend_window_holds_under_concurrent_requests_on_one_wallet() {
+	let db = db_or_skip!();
+	// Room for exactly three; ten requests race for it. Without the ledger's lock several
+	// could read the window as open at once and all be signed.
+	let per_topup: u128 = 21_000 + 1;
+	let cap = (per_topup * 3).to_string();
+	let rail = Rail::new(&db, Network::Bep20, policy(&[("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20", &cap)])).await;
+	let signer = std::sync::Arc::new(rail.signer);
+
+	let mut set = tokio::task::JoinSet::new();
+	for _ in 0..10 {
+		let signer = std::sync::Arc::clone(&signer);
+		let to = rail.user_address.clone();
+		set.spawn(async move { signer.sign_native_transfer(native(GAS_STATION, "bep20", 56, &to, 1, 1, 21_000)).await.map(|_| ()) });
+	}
+	let mut signed = 0;
+	while let Some(outcome) = set.join_next().await {
+		match outcome.expect("task panicked") {
+			Ok(()) => signed += 1,
+			Err(status) => assert_eq!(status.code(), Code::PermissionDenied, "{status:?}"),
+		}
+	}
+	assert_eq!(signed, 3, "exactly the window's worth is signed, however the requests interleave");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn native_spend_window_refuses_before_any_key_is_touched() {
+	let db = db_or_skip!();
+	// A cap below what a single ceiling-priced sweep commits: refused on the window, and from
+	// a wallet that was never provisioned — PermissionDenied, not FailedPrecondition.
+	let tight = policy(&[
+		("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20", "1"),
+		("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TRC20", "1"),
+		("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TON", "1"),
+	]);
+	let rail = Rail::new(&db, Network::Bep20, tight.clone()).await;
+	let tron_rail = Rail::new(&db, Network::Trc20, tight.clone()).await;
+
+	let status = denied(
+		rail.signer.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, 1, GWEI, 60_000)).await,
+		"sweep over the window",
+	);
+	assert!(status.message().contains("native spend window"), "{status:?}");
+	denied(
+		tron_rail
+			.signer
+			.sign_trc20_transfer(trc20(tron_rail.user, USDT_TRC20, &tron_rail.treasury_address, 1, 1_000_000))
+			.await,
+		"trc20 sweep over the window",
+	);
+	// TON native from the gas station to a held address, with the window at 1 nanoton.
+	let ton_rail = Rail::new(&db, Network::Ton, tight.clone()).await;
+	denied(ton_rail.signer.sign_ton_transfer(ton(GAS_STATION, &ton_rail.user_address, 2)).await, "ton top-up over the window");
+	// A signer with NOTHING provisioned: a treasury payout passes every other rule (pinned
+	// token, no cap, no allowlist) and is refused on the window before the key lookup that
+	// would otherwise fail on the missing treasury.
+	let bare = Signer::new(test_vault(), WalletSecrets::new(db.pool.clone()), tight);
+	let status = denied(
+		bare.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000)).await,
+		"unprovisioned treasury over the window",
+	);
+	assert!(status.message().contains("native spend window"), "{status:?}");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn native_spend_window_counts_fees_of_token_transfers_too() {
+	let db = db_or_skip!();
+	// Two ceiling-priced sweeps' worth of gas: the third sweep from the same wallet is refused
+	// although it moves no native value at all — the fee is the spend.
+	let fee: u128 = 100 * GWEI * 100_000;
+	let rail = Rail::new(&db, Network::Bep20, policy(&[("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20", &(fee * 2).to_string())])).await;
+	for _ in 0..2 {
+		rail.signer
+			.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, 1, 100 * GWEI, 100_000))
+			.await
+			.expect("a sweep within the window is signed");
+	}
+	denied(
+		rail.signer
+			.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, 1, 100 * GWEI, 100_000))
+			.await,
+		"a third ceiling-priced sweep",
+	);
+	// A cheaper one still fits nothing: the window is exactly full.
+	denied(
+		rail.signer.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, 1, 1, 21_000)).await,
+		"any further sweep",
+	);
+	db.cleanup().await;
+}
+
+// === #369: Tron is frozen by default =============================================
+
+#[tokio::test]
+async fn tron_handlers_refuse_everything_while_signing_is_disabled() {
+	let db = db_or_skip!();
+	// The REAL default — not the test policy — and a fully provisioned rail, so nothing but
+	// the freeze can be what refuses.
+	let rail = Rail::new(&db, Network::Trc20, SignerPolicy::default()).await;
+
+	let status = denied(
+		rail.signer.sign_trc20_transfer(trc20(rail.user, USDT_TRC20, &rail.treasury_address, 1, 1_000_000)).await,
+		"a legitimate sweep while frozen",
+	);
+	assert!(status.message().contains("SIGNER_TRON_SIGNING_ENABLED"), "{status:?}");
+	denied(rail.signer.sign_trx_transfer(trx(GAS_STATION, &rail.user_address, 1)).await, "a legitimate top-up while frozen");
+	// Before any other check: a malformed request is refused on the freeze, not as malformed.
+	let mut req = trc20(rail.user, USDT_TRC20, &rail.treasury_address, 1, -1).into_inner();
+	req.network = "bogus".to_owned();
+	denied(rail.signer.sign_trc20_transfer(Request::new(req)).await, "a malformed request while frozen");
 	db.cleanup().await;
 }

@@ -61,7 +61,7 @@
 //! the observability seams. An operator enabling the allowlist must either pin the
 //! treasury's jetton wallet or put it on the list, or every TON withdrawal is refused.
 //!
-//! Two controls are the opposite — **on by default** with ceilings an honest hub never
+//! Three controls are the opposite — **on by default** with ceilings an honest hub never
 //! reaches, and an operator may raise them via their `SIGNER_MAX_*` variables but cannot
 //! switch them off (`0` is a boot error, not "disabled"):
 //!
@@ -69,14 +69,27 @@
 //!     transaction, on every wallet class. The amount caps above bound what leaves in USDT;
 //!     they say nothing about the native coin a transaction burns as fee. Without this gate a
 //!     forged request moving 1 USDT with an absurd `gas_price` would hand the whole native
-//!     balance to the miner, and could do so once per nonce;
+//!     balance to the miner;
 //!   - the **gas top-up cap** ([`GasTopupCaps`]) — a ceiling on the native amount one
-//!     gas-station drip may carry.
+//!     gas-station drip may carry;
+//!   - the **native spend window** ([`NativeSpendWindow`]) — a ceiling on the native coin a
+//!     `(wallet, network)` may commit to over a sliding hour, counted in the signer's own
+//!     database ([`crate::native_spend`]) before each signature. The two ceilings above are
+//!     per signature; nothing else bounds how many signatures a compromised hub asks for, and
+//!     a thousand drips or fee-limits at the ceiling are the same hole as one unbounded
+//!     signature. What counts is the native coin a signature can burn or move: EVM
+//!     `gas_price × gas_limit` plus a native transfer's `value`, Tron `fee_limit` or the TRX
+//!     amount, TON `msg_value` or the Toncoin amount.
+//!
+//! **Tron signing is off by default** (`SIGNER_TRON_SIGNING_ENABLED`): the hub keeps the rail
+//! frozen (`TRC20_FROZEN` in `piggybank/core/src/config.rs`), so no legitimate Tron signature
+//! exists today and every Tron handler refuses before any other check. Flip it together with
+//! the hub's freeze.
 //!
 //! `Status` is tonic's large error type we don't control (same as the service handlers).
 #![allow(clippy::result_large_err)]
 
-use std::str::FromStr as _;
+use std::{str::FromStr as _, time::Duration};
 
 use domain::money::{Network, Usdt};
 use tonic::Status;
@@ -115,6 +128,71 @@ pub struct SignerPolicy {
 	/// `Some` only when an operator opted in to native transfers FROM the treasury; carries
 	/// the per-rail ceilings. `None` ⇒ every such transfer is refused.
 	treasury_native: Option<TreasuryNativeCaps>,
+	/// The always-on ceiling on native spend per `(wallet, network)` over [`NATIVE_SPEND_WINDOW`].
+	native_spend: NativeSpendWindow,
+	/// Whether the Tron handlers sign at all (`SIGNER_TRON_SIGNING_ENABLED`, default off).
+	tron_signing_enabled: bool,
+}
+
+/// The sliding window every [`NativeSpendWindow`] ceiling is measured over.
+pub const NATIVE_SPEND_WINDOW: Duration = Duration::from_secs(60 * 60);
+
+/// Ceilings on the native coin one `(wallet, network)` may commit to per sliding hour, in
+/// base units (`SIGNER_MAX_NATIVE_SPEND_PER_HOUR_{BEP20,POLYGON,TRC20,TON}`).
+///
+/// Sized as the largest single-signature native spend the other two ceilings admit, times a
+/// generous count of honest signatures per hour — the busiest wallet is the gas station,
+/// which may drip to tens of fresh deposit addresses in one sweep cycle:
+///   - BEP20: a drip is at most 0.05 BNB ([`GasTopupCaps`]) + 0.01 BNB fee ([`FeeBudget`])
+///     = 0.06 BNB; a sweep or payout at most 0.01 BNB. Cap 1e18 wei (1 BNB): ~16 ceiling
+///     drips, or ~100 ceiling sweeps — while an honest hour at normal gas is ~0.1 BNB.
+///   - Polygon: a drip at most 2 POL + 0.5 POL; a sweep at most 0.5 POL. Cap 5e19 wei
+///     (50 POL): 20 ceiling drips or 100 ceiling sweeps.
+///   - Tron: a TRC20 signature burns up to `fee_limit` 100 TRX; a drip 50 TRX. Cap 2e9 SUN
+///     (2_000 TRX): 20 ceiling sweeps or 40 drips.
+///   - TON: a jetton send attaches 0.1 TON; a drip 0.2 TON. Cap 5e9 nanoton (5 TON): 25
+///     ceiling drips or 50 sweeps.
+///
+/// Each is per wallet, so the treasury, the gas station and every deposit wallet get their
+/// own hour; an operator sizing the gas float tighter lowers the matching variable.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeSpendWindow {
+	bep20_wei: u128,
+	polygon_wei: u128,
+	trc20_sun: u128,
+	ton_nano: u128,
+}
+
+impl Default for NativeSpendWindow {
+	fn default() -> Self {
+		Self {
+			bep20_wei: 1_000_000_000_000_000_000,
+			polygon_wei: 50_000_000_000_000_000_000,
+			trc20_sun: 2_000_000_000,
+			ton_nano: 5_000_000_000,
+		}
+	}
+}
+
+impl NativeSpendWindow {
+	fn from_lookup(lookup: &impl Fn(&str) -> Option<String>) -> color_eyre::Result<Self> {
+		let defaults = Self::default();
+		Ok(Self {
+			bep20_wei: env_cap(lookup, "SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20", defaults.bep20_wei)?,
+			polygon_wei: env_cap(lookup, "SIGNER_MAX_NATIVE_SPEND_PER_HOUR_POLYGON", defaults.polygon_wei)?,
+			trc20_sun: env_cap(lookup, "SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TRC20", defaults.trc20_sun)?,
+			ton_nano: env_cap(lookup, "SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TON", defaults.ton_nano)?,
+		})
+	}
+
+	fn cap(&self, network: Network) -> u128 {
+		match network {
+			Network::Bep20 => self.bep20_wei,
+			Network::Polygon => self.polygon_wei,
+			Network::Trc20 => self.trc20_sun,
+			Network::Ton => self.ton_nano,
+		}
+	}
 }
 
 /// The USDT contract per rail (`SIGNER_USDT_CONTRACT_{BEP20,POLYGON,TRC20}`), defaulting to
@@ -435,6 +513,16 @@ fn deny_over(network: Network, control: &str, field: &str, value: u128, cap: u12
 	Ok(())
 }
 
+/// The native coin an EVM signature commits to: the whole fee (`gas_price × gas_limit` — the
+/// chain refunds unused gas, but the signature authorises all of it) plus the native `value`.
+/// The fee budget has already refused an overflowing product; the sum is checked here.
+pub fn evm_native_spend(network: Network, gas_price: u128, gas_limit: u64, value: u128) -> Result<u128, Status> {
+	gas_price
+		.checked_mul(u128::from(gas_limit))
+		.and_then(|fee| fee.checked_add(value))
+		.ok_or_else(|| Status::permission_denied(format!("native spend of the transaction overflows the signer's window on {network}")))
+}
+
 /// A native transfer out of a deposit wallet: no core flow does this (a sweep moves USDT, and
 /// its gas arrives FROM the gas station), so there is nothing to allow.
 pub fn refuse_deposit_native(network: Network) -> Status {
@@ -490,6 +578,8 @@ impl SignerPolicy {
 		} else {
 			None
 		};
+		let native_spend = NativeSpendWindow::from_lookup(lookup)?;
+		let tron_signing_enabled = env_flag(lookup, "SIGNER_TRON_SIGNING_ENABLED")?;
 		Ok(Self {
 			max_transfer_usdt,
 			destination_allowlist,
@@ -498,6 +588,8 @@ impl SignerPolicy {
 			gas_topup,
 			token_pins,
 			treasury_native,
+			native_spend,
+			tron_signing_enabled,
 		})
 	}
 
@@ -528,6 +620,40 @@ impl SignerPolicy {
 	/// The treasury-native ceilings, `Some` only when an operator opted in.
 	pub fn treasury_native(&self) -> Option<&TreasuryNativeCaps> {
 		self.treasury_native.as_ref()
+	}
+
+	pub fn native_spend(&self) -> &NativeSpendWindow {
+		&self.native_spend
+	}
+
+	pub fn tron_signing_enabled(&self) -> bool {
+		self.tron_signing_enabled
+	}
+
+	/// The first gate on every Tron handler: refused outright while the rail is frozen.
+	pub fn check_tron_signing(&self) -> Result<(), Status> {
+		if self.tron_signing_enabled {
+			return Ok(());
+		}
+		Err(Status::permission_denied(
+			"Tron signing is disabled on this signer (SIGNER_TRON_SIGNING_ENABLED) while the rail is frozen",
+		))
+	}
+
+	/// Enforce the native spend window on `network`: `spent` is what the wallet's window
+	/// already holds (read under the ledger's lock), `spend` what this signature would add.
+	/// Pure, so the caller can hold the ledger transaction across it.
+	pub fn check_native_spend_window(&self, network: Network, spent: u128, spend: u128) -> Result<(), Status> {
+		let cap = self.native_spend.cap(network);
+		let total = spent
+			.checked_add(spend)
+			.ok_or_else(|| Status::permission_denied(format!("native spend {spend} overflows the signer's window on {network}")))?;
+		if total > cap {
+			return Err(Status::permission_denied(format!(
+				"native spend {spend} would bring this wallet's last hour on {network} to {total}, over the signer's native spend window cap of {cap}"
+			)));
+		}
+		Ok(())
 	}
 
 	/// Enforce the fee budget on a transaction about to be signed — from ANY wallet.
@@ -697,6 +823,8 @@ mod tests {
 			gas_topup: GasTopupCaps::default(),
 			token_pins: TokenPins::default(),
 			treasury_native: None,
+			native_spend: NativeSpendWindow::default(),
+			tron_signing_enabled: false,
 		}
 	}
 
@@ -865,6 +993,85 @@ mod tests {
 			let err = TokenPins::from_lookup(&lookup(&[(name, bad)])).expect_err(&format!("{name}={bad} must not boot"));
 			assert!(err.to_string().contains(name), "{err}");
 		}
+	}
+
+	// === native spend window ======================================================
+
+	#[test]
+	fn native_spend_window_admits_up_to_the_cap_and_refuses_the_next_unit() {
+		let p = SignerPolicy::default();
+		let cap = 1_000_000_000_000_000_000;
+		assert!(p.check_native_spend_window(Network::Bep20, 0, cap).is_ok());
+		assert!(p.check_native_spend_window(Network::Bep20, cap - 1, 1).is_ok());
+		let status = denied(p.check_native_spend_window(Network::Bep20, cap, 1));
+		assert!(status.message().contains("native spend window"), "{status:?}");
+		denied(p.check_native_spend_window(Network::Bep20, 0, cap + 1));
+		// Per-rail caps: 50 POL, 2_000 TRX, 5 TON.
+		assert!(p.check_native_spend_window(Network::Polygon, 0, 50_000_000_000_000_000_000).is_ok());
+		denied(p.check_native_spend_window(Network::Polygon, 1, 50_000_000_000_000_000_000));
+		assert!(p.check_native_spend_window(Network::Trc20, 1_900_000_000, 100_000_000).is_ok());
+		denied(p.check_native_spend_window(Network::Trc20, 1_900_000_001, 100_000_000));
+		assert!(p.check_native_spend_window(Network::Ton, 4_800_000_000, 200_000_000).is_ok());
+		denied(p.check_native_spend_window(Network::Ton, 4_800_000_001, 200_000_000));
+		// A sum that does not fit is refused as such, never compared after wrapping.
+		let status = denied(p.check_native_spend_window(Network::Ton, u128::MAX, 1));
+		assert!(status.message().contains("overflows"), "{status:?}");
+	}
+
+	#[test]
+	fn evm_native_spend_is_fee_plus_value_and_refuses_overflow() {
+		assert_eq!(evm_native_spend(Network::Bep20, 5 * GWEI, 21_000, 7).unwrap(), 5 * GWEI * 21_000 + 7);
+		assert_eq!(evm_native_spend(Network::Bep20, 5 * GWEI, 60_000, 0).unwrap(), 5 * GWEI * 60_000);
+		assert_eq!(evm_native_spend(Network::Bep20, u128::MAX, 2, 0).unwrap_err().code(), Code::PermissionDenied);
+		assert_eq!(evm_native_spend(Network::Bep20, u128::MAX, 1, 1).unwrap_err().code(), Code::PermissionDenied);
+	}
+
+	#[test]
+	fn native_spend_window_comes_from_env_and_refuses_zero() {
+		assert_eq!(NativeSpendWindow::from_lookup(&lookup(&[])).unwrap(), NativeSpendWindow::default());
+		let window = NativeSpendWindow::from_lookup(&lookup(&[
+			("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20", "1"),
+			("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_POLYGON", "2"),
+			("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TRC20", "3"),
+			("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TON", "340282366920938463463374607431768211455"),
+		]))
+		.unwrap();
+		assert_eq!(
+			window,
+			NativeSpendWindow {
+				bep20_wei: 1,
+				polygon_wei: 2,
+				trc20_sun: 3,
+				ton_nano: u128::MAX,
+			}
+		);
+		for name in [
+			"SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20",
+			"SIGNER_MAX_NATIVE_SPEND_PER_HOUR_POLYGON",
+			"SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TRC20",
+			"SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TON",
+		] {
+			for bad in ["0", "abc", "-5", "1.5"] {
+				let err = NativeSpendWindow::from_lookup(&lookup(&[(name, bad)])).expect_err(&format!("{name}={bad} must not boot"));
+				assert!(err.to_string().contains(name), "{err}");
+			}
+		}
+		assert_eq!(NATIVE_SPEND_WINDOW, Duration::from_secs(3600));
+	}
+
+	// === tron: frozen by default ==================================================
+
+	#[test]
+	fn tron_signing_is_off_unless_the_flag_says_true() {
+		let off = SignerPolicy::from_lookup(&lookup(&[])).unwrap();
+		assert!(!off.tron_signing_enabled());
+		let status = denied(off.check_tron_signing());
+		assert!(status.message().contains("SIGNER_TRON_SIGNING_ENABLED"), "{status:?}");
+		let on = SignerPolicy::from_lookup(&lookup(&[("SIGNER_TRON_SIGNING_ENABLED", " True ")])).unwrap();
+		assert!(on.tron_signing_enabled());
+		assert!(on.check_tron_signing().is_ok());
+		assert!(!SignerPolicy::from_lookup(&lookup(&[("SIGNER_TRON_SIGNING_ENABLED", "false")])).unwrap().tron_signing_enabled());
+		assert!(SignerPolicy::from_lookup(&lookup(&[("SIGNER_TRON_SIGNING_ENABLED", "1")])).is_err());
 	}
 
 	// === allowlist: rendering-aware membership ===================================
