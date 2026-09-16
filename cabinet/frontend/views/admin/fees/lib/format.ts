@@ -6,6 +6,10 @@ import type { Translate } from "@evinvest/i18n";
 import { basisLabel, crystallizationLabel, type FeeTermsLike } from "@/shared/lib/fee-terms";
 import { pct } from "@/shared/lib/rate";
 
+// Lives in `shared` since the admin resources poll on it (banking#326); the screen keeps
+// reading it from here beside the other words for a change.
+export { isPendingChange } from "@/shared/lib/fee-terms";
+
 // The states this build has a name for. Anything else falls back to the bare wire word,
 // which is legible — `views/consilium/lib/format.ts` makes the same call, for the same
 // reason: a reader seeing `reconciling` is better served than `admin.feeChange.state.reconciling`.
@@ -29,11 +33,6 @@ export function changeStateTone(state: string | undefined): string {
   if (state === "scheduled" || state === "awaiting_consilium") return "text-accent-debug";
   if (state === "rejected") return "text-accent-error";
   return "text-ink-soft";
-}
-
-/** Pending means the change is still on its way — the two states a cancel can reach. */
-export function isPendingChange(state: string | undefined): boolean {
-  return state === "scheduled" || state === "awaiting_consilium";
 }
 
 /** The five terms in one line: "2% p.a. · 20% of the gain above 5% · Invested capital · Annually". */

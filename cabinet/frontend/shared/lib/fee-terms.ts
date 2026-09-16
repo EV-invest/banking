@@ -60,6 +60,12 @@ export const BASES = ["invested_capital", "market_value"] as const;
 /** Most frequent first: the order in which each step is a dearer price for the investor. */
 export const CRYSTALLIZATIONS = ["monthly", "quarterly", "semi_annual", "annual"] as const;
 
+/** Pending means the change is still on its way — the two states a cancel can reach, and
+ *  the ones the sweeper (or the owners) will move without anyone on this screen acting. */
+export function isPendingChange(state: string | undefined): boolean {
+  return state === "scheduled" || state === "awaiting_consilium";
+}
+
 const PERIOD_SECONDS: Record<string, number> = {
   monthly: 30 * 86_400,
   quarterly: 91 * 86_400,

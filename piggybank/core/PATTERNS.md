@@ -983,17 +983,55 @@ at full fidelity until the upgrade lands. Marking it applied — which is what b
 `last_lifecycle_sequence` "so it isn't re-fetched forever" did — is how a freeze or a tier
 revocation gets swallowed while the money plane keeps trading under withdrawn rules.
 
-**Verification gate (`kyc_level`).** The mirrored tier is not just stored, it *gates*:
-`domain::users::KYC_LEVEL_VERIFIED` (= 1) is the floor for money crossing the platform
-boundary in either direction — `GetDepositAddress` and `RequestWithdrawal`, and again at
-**dispatch** (`dispatch_withdrawal`), since acceptance and payout can be hours apart and a
-`KYC_CHANGED{kyc_level: 0}` sets no freeze for the freeze gate to catch. The ladder is
-written down on `banking.v1.UserProfile.kyc_level`: **0** registered (confirmed email,
-nothing verified), **1** verified (document + liveness + face match + a passed
-sanctions/PEP screen), **2** enhanced (proof of address + source of funds, raised limits),
-**3** elevated (EDD, human-set only). Concierge owns the value and an admin sets it there;
-banking has no transition that writes it, and the `users` UPDATE deliberately omits the
-column so a profile save can never race a `KYC_CHANGED` back to an older tier.
+**What the bridge trusts about its peer.** The channel is built once at boot from
+`CONCIERGE_BRIDGE_ADDR`, and in production that address is plaintext h2c inside the cluster
+(`http://concierge:55670`). The only credential on the wire is the outbound
+`BRIDGE_SERVICE_TOKEN` bearer, and it points the wrong way for this question: it proves
+banking to concierge, never concierge to banking. Anything that can answer on that address
+can hand the consumer a freeze, a revoke floor or a `KYC_CHANGED`, and the mirror will
+apply it. Phase 1 of #199 closes what banking can close on its own: boot **WARNs** — it
+does not refuse — when `APP_ENV=production` and `CONCIERGE_BRIDGE_ADDR` is neither `https`
+nor loopback, so a plaintext mirror shows up in a pod's first lines instead of in someone's
+memory; and `BRIDGE_TLS_CA_PEM_FILE` pins a private CA for the bridge channel exactly as
+`SIGNER_TLS_CA_PEM_FILE` already does for the signer client. It warns rather than refusing
+because production runs h2c today, and a bridge that refuses to boot mirrors nothing —
+freezes and tier revocations stop arriving, which is worse than the plaintext it objected
+to. The other half is not banking's to fix: phase 2 is a TLS listener at concierge with the
+CA pinned here, and only then does the WARN become a refusal. The network-level half — a
+NetworkPolicy that lets nothing but the piggybank pod reach `:55670` — is generated in
+devops, not in this repo.
+
+**Verification gate (`kyc_level`).** The mirrored tier is not just stored, it *gates* —
+and what it gates is **provisioning and payout, not the arrival of money**.
+`domain::users::KYC_LEVEL_VERIFIED` (= 1) is the floor for three calls and three only:
+`GetDepositAddress`, which provisions the address; `RequestWithdrawal`, which accepts the
+payout; and `dispatch_withdrawal`, which checks again at **dispatch**, since acceptance and
+payout can be hours apart and a `KYC_CHANGED{kyc_level: 0}` sets no freeze for the freeze
+gate to catch. The ladder is written down on `banking.v1.UserProfile.kyc_level`: **0**
+registered (confirmed email, nothing verified), **1** verified (document + liveness + face
+match + a passed sanctions/PEP screen), **2** enhanced (proof of address + source of funds,
+raised limits), **3** elevated (EDD, human-set only). Concierge owns the value and an admin
+sets it there; banking has no transition that writes it, and the `users` UPDATE
+deliberately omits the column so a profile save can never race a `KYC_CHANGED` back to an
+older tier.
+
+**Crediting is not gated, and that is deliberate (#179).** Once an address has been
+provisioned it stays live, and the rail watcher keeps crediting whatever arrives on it
+whatever the owner's tier is today — a user verified in the past and revoked since keeps a
+working deposit address. Nothing leaks: the same revocation closes `RequestWithdrawal` and
+`dispatch_withdrawal`, so an incoming transfer lands on a claim its owner cannot move and
+sits there until the tier is restored or an operator settles it by hand. The invariant is
+therefore a gate on **provisioning**, not a claim that an unverified user cannot be sent
+money: a transfer to an address that already exists on chain is not ours to refuse, and the
+alternative — holding the credit off the ledger — is custody the books do not show. Two
+consequences that are easy to get wrong:
+
+- **Copy must not promise what the gate does not do.** The cabinet may say that no deposit
+  address will be issued and that withdrawal is closed; it must never say "you cannot
+  receive funds" or "incoming transfers are blocked until you verify".
+- **A revoked tier is not a quarantine.** Should "credited to a user whose verification was
+  withdrawn" ever need its own handling — a quarantine claim and a manual review path —
+  that is new work, not something the existing gate is quietly assumed to be doing.
 
 Both gates sit **above** the [`DepositAddresses`] port for the same reason the rail gate
 does: the first `address` call provisions a signer keypair, and a key minted for an
@@ -1073,6 +1111,23 @@ watchers could not see, and `SeedCapital` is the same verification with one extr
 address instead of crediting that user, so an operator who meant capital and got a deposit
 finds out. Both are chain-proven and idempotent by the chain `tx_ref`; neither accepts an
 amount from the caller (the free-amount, no-dedup `SeedCapital` was removed in #234).
+
+The EVM deposit scan ([`deposit_watcher`](src/infrastructure/deposit_watcher.rs)) degrades
+rather than wedges when its `eth_getLogs` endpoint refuses it. A window refused for **width**
+is halved down to a floor (the cap is static, so the window never widens again). A window
+refused because the provider has **pruned** that history (`-32701`, "pruned" — shared nodes
+keep a bounded suffix of the chain) can never succeed at any width, so the live scan bisects
+for the oldest block still served, jumps the cursor there, and files the skipped range as a
+Sentry-shipped `error!` with its `from`/`to` — those deposits are **not credited** and the
+operator reconciles the window by hand with `RecordDeposit`. Retrying the pruned window
+instead (the pre-#309 behaviour: cycle backoff to 300 s, forever) loses every deposit after
+the gap as well. The skip is persisted only on a boundary the provider **confirmed**: the
+refused block is re-probed (a refusal that does not repeat is one backend's opinion), the
+head is probed rather than assumed, and the block under the boundary is probed once more —
+a provider refusing everything (index off) or a keyed pool answering the same block both
+ways yields no boundary, and the cycle holds its cursor and backs off as before. A backfill
+(`CursorPolicy::Leave`) never clamps — the operator chose that window, so it gets the
+refusal back.
 
 [`reaper`](src/infrastructure/reaper.rs) (`Reaper::sweep`) owns the timeout for abandoned
 sagas (TB pendings are `timeout = 0`, so nothing auto-voids). Split by safety per the

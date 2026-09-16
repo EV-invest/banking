@@ -29,6 +29,7 @@ import type { RemovalDecision } from "@/shared/contracts/governance";
 import { errorMessage } from "@/shared/lib/api-client";
 import { expiresIn, formatMoment, hasExpired } from "@/shared/lib/datetime";
 import { settledRemoval } from "@/shared/lib/decision";
+import { stripTransportPrefix, wrongCodeAttempts } from "@/shared/lib/hub-refusal";
 import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
 import {
@@ -94,10 +95,15 @@ export function RemovalApprovalView({ token }: { token: string }) {
       setActionError(cause);
       setCode("");
       setConfirming(false);
+      // The same refusal the payout page meets (banking#324): the plane's count of attempts
+      // left, behind the BFF's prefix, goes under the field rather than out as a sentence.
+      const attemptsLeft = wrongCodeAttempts(cause);
+      if (attemptsLeft !== null) setRejectedAttempts(attemptsLeft);
       // The server owns the attempt count; a failure here may or may not have spent one.
+      // Read through `settledRemoval`: an open seat arrives as the truthy "pending".
       await summary.refresh();
       const fresh = removalApprovalResource.peek(token);
-      if (fresh && attemptsBefore !== null && fresh.attempts_remaining < attemptsBefore && !fresh.decision) {
+      if (fresh && attemptsBefore !== null && fresh.attempts_remaining < attemptsBefore && !settledRemoval(fresh.decision)) {
         setRejectedAttempts(fresh.attempts_remaining);
       }
     } finally {
@@ -188,7 +194,7 @@ export function RemovalApprovalView({ token }: { token: string }) {
           <CardContent className="flex flex-col gap-4">
             <CodeField value={code} onChange={setCode} disabled={pending !== null} attemptsRemaining={rejectedAttempts} />
 
-            {actionError !== null && rejectedAttempts === null && <ResourceError message={errorMessage(actionError, t)} />}
+            {actionError !== null && rejectedAttempts === null && <ResourceError message={stripTransportPrefix(errorMessage(actionError, t))} />}
 
             {confirming ? (
               // The second step. It restates the consequence in full rather than asking

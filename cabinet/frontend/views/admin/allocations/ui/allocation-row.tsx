@@ -1,5 +1,7 @@
 "use client";
 
+import { useLocale } from "@evinvest/i18n/react";
+
 import type { AllocationWrite } from "@/entities/admin/api/admin-client";
 import type { Allocation, AllocationAccessLevel } from "@/shared/contracts/admin";
 import { ProductIcon } from "@/shared/ui/icons/products";
@@ -26,6 +28,7 @@ export interface AllocationRowProps {
 }
 
 export function AllocationRow({ row, busy, editing, onEdit, onSave, onToggle, onSetAccess, onOpenPanel }: AllocationRowProps) {
+  const locale = useLocale();
   // Same cache-age caveat as `icon`: `access` is optional on read for a persisted catalog
   // object older than this field. `view` is the hub's own default for an unset product.
   const access = row.access ?? "view";
@@ -60,7 +63,7 @@ export function AllocationRow({ row, busy, editing, onEdit, onSave, onToggle, on
         {/* Read-only here: resizing the supply is a money decision and lives on the
             Valuation screen and the issuance panel's "pin cap", next to the issued figure
             it has to be judged against. */}
-        <td className="px-5 py-3 tabular-nums text-ink-soft">{compactUnits(row.unit_cap)}</td>
+        <td className="px-5 py-3 tabular-nums text-ink-soft">{compactUnits(row.unit_cap, locale)}</td>
         <td className="px-5 py-3">
           <AllocationRowActions state={row.state} busy={busy} editing={editing} onOpenPanel={onOpenPanel} onEdit={onEdit} onToggle={onToggle} />
         </td>

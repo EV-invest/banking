@@ -5,7 +5,7 @@
 
 import { Loader2 } from "lucide-react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Input, Label, OrderForm, OrderFormRow, OrderFormSubmit, Select, SelectContent, SelectItem, SelectTrigger, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
 
 import { ORDER_TIFS } from "@/entities/book/lib/vocabulary";
@@ -32,6 +32,7 @@ export function OrderFormFields({
   onSubmit: () => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const problem = orderDraftProblem(draft, context);
   const notional = orderNotional(draft, context);
   const fee = notional === null ? null : takerFee(notional, draft, context.policy);
@@ -58,7 +59,7 @@ export function OrderFormFields({
             {t("trade.form.price")}
           </Label>
           <Input id="order-price" inputMode="decimal" placeholder="0.00" value={draft.price} disabled={disabled} onChange={(e) => onChange((d) => ({ ...d, price: e.target.value }))} className="w-full font-mono-tech tabular-nums" />
-          {priceProblem && draft.price.trim() !== "" && <p className="text-xs text-accent-error">{t(`trade.form.problem.${problem}`, { tick: formatUsdt(context.policy?.price_tick) })}</p>}
+          {priceProblem && draft.price.trim() !== "" && <p className="text-xs text-accent-error">{t(`trade.form.problem.${problem}`, { tick: formatUsdt(context.policy?.price_tick, locale) })}</p>}
         </div>
       )}
 
@@ -74,7 +75,7 @@ export function OrderFormFields({
           )}
         </div>
         <Input id="order-size" inputMode="decimal" placeholder="0" value={draft.size} disabled={disabled} onChange={(e) => onChange((d) => ({ ...d, size: e.target.value }))} className="w-full font-mono-tech tabular-nums" />
-        {sizeProblem && draft.size.trim() !== "" && <p className="text-xs text-accent-error">{t(`trade.form.problem.${problem}`, { lot: formatUnits(context.policy?.lot_size) })}</p>}
+        {sizeProblem && draft.size.trim() !== "" && <p className="text-xs text-accent-error">{t(`trade.form.problem.${problem}`, { lot: formatUnits(context.policy?.lot_size, locale) })}</p>}
         {problem === "noQuote" && <p className="text-xs text-accent-error">{t("trade.form.problem.noQuote")}</p>}
       </div>
 
@@ -97,14 +98,14 @@ export function OrderFormFields({
       )}
 
       <div className="space-y-1 border-t border-border pt-2">
-        <OrderFormRow label={t(market ? "trade.form.notionalEstimate" : "trade.form.notional")} value={notional === null ? "—" : `${formatUsdt(asDecimal(notional))} USDT`} />
-        <OrderFormRow label={t("trade.form.fee")} value={fee === null ? "—" : `${formatUsdt(asDecimal(fee))} USDT`} />
+        <OrderFormRow label={t(market ? "trade.form.notionalEstimate" : "trade.form.notional")} value={notional === null ? "—" : `${formatUsdt(asDecimal(notional), locale)} USDT`} />
+        <OrderFormRow label={t("trade.form.fee")} value={fee === null ? "—" : `${formatUsdt(asDecimal(fee), locale)} USDT`} />
         <OrderFormRow
           label={t("trade.form.available")}
           className={cn(problem === "funds" && "text-accent-error")}
-          value={buying ? (context.availableCash === null ? "—" : `${formatUsdt(context.availableCash)} USDT`) : context.availableUnits === null ? "—" : t("dash.unitsAmount", { n: Number(context.availableUnits), units: formatUnits(context.availableUnits) })}
+          value={buying ? (context.availableCash === null ? "—" : `${formatUsdt(context.availableCash, locale)} USDT`) : context.availableUnits === null ? "—" : t("dash.unitsAmount", { n: Number(context.availableUnits), units: formatUnits(context.availableUnits, locale) })}
         />
-        {!buying && position?.units_in_orders && !isZero(position.units_in_orders) && <OrderFormRow label={t("trade.form.inOrders")} value={formatUnits(position.units_in_orders)} />}
+        {!buying && position?.units_in_orders && !isZero(position.units_in_orders) && <OrderFormRow label={t("trade.form.inOrders")} value={formatUnits(position.units_in_orders, locale)} />}
       </div>
 
       <OrderFormSubmit side={draft.side} disabled={disabled || problem !== null}>

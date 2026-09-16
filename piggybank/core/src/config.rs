@@ -597,6 +597,173 @@ pub struct TonSweepConfig {
 	pub poll_secs: u64,
 }
 
+/// What a `CONCIERGE_BRIDGE_ADDR` proves about the party on the other end.
+///
+/// The lifecycle bridge carries strictly more authority than any other seam this binary
+/// dials: a `KYC_CHANGED` it applies is the single gate on both directions of money
+/// movement, and a `ROLE_CHANGED` mirrors an operator role onto the money plane. The
+/// shared `BRIDGE_SERVICE_TOKEN` only proves banking to concierge — it says nothing about
+/// who answered — so the transport is the whole of the reverse proof (EV-invest/banking#199).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BridgeTransport {
+	/// `https://` — the channel authenticates the server, against the public roots or the
+	/// CA pinned by `BRIDGE_TLS_CA_PEM_FILE`.
+	Tls,
+	/// Cleartext, but the peer is this host: the stream never reaches a network where
+	/// another party could answer or read it. The documented single-host exception, the
+	/// same one the signer seam makes.
+	Loopback,
+	/// Cleartext to a name or address off-host. Whatever answers to that name is believed.
+	Cleartext,
+}
+
+/// Classify a bridge address without pulling in a URL parser: scheme first, then the host
+/// out of the authority (userinfo dropped, port dropped, IPv6 literal unwrapped).
+///
+/// Anything that is not `https` and does not resolve *syntactically* to loopback is
+/// [`BridgeTransport::Cleartext`] — an unparseable address included. Classification only
+/// ever decides whether to WARN, so the uncertain reading is the loud one.
+pub fn bridge_transport(addr: &str) -> BridgeTransport {
+	let (scheme, rest) = match addr.split_once("://") {
+		Some((scheme, rest)) => (scheme.to_ascii_lowercase(), rest),
+		None => (String::new(), addr),
+	};
+	if scheme == "https" {
+		return BridgeTransport::Tls;
+	}
+	let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+	// `user:pass@host` — the host is what follows the LAST `@`.
+	let authority = authority.rsplit_once('@').map_or(authority, |(_, host)| host);
+	let host = if let Some(inside) = authority.strip_prefix('[') {
+		// `[::1]:55670` — the brackets exist precisely because the address holds colons.
+		inside.split(']').next().unwrap_or_default()
+	} else {
+		authority.split(':').next().unwrap_or_default()
+	};
+	let host = host.to_ascii_lowercase();
+	let loopback = host == "localhost" || host.ends_with(".localhost") || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback());
+	if loopback { BridgeTransport::Loopback } else { BridgeTransport::Cleartext }
+}
+
+/// Why a file pinned by `BRIDGE_TLS_CA_PEM_FILE` cannot serve as a trust anchor.
+///
+/// Every variant below ends the same way if it is let through: a root store holding fewer
+/// anchors than the operator pinned — none at all, in each of these cases.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum PinnedCaProblem {
+	/// Not a PEM: an empty file, raw DER, a block whose `-----END …-----` never arrives, or
+	/// a path left pointing at something that was never a certificate bundle.
+	#[error("it holds no complete PEM block — an empty file, DER bytes, a truncated block, or a path pointing at something else")]
+	NotPem,
+	/// PEM, but no certificate among it. A private key handed to the CA slot is the shape
+	/// this catches.
+	#[error("it holds no CERTIFICATE block, only: {0}")]
+	NoCertificate(String),
+	/// Certificates, beside a block the PEM reader will skip. A `PRIVATE KEY` here means key
+	/// material is sitting in the one file the deployment treats as a public trust anchor.
+	#[error("it holds a {0} block beside the certificates; a trust anchor is certificates and nothing else")]
+	ForeignBlock(String),
+}
+
+/// `-----BEGIN CERTIFICATE-----` ⇒ `CERTIFICATE`, given `marker = "-----BEGIN "`.
+fn pem_label<'a>(line: &'a str, marker: &str) -> Option<&'a str> {
+	line.strip_prefix(marker)?.strip_suffix("-----").filter(|label| !label.is_empty())
+}
+
+/// The label of every complete PEM block in `raw`, in order: a `-----BEGIN <label>-----`,
+/// at least one line of body, and the matching `-----END <label>-----`. Anything outside a
+/// block — openssl's text dump above a certificate, a comment, trailing junk — is skipped,
+/// and an unterminated block is not a block.
+fn pem_block_labels(raw: &str) -> Vec<&str> {
+	let mut labels = Vec::new();
+	let mut open: Option<(&str, bool)> = None;
+	for line in raw.lines() {
+		let line = line.trim();
+		let Some((label, has_body)) = open else {
+			open = pem_label(line, "-----BEGIN ").map(|label| (label, false));
+			continue;
+		};
+		if pem_label(line, "-----END ") == Some(label) {
+			if has_body {
+				labels.push(label);
+			}
+			open = None;
+		} else if !line.is_empty() {
+			open = Some((label, true));
+		}
+	}
+	labels
+}
+
+/// Check that a pinned CA file is a trust anchor, before it is handed to a TLS builder.
+///
+/// The PEM reader underneath tonic's `ca_certificate` skips every block it cannot use and
+/// reports nothing, so a file with no certificate in it builds an EMPTY root store: every
+/// handshake fails while the hub stays live and ready, and the seam looks configured
+/// everywhere an operator would look.
+///
+/// Searching for the BEGIN marker as a substring is not that check. It passes a key file
+/// that carries a certificate too (the private key then sits in a file mounted as public
+/// trust material), a marker quoted inside a comment, and a block that is never closed. So
+/// the blocks are parsed and every label has to be `CERTIFICATE`.
+///
+/// What this still cannot prove is that the base64 body decodes to a certificate: that
+/// parse happens inside rustls at connect time, and no crate here can reach it. The armor
+/// is the line this gate holds.
+pub fn check_pinned_ca_pem(raw: &str) -> Result<(), PinnedCaProblem> {
+	let labels = pem_block_labels(raw);
+	if labels.is_empty() {
+		return Err(PinnedCaProblem::NotPem);
+	}
+	let (certificates, foreign): (Vec<&str>, Vec<&str>) = labels.into_iter().partition(|label| *label == "CERTIFICATE");
+	match (certificates.is_empty(), foreign.first()) {
+		(true, _) => Err(PinnedCaProblem::NoCertificate(foreign.join(", "))),
+		(false, Some(label)) => Err(PinnedCaProblem::ForeignBlock((*label).to_string())),
+		(false, None) => Ok(()),
+	}
+}
+
+/// What production is told when it pulls the lifecycle stream in cleartext from a peer it
+/// cannot authenticate. The ingress NetworkPolicy named here is the control that actually
+/// holds the seam shut until phase 2 of #199 replaces it with TLS.
+const CLEARTEXT_BRIDGE_NOTICE: &str = "CONCIERGE_BRIDGE_ADDR is cleartext to a non-loopback peer in production: the lifecycle stream is neither encrypted nor server-authenticated, so anything that can answer to that name can mirror a KYC tier or an operator role onto the money plane (EV-invest/banking#199). Reachability is the only control on it — the concierge ingress NetworkPolicy (EV-invest/gitops#37, generated by EV-invest/devops#5) admits port 55670 from the piggybank and cabinet-backend pods only. Terminate TLS at concierge and set an https:// address (pin its CA with BRIDGE_TLS_CA_PEM_FILE) to replace it.";
+
+/// The boot notice due for this environment and address, or `None` when there is nothing to
+/// say — outside production, or once the seam is https or loopback.
+///
+/// Split out of [`note_if_bridge_is_unauthenticated`] so the scoping is a value and not
+/// just an early `return` inside a function that reports nothing: this notice is the whole
+/// of the operational signal phase 1 leaves behind, and a guard that silently stopped
+/// matching (or started matching everywhere) is precisely the regression to pin. At what
+/// level it is then emitted is the other half, and is asserted against a subscriber.
+fn cleartext_bridge_notice(app_env: &str, addr: &str) -> Option<&'static str> {
+	(app_env == "production" && bridge_transport(addr) == BridgeTransport::Cleartext).then_some(CLEARTEXT_BRIDGE_NOTICE)
+}
+
+/// Record at boot that production pulls the lifecycle stream in cleartext from a peer it
+/// cannot authenticate.
+///
+/// A WARN and not a refusal: production runs on `http://concierge:55670` today (h2c,
+/// inside the cluster), and a hub that refuses to start would take the money plane down to
+/// fix a seam currently held by network reachability. The refusal is phase 2, once
+/// concierge terminates TLS and the CA is pinned here — the signer seam's
+/// non-loopback-requires-TLS check (`piggybank/signer/src/config.rs`) is the shape it
+/// takes.
+///
+/// A WARN and not an INFO because warn is the level phase 1 of #199 is defined at, and
+/// because this is what the level is for: the one seam that can rewrite a KYC tier or an
+/// operator role is unauthenticated, and an unauthenticated money-plane seam has to be
+/// legible where production alerting looks, not only in a boot record nobody re-reads. The
+/// cost is real and taken knowingly — the deploy generator routes
+/// `{service_name="piggybank-core", level="warn"}` to the `discord-banking-warn` contact
+/// point at a threshold of zero, so this posts on every production restart until phase 2
+/// turns it into a refusal. That is the pressure, and an `https://` address ends it.
+pub fn note_if_bridge_is_unauthenticated(app_env: &str, addr: &str) {
+	if let Some(notice) = cleartext_bridge_notice(app_env, addr) {
+		tracing::warn!(bridge_addr = %addr, "{notice}");
+	}
+}
+
 /// A boolean env var: `true`/`1` ⇒ true, anything else ⇒ false, unset/empty ⇒ `default`.
 fn bool_env(key: &str, default: bool) -> bool {
 	match env::var(key).ok().filter(|s| !s.is_empty()) {
@@ -640,6 +807,171 @@ mod tests {
 		}
 		for raw in [Some("false"), Some("False"), Some("0"), Some(" false ")] {
 			assert_eq!(KycGate::read(raw), KycGate::LIFTED, "{raw:?} must lift the gate");
+		}
+	}
+
+	/// The classification decides whether production says anything at all about the seam
+	/// that can rewrite a KYC tier, so each family is pinned: `https` is the only scheme
+	/// that proves the peer, loopback is the only cleartext exemption, and everything else
+	/// — a bare host, a cluster DNS name, a public address, a value nobody can parse —
+	/// lands on the loud side.
+	#[test]
+	fn only_https_or_loopback_makes_the_bridge_seam_something_other_than_cleartext() {
+		for addr in ["https://concierge:55670", "HTTPS://concierge", "https://concierge.apps.svc.cluster.local/"] {
+			assert_eq!(bridge_transport(addr), BridgeTransport::Tls, "{addr} is TLS");
+		}
+		for addr in [
+			"http://127.0.0.1:55670",
+			"http://localhost:55670",
+			"http://LOCALHOST",
+			"http://[::1]:55670",
+			"http://127.9.9.9:55670",
+			"http://user:pass@localhost:55670",
+			"localhost:55670",
+		] {
+			assert_eq!(bridge_transport(addr), BridgeTransport::Loopback, "{addr} never leaves the host");
+		}
+		for addr in [
+			"http://concierge:55670",
+			"http://concierge.apps.svc.cluster.local:55670",
+			"http://10.42.0.7:55670",
+			"http://[2001:db8::1]:55670",
+			"http://user@concierge:55670",
+			"",
+			"not a url",
+		] {
+			assert_eq!(bridge_transport(addr), BridgeTransport::Cleartext, "{addr} is believed on the strength of a name");
+		}
+	}
+
+	/// A throwaway self-signed certificate (`openssl req -x509 -newkey rsa:2048 -nodes`,
+	/// valid to 2126), here so the gate is exercised against a real certificate and not only
+	/// against shapes of armor. No private key was kept and nothing trusts it.
+	const TEST_CA_PEM: &str = r"-----BEGIN CERTIFICATE-----
+MIIDGzCCAgOgAwIBAgIUNQD11Yz00cFGinwEzH2XA+Owz9swDQYJKoZIhvcNAQEL
+BQAwHDEaMBgGA1UEAwwRRVYgdGVzdCBicmlkZ2UgQ0EwIBcNMjYwOTE1MTg0MzQw
+WhgPMjEyNjA4MjIxODQzNDBaMBwxGjAYBgNVBAMMEUVWIHRlc3QgYnJpZGdlIENB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApmWEKLoU5f5XZwYIHZyi
+ivR2+9nizSTgbr5EEx8ifjYhU0V+h+gRzZrWfZUNMR3OPmNYC3/3VxzwCQ1lHg4r
+hgkiDXqUaI9KUMZZo/HfSn2V6h4O/iYl3Q2jVcmtKCwKC7A0eDH+4NvaOY40wmsn
+3b9kV9AlVDsUx4cBaIGNgBdEq4vN5DYjY/ZhPOoKfAiDiM4zQupW69XauEzhclFY
+qjzG/bnr11uWB4L+o7lZFu5gNN8bbmtL9jnxEYfl3KKnk4GpoAVDKHU9l5S/6oDm
+9o5/KMgZgtQCOU0h8NSTHT2s3UkLCCeSufF2Tx/Um7C9V899yryuyt34Kpy6odSQ
+cQIDAQABo1MwUTAdBgNVHQ4EFgQUlqaFS6fHa5yah2xLuk8CfaCWM9QwHwYDVR0j
+BBgwFoAUlqaFS6fHa5yah2xLuk8CfaCWM9QwDwYDVR0TAQH/BAUwAwEB/zANBgkq
+hkiG9w0BAQsFAAOCAQEAlU+v3Iui7pujKrW1fciQmJWwxiFLxuE8QFv4oAM+lzFx
+TKqj42bAOApMNXCw5flGp/Z9LhFPPoIThgxiRbYc7AyxhHXyuwfkAF22qrtB88r+
+njxEK4PFw7JoieY19UKhMqZ82gbesvW7T9Rd7deBXCksRNObzKc9LSl9O5UO+9Ks
+kNsL7Jype//j0lo3pVQcvbdq/fNno1YWnF72Y2w/mCOBV1Mc8fRX76z7sF3cHhkU
+10NvzdF+DGKDJJaUe89qas9TZrAdjCN6j9XXwrzG9Mc4Z9H9TCJ35tOJGM6GO5Qb
+gRI8JvM30gtx/NBsGEV927PGd7imCZpKdAlR1pYzGA==
+-----END CERTIFICATE-----
+";
+
+	/// PEM armor around a base64 sentence. The gate reads labels, never bodies, so no key
+	/// material has to exist for the "this is a key file" case to be real.
+	const TEST_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----\nYSB0ZXN0IHZhbHVlLCBub3QgYSBrZXk=\n-----END PRIVATE KEY-----\n";
+
+	/// A pinned CA decides which concierge the hub believes about KYC tiers and operator
+	/// roles, and the reader beneath it skips in silence what it cannot use. So each way a
+	/// file can fail to be a trust anchor is pinned here: every one of them would otherwise
+	/// boot a hub that is live, ready, TLS-configured — and trusting nothing, so the
+	/// lifecycle stream simply stops.
+	#[test]
+	fn a_pinned_ca_is_accepted_only_when_it_is_certificates_and_nothing_else() {
+		assert_eq!(check_pinned_ca_pem(TEST_CA_PEM), Ok(()), "a real certificate is the whole point of the variable");
+		assert_eq!(
+			check_pinned_ca_pem(&format!("{TEST_CA_PEM}{TEST_CA_PEM}")),
+			Ok(()),
+			"a private CA usually ships a bundle, not one anchor"
+		);
+		assert_eq!(
+			check_pinned_ca_pem(&format!("subject=CN = EV test bridge CA\n\n{TEST_CA_PEM}trailing notes\n")),
+			Ok(()),
+			"openssl's text dump around the block is not a block"
+		);
+
+		for (raw, why) in [
+			("", "an empty file — an unset secret that mounted as a file anyway"),
+			("\u{0}\u{1}\u{2}0\u{82}\u{3}\u{1}", "raw DER, the other way a certificate is spelled"),
+			("-----BEGIN CERTIFICATE-----\nMIIDGzCCAgOgAwIBAgIUNQ\n", "a block whose END never arrives is a truncated copy"),
+			(
+				"a note about -----BEGIN CERTIFICATE----- and how to make one\n",
+				"the marker quoted in prose is not a certificate",
+			),
+		] {
+			assert_eq!(check_pinned_ca_pem(raw), Err(PinnedCaProblem::NotPem), "{why}");
+		}
+
+		assert_eq!(
+			check_pinned_ca_pem(TEST_KEY_PEM),
+			Err(PinnedCaProblem::NoCertificate("PRIVATE KEY".to_string())),
+			"a key file in the CA slot is the mix-up this gate exists for"
+		);
+		assert_eq!(
+			check_pinned_ca_pem(&format!("{TEST_KEY_PEM}{TEST_CA_PEM}")),
+			Err(PinnedCaProblem::ForeignBlock("PRIVATE KEY".to_string())),
+			"a substring check passes this one, and the key then rides along in a file mounted as public trust material"
+		);
+	}
+
+	/// Every event `note_if_bridge_is_unauthenticated` emits for this environment and
+	/// address, by level — captured from a real subscriber, because the level is decided by
+	/// which macro the function reaches for and no value it returns can show that.
+	fn levels_recorded_by_the_boot_notice(app_env: &str, addr: &str) -> Vec<tracing::Level> {
+		use std::sync::{Arc, Mutex};
+
+		use tracing_subscriber::{layer::Context, prelude::*};
+
+		struct Capture(Arc<Mutex<Vec<tracing::Level>>>);
+		impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Capture {
+			fn on_event(&self, event: &tracing::Event<'_>, _: Context<'_, S>) {
+				self.0.lock().expect("nothing panics while holding this lock").push(*event.metadata().level());
+			}
+		}
+
+		let seen = Arc::new(Mutex::new(Vec::new()));
+		let subscriber = tracing_subscriber::registry().with(Capture(Arc::clone(&seen)));
+		tracing::subscriber::with_default(subscriber, || note_if_bridge_is_unauthenticated(app_env, addr));
+		seen.lock().expect("the notice is emitted on this thread and the guard released").clone()
+	}
+
+	/// The boot notice is production-only, cleartext-only, and a WARN — the three things
+	/// phase 1 of #199 leaves behind. It must fire on the one shape production actually runs
+	/// (a cluster DNS name over h2c) and stay silent everywhere else — in dev, where the
+	/// address is loopback anyway, and once concierge terminates TLS. The level is asserted
+	/// against a live subscriber and not inferred: production alerting collects warn-level
+	/// lines from this service, so demoting this one leaves an unauthenticated money-plane
+	/// seam recorded where nobody is watching, while inverting the guard pages on every dev
+	/// boot until the channel stops being read.
+	#[test]
+	fn the_bridge_boot_notice_warns_and_only_for_production_cleartext() {
+		assert_eq!(
+			cleartext_bridge_notice("production", "http://concierge:55670"),
+			Some(CLEARTEXT_BRIDGE_NOTICE),
+			"production on h2c to a cluster name is the condition this notice exists for"
+		);
+		assert_eq!(
+			cleartext_bridge_notice("production", "not a url"),
+			Some(CLEARTEXT_BRIDGE_NOTICE),
+			"an address nobody can parse is not a reason to go quiet"
+		);
+		assert_eq!(
+			levels_recorded_by_the_boot_notice("production", "http://concierge:55670"),
+			vec![tracing::Level::WARN],
+			"the one unauthenticated seam on the money plane is a warn, which is what production alerting collects"
+		);
+		for addr in ["https://concierge:55670", "HTTPS://concierge:55670"] {
+			assert_eq!(cleartext_bridge_notice("production", addr), None, "{addr} authenticates the peer, so there is nothing to report");
+			assert!(levels_recorded_by_the_boot_notice("production", addr).is_empty(), "{addr} must not page anyone");
+		}
+		assert_eq!(cleartext_bridge_notice("production", "http://127.0.0.1:55670"), None, "a loopback stream never reaches a network");
+		for env in ["development", "staging", ""] {
+			assert_eq!(cleartext_bridge_notice(env, "http://concierge:55670"), None, "{env} is not production");
+			assert!(
+				levels_recorded_by_the_boot_notice(env, "http://concierge:55670").is_empty(),
+				"{env} has no production alerting to reach"
+			);
 		}
 	}
 

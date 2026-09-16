@@ -3,7 +3,7 @@
 import { KeyRound, Loader2, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Badge, Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { revokeSessions, setKycLevel, type UserFilters } from "@/entities/admin/api/admin-client";
@@ -108,56 +108,67 @@ export function UsersView() {
                 // sizes the columns from the header row, so narrowing shortens the
                 // addresses and the row heights never move. The other three columns
                 // split what User leaves.
-                <table className="w-full table-fixed text-sm">
-                  <thead>
-                    {/* i18n-max: 8 per header — `table-fixed` sizes the columns from this
-                        row, so a header that does not fit wraps instead of widening, and
-                        the three right-hand columns share what User leaves. */}
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
-                      <th className="w-1/2 px-5 py-3 font-medium">{t("admin.col.user")}</th>
-                      <th className="px-5 py-3 font-medium">{t("admin.users.role")}</th>
-                      <th className="px-5 py-3 font-medium">{t("admin.users.kyc")}</th>
-                      <th className="px-5 py-3 font-medium">{t("admin.col.status")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {users.map((u) => (
-                      <tr
-                        key={u.user_id}
-                        onClick={() => setSelected(u)}
-                        className={cn("cursor-pointer transition-colors hover:bg-ink/5", selected?.user_id === u.user_id && "bg-accent-debug/10")}
-                      >
-                        <td className="px-5 py-3">
-                          {/* The row is clickable for the mouse, but the identity cell carries the
-                              real control: a bare `tr onClick` gives the keyboard no way in, and
-                              the address is what names the row being opened. */}
-                          <button
-                            type="button"
-                            aria-pressed={selected?.user_id === u.user_id}
-                            onClick={() => setSelected(u)}
-                            className="flex min-w-0 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            <Avatar email={u.email} />
-                            <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
-                          </button>
-                        </td>
-                        <td className="px-5 py-3">
-                          {/* Stacked, not inline: `table-fixed` sizes this column from an
-                              8-character header, so a chip beside the role would push the
-                              label out of its own cell in every locale. */}
-                          <div className="flex flex-col items-start gap-1">
-                            <span>{roleLabel(u.role, t)}</span>
-                            {u.role_is_break_glass && <BreakGlassMark />}
-                          </div>
-                        </td>
-                        <td className="px-5 py-3 text-ink-soft">{t("admin.users.kycLevelShort", { n: u.kyc_level })}</td>
-                        <td className="px-5 py-3">
-                          <StatusDot status={u.status} label={statusLabel(u.status, t)} />
-                        </td>
+                //
+                // The floor and the scrolling wrapper are the phone's (banking#327):
+                // fixed layout keeps squeezing below any width, and at 400px the User
+                // and Role cells were drawn over each other. Under the floor the table
+                // scrolls inside its own box instead, the way the payments and payout
+                // tables do. The floor stops at `lg`: from there the rail takes 248px
+                // and the open drawer another 364px, which leaves the card under 560px
+                // at 1024px — and there the squeeze above is the wanted behaviour, not a
+                // sideways scroll that hides KYC and Status behind the scrollbar.
+                <div className="overflow-x-auto">
+                  <table className="w-full table-fixed text-sm max-lg:min-w-140">
+                    <thead>
+                      {/* i18n-max: 8 per header — `table-fixed` sizes the columns from this
+                          row, so a header that does not fit wraps instead of widening, and
+                          the three right-hand columns share what User leaves. */}
+                      <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
+                        <th className="w-1/2 px-5 py-3 font-medium">{t("admin.col.user")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.users.role")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.users.kyc")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.col.status")}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {users.map((u) => (
+                        <tr
+                          key={u.user_id}
+                          onClick={() => setSelected(u)}
+                          className={cn("cursor-pointer transition-colors hover:bg-ink/5", selected?.user_id === u.user_id && "bg-accent-debug/10")}
+                        >
+                          <td className="px-5 py-3">
+                            {/* The row is clickable for the mouse, but the identity cell carries the
+                                real control: a bare `tr onClick` gives the keyboard no way in, and
+                                the address is what names the row being opened. */}
+                            <button
+                              type="button"
+                              aria-pressed={selected?.user_id === u.user_id}
+                              onClick={() => setSelected(u)}
+                              className="flex min-w-0 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <Avatar email={u.email} />
+                              <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
+                            </button>
+                          </td>
+                          <td className="px-5 py-3">
+                            {/* Stacked, not inline: `table-fixed` sizes this column from an
+                                8-character header, so a chip beside the role would push the
+                                label out of its own cell in every locale. */}
+                            <div className="flex flex-col items-start gap-1">
+                              <span>{roleLabel(u.role, t)}</span>
+                              {u.role_is_break_glass && <BreakGlassMark />}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3 text-ink-soft">{t("admin.users.kycLevelShort", { n: u.kyc_level })}</td>
+                          <td className="px-5 py-3">
+                            <StatusDot status={u.status} label={statusLabel(u.status, t)} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Settled>
           </CardContent>
@@ -251,6 +262,7 @@ function Avatar({ email }: { email: string }) {
 
 function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: () => void }) {
   const t = useT();
+  const locale = useLocale();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -336,7 +348,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
             value={t("admin.users.tokenVersionValue", { n: profile?.token_version ?? summary.token_version })}
             tip="admin.users.identity.token-version"
           />
-          <Row label={t("admin.users.balance")} value={balance ? `${formatUsd(balance.amount)} USDT` : "—"} />
+          <Row label={t("admin.users.balance")} value={balance ? `${formatUsd(balance.amount, locale)} USDT` : "—"} />
         </Section>
 
         <Section title={t("admin.users.accessSecurity")}>

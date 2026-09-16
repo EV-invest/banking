@@ -47,7 +47,7 @@ use uuid::Uuid;
 use crate::{
 	config::{TonConfig, TonSweepConfig},
 	infrastructure::{
-		rails::{self, GAS_STATION, SweepError, now_unix_secs, read_err},
+		rails::{self, GAS_STATION, HoldKey, RefusalBackoff, SweepError, now_unix_secs, read_err, signer_err},
 		ton_rpc::{RpcError, TonRpc},
 	},
 };
@@ -73,6 +73,8 @@ pub struct TonSweep {
 	treasury: OnceCell<String>,
 	gas_station: OnceCell<String>,
 	state: Mutex<GasState>,
+	/// Addresses the signer refused on the merits, each held back with a growing backoff.
+	refusals: Mutex<RefusalBackoff>,
 }
 
 impl TonSweep {
@@ -91,6 +93,7 @@ impl TonSweep {
 			treasury: OnceCell::new(),
 			gas_station: OnceCell::new(),
 			state: Mutex::new(GasState::default()),
+			refusals: Mutex::new(RefusalBackoff::default()),
 		}
 	}
 
@@ -126,11 +129,56 @@ impl TonSweep {
 			if address.eq_ignore_ascii_case(&treasury) || address.eq_ignore_ascii_case(&gas_station) {
 				continue;
 			}
-			if let Err(err) = self.sweep_address(user_id, &address, &treasury, &gas_station).await {
-				warn!(%address, "ton sweep: address cycle failed (continuing): {err}");
+			let key = HoldKey::Address(address.clone());
+			if self.is_held(&key) {
+				continue;
+			}
+			match self.sweep_address(user_id, &address, &treasury, &gas_station).await {
+				Ok(()) => self.release(&key),
+				Err(SweepError::SignerRefused { detail, activity_id, key }) => self.hold(key, &detail, activity_id.as_deref()),
+				Err(err) => warn!(%address, "ton sweep: address cycle failed (continuing): {err}"),
 			}
 		}
 		Ok(())
+	}
+
+	/// Back the refused `key` off after a terminal signer refusal. The FIRST refusal is the
+	/// alert — with the custodian's activity id when there is one, so the operator can find it
+	/// on the custodian's side — and every later one is the routine note that the hold keeps
+	/// growing.
+	fn hold(&self, key: HoldKey, detail: &str, activity_id: Option<&str>) {
+		let Ok(mut held) = self.refusals.lock() else {
+			return;
+		};
+		let strike = held.strike(key.clone(), Instant::now(), Duration::from_secs(self.config.poll_secs));
+		let retry_in_secs = strike.hold.as_secs();
+		let activity_id = activity_id.unwrap_or("none");
+		if strike.strikes == 1 {
+			error!(
+				?key,
+				activity_id,
+				retry_in_secs,
+				"ton sweep: signer refused on the merits — address held back with exponential backoff; an activity id means a human must approve it at the custodian: {detail}"
+			);
+		} else {
+			warn!(
+				?key,
+				activity_id,
+				strikes = strike.strikes,
+				retry_in_secs,
+				"ton sweep: signer refused again — hold extended: {detail}"
+			);
+		}
+	}
+
+	fn is_held(&self, key: &HoldKey) -> bool {
+		self.refusals.lock().is_ok_and(|held| held.is_held(key, Instant::now()))
+	}
+
+	fn release(&self, key: &HoldKey) {
+		if let Ok(mut held) = self.refusals.lock() {
+			held.release(key);
+		}
 	}
 
 	async fn sweep_address(&self, user_id: Uuid, address: &str, treasury: &str, gas_station: &str) -> Result<(), SweepError> {
@@ -161,6 +209,11 @@ impl TonSweep {
 		{
 			return Ok(());
 		}
+		// The station is ONE key for every address: while the signer refuses it, no address
+		// gets a top-up, or each would mint its own pending activity per cycle.
+		if self.is_held(&HoldKey::GasStation) {
+			return Ok(());
+		}
 		// One station send in flight at a time: a future seqno would be dropped (not queued)
 		// on TON, so wait until the chain seqno advances past our last top-up before sending —
 		// BUT only while that last send is still live. A top-up toncenter accepted (200) yet that
@@ -181,6 +234,7 @@ impl TonSweep {
 		let drop = self.config.gas_topup_nano.max(gas_needed);
 		let valid_until = (now_unix_secs() + VALID_WINDOW_SECS) as u32;
 		let boc = self.sign_native(address, drop, chain, valid_until).await?;
+		self.release(&HoldKey::GasStation);
 		// Record the top-up time BEFORE sending so a slow/failed send still gets a grace backoff.
 		if let Ok(mut state) = self.state.lock() {
 			state.recent_topups.insert(address.to_owned(), Instant::now());
@@ -230,7 +284,7 @@ impl TonSweep {
 			.await
 			.map_err(|s| {
 				super::telemetry::note_signer_error("sweep", address, s.message());
-				SweepError::Signer(format!("sweep {address}: {}", s.message()))
+				signer_err(format!("sweep {address}"), HoldKey::Address(address.to_owned()), &s)
 			})?
 			.into_inner();
 		self.broadcast(&response.signed_boc, "sweep", address).await;
@@ -258,7 +312,7 @@ impl TonSweep {
 			.await
 			.map_err(|s| {
 				super::telemetry::note_signer_error("gas top-up", "gas-station", s.message());
-				SweepError::Signer(format!("gas top-up {to}: {}", s.message()))
+				signer_err(format!("gas top-up {to}"), HoldKey::GasStation, &s)
 			})?
 			.into_inner();
 		Ok(response.signed_boc)

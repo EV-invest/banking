@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
+import { useCallback } from "react";
 
 import { BadgeCheck } from "lucide-react";
 
@@ -42,6 +43,10 @@ import { ActivityCard, PersonalCard, SecurityCard, VerificationCard } from "@/vi
 export function ProfileView() {
   const t = useT();
   const locale = useLocale();
+  // Bound once per locale, as on the dashboard: AnimatedNumber restarts its count whenever
+  // the identity of `format` changes.
+  const usd = useCallback((n: number) => formatUsd(n, locale), [locale]);
+  const signedUsd = useCallback((n: number) => formatSignedUsd(n, locale), [locale]);
 
   // Every read is cached and shared with another screen — the profile with the account
   // chip and Settings, the rest with Home, Operations and Settings — and all five are
@@ -139,11 +144,11 @@ export function ProfileView() {
         {/* Stat strip — the same tiles and arrangement as Home, so a figure reads the
             same on both screens: a 2×2 card grid on mobile, one divided strip from `lg`. */}
         <StaggerItem as={Card} className={cn(STAT_STRIP, "rounded-none border-0 bg-transparent py-0 shadow-none lg:rounded-xl lg:border lg:bg-card lg:py-5 lg:shadow-sm")}>
-          <StatTile label={t("dash.portfolioValue")} value={positions.isLoading ? null : value} format={formatUsd} hint={t("profile.hintAtNav")} unavailable={posFailed} />
+          <StatTile label={t("dash.portfolioValue")} value={positions.isLoading ? null : value} format={usd} hint={t("profile.hintAtNav")} unavailable={posFailed} />
           <StatDivider />
-          <StatTile label={t("dash.unrealizedPnl")} value={positions.isLoading ? null : pnl} format={formatSignedUsd} tone={pnl < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" unavailable={posFailed} />
+          <StatTile label={t("dash.unrealizedPnl")} value={positions.isLoading ? null : pnl} format={signedUsd} tone={pnl < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" unavailable={posFailed} />
           <StatDivider />
-          <StatTile label={t("dash.available")} value={wallet.isLoading ? null : num(wallet.data?.balance?.available)} format={formatUsd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" unavailable={walletFailed} />
+          <StatTile label={t("dash.available")} value={wallet.isLoading ? null : num(wallet.data?.balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" unavailable={walletFailed} />
           <StatDivider />
           <StatTile label={t("dash.activeStrategies")} value={positions.isLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} unavailable={posFailed} />
         </StaggerItem>

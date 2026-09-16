@@ -4,7 +4,7 @@
 
 import { Percent } from "lucide-react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { feeAssessmentsResource } from "@/entities/admin/model/admin-resource";
@@ -20,6 +20,7 @@ const HEAD = "h-8 text-xs font-medium uppercase tracking-wide text-ink-soft";
 
 export function AssessmentsCard({ service }: { service: string }) {
   const t = useT();
+  const locale = useLocale();
   const list = useResource(feeAssessmentsResource, service);
   const rows = list.data?.assessments ?? [];
 
@@ -62,14 +63,14 @@ export function AssessmentsCard({ service }: { service: string }) {
                 <TableRow key={`${a.assessed_at}-${i}`}>
                   <TableCell className="text-ink-soft">{ago(a.assessed_at, t)}</TableCell>
                   <TableCell>{triggerLabel(a.trigger, t)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatUsdt(a.management)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatUsdt(a.performance)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatUnits(a.charged_units)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatUsdt(a.management, locale)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatUsdt(a.performance, locale)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatUnits(a.charged_units, locale)}</TableCell>
                   {/* Non-zero means the holding could not cover the charge and the rest
                       rides to the next one. Worth its own column: it is the only reason
                       a charge collects less than it assessed. */}
                   <TableCell className={cn("text-right tabular-nums", Number(a.debt_carried) > 0 ? "text-accent-warn" : "text-ink-soft")}>
-                    {formatUsdt(a.debt_carried)}
+                    {formatUsdt(a.debt_carried, locale)}
                   </TableCell>
                 </TableRow>
               ))}
