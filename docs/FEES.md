@@ -285,7 +285,15 @@ failed to reach anybody. Notices already delivered stand; this plane sends no "c
 mail after them. The mailer holds each row's lock across the relay call, so a cancel that
 lands while a notice is being handed over waits for the outcome and then withdraws nothing
 delivered — never a notice sent after the fact was taken back, never a delivered one on
-record as withdrawn.
+record as withdrawn. Closing a consilium without a verdict — the administrator's cascade,
+the owner's own withdrawal, the window running out, a roster change — likewise withdraws,
+in the same transaction, the seats' approval invitations the mailer has not delivered yet,
+blanking their token and code as a given-up row's are: an invitation still queued behind a
+relay outage would otherwise ask its owner, once the relay is back, to vote on a consilium
+nobody can act on (#342). Only the invitations go — the verdict mail the closing queues and
+any burn notice already queued still reach the audience — and they are taken back before
+the consilium and its seats are locked, so a cancel never waits on a delivery in flight
+while holding the seat that delivery will mark as notified.
 
 Every transaction over a product's terms — scheduling, the owners carrying, promotion —
 opens by locking the product's `allocations` row. The requirement an operator's request
