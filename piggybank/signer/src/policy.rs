@@ -9,7 +9,12 @@
 //!     much, so one forged request can't drain the hot wallet;
 //!   - an optional **destination allowlist** — when set, treasury transfers may only go to
 //!     pre-registered addresses (a hardened/staged posture; off by default, since the normal
-//!     withdrawal model sends to arbitrary user addresses);
+//!     withdrawal model sends to arbitrary user addresses). A TON jetton transfer names two
+//!     more addresses that receive native Toncoin, and both are held to the same list: the
+//!     `response_destination` (the excess returns there — always the sending wallet itself on
+//!     a legitimate withdrawal, so that is accepted with or without a list) and
+//!     `our_jetton_wallet` (the internal message's destination, which receives `msg_value`
+//!     — pinned with `SIGNER_TON_TREASURY_JETTON_WALLET`, or else it must be on the list);
 //!   - a **fee budget** ([`FeeBudget`]) — a ceiling on the gas/fee side of EVERY signed
 //!     transaction. The amount caps above bound what leaves in USDT; they say nothing about
 //!     the native coin a transaction burns as fee. Without this gate a forged request moving
@@ -22,7 +27,9 @@
 //! treasury honor the allowlist too, but not the cap — it is USDT-denominated and cannot price
 //! a native amount. Both are **no-ops until configured** (`SIGNER_MAX_TRANSFER_USDT`,
 //! `SIGNER_DESTINATION_ALLOWLIST`), so dev/CI and existing deployments are unaffected until
-//! an operator opts in — the same convention as the observability seams.
+//! an operator opts in — the same convention as the observability seams. An operator enabling
+//! the allowlist must either pin the treasury's jetton wallet or put it on the list, or every
+//! TON withdrawal is refused.
 //!
 //! The fee budget is the opposite: **on by default** with ceilings an honest hub never
 //! reaches, enforced on every wallet class (treasury, deposit addresses, the gas station) and
@@ -32,7 +39,7 @@
 //! `Status` is tonic's large error type we don't control (same as the service handlers).
 #![allow(clippy::result_large_err)]
 
-use std::collections::HashSet;
+use std::{collections::HashSet, str::FromStr as _};
 
 use domain::money::{Network, Usdt};
 use tonic::Status;
@@ -57,6 +64,9 @@ pub struct SignerPolicy {
 	/// If non-empty, a treasury transfer's destination must be one of these (verbatim wire
 	/// address strings). Empty ⇒ any destination is allowed (the default withdrawal model).
 	destination_allowlist: HashSet<String>,
+	/// The treasury's own USDT jetton wallet, when pinned: a treasury jetton transfer's
+	/// `our_jetton_wallet` must be this address. `None` ⇒ it falls back to the allowlist.
+	ton_treasury_jetton_wallet: Option<String>,
 	/// The always-on ceiling on the fee side of every signed transaction.
 	fee_budget: FeeBudget,
 }
@@ -203,29 +213,45 @@ fn deny_over(network: Network, field: &str, value: u128, cap: u128) -> Result<()
 
 impl SignerPolicy {
 	pub fn from_env() -> color_eyre::Result<Self> {
-		let max_transfer_usdt = match std::env::var("SIGNER_MAX_TRANSFER_USDT").ok().filter(|s| !s.is_empty()) {
+		Self::from_lookup(&|name| std::env::var(name).ok())
+	}
+
+	/// Build the policy from `lookup` (the environment in production; a map in tests, which
+	/// must not mutate the process environment under a parallel test runner).
+	pub fn from_lookup(lookup: &impl Fn(&str) -> Option<String>) -> color_eyre::Result<Self> {
+		let max_transfer_usdt = match lookup("SIGNER_MAX_TRANSFER_USDT").filter(|s| !s.is_empty()) {
 			Some(raw) => Some(
 				raw.parse::<u64>()
 					.map_err(|_| color_eyre::eyre::eyre!("SIGNER_MAX_TRANSFER_USDT must be a whole number of USDT"))?,
 			),
 			None => None,
 		};
-		let destination_allowlist = std::env::var("SIGNER_DESTINATION_ALLOWLIST")
-			.ok()
+		let destination_allowlist = lookup("SIGNER_DESTINATION_ALLOWLIST")
 			.map(|raw| raw.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect())
 			.unwrap_or_default();
-		let fee_budget = FeeBudget::from_lookup(&|name| std::env::var(name).ok())?;
+		let ton_treasury_jetton_wallet = match lookup("SIGNER_TON_TREASURY_JETTON_WALLET").map(|raw| raw.trim().to_owned()).filter(|s| !s.is_empty()) {
+			// A pin that does not parse would refuse every TON withdrawal; fail the boot instead.
+			Some(raw) if tonlib_core::TonAddress::from_str(&raw).is_ok() => Some(raw),
+			Some(raw) => return Err(color_eyre::eyre::eyre!("SIGNER_TON_TREASURY_JETTON_WALLET is not a TON address: {raw:?}")),
+			None => None,
+		};
+		let fee_budget = FeeBudget::from_lookup(lookup)?;
 		Ok(Self {
 			max_transfer_usdt,
 			destination_allowlist,
+			ton_treasury_jetton_wallet,
 			fee_budget,
 		})
 	}
 
-	/// Whether either opt-in control (cap, allowlist) is active, for a one-line boot log. The
-	/// fee budget is always on and is not part of this answer.
+	/// Whether any opt-in control (cap, allowlist, pinned jetton wallet) is active, for a
+	/// one-line boot log. The fee budget is always on and is not part of this answer.
 	pub fn is_active(&self) -> bool {
-		self.max_transfer_usdt.is_some() || !self.destination_allowlist.is_empty()
+		self.max_transfer_usdt.is_some() || !self.destination_allowlist.is_empty() || self.ton_treasury_jetton_wallet.is_some()
+	}
+
+	pub fn treasury_jetton_wallet_pinned(&self) -> bool {
+		self.ton_treasury_jetton_wallet.is_some()
 	}
 
 	pub fn max_transfer_usdt(&self) -> Option<u64> {
@@ -272,18 +298,33 @@ impl SignerPolicy {
 		self.check_allowlist(to_address)
 	}
 
-	/// Enforce the destination allowlist on a treasury jetton transfer's
-	/// `response_destination` — the address the excess Toncoin returns to, and so a second
-	/// destination on the same signed message. The hub legitimately points it at the treasury
-	/// itself on a withdrawal, so the sending wallet's own address is always accepted, in
-	/// either of its renderings (the raw `0:<hex>` the signer stores, the base64 the hub may
-	/// carry); anything else must be on the allowlist like `to_address`.
+	/// Enforce the policy on a treasury jetton transfer's `response_destination` — the address
+	/// the excess Toncoin returns to, and so a second destination on the same signed message.
+	/// Unlike `to_address` this is never a user's address: a legitimate withdrawal always points
+	/// it at the treasury itself, so the check is ALWAYS on — the sending wallet's own address
+	/// is accepted in either rendering (the raw `0:<hex>` the signer stores, the base64 the hub
+	/// may carry), and anything else only if an allowlist is set and lists it verbatim.
 	pub fn check_treasury_response_destination(&self, own_address: &str, response_destination: &str) -> Result<(), Status> {
-		if self.destination_allowlist.is_empty() || provision::addresses_agree(Network::Ton, own_address, response_destination) {
+		if provision::addresses_agree(Network::Ton, own_address, response_destination) || self.destination_allowlist.contains(response_destination) {
 			return Ok(());
 		}
-		self.check_allowlist(response_destination)
-			.map_err(|_| Status::permission_denied("treasury transfer response_destination is neither the sending wallet nor on the signer's allowlist"))
+		Err(Status::permission_denied(
+			"treasury transfer response_destination must be the sending wallet or on the signer's allowlist",
+		))
+	}
+
+	/// Enforce the policy on a treasury jetton transfer's `our_jetton_wallet` — the internal
+	/// message's destination, which receives `msg_value` in native Toncoin whatever contract
+	/// sits there. Pinned ⇒ it must be the pinned address (either rendering); unpinned ⇒ it is
+	/// held to the destination allowlist like `to_address` (a no-op while the list is empty).
+	pub fn check_treasury_jetton_wallet(&self, our_jetton_wallet: &str) -> Result<(), Status> {
+		match &self.ton_treasury_jetton_wallet {
+			Some(pinned) if provision::addresses_agree(Network::Ton, pinned, our_jetton_wallet) => Ok(()),
+			Some(_) => Err(Status::permission_denied("our_jetton_wallet is not the treasury's pinned jetton wallet")),
+			None => self
+				.check_allowlist(our_jetton_wallet)
+				.map_err(|_| Status::permission_denied("our_jetton_wallet is neither pinned nor on the signer's allowlist")),
+		}
 	}
 
 	/// Verbatim membership on purpose: a rendering-aware comparison (EIP-55 casing, TON raw vs
@@ -308,6 +349,7 @@ mod tests {
 		SignerPolicy {
 			max_transfer_usdt: max,
 			destination_allowlist: allow.iter().map(|s| (*s).to_owned()).collect(),
+			ton_treasury_jetton_wallet: None,
 			fee_budget: FeeBudget::default(),
 		}
 	}
@@ -574,7 +616,6 @@ mod tests {
 	const FOREIGN: &str = "EQB3ncyBUTjZUA5EnFKR5_EnOMI9V1tTEAAPaiU71gc4TiUt";
 
 	fn own_raw() -> String {
-		use std::str::FromStr as _;
 		tonlib_core::TonAddress::from_str(OWN_BASE64).unwrap().to_hex()
 	}
 
@@ -600,9 +641,74 @@ mod tests {
 	}
 
 	#[test]
-	fn response_destination_is_unchecked_without_an_allowlist() {
+	fn response_destination_must_be_the_own_wallet_without_an_allowlist() {
+		// The default (prod) posture: no allowlist, yet the excess may only return to the wallet.
 		let p = policy(Some(1000), &[]);
-		assert!(p.check_treasury_response_destination(&own_raw(), FOREIGN).is_ok());
-		assert!(p.check_treasury_response_destination(&own_raw(), "anything").is_ok());
+		assert!(p.check_treasury_response_destination(&own_raw(), OWN_BASE64).is_ok());
+		denied(p.check_treasury_response_destination(&own_raw(), FOREIGN));
+		denied(p.check_treasury_response_destination(&own_raw(), "anything"));
+	}
+
+	// === our_jetton_wallet =====================================================
+
+	const JETTON_WALLET_RAW: &str = "0:e4d954ef9f4e1250a26b5bbad76a1cdd17cfd08babad6f4c23e372270aef6f76";
+
+	fn jetton_wallet_base64() -> String {
+		tonlib_core::TonAddress::from_str(JETTON_WALLET_RAW).unwrap().to_base64_url_flags(true, false)
+	}
+
+	#[test]
+	fn pinned_jetton_wallet_admits_only_itself_in_either_rendering() {
+		let p = SignerPolicy {
+			ton_treasury_jetton_wallet: Some(JETTON_WALLET_RAW.to_owned()),
+			..policy(None, &[FOREIGN])
+		};
+		assert!(p.is_active());
+		assert!(p.check_treasury_jetton_wallet(JETTON_WALLET_RAW).is_ok());
+		assert!(p.check_treasury_jetton_wallet(&jetton_wallet_base64()).is_ok());
+		// Allowlisted, but not the pin: the pin wins.
+		let status = denied(p.check_treasury_jetton_wallet(FOREIGN));
+		assert!(status.message().contains("pinned"), "{status:?}");
+		denied(p.check_treasury_jetton_wallet("garbage"));
+	}
+
+	#[test]
+	fn unpinned_jetton_wallet_falls_back_to_the_allowlist() {
+		// No list, no pin: the default posture, unchecked (as `to_address` is).
+		assert!(policy(None, &[]).check_treasury_jetton_wallet(FOREIGN).is_ok());
+		// A list without the jetton wallet on it refuses — the operator must list or pin it.
+		let status = denied(policy(None, &[FOREIGN]).check_treasury_jetton_wallet(JETTON_WALLET_RAW));
+		assert!(status.message().contains("our_jetton_wallet"), "{status:?}");
+		assert!(policy(None, &[JETTON_WALLET_RAW]).check_treasury_jetton_wallet(JETTON_WALLET_RAW).is_ok());
+	}
+
+	// === policy: env parsing ===================================================
+
+	#[test]
+	fn policy_from_lookup_reads_cap_allowlist_and_pin() {
+		let p = SignerPolicy::from_lookup(&lookup(&[])).unwrap();
+		assert!(!p.is_active());
+		assert!(!p.treasury_jetton_wallet_pinned());
+
+		let p = SignerPolicy::from_lookup(&lookup(&[
+			("SIGNER_MAX_TRANSFER_USDT", "500"),
+			("SIGNER_DESTINATION_ALLOWLIST", " 0xa , 0xb,, "),
+			("SIGNER_TON_TREASURY_JETTON_WALLET", JETTON_WALLET_RAW),
+		]))
+		.unwrap();
+		assert_eq!(p.max_transfer_usdt(), Some(500));
+		assert_eq!(p.allowlist_len(), 2);
+		assert!(p.treasury_jetton_wallet_pinned());
+		assert!(p.check_treasury_jetton_wallet(&jetton_wallet_base64()).is_ok());
+
+		// An empty pin is unset; a pin that is not a TON address does not boot.
+		assert!(
+			!SignerPolicy::from_lookup(&lookup(&[("SIGNER_TON_TREASURY_JETTON_WALLET", "")]))
+				.unwrap()
+				.treasury_jetton_wallet_pinned()
+		);
+		let err = SignerPolicy::from_lookup(&lookup(&[("SIGNER_TON_TREASURY_JETTON_WALLET", "not-an-address")])).unwrap_err();
+		assert!(err.to_string().contains("SIGNER_TON_TREASURY_JETTON_WALLET"), "{err}");
+		assert!(SignerPolicy::from_lookup(&lookup(&[("SIGNER_MAX_TRANSFER_USDT", "x")])).is_err());
 	}
 }

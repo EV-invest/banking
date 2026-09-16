@@ -8,9 +8,14 @@
 //!   - a quote exactly at the default ceiling from a provisioned deposit wallet (not the
 //!     treasury: this is not a treasury control) is signed.
 //!
+//! The same file also covers the treasury-only sinks of a jetton transfer (`our_jetton_wallet`,
+//! `response_destination`), since they share the harness.
+//!
 //! Runs when `SIGNER_DATABASE_URL`/`DATABASE_URL` is set; skips otherwise.
 
 mod common;
+
+use std::str::FromStr as _;
 
 use domain::money::Network;
 use evbanking_contracts::signer::v1::{SignErc20TransferRequest, SignJettonTransferRequest, SignNativeTransferRequest, SignTrc20TransferRequest, signer_service_server::SignerService};
@@ -152,5 +157,69 @@ async fn jetton_transfer_is_bounded_by_the_ton_budget() {
 	assert!(refused.message().contains("forward_ton_amount"), "{refused:?}");
 
 	signer.sign_jetton_transfer(jetton(wallet, 100_000_000, 50_000_000)).await.expect("at the ceiling is signed");
+	db.cleanup().await;
+}
+
+// === treasury jetton sinks ==================================================
+
+const TREASURY_JETTON_WALLET: &str = "0:e4d954ef9f4e1250a26b5bbad76a1cdd17cfd08babad6f4c23e372270aef6f76";
+const FOREIGN_TON: &str = "0:8d8c9d8a8e8b8c8d8e8f808182838485868788898a8b8c8d8e8f80818283848f";
+
+/// A signer whose treasury TON wallet is provisioned, under a policy with the treasury's
+/// jetton wallet pinned and no allowlist — the intended production posture. Returns the
+/// treasury's own address in the base64 rendering (the signer stores the raw `0:<hex>`).
+async fn treasury_signer(db: &common::TestDb) -> (Signer, String) {
+	let secrets = WalletSecrets::new(db.pool.clone());
+	let provisioned = provision::provision(&test_vault(), &secrets, Uuid::nil(), Network::Ton)
+		.await
+		.expect("provision the treasury TON wallet");
+	let base64 = tonlib_core::TonAddress::from_str(&provisioned.address).unwrap().to_base64_url_flags(true, false);
+	assert_ne!(base64, provisioned.address, "the two renderings must be spelled differently for the test to mean anything");
+	let policy = SignerPolicy::from_lookup(&|name| (name == "SIGNER_TON_TREASURY_JETTON_WALLET").then(|| TREASURY_JETTON_WALLET.to_owned())).unwrap();
+	(Signer::new(test_vault(), secrets, policy), base64)
+}
+
+fn treasury_jetton(our_jetton_wallet: &str, response_destination: &str) -> Request<SignJettonTransferRequest> {
+	let mut req = jetton(Uuid::nil(), 100_000_000, 50_000_000).into_inner();
+	req.from_user_id = String::new();
+	req.our_jetton_wallet = our_jetton_wallet.to_owned();
+	req.response_destination = response_destination.to_owned();
+	Request::new(req)
+}
+
+#[tokio::test]
+async fn treasury_jetton_transfer_returns_excess_only_to_the_treasury() {
+	let Some(db) = common::throwaway_db().await else {
+		eprintln!("DATABASE_URL/SIGNER_DATABASE_URL unset — skipping signer fee budget test");
+		return;
+	};
+	let (signer, treasury_base64) = treasury_signer(&db).await;
+
+	// (a) The hub's shape: the excess returns to the treasury, spelled base64 while the signer
+	// derived raw — `render_address` and `addresses_agree` must agree across renderings.
+	signer
+		.sign_jetton_transfer(treasury_jetton(TREASURY_JETTON_WALLET, &treasury_base64))
+		.await
+		.expect("a withdrawal returning excess to the treasury is signed");
+
+	// (b) Anywhere else is refused, with no allowlist configured at all.
+	let refused = signer.sign_jetton_transfer(treasury_jetton(TREASURY_JETTON_WALLET, FOREIGN_TON)).await.unwrap_err();
+	assert_eq!(refused.code(), Code::PermissionDenied, "{refused:?}");
+	assert!(refused.message().contains("response_destination"), "{refused:?}");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn treasury_jetton_transfer_refuses_an_unpinned_jetton_wallet() {
+	let Some(db) = common::throwaway_db().await else {
+		eprintln!("DATABASE_URL/SIGNER_DATABASE_URL unset — skipping signer fee budget test");
+		return;
+	};
+	let (signer, treasury_base64) = treasury_signer(&db).await;
+
+	// (c) `msg_value` would go to whatever sits at `our_jetton_wallet`; only the pin is accepted.
+	let refused = signer.sign_jetton_transfer(treasury_jetton(FOREIGN_TON, &treasury_base64)).await.unwrap_err();
+	assert_eq!(refused.code(), Code::PermissionDenied, "{refused:?}");
+	assert!(refused.message().contains("our_jetton_wallet"), "{refused:?}");
 	db.cleanup().await;
 }

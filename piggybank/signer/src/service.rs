@@ -103,10 +103,19 @@ impl Signer {
 		Ok(())
 	}
 
-	/// Apply the destination allowlist to a treasury jetton transfer's `response_destination`
-	/// — the second address on the same signed message, where the excess Toncoin returns. The
-	/// sending wallet's own address (derived from the key that will sign) is always fine; the
-	/// hub sets exactly that on a withdrawal. Sweeps are signed from user wallets and pass.
+	/// Apply the policy to a treasury jetton transfer's `our_jetton_wallet` — the internal
+	/// message's destination, which receives `msg_value` in Toncoin whatever contract sits
+	/// there. Sweeps are signed from user wallets and pass.
+	fn guard_treasury_jetton_wallet(&self, wallet_id: Uuid, our_jetton_wallet: &str) -> Result<(), Status> {
+		if wallet_id == TREASURY_WALLET {
+			self.policy.check_treasury_jetton_wallet(our_jetton_wallet)?;
+		}
+		Ok(())
+	}
+
+	/// Apply the policy to a treasury jetton transfer's `response_destination` — where the
+	/// excess Toncoin returns, which on a withdrawal is always the sending wallet itself
+	/// (derived here from the key that will sign). Sweeps are signed from user wallets and pass.
 	fn guard_treasury_response_destination(&self, wallet_id: Uuid, public_key: &[u8], response_destination: &str) -> Result<(), Status> {
 		if wallet_id == TREASURY_WALLET {
 			let (own_address, _) = provision::render_address(Network::Ton, public_key)?;
@@ -282,10 +291,11 @@ impl SignerService for Signer {
 			},
 		)?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
+		self.guard_treasury_jetton_wallet(wallet_id, &req.our_jetton_wallet)?;
 
 		let handle = KeyHandle { wallet_id, network };
-		// The key comes before the second allowlist check: the wallet's own address, which a
-		// withdrawal's `response_destination` legitimately is, is derived from it.
+		// The key comes before the last check: the wallet's own address, which a withdrawal's
+		// `response_destination` legitimately is, is derived from it.
 		let public_key = self.ton_public_key(handle).await?;
 		self.guard_treasury_response_destination(wallet_id, &public_key, &req.response_destination)?;
 		let (parts, digest) = ton_tx::build_unsigned_jetton(
