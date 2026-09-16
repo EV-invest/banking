@@ -367,7 +367,6 @@ mod route_tests {
 			approvals: Arc::new(AttemptLimiter::default()),
 			verifier,
 			grpc: Grpc::connect_lazy(BLACK_HOLE, BLACK_HOLE, BLACK_HOLE, Some("test-issuance".into())).expect("build the lazy channels"),
-			deployments: Arc::new(crate::deployments::Deployments::new(config.deployed_versions_dir.clone(), None)),
 			config: Arc::new(config),
 		})
 	}

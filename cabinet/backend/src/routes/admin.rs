@@ -120,15 +120,6 @@ pub async fn overview(State(st): State<AppState>, jar: CookieJar) -> Result<Json
 	}))
 }
 
-/// `GET /api/admin/deployments` — which version of every component is in production,
-/// with the tag's commit and pull request and the newest tag of each repository. Read
-/// from the mounted deployed-versions ConfigMap and enriched from GitHub through the
-/// in-process cache; a GitHub failure degrades a row, never the page.
-pub async fn deployments(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AdminDeployments>, ApiError> {
-	require_admin(&st, &jar).await?;
-	Ok(Json(st.deployments.report().await.into()))
-}
-
 fn fleet(name: &str, kind: &str, healthy: bool, detail: String) -> dto::FleetService {
 	dto::FleetService {
 		name: name.into(),
@@ -1960,8 +1951,6 @@ mod admin_route_tests {
 				"AUTH_ISSUER" => ISSUER.into(),
 				"AUTH_CLIENT_AUDIENCE" => AUDIENCE.into(),
 				"MFE_REGISTRY_PATH" => "/mfe-registry.json".into(),
-				// Nothing mounted: the deployments page must answer "not available", not error.
-				"DEPLOYED_VERSIONS_DIR" => "/nonexistent/deployed-versions".into(),
 				"APP_ENV" => "development".into(),
 				_ => return None,
 			})
@@ -1982,7 +1971,6 @@ mod admin_route_tests {
 			approvals: Arc::new(crate::routes::approval::AttemptLimiter::default()),
 			verifier,
 			grpc: Grpc::connect_lazy(&endpoint, &endpoint, &endpoint, Some("test-issuance".into())).expect("build the lazy channels"),
-			deployments: Arc::new(crate::deployments::Deployments::new(config.deployed_versions_dir.clone(), None)),
 			config: Arc::new(config),
 		})
 	}
@@ -2076,23 +2064,6 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not price a fund");
 
 		assert!(seen.lock().unwrap().set_policy.is_none(), "a refused caller must never reach the hub");
-	}
-
-	/// The deployments page sits behind the coarse console gate like the overview, and
-	/// without a mounted deployed-versions directory it says so with a 200 — local
-	/// development and a misconfigured mount must not read as a broken console.
-	#[tokio::test]
-	async fn the_deployments_page_is_gated_and_honest_about_an_empty_mount() {
-		let investor = app(serve(Hub::new("investor")).await);
-		let (status, _) = send(&investor, signed("GET", "/api/admin/deployments", None, false)).await;
-		assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not see what is deployed");
-
-		let operator = app(serve(Hub::new("operator")).await);
-		let (status, body) = send(&operator, signed("GET", "/api/admin/deployments", None, false)).await;
-		assert_eq!(status, StatusCode::OK);
-		assert_eq!(body["available"], false);
-		assert_eq!(body["components"], serde_json::json!([]));
-		assert!(body["fetched_at"].as_str().is_some_and(|t| t.ends_with('Z')), "{body}");
 	}
 
 	/// An `operator` passes the coarse console gate but not the fee one. The money plane

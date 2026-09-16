@@ -20,7 +20,6 @@
 import {
   adminAllocationsResource,
   cabinetConfigResource,
-  deploymentsResource,
   fundRevenueResource,
   mfeRegistryResource,
   overviewResource,
@@ -48,7 +47,6 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
     warm: () => {
       overviewResource.prefetch();
       parkedEventsResource.prefetch();
-      deploymentsResource.prefetch();
     },
   },
   { prefix: "/admin/users", warm: () => usersResource.prefetch({}) },

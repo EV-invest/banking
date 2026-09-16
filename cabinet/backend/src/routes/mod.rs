@@ -109,7 +109,6 @@ fn requests(state: AppState) -> Router {
 		// (defense in depth). Identity/platform routes hit concierge; money/treasury routes
 		// hit the piggybank money plane.
 		.route("/api/admin/overview", get(admin::overview))
-		.route("/api/admin/deployments", get(admin::deployments))
 		.route("/api/admin/users", get(admin::list_users))
 		.route("/api/admin/users/detail", get(admin::get_user))
 		.route("/api/admin/users/role", post(admin::set_role))

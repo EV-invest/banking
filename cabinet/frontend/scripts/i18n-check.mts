@@ -73,8 +73,6 @@ const SHARED_TERMS: ReadonlySet<string> = new Set([
   "The Open Network",
   "TRON",
   "Seq",
-  "PR",
-  "GitHub: {error}",
   "Gas",
   "gas",
   "Maker",
@@ -96,7 +94,6 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Browser",
     "Cabinet",
     "Chart",
-    "Commit",
     "Details",
     "{title} — Details",
     "Hurdle",
@@ -133,7 +130,6 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Admin",
     "Admissions",
     "Arbitrage",
-    "Commit",
     "Consilium",
     "Feature flags",
     "Max",
@@ -155,7 +151,7 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "6M",
   ]),
   ru: new Set(),
-  vi: new Set(["Cabinet", "Commit", "Consilium", "Email"]),
+  vi: new Set(["Cabinet", "Consilium", "Email"]),
 };
 
 const isLegitimatelyIdentical = (locale: Translated, text: string): boolean =>

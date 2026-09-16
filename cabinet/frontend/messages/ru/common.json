@@ -1171,14 +1171,6 @@
     "en": "Verified",
     "t": "Верификация"
   },
-  "admin.overview.col.commit": {
-    "en": "Commit",
-    "t": "Коммит"
-  },
-  "admin.overview.col.component": {
-    "en": "Component",
-    "t": "Компонент"
-  },
   "admin.overview.col.event": {
     "en": "Event",
     "t": "Событие"
@@ -1191,17 +1183,9 @@
     "en": "Parked",
     "t": "Отложено"
   },
-  "admin.overview.col.pr": {
-    "en": "PR",
-    "t": "PR"
-  },
   "admin.overview.col.reason": {
     "en": "Reason",
     "t": "Причина"
-  },
-  "admin.overview.col.released": {
-    "en": "Released",
-    "t": "Выпущено"
   },
   "admin.overview.col.seq": {
     "en": "Seq",
@@ -1211,49 +1195,9 @@
     "en": "Service",
     "t": "Сервис"
   },
-  "admin.overview.col.version": {
-    "en": "Version",
-    "t": "Версия"
-  },
   "admin.overview.compensated": {
     "en": "compensated",
     "t": "компенсация"
-  },
-  "admin.overview.deployed": {
-    "en": "Deployed versions",
-    "t": "Выкаченные версии"
-  },
-  "admin.overview.deployedGithubError": {
-    "en": "GitHub: {error}",
-    "t": "GitHub: {error}"
-  },
-  "admin.overview.deployedNewer": {
-    "en": "Newer: {tag}",
-    "t": "Новее: {tag}"
-  },
-  "admin.overview.deployedOtherImages": {
-    "en": "Other images",
-    "t": "Прочие образы"
-  },
-  "admin.overview.deployedSub": {
-    "en": "What each component runs in production, against the newest tag in its repository",
-    "t": "Что запущено в проде по каждому компоненту — против самого нового тега в его репозитории"
-  },
-  "admin.overview.deployedUnavailable": {
-    "en": "Version data is not available in this environment",
-    "t": "Данные о версиях недоступны в этом окружении"
-  },
-  "admin.overview.deployedUnavailableHint": {
-    "en": "In production the deploy mounts a version catalogue beside the cabinet; a local run has none.",
-    "t": "В проде выкатка монтирует каталог версий рядом с кабинетом; у локального запуска его нет."
-  },
-  "admin.overview.deployedUpToDate": {
-    "en": "Up to date",
-    "t": "Актуально"
-  },
-  "admin.overview.deployedUpdated": {
-    "en": "Updated {at}",
-    "t": "Обновлено {at}"
   },
   "admin.overview.errorsAnalytics": {
     "en": "Errors & analytics",
@@ -1326,10 +1270,6 @@
   "admin.overview.obs.sentry": {
     "en": "Unresolved issues across the fleet surface here once SENTRY_DSN is configured.",
     "t": "Нерешённые проблемы по всему парку сервисов появятся здесь после настройки SENTRY_DSN."
-  },
-  "admin.overview.opensGithub": {
-    "en": "Opens on GitHub in a new tab",
-    "t": "Откроется на GitHub в новой вкладке"
   },
   "admin.overview.parkedEvents": {
     "en": "Parked events",

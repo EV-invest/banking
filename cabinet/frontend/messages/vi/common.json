@@ -1171,14 +1171,6 @@
     "en": "Verified",
     "t": "Đã xác minh"
   },
-  "admin.overview.col.commit": {
-    "en": "Commit",
-    "t": "Commit"
-  },
-  "admin.overview.col.component": {
-    "en": "Component",
-    "t": "Thành phần"
-  },
   "admin.overview.col.event": {
     "en": "Event",
     "t": "Sự kiện"
@@ -1191,17 +1183,9 @@
     "en": "Parked",
     "t": "Bị treo"
   },
-  "admin.overview.col.pr": {
-    "en": "PR",
-    "t": "PR"
-  },
   "admin.overview.col.reason": {
     "en": "Reason",
     "t": "Nguyên nhân"
-  },
-  "admin.overview.col.released": {
-    "en": "Released",
-    "t": "Phát hành"
   },
   "admin.overview.col.seq": {
     "en": "Seq",
@@ -1211,49 +1195,9 @@
     "en": "Service",
     "t": "Dịch vụ"
   },
-  "admin.overview.col.version": {
-    "en": "Version",
-    "t": "Phiên bản"
-  },
   "admin.overview.compensated": {
     "en": "compensated",
     "t": "đã bù trừ"
-  },
-  "admin.overview.deployed": {
-    "en": "Deployed versions",
-    "t": "Phiên bản đã triển khai"
-  },
-  "admin.overview.deployedGithubError": {
-    "en": "GitHub: {error}",
-    "t": "GitHub: {error}"
-  },
-  "admin.overview.deployedNewer": {
-    "en": "Newer: {tag}",
-    "t": "Mới hơn: {tag}"
-  },
-  "admin.overview.deployedOtherImages": {
-    "en": "Other images",
-    "t": "Image khác"
-  },
-  "admin.overview.deployedSub": {
-    "en": "What each component runs in production, against the newest tag in its repository",
-    "t": "Mỗi thành phần đang chạy phiên bản nào trên production, so với tag mới nhất trong kho mã của nó"
-  },
-  "admin.overview.deployedUnavailable": {
-    "en": "Version data is not available in this environment",
-    "t": "Dữ liệu phiên bản không có sẵn trong môi trường này"
-  },
-  "admin.overview.deployedUnavailableHint": {
-    "en": "In production the deploy mounts a version catalogue beside the cabinet; a local run has none.",
-    "t": "Trên production, bản triển khai gắn một danh mục phiên bản bên cạnh cabinet; bản chạy cục bộ không có."
-  },
-  "admin.overview.deployedUpToDate": {
-    "en": "Up to date",
-    "t": "Mới nhất"
-  },
-  "admin.overview.deployedUpdated": {
-    "en": "Updated {at}",
-    "t": "Cập nhật {at}"
   },
   "admin.overview.errorsAnalytics": {
     "en": "Errors & analytics",
@@ -1326,10 +1270,6 @@
   "admin.overview.obs.sentry": {
     "en": "Unresolved issues across the fleet surface here once SENTRY_DSN is configured.",
     "t": "Các sự cố chưa xử lý trên toàn hệ thống sẽ xuất hiện ở đây khi SENTRY_DSN được cấu hình."
-  },
-  "admin.overview.opensGithub": {
-    "en": "Opens on GitHub in a new tab",
-    "t": "Mở trên GitHub trong thẻ mới"
   },
   "admin.overview.parkedEvents": {
     "en": "Parked events",
