@@ -62,8 +62,8 @@ export function OrderFormPane({
   // attempt without triggering a render, which is what a ref is for.
   const submission = useRef<OrderSubmission | null>(null);
 
-  // A pick is an event, applied during render the way `useCrossedSection` adjusts state
-  // in the rail — never in an effect, which would paint one frame with the old price.
+  // A pick is an event, applied during render the way `Settled` (shared/ui/motion) adjusts state
+  // — never in an effect, which would paint one frame with the old price.
   const [seenPick, setSeenPick] = useState(pick);
   if (pick !== seenPick) {
     setSeenPick(pick);

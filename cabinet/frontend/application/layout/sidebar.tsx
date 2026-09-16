@@ -3,9 +3,8 @@
 import { useT } from "@evinvest/i18n/react";
 
 import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Gavel, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UserRound, UsersRound, Wallet, type LucideIcon } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
 import { Link } from "@/shared/ui/cabinet-link";
-import { type ReactNode, useState } from "react";
+import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
 import { prefetchOn } from "@/application/prefetch";
 import { allocationsResource } from "@/entities/fund/model/fund-resource";
@@ -16,7 +15,6 @@ import { useResource } from "@/shared/lib/resource";
 import { visibleFor } from "@/shared/lib/roles";
 import { useSession } from "@/shared/lib/use-session";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
-import { DUR, EASE } from "@/shared/ui/motion";
 
 interface NavItem {
   href: `/${string}`;
@@ -43,7 +41,7 @@ const FUND: NavItem[] = [
   // Exactly `/invest`, not everything beneath it: each product has its own row in
   // PRODUCTS, and a prefix match here lit both that row and this one on a product
   // page. Two highlighted rows is not a state the rail should be able to reach —
-  // and with the pill scoped per section it would mean two pills at once.
+  // and with one marker per section it would mean two markers at once.
   { href: "/invest", label: "Invest", key: "nav.invest", icon: LineChart, active: (p) => p === "/invest" },
   { href: "/wallet", label: "Wallet", key: "nav.wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
   { href: "/operations", label: "Operations", key: "nav.operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
@@ -136,51 +134,52 @@ export function Sidebar() {
   // failed read leaves the group empty rather than blocking the rail — the nav is not the
   // place to surface an API error.
   const products = useResource(allocationsResource).data?.allocations ?? [];
-  // Which section owns the current route, and whether getting here crossed a
-  // boundary. A product page belongs to no pill-owning section, so it is null and
-  // the next move into one counts as a crossing.
-  const activeSection: Section | null = products.some((p) => onProduct(pathname, p.service))
-    ? "products"
-    : FUND.some((i) => i.active(pathname))
-      ? "fund"
-      : isAdmin && admin.some((i) => i.active(pathname))
-        ? "administer"
-        : SECONDARY.some((i) => i.active(pathname))
-          ? "secondary"
-          : null;
-  const crossed = useCrossedSection(pathname, activeSection);
+  // The row answers the click, not the RSC round-trip. Every cabinet route is dynamic
+  // and none has a `loading.tsx`, so the pathname only changes once the new page's
+  // payload has arrived — 150–300ms after the click, which is exactly the window in
+  // which a highlight that has not moved reads as a click that did not land. The
+  // clicked href is marked at once and the pathname catches up.
+  //
+  // The entry remembers the pathname it was made on, so the moment the pathname changes
+  // it is stale by construction and the URL is the truth again. It is cleared during
+  // render rather than in an effect — an effect would paint one frame with the URL's row
+  // marked and the stale one not — and cleared rather than merely ignored: an entry left
+  // behind would come back to life on a return to the page it was made on, marking
+  // Operations again on the way back from it to Wallet. A click that never navigates
+  // (cancelled, failed) is forgotten by the next one.
+  const [pending, setPending] = useState<{ href: `/${string}`; from: string } | null>(null);
+  if (pending && pending.from !== pathname) setPending(null);
+  const marked = pending && pending.from === pathname ? pending.href : pathname;
+  const mark = (href: `/${string}`) => setPending({ href, from: pathname });
 
   return (
     <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-secondary px-4.5 pb-5 pt-6">
       <nav aria-label={t("nav.a11y.primary")} className="flex flex-col gap-4.5">
-        <Group label={t("nav.group.fund")}>
+        <Section label={t("nav.group.fund")} at={FUND.some((i) => i.active(marked)) ? marked : null}>
           {FUND.map((item) => (
-            <NavLink key={item.label} item={item} active={item.active(pathname)} section="fund" appear={crossed} />
+            <NavLink key={item.label} item={item} active={item.active(marked)} onClick={onRailClick(item.href, mark)} />
           ))}
-        </Group>
+        </Section>
         {products.length > 0 && (
-          <Group label={t("invest.products")}>
+          <Section label={t("invest.products")} at={products.some((p) => onProduct(marked, p.service)) ? marked : null}>
             {products.map((p) => {
               // Every row pointed at `/invest`, so naming a product in the rail took you to
               // the list of all of them. The product's own page is keyed by its service id.
               const href: `/${string}` = `/invest/${encodeURIComponent(p.service)}`;
-              const active = onProduct(pathname, p.service);
+              const active = onProduct(marked, p.service);
               return (
                 <Link
                   key={p.service}
                   href={href}
                   {...prefetchOn(href)}
+                  onClick={onRailClick(href, mark)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    // `isolate` for the same reason NavLink needs it: the pill sits
-                    // on a negative z-index and would otherwise land behind the
-                    // rail's own background rather than behind the label.
-                    "relative isolate flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                     NAV_FOCUS,
                     active ? "font-semibold text-on-primary" : "font-medium text-ink hover:bg-ink/5",
                   )}
                 >
-                  {active && <ActivePill section="products" appear={crossed} />}
                   <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md", productTone(p.service))}>
                     <ProductIcon icon={p.icon} className="size-3.5" />
                   </span>
@@ -188,132 +187,157 @@ export function Sidebar() {
                 </Link>
               );
             })}
-          </Group>
+          </Section>
         )}
         {isAdmin && (
-          <Group label={t("admin.eyebrow.administer")}>
+          <Section label={t("admin.eyebrow.administer")} at={admin.some((i) => i.active(marked)) ? marked : null}>
             {admin.map((item) => (
-              <NavLink key={item.label} item={item} active={item.active(pathname)} section="administer" appear={crossed} />
+              <NavLink key={item.label} item={item} active={item.active(marked)} onClick={onRailClick(item.href, mark)} />
             ))}
-          </Group>
+          </Section>
         )}
       </nav>
 
       <div className="flex-1" />
 
-      <nav aria-label={t("nav.a11y.secondary")} className="flex flex-col gap-1">
-        {SECONDARY.map((item) => {
-          const active = item.active(pathname);
-          return (
-            <NavLink
-              key={item.label}
-              item={item}
-              active={active}
-              section="secondary"
-              appear={crossed}
-              trailing={item.href === "/notifications" && unread ? <UnreadPill count={unread} active={active} /> : undefined}
-            />
-          );
-        })}
+      <nav aria-label={t("nav.a11y.secondary")} className="flex flex-col">
+        <Section at={SECONDARY.some((i) => i.active(marked)) ? marked : null}>
+          {SECONDARY.map((item) => {
+            const active = item.active(marked);
+            return (
+              <NavLink
+                key={item.label}
+                item={item}
+                active={active}
+                onClick={onRailClick(item.href, mark)}
+                trailing={item.href === "/notifications" && unread ? <UnreadPill count={unread} active={active} /> : undefined}
+              />
+            );
+          })}
+        </Section>
       </nav>
     </aside>
   );
 }
 
-function Group({ label, children }: { label: string; children: ReactNode }) {
+// A modified or non-primary click opens the page somewhere else — a new tab, a window,
+// the context menu — and `next/link` lets the browser have it. The row the reader is
+// looking at is still the current one, so it keeps the mark. `defaultPrevented` is the
+// same courtesy to anything upstream that claimed the click first.
+function onRailClick(href: `/${string}`, mark: (href: `/${string}`) => void) {
+  return (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    mark(href);
+  };
+}
+
+// One rail section: an optional eyebrow, its rows, and — while one of those rows is
+// marked — the single highlight that sits behind it.
+//
+// The highlight is one node per SECTION, mounted once and moved, the way the mobile tab
+// bar's rule is. It used to be a `layoutId` pill inside the marked row, and that had two
+// costs. The slide was a JS-driven layout projection competing for the main thread with
+// the new page's render, so it dropped frames on precisely the navigation it was meant
+// to smooth. And its origin was wrong: motion's page-box measurement adds `window.scroll`
+// to every box unless the element itself is `position: fixed`, so the unmount snapshot
+// carried the old page's scrollY while the new pill was measured after Next had scrolled
+// to the top — the pill set off from `scrollY` pixels below its row. Here the move is a
+// CSS transition on `transform`, which runs on the compositor and survives whatever the
+// main thread is doing, and the origin is wherever the marker already is.
+//
+// One per section rather than one per rail for the same reason as before: a marker
+// travelling from Invest to Users would cross two headings that have nothing to do with
+// either row, and the distance would imply a relationship that does not exist. Crossing
+// a section unmounts one marker and mounts another, which is a fade.
+//
+// The tab bar positions its marker by arithmetic because its tabs are uniform; rail rows
+// are not — sections differ in row count and every label is a translation — so this one
+// is placed by measurement. SSR cannot know those offsets, so until the first placement
+// the marked row carries the fill itself (globals.css) and the marker stays hidden; one
+// forced layout read per navigation is the price of the move.
+//
+// `isolate` is load-bearing: the marker sits on a negative z-index, and without a
+// stacking context of its own it would land behind the rail's background instead of
+// behind the row's label.
+function Section({ label, at, children }: { label?: string; at: string | null; children: ReactNode }) {
+  const root = useRef<HTMLDivElement>(null);
+  // Which marker node was last placed, so a re-run over the same node — a move within
+  // the section, a resize — is told apart from a marker that has just mounted. Starts
+  // undefined rather than null so the first run is told apart from a run that found no
+  // marker: only a marker mounting AFTER the section has settled is entering it and
+  // fades; the one hydration finds already on its row cuts straight in.
+  const placed = useRef<HTMLElement | null | undefined>(undefined);
+  useLayoutEffect(() => {
+    const section = root.current;
+    if (!section) return;
+    const place = () => {
+      const marker = section.querySelector<HTMLElement>('[data-slot="rail-marker"]');
+      const row = section.querySelector<HTMLElement>('[aria-current="page"]');
+      const fresh = marker !== placed.current;
+      const entering = fresh && placed.current !== undefined;
+      placed.current = marker;
+      if (!marker || !row) return;
+      // Offsets are relative to the section (its `relative`), so they land on the row
+      // whatever the rail around it is doing.
+      if (fresh) marker.style.transition = "none";
+      marker.style.transform = `translate(${row.offsetLeft}px, ${row.offsetTop}px)`;
+      marker.style.width = `${row.offsetWidth}px`;
+      marker.style.height = `${row.offsetHeight}px`;
+      if (fresh) {
+        // A new node has already been styled once — by the layout read above — at the
+        // section's origin, and a transition is decided by the style AFTER the change.
+        // Flushing the placement first makes it the starting point rather than the
+        // destination, so the marker appears on its row instead of sliding in from the
+        // top of the section.
+        void marker.offsetWidth;
+        marker.style.transition = "";
+        marker.dataset.placed = entering ? "entered" : "first";
+      }
+    };
+    place();
+    // Rows come and go (the catalog loads, a role hides Fees) and labels change width
+    // with the locale or a font swap; any of it moves the marked row without changing
+    // which row is marked.
+    const observer = new ResizeObserver(place);
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, [at]);
   return (
-    <div className="flex flex-col gap-1 pl-1">
-      <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{label}</p>
+    <div ref={root} className={cn("relative isolate flex flex-col gap-1", label !== undefined && "pl-1")}>
+      {/* First in DOM order: the pre-hydration fallback in globals.css reaches the marked
+          row through a sibling combinator, which only looks forward. */}
+      {at !== null && <span data-slot="rail-marker" aria-hidden className="pointer-events-none absolute left-0 top-0 -z-10 rounded-lg bg-primary" />}
+      {label !== undefined && <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{label}</p>}
       {children}
     </div>
   );
 }
 
-// The active pill is one shared node per SECTION, not one for the whole rail and
-// not a background class on each link.
-//
-// Sharing a `layoutId` is what makes motion track the pill from the old link to
-// the new one and slide it there, so a move inside a section reads as a move. The
-// id is scoped to the section because that same behaviour is wrong across
-// sections: jumping from Invest to Users sent the pill travelling the length of
-// the rail, straight through two headings that have nothing to do with either
-// row. The distance implied a relationship between them that does not exist.
-//
-// With the id scoped, motion finds no counterpart in the section being entered,
-// so the pill mounts fresh there — and `initial`/`animate` below turn that into a
-// plain fade. Sliding within a section, appearing between them, from one lever.
-const ACTIVE_PILL = "cabinet-rail-active";
-
-/** Rail sections that own a pill. Every group that can hold the active row has one. */
-type Section = "fund" | "products" | "administer" | "secondary";
-
-/**
- * Whether the pill should fade in on mount — true only when the last navigation
- * crossed a section boundary.
- *
- * It has to be derived rather than left to motion: `initial` is honoured whenever
- * the pill mounts without a layout counterpart, but motion cannot tell us that
- * happened, and setting `initial` unconditionally makes the pill fade *while it
- * slides* inside a section too. Measured: with a blanket `initial` a within-
- * section move ran 13 positions AND 12 opacity steps; the slide alone is what was
- * asked for.
- *
- * Keyed on the path, not the section: a move inside a section leaves the section
- * unchanged, so comparing sections alone would keep whatever the previous answer
- * was and fade anyway. Adjusting state during render (rather than in an effect)
- * is what lets the answer be correct on the very render the pill mounts on.
- */
-function useCrossedSection(pathname: string, section: Section | null): boolean {
-  const [prev, setPrev] = useState({ path: pathname, section, crossed: false });
-  if (prev.path !== pathname) {
-    setPrev({ path: pathname, section, crossed: prev.section !== section });
-    return prev.section !== section;
-  }
-  return prev.crossed;
-}
-
-// The highlight itself, shared by both row shapes in the rail — the nav rows and
-// the product rows. It lives in one place because the two used to style
-// the active state differently: NavLink drew this pill, PRODUCTS set `bg-primary`
-// on the row, and so moving into or out of a product was the one transition in the
-// rail that did not animate at all.
-function ActivePill({ section, appear }: { section: Section; appear: boolean }) {
-  const reduce = useReducedMotion();
-  return (
-    <motion.span
-      // Dropping the id under reduced motion turns the slide into a cut while
-      // leaving the highlight itself in place.
-      layoutId={reduce ? undefined : `${ACTIVE_PILL}-${section}`}
-      aria-hidden
-      className="absolute inset-0 -z-10 rounded-lg bg-primary"
-      // `false` disables the mount animation outright, which is what a move inside
-      // a section wants: the pill slides at full opacity and must not also fade
-      // while doing it.
-      initial={appear ? { opacity: 0 } : false}
-      animate={{ opacity: 1 }}
-      transition={{ duration: DUR.base, ease: EASE.out }}
-    />
-  );
-}
-
-function NavLink({ item, active, section, appear, trailing }: { item: NavItem; active: boolean; section: Section; appear: boolean; trailing?: ReactNode }) {
+function NavLink({
+  item,
+  active,
+  onClick,
+  trailing,
+}: {
+  item: NavItem;
+  active: boolean;
+  onClick: (e: MouseEvent<HTMLAnchorElement>) => void;
+  trailing?: ReactNode;
+}) {
   const t = useT();
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
       {...prefetchOn(item.href)}
+      onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
-        // `isolate` is load-bearing: it gives the link its own stacking context so
-        // the pill's negative z-index stays behind the label and not behind the
-        // rail's own background, which is where it would land otherwise.
-        "relative isolate flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
         NAV_FOCUS,
         active ? "font-semibold text-on-primary" : "font-medium text-ink hover:bg-ink/5",
       )}
     >
-      {active && <ActivePill section={section} appear={appear} />}
       <Icon className="size-4.5 shrink-0" />
       {/* `min-w-0` for the same reason as the mobile tab bar: without it the
           label refuses to shrink below its own text, and the rail widens to fit
