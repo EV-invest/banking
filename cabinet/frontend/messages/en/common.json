@@ -297,6 +297,7 @@
   "admin.outbox.col.reason": "Reason",
   "admin.outbox.col.seq": "Seq",
   "admin.outbox.compensated": "compensated",
+  "admin.outbox.deadKey": "Signing key unavailable — engineering has been alerted; unparking will fail until the key is rotated",
   "admin.outbox.noParkedEvents": "No parked events — the relay is clean.",
   "admin.outbox.parkedEvents": "Parked events",
   "admin.outbox.parkedEventsSub": "Outbox rows the relay couldn't apply — fix the cause, then unpark to re-drive",

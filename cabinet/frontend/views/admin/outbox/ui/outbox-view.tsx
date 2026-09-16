@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import { KeyRound, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
@@ -12,6 +12,7 @@ import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { ago } from "@/views/admin/lib/format";
+import { isDeadKeyPark } from "@/views/admin/outbox/lib/dead-key";
 import { StaggerItem } from "@/shared/ui/motion";
 import type { ParkedEvent } from "@/shared/contracts/admin";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
@@ -166,33 +167,61 @@ function ParkedTable({
             </td>
             <td className="whitespace-nowrap py-2.5 text-ink-soft">{ago(e.parked_at, t)}</td>
             <td className="py-2.5 text-right">
-              <div className="flex items-center justify-end gap-2">
-                {/* i18n-max: 12 per badge — three chips and a button share this cell. */}
-                {e.compensated && (
-                  <span className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-ink/5 px-2 py-0.5 text-xs font-medium text-ink">
-                    {t("admin.outbox.compensated")}
-                    <TipAnchor anchor="admin.outbox.parked.compensated" />
-                  </span>
-                )}
-                {unparked.has(e.seq) && (
-                  <span className="whitespace-nowrap rounded-full bg-positive/15 px-2 py-0.5 text-xs font-medium text-positive">{t("admin.outbox.unparked")}</span>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={e.compensated || unparked.has(e.seq) || unparking !== null}
-                  onClick={() => onUnpark(e.seq)}
-                >
-                  {unparking === e.seq ? <Loader2 className="size-3.5 animate-spin" /> : null}
-                  {t("admin.outbox.unpark")}
-                </Button>
-                <TipAnchor anchor="admin.outbox.parked.unpark" />
-              </div>
+              <ParkedActions event={e} unparked={unparked.has(e.seq)} unparking={unparking} onUnpark={() => onUnpark(e.seq)} />
             </td>
           </tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+function ParkedActions({
+  event,
+  unparked,
+  unparking,
+  onUnpark,
+}: {
+  event: ParkedEvent;
+  unparked: boolean;
+  unparking: string | null;
+  onUnpark: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {/* i18n-max: 12 per badge — three chips and a button share this cell. */}
+      {event.compensated && (
+        <span className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-ink/5 px-2 py-0.5 text-xs font-medium text-ink">
+          {t("admin.outbox.compensated")}
+          <TipAnchor anchor="admin.outbox.parked.compensated" />
+        </span>
+      )}
+      {unparked && (
+        <span className="whitespace-nowrap rounded-full bg-positive/15 px-2 py-0.5 text-xs font-medium text-positive">{t("admin.outbox.unparked")}</span>
+      )}
+      {isDeadKeyPark(event.reason) ? (
+        // No button at all: unparking a dead-key row re-parks it on the same refusal, and
+        // an operator cannot rotate the key — the hint says who can and what they are waiting on.
+        <span className="flex max-w-64 items-start gap-1.5 text-left text-xs text-accent-warn">
+          <KeyRound className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          {t("admin.outbox.deadKey")}
+        </span>
+      ) : (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={event.compensated || unparked || unparking !== null}
+            onClick={onUnpark}
+          >
+            {unparking === event.seq ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {t("admin.outbox.unpark")}
+          </Button>
+          <TipAnchor anchor="admin.outbox.parked.unpark" />
+        </>
+      )}
+    </div>
   );
 }

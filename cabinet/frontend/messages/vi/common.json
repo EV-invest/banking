@@ -1191,6 +1191,10 @@
     "en": "compensated",
     "t": "đã bù trừ"
   },
+  "admin.outbox.deadKey": {
+    "en": "Signing key unavailable — engineering has been alerted; unparking will fail until the key is rotated",
+    "t": "Khóa ký không khả dụng — đội kỹ thuật đã được cảnh báo; gỡ treo sẽ thất bại cho đến khi khóa được thay mới"
+  },
   "admin.outbox.noParkedEvents": {
     "en": "No parked events — the relay is clean.",
     "t": "Không có sự kiện bị treo — bộ chuyển tiếp sạch."
