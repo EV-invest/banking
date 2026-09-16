@@ -444,12 +444,12 @@ function PayoutSection({
                       <ItemContent className="min-w-0 gap-0.5">
                         <ItemTitle className="block w-auto truncate font-medium tabular-nums">
                           {consilium.valuation_override
-                            ? `${formatExactUsdt(consilium.valuation_override.aum)} USDT · ${valuationWords(consilium.valuation_override, t)}`
+                            ? `${formatExactUsdt(consilium.valuation_override.aum, locale)} USDT · ${valuationWords(consilium.valuation_override, t)}`
                             : consilium.payment
-                              ? `${formatExactUsdt(consilium.payment.amount)} USDT · ${paymentWords(consilium.payment)}`
+                              ? `${formatExactUsdt(consilium.payment.amount, locale)} USDT · ${paymentWords(consilium.payment)}`
                               : consilium.fee_policy
                                 ? feePolicyWords(consilium.fee_policy)
-                              : `${formatExactUsdt(consilium.revenue_payout?.amount)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
+                              : `${formatExactUsdt(consilium.revenue_payout?.amount, locale)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
                         </ItemTitle>
                         <ItemDescription className="truncate text-xs tabular-nums">
                           {/* `??` cannot do this: an undecided consilium carries the STRING "0", which is truthy. */}
@@ -516,7 +516,7 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
             <p className="text-2xl font-semibold leading-none text-ink">{feePolicy.allocation_name || feePolicy.service}</p>
           ) : (
             <p className="text-2xl font-semibold leading-none tabular-nums text-ink">
-              {formatExactUsdt(valuation ? valuation.aum : payment ? payment.amount : payout?.amount)}
+              {formatExactUsdt(valuation ? valuation.aum : payment ? payment.amount : payout?.amount, locale)}
               <span className="ml-2 text-sm font-medium text-ink-soft">USDT</span>
             </p>
           )}

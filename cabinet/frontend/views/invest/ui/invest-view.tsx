@@ -10,7 +10,7 @@
 // is now a single dense band plus a grid — nothing is sized by anything other than what
 // is in it.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { ArrowRight, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useMemo } from "react";
@@ -119,6 +119,7 @@ export function InvestView() {
  */
 function PortfolioBand({ invested, cost, funds, available, queued }: { invested: bigint; cost: bigint; funds: number; available: string | null; queued: number }) {
   const t = useT();
+  const locale = useLocale();
   const pnl = invested - cost;
   const loss = pnl < 0n;
   const flat = pnl === 0n;
@@ -137,11 +138,11 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
         <div className="space-y-1.5 md:flex-1">
           <p className="text-xs font-semibold uppercase tracking-widest text-accent-debug">{t("invest.investedValue")}</p>
           <div className="flex flex-wrap items-baseline gap-2.5">
-            <span className="text-3xl font-semibold leading-none tabular-nums">{formatUsdt(fromBaseUnits(invested))}</span>
+            <span className="text-3xl font-semibold leading-none tabular-nums">{formatUsdt(fromBaseUnits(invested), locale)}</span>
             <span className="text-sm text-ink-soft">USDT</span>
             {!flat && (
               <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", loss ? "bg-chart-4/15 text-chart-4" : "bg-positive/15 text-positive")}>
-                {formatSignedUsdt(fromBaseUnits(pnl))}
+                {formatSignedUsdt(fromBaseUnits(pnl), locale)}
                 {pct !== null && ` · ${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`}
               </span>
             )}
@@ -150,7 +151,7 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
         </div>
 
         <div className="flex flex-wrap gap-8 md:border-l md:border-border md:px-7">
-          <BandStat label={t("invest.costBasis")} value={`${formatUsdt(fromBaseUnits(cost))} USDT`} />
+          <BandStat label={t("invest.costBasis")} value={`${formatUsdt(fromBaseUnits(cost), locale)} USDT`} />
           <BandStat label={t("invest.fundsHeld")} value={String(funds)} />
           <BandStat
             label={t("invest.awaitingSettlement")}
@@ -163,7 +164,7 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
           <p className="flex items-center gap-1.5 text-xs text-ink-soft">
             <Wallet className="size-3.5" /> {t("invest.availableToInvest")}
           </p>
-          <p className="text-xl font-semibold tabular-nums">{available === null ? "—" : `${formatUsdt(available)} USDT`}</p>
+          <p className="text-xl font-semibold tabular-nums">{available === null ? "—" : `${formatUsdt(available, locale)} USDT`}</p>
           <Button asChild type="button" variant="outline" size="sm">
             <Link href="/wallet">{t("invest.topUp")}</Link>
           </Button>
@@ -196,6 +197,7 @@ function BandStat({ label, value, tone }: { label: string; value: string; tone?:
  */
 function ProductCard({ product }: { product: Product }) {
   const t = useT();
+  const locale = useLocale();
   const nav = useResource(fundNavResource, product.service).data ?? null;
 
   const held = product.position && !isZero(product.position.units) ? product.position : null;
@@ -226,14 +228,14 @@ function ProductCard({ product }: { product: Product }) {
         </div>
 
         <div className="flex flex-wrap gap-x-6 gap-y-3 border-y border-border py-3.5">
-          <CardStat label={t("invest.navPerUnit")} value={nav ? formatUsdt(nav.nav) : "—"} large />
+          <CardStat label={t("invest.navPerUnit")} value={nav ? formatUsdt(nav.nav, locale) : "—"} large />
           {held ? (
             <>
-              <CardStat label={t("invest.yourUnits")} value={formatUnits(held.units)} />
-              <CardStat label={t("invest.value")} value={formatUsdt(held.value)} />
+              <CardStat label={t("invest.yourUnits")} value={formatUnits(held.units, locale)} />
+              <CardStat label={t("invest.value")} value={formatUsdt(held.value, locale)} />
               <CardStat
                 label={t("invest.pnl")}
-                value={flat ? "0.00" : formatSignedUsdt(held.pnl)}
+                value={flat ? "0.00" : formatSignedUsdt(held.pnl, locale)}
                 tone={flat ? undefined : loss ? "text-chart-4" : "text-positive"}
                 icon={flat ? undefined : <TrendingUp className={cn("size-3.5", loss && "rotate-180")} />}
               />

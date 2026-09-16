@@ -43,6 +43,15 @@ Required to turn the rail on:
   Against the old 500 default every Polygon `eth_getLogs` was refused and **the rail credited
   no deposits at all**. Re-measure before raising it, and note the keyless alternatives
   (publicnode et al.) refuse Polygon `getLogs` outright, so drpc is the only free option.
+- **Pruned history is skipped, not retried.** A shared keyed node (allnodes) keeps only a
+  bounded window of logs and answers an older `fromBlock` with `-32701 History has been
+  pruned for this block`. The scan bisects for the oldest block the node still serves, moves
+  the cursor there and logs `deposit watcher: provider has pruned history below block …`
+  at `error!` (Sentry) with the skipped `from`/`to`. Deposits in that window are **not
+  credited**: check the USDT contract's transfers to our addresses over that range on the
+  explorer and record any hits with `RecordDeposit`. A watcher that keeps hitting this after
+  a restart is a watcher that was down longer than the node's window — shorten the outage,
+  or point `POLYGON_LOGS_RPC_URL` at an archive-capable endpoint.
 
 Sensible defaults (override only to deviate): `POLYGON_USDT_CONTRACT`, `POLYGON_CHAIN_ID` (137),
 `POLYGON_CONFIRMATIONS` (128), `POLYGON_POLL_SECS` (6), `POLYGON_MAX_BLOCK_RANGE` (500 in code,

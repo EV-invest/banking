@@ -9,7 +9,7 @@
 // end shows the label the digest binds AND the detail a person recognises it by, because
 // "investor 8f3e…" is exactly the thing a reader cannot check.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Separator } from "@evinvest/uikit";
 
 import { tierHint, tierLabel } from "@/entities/payment/lib/format";
@@ -50,6 +50,7 @@ export function PaymentTermsBlock({
   tierAs?: "label" | "hint";
 }) {
   const t = useT();
+  const locale = useLocale();
   const external = terms.destination.kind === "external";
   return (
     <>
@@ -57,7 +58,7 @@ export function PaymentTermsBlock({
         <FieldCaption>{t("approval.amount")}</FieldCaption>
         <p className="text-4xl font-semibold leading-none tabular-nums text-ink">
           {/* The wire string, digit for digit — `payload_hash` covers the exact decimal. */}
-          {formatExactUsdt(terms.amount)}
+          {formatExactUsdt(terms.amount, locale)}
           <span className="ml-2 text-base font-medium text-ink-soft">USDT</span>
         </p>
       </div>

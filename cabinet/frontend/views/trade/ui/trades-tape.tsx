@@ -38,7 +38,7 @@ export function TradesTape({ service }: { service: string }) {
       </div>
       {trades.map((trade, i) => (
         // A taker buy lifted an ask and prints in the bid colour — the buyer's side.
-        <TradesTapeRow key={trade.id ?? i} side={trade.taker_side === "sell" ? "ask" : "bid"} price={formatUsdt(trade.price)} size={formatUnits(trade.size)} time={formatClock(trade.executed_at, locale)} />
+        <TradesTapeRow key={trade.id ?? i} side={trade.taker_side === "sell" ? "ask" : "bid"} price={formatUsdt(trade.price, locale)} size={formatUnits(trade.size, locale)} time={formatClock(trade.executed_at, locale)} />
       ))}
     </div>
   );

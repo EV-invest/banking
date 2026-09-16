@@ -13,7 +13,9 @@ import type { Locale } from "@evinvest/i18n";
  * cabinet's answer to "what does `en` mean to `Intl`", and there is only one.
  *
  * Money is deliberately NOT routed through here — `shared/lib/money.ts` owns one
- * policy per unit of measure and pins its own locale on purpose.
+ * policy per unit of measure and maps `en` to `en-US` itself, because that is the
+ * tag its English output was always produced with (and `en-GB` would spell the
+ * dollar "US$").
  */
 export function intlLocale(locale: Locale): string {
   return locale === "en" ? "en-GB" : locale;

@@ -6,7 +6,7 @@
 
 import { CheckCircle2, Clock, Info, Lock, TriangleAlert } from "lucide-react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Alert, AlertDescription, AlertTitle } from "@evinvest/uikit";
 
 import type { Order } from "@/shared/contracts/book";
@@ -46,11 +46,12 @@ export function OrderGate({ closed, locked, unbacked }: { closed: boolean; locke
 /** The last submit's answer: the order as the hub recorded it, or why it refused. */
 export function OrderOutcome({ outcome }: { outcome: Outcome }) {
   const t = useT();
+  const locale = useLocale();
   if (outcome.order) {
     const order = outcome.order;
     const key = orderStateKey(order);
     const placed = placedOutcome(order);
-    const args = { filled: formatUnits(order.filled), size: formatUnits(order.size), avg: formatUsdt(order.avg_fill_price), reason: order.reject_reason ?? "" };
+    const args = { filled: formatUnits(order.filled, locale), size: formatUnits(order.size, locale), avg: formatUsdt(order.avg_fill_price, locale), reason: order.reject_reason ?? "" };
     return (
       <div className="px-3 pb-3">
         <Alert variant={placed === "rejected" ? "destructive" : undefined}>

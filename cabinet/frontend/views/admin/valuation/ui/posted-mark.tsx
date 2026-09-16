@@ -7,7 +7,7 @@
 
 import { CheckCircle2 } from "lucide-react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Alert, AlertDescription, AlertTitle, Button } from "@evinvest/uikit";
 
 import type { FundNav } from "@/shared/contracts/admin";
@@ -15,13 +15,14 @@ import { formatExactUsdt, formatNav } from "@/shared/lib/money";
 
 export function PostedMark({ mark, onClose }: { mark: FundNav; onClose: () => void }) {
   const t = useT();
+  const locale = useLocale();
   return (
     <Alert role="status" className="border-positive/40 bg-positive/10">
       <CheckCircle2 className="size-4 text-positive" />
       <AlertTitle>{t("admin.valuation.postedTitle")}</AlertTitle>
       <AlertDescription className="gap-3 text-ink">
         <p className="leading-relaxed tabular-nums">
-          {t("admin.valuation.postedBody", { nav: formatNav(mark.nav), aum: formatExactUsdt(mark.aum) })}
+          {t("admin.valuation.postedBody", { nav: formatNav(mark.nav, locale), aum: formatExactUsdt(mark.aum, locale) })}
         </p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="ghost" onClick={onClose}>

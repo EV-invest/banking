@@ -44,18 +44,10 @@ use piggybank_core::{
 	},
 };
 use sqlx::PgPool;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 mod common;
-
-/// Every test here builds its own `Relay` and calls `drain()`, which — unlike `Relay::run` —
-/// never takes `OUTBOX_LOCK_KEY`, while the outbox is one table per test binary. Two relays
-/// draining concurrently pick up the same row and both act on it (observed: a row with
-/// `dispatched_at` AND `parked_at` set, each written by a different custody fake) — the
-/// mechanism behind the `relay_recovery` flakes. So the tests take turns; production has a
-/// single drainer under the advisory lock and needs none of this.
-static SERIAL_DRAIN: Mutex<()> = Mutex::const_new(());
 
 struct Harness {
 	pool: PgPool,
@@ -148,7 +140,7 @@ async fn active_user(h: &Harness) -> UserId {
 /// queryable, and reconciliation surfaces it in the parked-row scan.
 #[tokio::test]
 async fn a_parked_event_is_not_dispatched_and_reconciliation_surfaces_it() {
-	let _serial = SERIAL_DRAIN.lock().await;
+	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
 	let event_id = Uuid::new_v4();
 	let aggregate_id = Uuid::new_v4();
@@ -186,7 +178,7 @@ async fn a_parked_event_is_not_dispatched_and_reconciliation_surfaces_it() {
 /// `queued` withdrawal past the max age is auto-cancelled (safe — never broadcast).
 #[tokio::test]
 async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
-	let _serial = SERIAL_DRAIN.lock().await;
+	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
 	let network = Network::Bep20;
 
@@ -268,7 +260,7 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 /// custody park), because a live one is only drainable while the row is `processing`.
 #[tokio::test]
 async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
-	let _serial = SERIAL_DRAIN.lock().await;
+	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
 	let network = Network::Trc20;
 	let user = active_user(&h).await;
@@ -355,7 +347,7 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 /// locked for the operator instead of refunding a user who may also be paid on-chain.
 #[tokio::test]
 async fn a_fail_void_parks_when_a_broadcast_row_exists() {
-	let _serial = SERIAL_DRAIN.lock().await;
+	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
 	let network = Network::Bep20;
 	let user = active_user(&h).await;
@@ -422,7 +414,7 @@ async fn a_fail_void_parks_when_a_broadcast_row_exists() {
 /// the outbox (no in-memory floor) and dispatches it.
 #[tokio::test]
 async fn an_unparked_event_is_re_driven_and_dispatched() {
-	let _serial = SERIAL_DRAIN.lock().await;
+	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	let event = LedgerEvent::Deposited {
@@ -471,7 +463,7 @@ async fn an_unparked_event_is_re_driven_and_dispatched() {
 /// FAILED_PRECONDITION vs NOT_FOUND precisely.
 #[tokio::test]
 async fn unpark_refuses_compensated_and_dispatched_rows() {
-	let _serial = SERIAL_DRAIN.lock().await;
+	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
 	let compensated_seq: i64 = sqlx::query_scalar(
 		"INSERT INTO outbox (event_id, aggregate, aggregate_id, kind, payload, parked_at, last_error) \
@@ -527,7 +519,7 @@ async fn unpark_refuses_compensated_and_dispatched_rows() {
 /// The redelivery must instead recognize the applied legs and complete the fee.
 #[tokio::test]
 async fn a_redelivered_half_applied_settle_completes_instead_of_parking() {
-	let _serial = SERIAL_DRAIN.lock().await;
+	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
 	let network = Network::Bep20;
 	let user = active_user(&h).await;
@@ -699,7 +691,7 @@ impl Custody for RefusingCustody {
 /// `ListParkedEvents` shows the operator — carries the custodian's activity id verbatim.
 #[tokio::test]
 async fn a_custody_refusal_parks_the_broadcast_once_and_names_the_activity_in_last_error() {
-	let _serial = SERIAL_DRAIN.lock().await;
+	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
 	let network = Network::Bep20;
 	const ACTIVITY_ID: &str = "0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b";

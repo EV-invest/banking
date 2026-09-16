@@ -5,7 +5,7 @@
 // operator is undoing the same kind of thing. The button here only REVIEWS; the send is
 // the confirmation step in `RetireAction`, because this destroys units for good.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Input, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
 
 import { cn } from "@/shared/lib/cn";
@@ -15,6 +15,7 @@ import { UserPicker, type PickedUser } from "@/views/admin/allocations/ui/user-p
 
 export function RetireForm({ draft, companyUnits, onChange, onReview, onCancel }: { draft: RetireDraft; companyUnits: string; onChange: (next: RetireDraft) => void; onReview: () => void; onCancel: () => void }) {
   const t = useT();
+  const locale = useLocale();
   const problem = retireDraftProblem(draft, companyUnits);
   // Under the button, only what no field already says: an unpicked holder and untouched
   // units have no message of their own, while a malformed figure is flagged at its field.
@@ -51,7 +52,7 @@ export function RetireForm({ draft, companyUnits, onChange, onReview, onCancel }
           {/* The company's settled stake is the one figure this form can cap against; an
               investor's available units are the hub's to know, and its refusal names them. */}
           <span className={cn("text-xs tabular-nums", unitsProblem ? "text-accent-error" : "text-ink-soft")}>
-            {unitsProblem === "units" ? t("admin.alloc.issue.problem.units") : kind === "company" ? t("admin.alloc.transfer.available", { units: formatUnits(companyUnits) }) : t("admin.alloc.retire.investorHint")}
+            {unitsProblem === "units" ? t("admin.alloc.issue.problem.units") : kind === "company" ? t("admin.alloc.transfer.available", { units: formatUnits(companyUnits, locale) }) : t("admin.alloc.retire.investorHint")}
           </span>
         </label>
         <label className="flex flex-col gap-1.5">

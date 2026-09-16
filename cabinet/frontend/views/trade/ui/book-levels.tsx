@@ -6,7 +6,7 @@
 
 import type { KeyboardEvent } from "react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle, OrderBook, OrderBookHead, OrderBookRow, OrderBookSpread, Skeleton } from "@evinvest/uikit";
 
 import { bookSnapshotResource } from "@/entities/book/model/book-resource";
@@ -19,6 +19,7 @@ const ROW_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-inset fo
 
 export function BookLevels({ service, onPick }: { service: string; onPick: (price: string) => void }) {
   const t = useT();
+  const locale = useLocale();
   const read = useResource(bookSnapshotResource, service);
   const book = read.data ?? null;
 
@@ -57,9 +58,9 @@ export function BookLevels({ service, onPick }: { service: string; onPick: (pric
       <OrderBookRow
         key={`${side}:${row.price}`}
         side={side}
-        price={formatUsdt(row.price)}
-        size={formatUnits(row.size)}
-        total={formatUnits(row.total)}
+        price={formatUsdt(row.price, locale)}
+        size={formatUnits(row.size, locale)}
+        total={formatUnits(row.total, locale)}
         depth={row.depth}
         role="button"
         tabIndex={0}
@@ -78,8 +79,8 @@ export function BookLevels({ service, onPick }: { service: string; onPick: (pric
           the order is reversed for display and the best ask sits just above the line. */}
       {[...asks].reverse().map((row) => level("ask", row))}
       <OrderBookSpread>
-        <span>{book.mid ? formatUsdt(book.mid) : "—"}</span>
-        <span className="text-xs">{book.spread ? t("trade.book.spread", { spread: formatUsdt(book.spread) }) : t("trade.book.oneSided")}</span>
+        <span>{book.mid ? formatUsdt(book.mid, locale) : "—"}</span>
+        <span className="text-xs">{book.spread ? t("trade.book.spread", { spread: formatUsdt(book.spread, locale) }) : t("trade.book.oneSided")}</span>
       </OrderBookSpread>
       {bids.map((row) => level("bid", row))}
     </OrderBook>

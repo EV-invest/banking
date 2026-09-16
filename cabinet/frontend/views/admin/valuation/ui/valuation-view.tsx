@@ -152,7 +152,7 @@ export function ValuationView() {
                     ledger), never posted directly — an editable field here would imply
                     an operator can set a price. */}
                 <div className="flex h-9 items-center rounded-md border border-accent-debug/40 bg-accent-debug/10 px-3 text-sm" aria-readonly="true">
-                  <span className="font-semibold text-accent-debug tabular-nums">{derivedNav ? formatNav(derivedNav) : "—"}</span>
+                  <span className="font-semibold text-accent-debug tabular-nums">{derivedNav ? formatNav(derivedNav, locale) : "—"}</span>
                   {/* An ICU plural, so `units` agrees with the count and `#` groups the
                       digits in the reader's convention — the hard-coded `en-US` is gone. */}
                   {units > 0 && <span className="ml-2 text-xs tabular-nums text-ink-soft">{t("admin.valuation.derivedFormula", { n: units })}</span>}
@@ -266,11 +266,11 @@ export function ValuationView() {
                             <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
                             <p className="font-mono-tech text-xs text-ink-soft">{item.service}</p>
                           </td>
-                          {/* A bare unit count, grouped in the reader's locale rather than
-                              `en-US` — it is not money, so `shared/lib/money.ts` has no
-                              say here. */}
+                          {/* A bare unit count in the reader's locale — it is not money, so
+                              it takes `Intl`'s own precision rather than one of the
+                              `shared/lib/money.ts` policies. */}
                           <td className="px-5 py-3 tabular-nums">{Number(item.units).toLocaleString(locale)}</td>
-                          <td className="px-5 py-3 tabular-nums text-ink-soft">{est ? t("admin.valuation.approx", { amount: formatUsd(est) }) : "—"}</td>
+                          <td className="px-5 py-3 tabular-nums text-ink-soft">{est ? t("admin.valuation.approx", { amount: formatUsd(est, locale) }) : "—"}</td>
                           <td className="px-5 py-3 text-ink-soft">{ago(item.created_at, t)}</td>
                           <td className="px-5 py-3">
                             {/* i18n-max: 12 per verb — two `shrink-0` Buttons, each with a
@@ -328,6 +328,7 @@ function SupplyCapCard({
   onError: (message: string | null) => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -374,7 +375,7 @@ function SupplyCapCard({
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm text-ink-soft">{t("admin.valuation.unitsIssuedIn", { service: allocation.service })}</span>
             <span className={cn("text-sm font-semibold tabular-nums", nearCap ? "text-accent-warn" : "text-ink")}>
-              {t("admin.valuation.issuedOfCap", { issued: compactUnits(issued), cap: compactUnits(cap) })}
+              {t("admin.valuation.issuedOfCap", { issued: compactUnits(issued, locale), cap: compactUnits(cap, locale) })}
             </span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
@@ -386,7 +387,7 @@ function SupplyCapCard({
               fragment no translator could place, and the loading branch reads differently
               from the figure branch in most languages. */}
           <p className="text-xs text-ink-soft">
-            {nav ? t("admin.valuation.stillIssuable", { units: formatUnits(nav.remaining_capacity) }) : t("admin.valuation.loadingSupply")}
+            {nav ? t("admin.valuation.stillIssuable", { units: formatUnits(nav.remaining_capacity, locale) }) : t("admin.valuation.loadingSupply")}
           </p>
         </div>
 
@@ -409,7 +410,7 @@ function SupplyCapCard({
             {invalid
               ? t("admin.valuation.capInvalid")
               : belowIssued
-                ? t("admin.valuation.capBelowIssued", { n: compactUnits(issued) })
+                ? t("admin.valuation.capBelowIssued", { n: compactUnits(issued, locale) })
                 : t("admin.valuation.capHint")}
           </p>
 

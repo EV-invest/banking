@@ -7,7 +7,7 @@
 // because the second one changes WHO reads the reason the operator is typing — every
 // owner, or one investor — and that is worth knowing before the sentence is written.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Spinner } from "@evinvest/uikit";
 
 import { requirementLabel, tierLabel } from "@/entities/payment/lib/format";
@@ -58,6 +58,7 @@ export function ReviewPanel({
   onBack: () => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const requirement = previewRequirement(source);
   return (
     <div className="space-y-3 rounded-lg border border-accent-warn/40 bg-accent-warn/5 p-3">
@@ -66,7 +67,7 @@ export function ReviewPanel({
           characters. The amount is the exact wire decimal — the figure the hash covers. */}
       <p className="text-sm tabular-nums break-words">
         {t("admin.payments.reviewSentence", {
-          amount: `${formatExactUsdt(amount.trim())} USDT`,
+          amount: `${formatExactUsdt(amount.trim(), locale)} USDT`,
           source: draftWords(source, t),
           destination: draftWords(destination, t),
         })}
