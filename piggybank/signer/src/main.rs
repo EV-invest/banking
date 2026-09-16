@@ -58,14 +58,9 @@ async fn run() -> color_eyre::Result<()> {
 	// compromised. The fee budget is always on; the cap/allowlist are no-ops until an operator
 	// sets them.
 	let policy = SignerPolicy::from_env().context("failed to load signer spend policy")?;
-	tracing::info!(fee_budget = ?policy.fee_budget(), "signer fee budget active");
+	tracing::info!(fee_budget = ?policy.fee_budget(), treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(), "signer fee budget active");
 	if policy.is_active() {
-		tracing::info!(
-			max_transfer_usdt = ?policy.max_transfer_usdt(),
-			allowlisted_destinations = policy.allowlist_len(),
-			treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(),
-			"signer spend policy active"
-		);
+		tracing::info!(max_transfer_usdt = ?policy.max_transfer_usdt(), allowlisted_destinations = policy.allowlist_len(), "signer spend policy active");
 	} else {
 		tracing::warn!("signer spend policy inactive — no per-transfer cap or destination allowlist (set SIGNER_MAX_TRANSFER_USDT before scaling liquidity)");
 	}
