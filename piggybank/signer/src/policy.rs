@@ -2,44 +2,68 @@
 //! compromised.
 //!
 //! The signer is a distinct trust domain: it holds the keys and applies its OWN limits, so
-//! an attacker who owns the hub still cannot make it sign an arbitrary payout. Three
-//! controls, two of them opt-in and one always on:
+//! an attacker who owns the hub still cannot make it sign an arbitrary payout. Every wallet
+//! the signer holds a key for belongs to one of three classes, and each class has the rule
+//! that fits it — there is no wallet a handler signs for without reaching a policy branch:
 //!
-//!   - a **per-transfer USDT cap** — a single signed treasury transfer can move at most this
-//!     much, so one forged request can't drain the hot wallet;
-//!   - an optional **destination allowlist** — when set, treasury transfers may only go to
-//!     pre-registered addresses (a hardened/staged posture; off by default, since the normal
-//!     withdrawal model sends to arbitrary user addresses). A TON jetton transfer names two
-//!     more addresses that receive native Toncoin, and both are held to the same list: the
-//!     `response_destination` (the excess returns there — always the sending wallet itself on
-//!     a legitimate withdrawal, so that is accepted with or without a list) and
-//!     `our_jetton_wallet` (the internal message's destination, which receives `msg_value`
-//!     — pinned with `SIGNER_TON_TREASURY_JETTON_WALLET`, or else it must be on the list);
-//!   - a **fee budget** ([`FeeBudget`]) — a ceiling on the gas/fee side of EVERY signed
-//!     transaction. The amount caps above bound what leaves in USDT; they say nothing about
-//!     the native coin a transaction burns as fee. Without this gate a forged request moving
-//!     1 USDT with an absurd `gas_price` would hand the whole native balance to the miner,
-//!     and could do so once per nonce.
+//!   - **Deposit** (a user's address; anything but the two reserved ids): the only legitimate
+//!     flow is a **sweep into the treasury**, so a token transfer's destination must be the
+//!     treasury's own address on that network — which the signer already knows from its own
+//!     `wallet_secrets`, so no configuration is involved and no legitimate sweep is refused.
+//!     A treasury that is not provisioned on the network means there is nowhere to sweep to,
+//!     and the request is refused. A native transfer out of a deposit wallet has no
+//!     legitimate flow at all and is always refused. On TON the hub points a sweep's
+//!     `response_destination` at the gas station (the excess Toncoin tops the station back
+//!     up), so that field may name the sending wallet, the gas station or the treasury — all
+//!     three derived by the signer. `our_jetton_wallet` cannot be derived for a sweep (it is
+//!     the user's jetton wallet, a contract address the signer never computes); it is
+//!     bounded instead by the fee budget on `msg_value` — the only Toncoin that message
+//!     carries — and by the native spend window (#369).
+//!   - **Gas station** (`Uuid::from_u128(1)`, the hub's reserved id): it only ever tops up
+//!     deposit wallets with the native coin, so it signs **native transfers only**, the
+//!     destination must be an address the signer itself holds a key for on that network
+//!     (again derived from `wallet_secrets`, not configured), and the drip is capped by
+//!     [`GasTopupCaps`].
+//!   - **Treasury** (`Uuid::nil()`): the one class with an arbitrary destination — user
+//!     withdrawals — and so the one where the amount controls live:
+//!       - a **per-transfer USDT cap** (`SIGNER_MAX_TRANSFER_USDT`) — a single signed
+//!         treasury transfer can move at most this much, so one forged request can't drain
+//!         the hot wallet;
+//!       - an optional **destination allowlist** (`SIGNER_DESTINATION_ALLOWLIST`) — when set,
+//!         treasury transfers may only go to pre-registered addresses (a hardened/staged
+//!         posture; off by default, since the normal withdrawal model sends to arbitrary user
+//!         addresses). Membership is rendering-aware ([`provision::addresses_agree`]): EIP-55
+//!         casing and TON's raw-vs-base64 forms are the same address, so an operator may list
+//!         either spelling. A TON jetton transfer names two more addresses that receive native
+//!         Toncoin, and both are held to the same list: the `response_destination` (the excess
+//!         returns there — always the sending wallet itself on a legitimate withdrawal, so that
+//!         is accepted with or without a list) and `our_jetton_wallet` (the internal message's
+//!         destination, which receives `msg_value` — pinned with
+//!         `SIGNER_TON_TREASURY_JETTON_WALLET`, or else it must be on the list).
 //!
-//! The cap and the allowlist apply only to transfers signed FROM the **treasury** wallet (the
-//! withdrawal drain vector); sweeps *into* the treasury and gas top-ups (signed from the
-//! separate gas-station wallet) are not treasury spends. Native (gas-coin) transfers from the
-//! treasury honor the allowlist too, but not the cap — it is USDT-denominated and cannot price
-//! a native amount. Both are **no-ops until configured** (`SIGNER_MAX_TRANSFER_USDT`,
-//! `SIGNER_DESTINATION_ALLOWLIST`), so dev/CI and existing deployments are unaffected until
-//! an operator opts in — the same convention as the observability seams. An operator enabling
+//! Native (gas-coin) transfers from the treasury honor the allowlist but not the cap — it is
+//! USDT-denominated and cannot price a native amount. The cap and the allowlist are
+//! **no-ops until configured**, so dev/CI and existing deployments are unaffected until an
+//! operator opts in — the same convention as the observability seams. An operator enabling
 //! the allowlist must either pin the treasury's jetton wallet or put it on the list, or every
 //! TON withdrawal is refused.
 //!
-//! The fee budget is the opposite: **on by default** with ceilings an honest hub never
-//! reaches, enforced on every wallet class (treasury, deposit addresses, the gas station) and
-//! in every signing handler before a digest is signed. An operator may raise a ceiling via
-//! its `SIGNER_MAX_*` variable, but cannot switch it off — `0` is a boot error, not "disabled".
+//! Two controls are the opposite — **on by default** with ceilings an honest hub never
+//! reaches, and an operator may raise them via their `SIGNER_MAX_*` variables but cannot
+//! switch them off (`0` is a boot error, not "disabled"):
+//!
+//!   - the **fee budget** ([`FeeBudget`]) — a ceiling on the gas/fee side of EVERY signed
+//!     transaction, on every wallet class. The amount caps above bound what leaves in USDT;
+//!     they say nothing about the native coin a transaction burns as fee. Without this gate a
+//!     forged request moving 1 USDT with an absurd `gas_price` would hand the whole native
+//!     balance to the miner, and could do so once per nonce;
+//!   - the **gas top-up cap** ([`GasTopupCaps`]) — a ceiling on the native amount one
+//!     gas-station drip may carry.
 //!
 //! `Status` is tonic's large error type we don't control (same as the service handlers).
 #![allow(clippy::result_large_err)]
 
-use std::{collections::HashSet, str::FromStr as _};
+use std::str::FromStr as _;
 
 use domain::money::{Network, Usdt};
 use tonic::Status;
@@ -61,14 +85,18 @@ const DEFAULT_MAX_GAS_PRICE_GWEI_POLYGON: u64 = 5_000;
 pub struct SignerPolicy {
 	/// Max USDT (whole units) a single treasury transfer may move. `None` ⇒ uncapped.
 	max_transfer_usdt: Option<u64>,
-	/// If non-empty, a treasury transfer's destination must be one of these (verbatim wire
-	/// address strings). Empty ⇒ any destination is allowed (the default withdrawal model).
-	destination_allowlist: HashSet<String>,
+	/// If non-empty, a treasury transfer's destination must agree with one of these (wire
+	/// address strings in any rendering — membership goes through
+	/// [`provision::addresses_agree`], not string equality). Empty ⇒ any destination is
+	/// allowed (the default withdrawal model).
+	destination_allowlist: Vec<String>,
 	/// The treasury's own USDT jetton wallet, when pinned: a treasury jetton transfer's
 	/// `our_jetton_wallet` must be this address. `None` ⇒ it falls back to the allowlist.
 	ton_treasury_jetton_wallet: Option<String>,
 	/// The always-on ceiling on the fee side of every signed transaction.
 	fee_budget: FeeBudget,
+	/// The always-on ceiling on the native amount one gas-station drip may carry.
+	gas_topup: GasTopupCaps,
 }
 
 /// Ceilings on the fee side of a signed transaction, per rail.
@@ -124,6 +152,59 @@ pub enum FeeQuote {
 	Ton { msg_value: u64, forward_ton_amount: u64 },
 }
 
+/// Ceilings on the native amount one gas-station drip may carry, per rail, in the rail's
+/// base units (wei / wei / SUN / nanoton).
+///
+/// Sized from what an honest hub sends at the signer's OWN fee-budget ceilings, with headroom
+/// so the two gates never disagree on a legitimate top-up; an operator may raise one via
+/// `SIGNER_MAX_GAS_TOPUP_{BEP20,POLYGON,TRC20,TON}`:
+///   - EVM: a drip is `max(gas_price × gas_limit × gas_drop_multiple, min_gas_drop_wei)` —
+///     `SweepConfig` defaults 3 and 3e14 — so at the fee budget's ceilings (100 gwei /
+///     5_000 gwei × 100_000 gas) the largest honest drip is 0.03 BNB / 1.5 POL. Caps:
+///     BEP20 5e16 wei (0.05 BNB), Polygon 2e18 wei (2 POL).
+///   - Tron: a drip is the flat `TRON_SWEEP_MIN_TRX_DROP_SUN`, 30 TRX. Cap 5e7 SUN (50 TRX).
+///   - TON: a drip is `max(TON_SWEEP_GAS_TOPUP_NANO, msg_value + 0.05 TON headroom)` — 0.15
+///     TON at the fee budget's `msg_value` ceiling. Cap 2e8 nanoton (0.2 TON).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GasTopupCaps {
+	bep20_wei: u128,
+	polygon_wei: u128,
+	trc20_sun: u128,
+	ton_nano: u128,
+}
+
+impl Default for GasTopupCaps {
+	fn default() -> Self {
+		Self {
+			bep20_wei: 50_000_000_000_000_000,
+			polygon_wei: 2_000_000_000_000_000_000,
+			trc20_sun: 50_000_000,
+			ton_nano: 200_000_000,
+		}
+	}
+}
+
+impl GasTopupCaps {
+	fn from_lookup(lookup: &impl Fn(&str) -> Option<String>) -> color_eyre::Result<Self> {
+		let defaults = Self::default();
+		Ok(Self {
+			bep20_wei: env_cap(lookup, "SIGNER_MAX_GAS_TOPUP_BEP20", defaults.bep20_wei)?,
+			polygon_wei: env_cap(lookup, "SIGNER_MAX_GAS_TOPUP_POLYGON", defaults.polygon_wei)?,
+			trc20_sun: env_cap(lookup, "SIGNER_MAX_GAS_TOPUP_TRC20", defaults.trc20_sun)?,
+			ton_nano: env_cap(lookup, "SIGNER_MAX_GAS_TOPUP_TON", defaults.ton_nano)?,
+		})
+	}
+
+	fn cap(&self, network: Network) -> u128 {
+		match network {
+			Network::Bep20 => self.bep20_wei,
+			Network::Polygon => self.polygon_wei,
+			Network::Trc20 => self.trc20_sun,
+			Network::Ton => self.ton_nano,
+		}
+	}
+}
+
 impl FeeBudget {
 	/// Read the ceilings from `lookup` (the environment in production), each falling back to
 	/// its default when the variable is unset or empty. A value that is `0` or does not parse
@@ -152,16 +233,16 @@ impl FeeBudget {
 				gas_price
 					.checked_mul(u128::from(gas_limit))
 					.ok_or_else(|| Status::permission_denied(format!("gas_price {gas_price} × gas_limit {gas_limit} overflows the signer's fee budget on {network}")))?;
-				deny_over(network, "gas_limit", u128::from(gas_limit), u128::from(self.max_gas_limit))?;
-				deny_over(network, "gas_price", gas_price, self.max_gas_price_wei(network)?)
+				deny_over(network, FEE_BUDGET, "gas_limit", u128::from(gas_limit), u128::from(self.max_gas_limit))?;
+				deny_over(network, FEE_BUDGET, "gas_price", gas_price, self.max_gas_price_wei(network)?)
 			}
 			FeeQuote::Tron { fee_limit } => {
 				let fee_limit = u128::try_from(fee_limit).map_err(|_| Status::invalid_argument("fee_limit must not be negative"))?;
-				deny_over(network, "fee_limit", fee_limit, u128::from(self.max_tron_fee_limit_sun))
+				deny_over(network, FEE_BUDGET, "fee_limit", fee_limit, u128::from(self.max_tron_fee_limit_sun))
 			}
 			FeeQuote::Ton { msg_value, forward_ton_amount } => {
-				deny_over(network, "msg_value", u128::from(msg_value), u128::from(self.max_ton_msg_value_nano))?;
-				deny_over(network, "forward_ton_amount", u128::from(forward_ton_amount), u128::from(self.max_ton_forward_nano))?;
+				deny_over(network, FEE_BUDGET, "msg_value", u128::from(msg_value), u128::from(self.max_ton_msg_value_nano))?;
+				deny_over(network, FEE_BUDGET, "forward_ton_amount", u128::from(forward_ton_amount), u128::from(self.max_ton_forward_nano))?;
 				if forward_ton_amount > msg_value {
 					return Err(Status::permission_denied(format!(
 						"forward_ton_amount {forward_ton_amount} exceeds msg_value {msg_value} it is paid out of on {network}"
@@ -188,15 +269,19 @@ const fn gwei_to_wei(gwei: u64) -> u128 {
 }
 
 /// One ceiling from `lookup`: unset/empty ⇒ `default`; `0`, negative or unparsable ⇒ error.
-fn env_cap(lookup: &impl Fn(&str) -> Option<String>, name: &str, default: u64) -> color_eyre::Result<u64> {
+/// `T` is the unsigned integer the ceiling is compared in (`u64` for a gas limit, `u128` for
+/// a wei amount); either way `0` cannot be typed to mean "off".
+fn env_cap<T>(lookup: &impl Fn(&str) -> Option<String>, name: &str, default: T) -> color_eyre::Result<T>
+where
+	T: std::str::FromStr + Default + PartialEq, {
 	match lookup(name).filter(|raw| !raw.is_empty()) {
 		Some(raw) => {
 			let value = raw
 				.trim()
-				.parse::<u64>()
+				.parse::<T>()
 				.map_err(|_| color_eyre::eyre::eyre!("{name} must be a positive whole number, got {raw:?}"))?;
-			if value == 0 {
-				return Err(color_eyre::eyre::eyre!("{name} must be positive — the fee budget cannot be disabled"));
+			if value == T::default() {
+				return Err(color_eyre::eyre::eyre!("{name} must be positive — this control cannot be disabled"));
 			}
 			Ok(value)
 		}
@@ -204,11 +289,27 @@ fn env_cap(lookup: &impl Fn(&str) -> Option<String>, name: &str, default: u64) -
 	}
 }
 
-fn deny_over(network: Network, field: &str, value: u128, cap: u128) -> Result<(), Status> {
+/// The control names `deny_over` reports, so a refusal says which ceiling it hit.
+const FEE_BUDGET: &str = "fee budget";
+const GAS_TOPUP: &str = "gas top-up";
+
+fn deny_over(network: Network, control: &str, field: &str, value: u128, cap: u128) -> Result<(), Status> {
 	if value > cap {
-		return Err(Status::permission_denied(format!("{field} {value} exceeds the signer's fee budget cap of {cap} on {network}")));
+		return Err(Status::permission_denied(format!("{field} {value} exceeds the signer's {control} cap of {cap} on {network}")));
 	}
 	Ok(())
+}
+
+/// A native transfer out of a deposit wallet: no core flow does this (a sweep moves USDT, and
+/// its gas arrives FROM the gas station), so there is nothing to allow.
+pub fn refuse_deposit_native(network: Network) -> Status {
+	Status::permission_denied(format!("a deposit wallet signs no native transfers on {network} — only USDT sweeps into the treasury"))
+}
+
+/// A token transfer out of the gas station: it holds only the native coin and only ever tops
+/// up deposit wallets, so a token transfer from it is forged by construction.
+pub fn refuse_gas_station_token(network: Network) -> Status {
+	Status::permission_denied(format!("the gas station signs native top-ups only on {network} — never a token transfer"))
 }
 
 impl SignerPolicy {
@@ -236,18 +337,14 @@ impl SignerPolicy {
 			None => None,
 		};
 		let fee_budget = FeeBudget::from_lookup(lookup)?;
+		let gas_topup = GasTopupCaps::from_lookup(lookup)?;
 		Ok(Self {
 			max_transfer_usdt,
 			destination_allowlist,
 			ton_treasury_jetton_wallet,
 			fee_budget,
+			gas_topup,
 		})
-	}
-
-	/// Whether any opt-in control (cap, allowlist, pinned jetton wallet) is active, for a
-	/// one-line boot log. The fee budget is always on and is not part of this answer.
-	pub fn is_active(&self) -> bool {
-		self.max_transfer_usdt.is_some() || !self.destination_allowlist.is_empty() || self.ton_treasury_jetton_wallet.is_some()
 	}
 
 	pub fn treasury_jetton_wallet_pinned(&self) -> bool {
@@ -266,10 +363,16 @@ impl SignerPolicy {
 		&self.fee_budget
 	}
 
+	pub fn gas_topup(&self) -> &GasTopupCaps {
+		&self.gas_topup
+	}
+
 	/// Enforce the fee budget on a transaction about to be signed — from ANY wallet.
 	pub fn check_fee_budget(&self, network: Network, quote: FeeQuote) -> Result<(), Status> {
 		self.fee_budget.check(network, quote)
 	}
+
+	// === treasury ================================================================
 
 	/// Enforce the policy on a treasury-sourced USDT transfer. `amount_base_units` is the
 	/// transfer amount in `network`'s on-chain decimals (as it will be signed), so the cap is
@@ -286,7 +389,7 @@ impl SignerPolicy {
 				)));
 			}
 		}
-		self.check_allowlist(to_address)
+		self.check_allowlist(network, to_address)
 	}
 
 	/// Enforce the policy on a treasury-sourced NATIVE (gas-coin) transfer: only the
@@ -294,8 +397,8 @@ impl SignerPolicy {
 	/// price a native amount. No core flow sends native funds FROM the treasury today (gas
 	/// top-ups are signed from the gas-station wallet), so an operator enabling the
 	/// allowlist must include any deliberate treasury-native destination on it.
-	pub fn check_treasury_native_transfer(&self, to_address: &str) -> Result<(), Status> {
-		self.check_allowlist(to_address)
+	pub fn check_treasury_native_transfer(&self, network: Network, to_address: &str) -> Result<(), Status> {
+		self.check_allowlist(network, to_address)
 	}
 
 	/// Enforce the policy on a treasury jetton transfer's `response_destination` — the address
@@ -303,9 +406,9 @@ impl SignerPolicy {
 	/// Unlike `to_address` this is never a user's address: a legitimate withdrawal always points
 	/// it at the treasury itself, so the check is ALWAYS on — the sending wallet's own address
 	/// is accepted in either rendering (the raw `0:<hex>` the signer stores, the base64 the hub
-	/// may carry), and anything else only if an allowlist is set and lists it verbatim.
+	/// may carry), and anything else only if an allowlist is set and lists it.
 	pub fn check_treasury_response_destination(&self, own_address: &str, response_destination: &str) -> Result<(), Status> {
-		if provision::addresses_agree(Network::Ton, own_address, response_destination) || self.destination_allowlist.contains(response_destination) {
+		if provision::addresses_agree(Network::Ton, own_address, response_destination) || self.allowlisted(Network::Ton, response_destination) {
 			return Ok(());
 		}
 		Err(Status::permission_denied(
@@ -322,18 +425,71 @@ impl SignerPolicy {
 			Some(pinned) if provision::addresses_agree(Network::Ton, pinned, our_jetton_wallet) => Ok(()),
 			Some(_) => Err(Status::permission_denied("our_jetton_wallet is not the treasury's pinned jetton wallet")),
 			None => self
-				.check_allowlist(our_jetton_wallet)
+				.check_allowlist(Network::Ton, our_jetton_wallet)
 				.map_err(|_| Status::permission_denied("our_jetton_wallet is neither pinned nor on the signer's allowlist")),
 		}
 	}
 
-	/// Verbatim membership on purpose: a rendering-aware comparison (EIP-55 casing, TON raw vs
-	/// base64) is #183's change, not this one.
-	fn check_allowlist(&self, to_address: &str) -> Result<(), Status> {
-		if !self.destination_allowlist.is_empty() && !self.destination_allowlist.contains(to_address) {
+	fn check_allowlist(&self, network: Network, to_address: &str) -> Result<(), Status> {
+		if !self.destination_allowlist.is_empty() && !self.allowlisted(network, to_address) {
 			return Err(Status::permission_denied("treasury transfer destination is not on the signer's allowlist"));
 		}
 		Ok(())
+	}
+
+	/// Rendering-aware membership: an operator may list an address in any spelling the
+	/// network accepts (EIP-55 or lowercase, TON raw or base64) and the hub may send another.
+	fn allowlisted(&self, network: Network, address: &str) -> bool {
+		self.destination_allowlist.iter().any(|listed| provision::addresses_agree(network, listed, address))
+	}
+
+	// === deposit (sweep) ==========================================================
+
+	/// Enforce the sweep rule on a token transfer signed from a deposit wallet: the only
+	/// legitimate destination is the treasury's own address on `network`, which the caller
+	/// reads from `wallet_secrets` (`None` ⇒ the treasury is not provisioned there, so there is
+	/// nowhere to sweep to and the request is refused).
+	pub fn check_sweep_destination(&self, network: Network, treasury_address: Option<&str>, to_address: &str) -> Result<(), Status> {
+		match treasury_address {
+			Some(treasury) if provision::addresses_agree(network, treasury, to_address) => Ok(()),
+			Some(_) => Err(Status::permission_denied(format!(
+				"a deposit wallet may only sweep to the treasury on {network}; to_address is not the treasury"
+			))),
+			None => Err(Status::permission_denied(format!("the treasury is not provisioned on {network} — nothing to sweep to"))),
+		}
+	}
+
+	/// Enforce the sweep rule on a jetton sweep's `response_destination`: the excess Toncoin
+	/// may return to the sending wallet itself, to the gas station (where the hub sends it, so
+	/// the station is topped back up) or to the treasury — all three derived by the signer,
+	/// the latter two `None` when not provisioned on TON.
+	pub fn check_sweep_response_destination(&self, own_address: &str, gas_station: Option<&str>, treasury: Option<&str>, response_destination: &str) -> Result<(), Status> {
+		let ours = std::iter::once(own_address).chain(gas_station).chain(treasury);
+		if ours.into_iter().any(|address| provision::addresses_agree(Network::Ton, address, response_destination)) {
+			return Ok(());
+		}
+		Err(Status::permission_denied(
+			"sweep response_destination must be the sending wallet, the gas station or the treasury",
+		))
+	}
+
+	// === gas station (top-up) =====================================================
+
+	/// Enforce the top-up rule on a native transfer signed from the gas station: the
+	/// destination must be an address the signer itself holds a key for on `network`
+	/// (`held_address` is the active `wallet_secrets` row the caller found for `to_address`,
+	/// `None` when there is none), and the drip may not exceed the rail's [`GasTopupCaps`]
+	/// ceiling.
+	pub fn check_gas_topup(&self, network: Network, to_address: &str, held_address: Option<&str>, amount: u128) -> Result<(), Status> {
+		match held_address {
+			Some(held) if provision::addresses_agree(network, held, to_address) => {}
+			_ => {
+				return Err(Status::permission_denied(format!(
+					"gas top-up destination is not an address this signer holds a key for on {network}"
+				)));
+			}
+		}
+		deny_over(network, GAS_TOPUP, "amount", amount, self.gas_topup.cap(network))
 	}
 }
 
@@ -351,6 +507,7 @@ mod tests {
 			destination_allowlist: allow.iter().map(|s| (*s).to_owned()).collect(),
 			ton_treasury_jetton_wallet: None,
 			fee_budget: FeeBudget::default(),
+			gas_topup: GasTopupCaps::default(),
 		}
 	}
 
@@ -363,7 +520,6 @@ mod tests {
 	#[test]
 	fn unconfigured_policy_allows_everything() {
 		let p = SignerPolicy::default();
-		assert!(!p.is_active());
 		// 1e30 base units, any address — no cap, no allowlist ⇒ allowed.
 		assert!(p.check_treasury_transfer(Network::Bep20, "0xanything", 1_000_000_000_000_000_000_000_000_000_000).is_ok());
 	}
@@ -392,11 +548,128 @@ mod tests {
 	fn native_transfers_honor_the_allowlist_but_not_the_usdt_cap() {
 		let p = policy(Some(1), &["0xgood"]);
 		// On the allowlist → allowed regardless of the (inapplicable) USDT cap.
-		assert!(p.check_treasury_native_transfer("0xgood").is_ok());
-		assert!(p.check_treasury_native_transfer("0xbad").is_err());
+		assert!(p.check_treasury_native_transfer(Network::Bep20, "0xgood").is_ok());
+		assert!(p.check_treasury_native_transfer(Network::Bep20, "0xbad").is_err());
 		// Allowlist unset → no-op, even with a cap configured.
 		let p = policy(Some(1), &[]);
-		assert!(p.check_treasury_native_transfer("0xanything").is_ok());
+		assert!(p.check_treasury_native_transfer(Network::Bep20, "0xanything").is_ok());
+	}
+
+	// === allowlist: rendering-aware membership ===================================
+
+	const EIP55: &str = "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf";
+	const OTHER_EVM: &str = "0x024da544a76714a3812096e9ef84d40b2c8863e8";
+	const TRON: &str = "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8";
+
+	#[test]
+	fn allowlist_membership_ignores_eip55_casing_on_evm() {
+		let p = policy(None, &[EIP55]);
+		assert!(p.check_treasury_transfer(Network::Bep20, &EIP55.to_ascii_lowercase(), 1).is_ok());
+		assert!(p.check_treasury_transfer(Network::Polygon, &EIP55.to_ascii_uppercase().replace("0X", "0x"), 1).is_ok());
+		// The list may be spelled lowercase while the hub sends EIP-55.
+		assert!(policy(None, &[&EIP55.to_ascii_lowercase()]).check_treasury_native_transfer(Network::Bep20, EIP55).is_ok());
+		denied(p.check_treasury_transfer(Network::Bep20, OTHER_EVM, 1));
+	}
+
+	#[test]
+	fn allowlist_membership_spans_ton_raw_and_base64_but_keeps_tron_case_sensitive() {
+		let raw = own_raw();
+		assert!(policy(None, &[&raw]).check_treasury_transfer(Network::Ton, OWN_BASE64, 1).is_ok());
+		assert!(policy(None, &[OWN_BASE64]).check_treasury_transfer(Network::Ton, &raw, 1).is_ok());
+		denied(policy(None, &[OWN_BASE64]).check_treasury_transfer(Network::Ton, FOREIGN, 1));
+		// Tron's Base58Check is case-sensitive: a re-cased string is a different (invalid) address.
+		assert!(policy(None, &[TRON]).check_treasury_transfer(Network::Trc20, TRON, 1).is_ok());
+		denied(policy(None, &[TRON]).check_treasury_transfer(Network::Trc20, &TRON.to_ascii_lowercase(), 1));
+	}
+
+	// === deposit: sweep ===========================================================
+
+	#[test]
+	fn sweep_destination_must_be_the_treasury_in_any_rendering() {
+		let p = SignerPolicy::default();
+		assert!(p.check_sweep_destination(Network::Bep20, Some(EIP55), &EIP55.to_ascii_lowercase()).is_ok());
+		assert!(p.check_sweep_destination(Network::Ton, Some(&own_raw()), OWN_BASE64).is_ok());
+		let status = denied(p.check_sweep_destination(Network::Bep20, Some(EIP55), OTHER_EVM));
+		assert!(status.message().contains("treasury"), "{status:?}");
+		// No treasury on the network: nowhere to sweep to, so nothing is signed.
+		let status = denied(p.check_sweep_destination(Network::Ton, None, OWN_BASE64));
+		assert!(status.message().contains("not provisioned"), "{status:?}");
+	}
+
+	#[test]
+	fn sweep_response_destination_admits_self_station_and_treasury_only() {
+		let p = SignerPolicy::default();
+		let own = own_raw();
+		let station = JETTON_WALLET_RAW;
+		let treasury = FOREIGN;
+		assert!(p.check_sweep_response_destination(&own, Some(station), Some(treasury), OWN_BASE64).is_ok());
+		assert!(p.check_sweep_response_destination(&own, Some(station), Some(treasury), &jetton_wallet_base64()).is_ok());
+		assert!(p.check_sweep_response_destination(&own, Some(station), Some(treasury), treasury).is_ok());
+		// Neither reserved wallet provisioned on TON: only the sender itself remains.
+		assert!(p.check_sweep_response_destination(&own, None, None, &own).is_ok());
+		denied(p.check_sweep_response_destination(&own, None, None, station));
+		denied(p.check_sweep_response_destination(&own, Some(station), Some(treasury), "not-an-address"));
+	}
+
+	#[test]
+	fn deposit_native_and_gas_station_token_are_refused_outright() {
+		assert_eq!(refuse_deposit_native(Network::Bep20).code(), Code::PermissionDenied);
+		assert_eq!(refuse_gas_station_token(Network::Ton).code(), Code::PermissionDenied);
+	}
+
+	// === gas station: top-up ======================================================
+
+	#[test]
+	fn gas_topup_requires_a_held_destination_and_a_bounded_drip() {
+		let p = SignerPolicy::default();
+		// Held (found in wallet_secrets, spelled differently) and under the cap.
+		assert!(p.check_gas_topup(Network::Bep20, &EIP55.to_ascii_lowercase(), Some(EIP55), 50_000_000_000_000_000).is_ok());
+		let over = denied(p.check_gas_topup(Network::Bep20, EIP55, Some(EIP55), 50_000_000_000_000_001));
+		assert!(over.message().contains("gas top-up"), "{over:?}");
+		// Per-rail caps: 2 POL, 50 TRX, 0.2 TON.
+		assert!(p.check_gas_topup(Network::Polygon, EIP55, Some(EIP55), 2_000_000_000_000_000_000).is_ok());
+		denied(p.check_gas_topup(Network::Polygon, EIP55, Some(EIP55), 2_000_000_000_000_000_001));
+		assert!(p.check_gas_topup(Network::Trc20, TRON, Some(TRON), 50_000_000).is_ok());
+		denied(p.check_gas_topup(Network::Trc20, TRON, Some(TRON), 50_000_001));
+		assert!(p.check_gas_topup(Network::Ton, OWN_BASE64, Some(&own_raw()), 200_000_000).is_ok());
+		denied(p.check_gas_topup(Network::Ton, OWN_BASE64, Some(&own_raw()), 200_000_001));
+		// Not held: refused whatever the amount — and a lookup that returned a DIFFERENT
+		// address (a caller bug) is not "held" either.
+		let status = denied(p.check_gas_topup(Network::Bep20, EIP55, None, 1));
+		assert!(status.message().contains("holds a key"), "{status:?}");
+		denied(p.check_gas_topup(Network::Bep20, EIP55, Some(OTHER_EVM), 1));
+	}
+
+	#[test]
+	fn gas_topup_caps_come_from_env_and_refuse_zero() {
+		assert_eq!(GasTopupCaps::from_lookup(&lookup(&[])).unwrap(), GasTopupCaps::default());
+		let caps = GasTopupCaps::from_lookup(&lookup(&[
+			("SIGNER_MAX_GAS_TOPUP_BEP20", "1"),
+			("SIGNER_MAX_GAS_TOPUP_POLYGON", "340282366920938463463374607431768211455"),
+			("SIGNER_MAX_GAS_TOPUP_TRC20", "3"),
+			("SIGNER_MAX_GAS_TOPUP_TON", "4"),
+		]))
+		.unwrap();
+		assert_eq!(
+			caps,
+			GasTopupCaps {
+				bep20_wei: 1,
+				polygon_wei: u128::MAX,
+				trc20_sun: 3,
+				ton_nano: 4,
+			}
+		);
+		for name in [
+			"SIGNER_MAX_GAS_TOPUP_BEP20",
+			"SIGNER_MAX_GAS_TOPUP_POLYGON",
+			"SIGNER_MAX_GAS_TOPUP_TRC20",
+			"SIGNER_MAX_GAS_TOPUP_TON",
+		] {
+			for bad in ["0", "abc", "-5", "1.5"] {
+				let err = GasTopupCaps::from_lookup(&lookup(&[(name, bad)])).expect_err(&format!("{name}={bad} must not boot"));
+				assert!(err.to_string().contains(name), "{err}");
+			}
+		}
 	}
 
 	#[test]
@@ -667,7 +940,7 @@ mod tests {
 			ton_treasury_jetton_wallet: Some(JETTON_WALLET_RAW.to_owned()),
 			..policy(None, &[FOREIGN])
 		};
-		assert!(p.is_active());
+		assert!(p.treasury_jetton_wallet_pinned());
 		assert!(p.check_treasury_jetton_wallet(JETTON_WALLET_RAW).is_ok());
 		assert!(p.check_treasury_jetton_wallet(&jetton_wallet_base64()).is_ok());
 		// Allowlisted, but not the pin: the pin wins.
@@ -691,7 +964,8 @@ mod tests {
 	#[test]
 	fn policy_from_lookup_reads_cap_allowlist_and_pin() {
 		let p = SignerPolicy::from_lookup(&lookup(&[])).unwrap();
-		assert!(!p.is_active());
+		assert_eq!(p.max_transfer_usdt(), None);
+		assert_eq!(p.allowlist_len(), 0);
 		assert!(!p.treasury_jetton_wallet_pinned());
 
 		let p = SignerPolicy::from_lookup(&lookup(&[

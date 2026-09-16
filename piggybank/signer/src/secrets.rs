@@ -21,7 +21,7 @@ use domain::money::Network;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::error::SignerError;
+use crate::{error::SignerError, provision};
 
 /// A new sealed-key row to persist. Borrows its byte payloads so the caller keeps
 /// ownership of (and can promptly drop/zeroize) the sensitive material.
@@ -246,6 +246,26 @@ impl WalletSecrets {
 			.fetch_optional(&self.pool)
 			.await?;
 		Ok(address)
+	}
+
+	/// The stored address of the ACTIVE row on `network` whose address is `address` in any
+	/// rendering the network accepts, if this signer holds a key for it — the gas top-up
+	/// gate's question. Watch-only data; never the sealed blob.
+	///
+	/// The comparison is done on the stored rendering ([`provision::stored_rendering`]) so
+	/// it is one equality lookup, not a scan; the caller re-confirms the hit with
+	/// [`provision::addresses_agree`] before treating it as held. A string that is not an
+	/// address of `network` is simply not held.
+	pub async fn find_active_by_address(&self, network: Network, address: &str) -> Result<Option<String>, SignerError> {
+		let Some(key) = provision::stored_rendering(network, address) else {
+			return Ok(None);
+		};
+		let sql = match network {
+			Network::Bep20 | Network::Polygon => "SELECT address FROM wallet_secrets WHERE network = $1 AND superseded_at IS NULL AND lower(address) = $2",
+			Network::Trc20 | Network::Ton => "SELECT address FROM wallet_secrets WHERE network = $1 AND superseded_at IS NULL AND address = $2",
+		};
+		let stored = sqlx::query_scalar::<_, String>(sql).bind(network.as_str()).bind(key).fetch_optional(&self.pool).await?;
+		Ok(stored)
 	}
 
 	/// The watch-only `(address, public_key)` for the active `(user, network)` key, if

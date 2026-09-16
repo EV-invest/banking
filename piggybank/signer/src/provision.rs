@@ -137,6 +137,25 @@ pub(crate) fn addresses_agree(network: Network, ours: &str, theirs: &str) -> boo
 	}
 }
 
+/// The rendering [`render_address`] stores for `address`, so a caller-supplied spelling can be
+/// looked up in `wallet_secrets` by equality instead of by scanning every row through
+/// [`addresses_agree`]. `None` when it is not an address of `network` at all.
+///
+/// The EVM form is returned lowercase — the store holds EIP-55, so the lookup compares
+/// `lower(address)`; Tron's Base58Check is case-sensitive and stored verbatim; a TON address is
+/// re-rendered to the raw `0:<hex>` form the signer derives. The match is a candidate, not a
+/// verdict: the caller still confirms it with [`addresses_agree`].
+pub(crate) fn stored_rendering(network: Network, address: &str) -> Option<String> {
+	match network {
+		Network::Bep20 | Network::Polygon => Some(address.to_ascii_lowercase()),
+		Network::Trc20 => Some(address.to_owned()),
+		Network::Ton => {
+			use std::str::FromStr as _;
+			tonlib_core::TonAddress::from_str(address).ok().map(|parsed| parsed.to_hex())
+		}
+	}
+}
+
 struct Generated {
 	alg: &'static str,
 	/// 32-byte private scalar/seed, zeroized on drop.

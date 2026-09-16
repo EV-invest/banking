@@ -55,14 +55,20 @@ async fn run() -> color_eyre::Result<()> {
 	kek_guard::enforce(&vault, &secrets).await.context("KEK epoch guard refused to serve")?;
 
 	// The signer's independent spend policy — the second gate that holds even if the hub is
-	// compromised. The fee budget is always on; the cap/allowlist are no-ops until an operator
-	// sets them.
+	// compromised. The per-class rules (sweep → treasury only, gas station → own addresses
+	// only, deposit native never), the fee budget and the top-up cap are always on; the
+	// treasury cap/allowlist are no-ops until an operator sets them.
 	let policy = SignerPolicy::from_env().context("failed to load signer spend policy")?;
-	tracing::info!(fee_budget = ?policy.fee_budget(), treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(), "signer fee budget active");
-	if policy.is_active() {
-		tracing::info!(max_transfer_usdt = ?policy.max_transfer_usdt(), allowlisted_destinations = policy.allowlist_len(), "signer spend policy active");
-	} else {
-		tracing::warn!("signer spend policy inactive — no per-transfer cap or destination allowlist (set SIGNER_MAX_TRANSFER_USDT before scaling liquidity)");
+	tracing::info!(
+		fee_budget = ?policy.fee_budget(),
+		gas_topup_caps = ?policy.gas_topup(),
+		max_transfer_usdt = ?policy.max_transfer_usdt(),
+		allowlisted_destinations = policy.allowlist_len(),
+		treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(),
+		"signer spend policy active: sweeps only to the treasury, gas top-ups only to own addresses, no native out of deposit wallets"
+	);
+	if policy.max_transfer_usdt().is_none() {
+		tracing::warn!("signer treasury cap unset — a single treasury payout is unbounded (set SIGNER_MAX_TRANSFER_USDT before scaling liquidity)");
 	}
 
 	// Where NEW keys are minted and existing ones signed. `local` is the default and the

@@ -23,7 +23,7 @@ use crate::{
 	evm_tx,
 	kek_guard::short_fp,
 	key_vault::Vault,
-	policy::{FeeQuote, SignerPolicy},
+	policy::{self, FeeQuote, SignerPolicy},
 	provision,
 	secrets::{NewTurnkeySecret, WalletSecrets},
 	ton_tx, tron_tx,
@@ -38,9 +38,41 @@ const BACKEND_LOCAL: &str = "local";
 /// change. A withdrawal sends from here; a sweep sends INTO here from user addresses.
 const TREASURY_WALLET: Uuid = Uuid::nil();
 
+/// The reserved wallet id for the gas station — the wallet holding only each rail's native
+/// coin, which tops up deposit addresses with the gas their sweep burns. Mirrors the hub's
+/// `GAS_STATION` (`piggybank/core/src/infrastructure/rails.rs`); the signer pins it itself
+/// rather than trusting the hub to say which wallet is the station.
+const GAS_STATION_WALLET: Uuid = Uuid::from_u128(1);
+
+/// The class a sending wallet belongs to, and so which [`SignerPolicy`] rule applies. Every
+/// handler matches on this exhaustively: there is no wallet the signer signs for without a
+/// policy branch (the #183 hole was `if treasury { check }` with nothing in the else).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WalletClass {
+	/// The hot wallet withdrawals pay out of: arbitrary destinations, so cap + allowlist.
+	Treasury,
+	/// Native-coin float that tops up deposit addresses: native only, to our own addresses.
+	GasStation,
+	/// A user's deposit address: only ever swept into the treasury.
+	Deposit,
+}
+
+impl WalletClass {
+	fn of(wallet_id: Uuid) -> Self {
+		if wallet_id == TREASURY_WALLET {
+			Self::Treasury
+		} else if wallet_id == GAS_STATION_WALLET {
+			Self::GasStation
+		} else {
+			Self::Deposit
+		}
+	}
+}
+
 /// The signer service: the key [`backend`](crate::backend) every signature goes through, the
-/// loaded [`Vault`] and `wallet_secrets` store the KEK-epoch diagnostics still read directly,
-/// and the independent spend [`SignerPolicy`] (the second gate — cap/allowlist/fee budget).
+/// loaded [`Vault`] and `wallet_secrets` store the KEK-epoch diagnostics still read directly
+/// (and every handler consults for the addresses the policy derives), and the independent
+/// spend [`SignerPolicy`] (the second gate — one rule per [`WalletClass`], plus the fee budget).
 pub struct Signer {
 	backend: Arc<dyn KeyBackend>,
 	/// The custody minter the phase-4 migration path needs, when this signer is composed with
@@ -83,45 +115,63 @@ impl Signer {
 		}
 	}
 
-	/// Apply the spend policy to a USDT transfer signed FROM the treasury (the drain vector).
-	/// Transfers from any other wallet — a user's deposit address being swept in, the gas
-	/// station — are not treasury spends and pass unchecked.
-	fn guard_treasury_transfer(&self, wallet_id: Uuid, network: Network, to_address: &str, amount_base_units: u128) -> Result<(), Status> {
-		if wallet_id == TREASURY_WALLET {
-			self.policy.check_treasury_transfer(network, to_address, amount_base_units)?;
+	/// Apply the class rule to a USDT/token transfer: a treasury payout (cap + allowlist), a
+	/// sweep from a deposit wallet (destination must be the treasury on this network), or a
+	/// forged transfer from the gas station (which never moves tokens).
+	async fn guard_token_transfer(&self, class: WalletClass, network: Network, to_address: &str, amount_base_units: u128) -> Result<(), Status> {
+		match class {
+			WalletClass::Treasury => self.policy.check_treasury_transfer(network, to_address, amount_base_units),
+			WalletClass::GasStation => Err(policy::refuse_gas_station_token(network)),
+			WalletClass::Deposit => {
+				let treasury = self.secrets.find_address(TREASURY_WALLET, network).await?;
+				self.policy.check_sweep_destination(network, treasury.as_deref(), to_address)
+			}
 		}
-		Ok(())
 	}
 
-	/// Apply the destination allowlist to a NATIVE (gas-coin) transfer signed FROM the
-	/// treasury — the USDT cap cannot price a native amount, so only the allowlist applies.
-	/// Gas top-ups are signed from the separate gas-station wallet and pass unchecked.
-	fn guard_treasury_native_transfer(&self, wallet_id: Uuid, to_address: &str) -> Result<(), Status> {
-		if wallet_id == TREASURY_WALLET {
-			self.policy.check_treasury_native_transfer(to_address)?;
+	/// Apply the class rule to a NATIVE (gas-coin) transfer: from the treasury the destination
+	/// allowlist (the USDT cap cannot price a native amount); from the gas station a top-up,
+	/// which must land on an address this signer holds a key for and stay under the drip cap;
+	/// from a deposit wallet nothing — no core flow sends native coin out of one.
+	async fn guard_native_transfer(&self, class: WalletClass, network: Network, to_address: &str, amount: u128) -> Result<(), Status> {
+		match class {
+			WalletClass::Treasury => self.policy.check_treasury_native_transfer(network, to_address),
+			WalletClass::GasStation => {
+				let held = self.secrets.find_active_by_address(network, to_address).await?;
+				self.policy.check_gas_topup(network, to_address, held.as_deref(), amount)
+			}
+			WalletClass::Deposit => Err(policy::refuse_deposit_native(network)),
 		}
-		Ok(())
 	}
 
-	/// Apply the policy to a treasury jetton transfer's `our_jetton_wallet` — the internal
-	/// message's destination, which receives `msg_value` in Toncoin whatever contract sits
-	/// there. Sweeps are signed from user wallets and pass.
-	fn guard_treasury_jetton_wallet(&self, wallet_id: Uuid, our_jetton_wallet: &str) -> Result<(), Status> {
-		if wallet_id == TREASURY_WALLET {
-			self.policy.check_treasury_jetton_wallet(our_jetton_wallet)?;
+	/// Apply the class rule to a jetton transfer's `our_jetton_wallet` — the internal message's
+	/// destination, which receives `msg_value` in Toncoin whatever contract sits there. Pinned
+	/// for the treasury; underivable for a sweep (it is the user's jetton wallet), where the fee
+	/// budget on `msg_value` is what bounds it.
+	fn guard_jetton_wallet(&self, class: WalletClass, our_jetton_wallet: &str) -> Result<(), Status> {
+		match class {
+			WalletClass::Treasury => self.policy.check_treasury_jetton_wallet(our_jetton_wallet),
+			WalletClass::GasStation => Err(policy::refuse_gas_station_token(Network::Ton)),
+			WalletClass::Deposit => Ok(()),
 		}
-		Ok(())
 	}
 
-	/// Apply the policy to a treasury jetton transfer's `response_destination` — where the
-	/// excess Toncoin returns, which on a withdrawal is always the sending wallet itself
-	/// (derived here from the key that will sign). Sweeps are signed from user wallets and pass.
-	fn guard_treasury_response_destination(&self, wallet_id: Uuid, public_key: &[u8], response_destination: &str) -> Result<(), Status> {
-		if wallet_id == TREASURY_WALLET {
-			let (own_address, _) = provision::render_address(Network::Ton, public_key)?;
-			self.policy.check_treasury_response_destination(&own_address, response_destination)?;
+	/// Apply the class rule to a jetton transfer's `response_destination` — where the excess
+	/// Toncoin returns. On a withdrawal that is the treasury itself (derived here from the key
+	/// that will sign); on a sweep the hub points it at the gas station, so the sending wallet,
+	/// the station and the treasury are all accepted — every one of them derived by the signer.
+	async fn guard_response_destination(&self, class: WalletClass, public_key: &[u8], response_destination: &str) -> Result<(), Status> {
+		let (own_address, _) = provision::render_address(Network::Ton, public_key)?;
+		match class {
+			WalletClass::Treasury => self.policy.check_treasury_response_destination(&own_address, response_destination),
+			WalletClass::GasStation => Err(policy::refuse_gas_station_token(Network::Ton)),
+			WalletClass::Deposit => {
+				let gas_station = self.secrets.find_address(GAS_STATION_WALLET, Network::Ton).await?;
+				let treasury = self.secrets.find_address(TREASURY_WALLET, Network::Ton).await?;
+				self.policy
+					.check_sweep_response_destination(&own_address, gas_station.as_deref(), treasury.as_deref(), response_destination)
+			}
 		}
-		Ok(())
 	}
 
 	/// Resolve the sending wallet id from the wire `from_user_id`: empty ⇒ the treasury hot
@@ -176,7 +226,7 @@ impl SignerService for Signer {
 				gas_limit: req.gas_limit,
 			},
 		)?;
-		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
+		self.guard_token_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
 
 		let data = evm_tx::erc20_transfer_calldata(&to, amount);
 		let (parts, digest) = evm_tx::build_unsigned(&evm_tx::LegacyTx {
@@ -212,7 +262,7 @@ impl SignerService for Signer {
 				gas_limit: req.gas_limit,
 			},
 		)?;
-		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
+		self.guard_native_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
 
 		// A native transfer carries the value directly and no calldata.
 		let (parts, digest) = evm_tx::build_unsigned(&evm_tx::LegacyTx {
@@ -242,7 +292,7 @@ impl SignerService for Signer {
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
 		self.policy.check_fee_budget(network, FeeQuote::Tron { fee_limit: req.fee_limit })?;
-		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
+		self.guard_token_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
 
 		let handle = KeyHandle { wallet_id, network };
 		let owner = tron_tx::owner_address(&self.backend.public_key(handle).await?).map_err(sign_status("trc20 transfer"))?;
@@ -265,7 +315,7 @@ impl SignerService for Signer {
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
 		// No fee budget to check: a TRX transfer is bandwidth-only and carries no caller-supplied
 		// fee field (`build_unsigned_trx` omits `fee_limit`), so the amount is all it can spend.
-		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
+		self.guard_native_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
 
 		let handle = KeyHandle { wallet_id, network };
 		let owner = tron_tx::owner_address(&self.backend.public_key(handle).await?).map_err(sign_status("trx transfer"))?;
@@ -292,14 +342,15 @@ impl SignerService for Signer {
 				forward_ton_amount: req.forward_ton_amount,
 			},
 		)?;
-		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
-		self.guard_treasury_jetton_wallet(wallet_id, &req.our_jetton_wallet)?;
+		let class = WalletClass::of(wallet_id);
+		self.guard_token_transfer(class, network, &req.to_address, amount).await?;
+		self.guard_jetton_wallet(class, &req.our_jetton_wallet)?;
 
 		let handle = KeyHandle { wallet_id, network };
 		// The key comes before the last check: the wallet's own address, which a withdrawal's
 		// `response_destination` legitimately is, is derived from it.
 		let public_key = self.ton_public_key(handle).await?;
-		self.guard_treasury_response_destination(wallet_id, &public_key, &req.response_destination)?;
+		self.guard_response_destination(class, &public_key, &req.response_destination).await?;
 		let (parts, digest) = ton_tx::build_unsigned_jetton(
 			&public_key,
 			&ton_tx::JettonTransfer {
@@ -327,7 +378,7 @@ impl SignerService for Signer {
 		// No fee budget to check: a native TON transfer carries no caller-supplied fee field —
 		// the wallet contract pays the forwarding fee out of its balance, and the amount is the
 		// only value the caller chooses.
-		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
+		self.guard_native_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
 
 		let handle = KeyHandle { wallet_id, network };
 		let public_key = self.ton_public_key(handle).await?;
