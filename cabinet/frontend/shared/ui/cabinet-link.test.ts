@@ -15,6 +15,7 @@ import test from "node:test";
 const FRONTEND_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const APP_ROOT = join(FRONTEND_ROOT, "app");
 const LINK_SOURCE = fileURLToPath(new URL("./cabinet-link.tsx", import.meta.url));
+const NEXT_CONFIG = fileURLToPath(new URL("../../next.config.ts", import.meta.url));
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -41,9 +42,22 @@ test("no cabinet route has a loading boundary — the premise behind prefetch={f
 test("cabinet links opt out of automatic prefetching unless the caller says otherwise", () => {
   const source = readFileSync(LINK_SOURCE, "utf8");
   // The default sits immediately before the caller's spread, so an explicit `prefetch`
-  // from a caller with a reason still wins.
-  assert.ok(
-    source.includes("prefetch={false} {...props}"),
+  // from a caller with a reason still wins. Lazy up to the props, not `[^>]*`: an inline
+  // arrow in the JSX would contain a `>` and make a stricter match lie.
+  assert.match(
+    source,
+    /<NextLink\b[\s\S]*?\bprefetch=\{false\}\s+\{\.\.\.props\}/,
     "cabinet-link.tsx must render <NextLink … prefetch={false} {...props} /> (banking#349)",
+  );
+});
+
+test("no PPR or Cache Components in next.config — the other premise behind prefetch={false}", () => {
+  const config = readFileSync(NEXT_CONFIG, "utf8");
+  assert.doesNotMatch(
+    config,
+    /\bcacheComponents\s*:\s*true|\bppr\s*:/,
+    "With PPR or Cache Components a prefetch carries the static shell of the page itself, " +
+      "so the viewport prefetch stops being two empty documents. Revisit the prefetch " +
+      "default in shared/ui/cabinet-link.tsx before enabling either.",
   );
 });
