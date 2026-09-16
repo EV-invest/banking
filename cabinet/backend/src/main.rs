@@ -17,6 +17,7 @@ use evconcierge_auth::{Verifier, VerifierConfig};
 
 mod config;
 mod cookies;
+mod deployments;
 mod dto;
 mod error;
 mod governance;
@@ -27,6 +28,7 @@ mod util;
 
 use config::AppConfig;
 use cookies::CookieNames;
+use deployments::Deployments;
 use routes::approval::AttemptLimiter;
 use session::BankingTokens;
 use state::{AppState, Grpc};
@@ -113,6 +115,7 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 		approvals: Arc::new(AttemptLimiter::default()),
 		verifier,
 		grpc,
+		deployments: Arc::new(Deployments::new(config.deployed_versions_dir.clone(), config.github_token.clone())),
 		config: Arc::new(config),
 	};
 

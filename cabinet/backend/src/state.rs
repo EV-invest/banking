@@ -7,7 +7,7 @@ use tonic::{
 	transport::{Channel, Endpoint},
 };
 
-use crate::{config::AppConfig, cookies::CookieNames, routes::approval::AttemptLimiter, session::BankingTokens};
+use crate::{config::AppConfig, cookies::CookieNames, deployments::Deployments, routes::approval::AttemptLimiter, session::BankingTokens};
 
 /// Cap on establishing a TCP/TLS connection to an upstream plane: a black-holed or
 /// half-open replica must fail fast rather than wedge the awaiting request task.
@@ -35,6 +35,8 @@ pub struct AppState {
 	/// Local verifier for the shared concierge access JWT (JWKS-cached — no
 	/// per-request round trip).
 	pub verifier: evconcierge_auth::Verifier,
+	/// The admin deployments page's reader + GitHub cache — see [`crate::deployments`].
+	pub deployments: Arc<Deployments>,
 }
 
 /// gRPC egress to both planes. Channels are lazily connected and cheap to clone, so a
