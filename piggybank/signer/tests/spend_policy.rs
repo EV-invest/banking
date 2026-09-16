@@ -444,3 +444,104 @@ async fn treasury_allowlist_accepts_the_listed_address_in_another_rendering() {
 	);
 	db.cleanup().await;
 }
+
+// === #184: native out of the treasury is off by default; the token is pinned ==
+
+#[tokio::test]
+async fn treasury_native_is_refused_by_default_on_every_rail() {
+	let db = db_or_skip!();
+	// Nothing provisioned at all: the refusal is the rule's, before any key is looked up.
+	let signer = Signer::new(test_vault(), WalletSecrets::new(db.pool.clone()), SignerPolicy::default());
+
+	let status = denied(
+		signer.sign_native_transfer(native(TREASURY, "polygon", 137, OTHER_EVM, 1, GWEI, 21_000)).await,
+		"evm native from the treasury",
+	);
+	assert!(status.message().contains("SIGNER_ALLOW_TREASURY_NATIVE"), "{status:?}");
+	denied(
+		signer.sign_native_transfer(native(TREASURY, "bep20", 56, OTHER_EVM, 1, GWEI, 21_000)).await,
+		"bsc native from the treasury",
+	);
+	denied(signer.sign_trx_transfer(trx(TREASURY, OTHER_TRON, 1)).await, "trx from the treasury");
+	denied(signer.sign_ton_transfer(ton(TREASURY, OTHER_TON, 1)).await, "ton from the treasury");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn treasury_native_opted_in_signs_to_the_allowlist_under_the_ceiling() {
+	let db = db_or_skip!();
+	let policy = SignerPolicy::from_lookup(&|name| match name {
+		"SIGNER_ALLOW_TREASURY_NATIVE" => Some("true".to_owned()),
+		"SIGNER_DESTINATION_ALLOWLIST" => Some(OTHER_EVM.to_owned()),
+		"SIGNER_MAX_TREASURY_NATIVE_POLYGON" => Some("1000000000000000000".to_owned()),
+		_ => None,
+	})
+	.unwrap();
+	let rail = Rail::new(&db, Network::Polygon, policy.clone()).await;
+	let bsc = Rail::new(&db, Network::Bep20, policy).await;
+
+	// Allowlisted (in another rendering) and at the ceiling: signed.
+	rail.signer
+		.sign_native_transfer(native(
+			TREASURY,
+			"polygon",
+			137,
+			"0x024DA544A76714a3812096e9EF84D40b2C8863E8",
+			1_000_000_000_000_000_000,
+			GWEI,
+			21_000,
+		))
+		.await
+		.expect("an opted-in treasury native transfer is signed");
+	let status = denied(
+		rail.signer
+			.sign_native_transfer(native(TREASURY, "polygon", 137, OTHER_EVM, 1_000_000_000_000_000_001, GWEI, 21_000))
+			.await,
+		"treasury native over the ceiling",
+	);
+	assert!(status.message().contains("treasury native"), "{status:?}");
+	denied(
+		rail.signer.sign_native_transfer(native(TREASURY, "polygon", 137, &rail.user_address, 1, GWEI, 21_000)).await,
+		"treasury native off the allowlist",
+	);
+	// The flow is on, but BSC has no ceiling: still refused there.
+	let status = denied(
+		bsc.signer.sign_native_transfer(native(TREASURY, "bep20", 56, OTHER_EVM, 1, GWEI, 21_000)).await,
+		"treasury native on an uncapped rail",
+	);
+	assert!(status.message().contains("SIGNER_MAX_TREASURY_NATIVE"), "{status:?}");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn treasury_token_transfer_must_name_the_pinned_usdt_contract() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Bep20, SignerPolicy::default()).await;
+	let tron_rail = Rail::new(&db, Network::Trc20, SignerPolicy::default()).await;
+
+	rail.signer
+		.sign_erc20_transfer(erc20(TREASURY, &USDT_BEP20.to_ascii_lowercase(), OTHER_EVM, 1, GWEI, 60_000))
+		.await
+		.expect("the pinned token in another rendering is signed");
+	let status = denied(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, OTHER_EVM, OTHER_EVM, 1, GWEI, 60_000)).await,
+		"another token from the treasury",
+	);
+	assert!(status.message().contains("token_contract"), "{status:?}");
+	denied(
+		tron_rail.signer.sign_trc20_transfer(trc20(TREASURY, OTHER_TRON, OTHER_TRON, 1, 1_000_000)).await,
+		"another token from the treasury on tron",
+	);
+	tron_rail
+		.signer
+		.sign_trc20_transfer(trc20(TREASURY, USDT_TRC20, OTHER_TRON, 1, 1_000_000))
+		.await
+		.expect("the pinned TRC20 token is signed");
+
+	// A sweep is not pinned: its destination is the treasury, whatever token it moves.
+	rail.signer
+		.sign_erc20_transfer(erc20(rail.user, OTHER_EVM, &rail.treasury_address, 1, GWEI, 60_000))
+		.await
+		.expect("a sweep of any token into the treasury is signed");
+	db.cleanup().await;
+}

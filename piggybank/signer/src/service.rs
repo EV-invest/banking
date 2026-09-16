@@ -115,12 +115,13 @@ impl Signer {
 		}
 	}
 
-	/// Apply the class rule to a USDT/token transfer: a treasury payout (cap + allowlist), a
-	/// sweep from a deposit wallet (destination must be the treasury on this network), or a
-	/// forged transfer from the gas station (which never moves tokens).
-	async fn guard_token_transfer(&self, class: WalletClass, network: Network, to_address: &str, amount_base_units: u128) -> Result<(), Status> {
+	/// Apply the class rule to a USDT/token transfer: a treasury payout (pinned token + cap +
+	/// allowlist), a sweep from a deposit wallet (destination must be the treasury on this
+	/// network), or a forged transfer from the gas station (which never moves tokens).
+	/// `token_contract` is the wire's contract on the EVM/Tron rails and `None` on TON.
+	async fn guard_token_transfer(&self, class: WalletClass, network: Network, token_contract: Option<&str>, to_address: &str, amount_base_units: u128) -> Result<(), Status> {
 		match class {
-			WalletClass::Treasury => self.policy.check_treasury_transfer(network, to_address, amount_base_units),
+			WalletClass::Treasury => self.policy.check_treasury_transfer(network, token_contract, to_address, amount_base_units),
 			WalletClass::GasStation => Err(policy::refuse_gas_station_token(network)),
 			WalletClass::Deposit => {
 				let treasury = self.secrets.find_address(TREASURY_WALLET, network).await?;
@@ -129,13 +130,14 @@ impl Signer {
 		}
 	}
 
-	/// Apply the class rule to a NATIVE (gas-coin) transfer: from the treasury the destination
-	/// allowlist (the USDT cap cannot price a native amount); from the gas station a top-up,
-	/// which must land on an address this signer holds a key for and stay under the drip cap;
-	/// from a deposit wallet nothing — no core flow sends native coin out of one.
+	/// Apply the class rule to a NATIVE (gas-coin) transfer: from the treasury refused unless
+	/// an operator opted in (then allowlist + ceiling — the USDT cap cannot price a native
+	/// amount); from the gas station a top-up, which must land on an address this signer holds
+	/// a key for and stay under the drip cap; from a deposit wallet nothing — no core flow
+	/// sends native coin out of one.
 	async fn guard_native_transfer(&self, class: WalletClass, network: Network, to_address: &str, amount: u128) -> Result<(), Status> {
 		match class {
-			WalletClass::Treasury => self.policy.check_treasury_native_transfer(network, to_address),
+			WalletClass::Treasury => self.policy.check_treasury_native_transfer(network, to_address, amount),
 			WalletClass::GasStation => {
 				let held = self.secrets.find_active_by_address(network, to_address).await?;
 				self.policy.check_gas_topup(network, to_address, held.as_deref(), amount)
@@ -226,7 +228,8 @@ impl SignerService for Signer {
 				gas_limit: req.gas_limit,
 			},
 		)?;
-		self.guard_token_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
+		self.guard_token_transfer(WalletClass::of(wallet_id), network, Some(&req.token_contract), &req.to_address, amount)
+			.await?;
 
 		let data = evm_tx::erc20_transfer_calldata(&to, amount);
 		let (parts, digest) = evm_tx::build_unsigned(&evm_tx::LegacyTx {
@@ -292,7 +295,8 @@ impl SignerService for Signer {
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
 		self.policy.check_fee_budget(network, FeeQuote::Tron { fee_limit: req.fee_limit })?;
-		self.guard_token_transfer(WalletClass::of(wallet_id), network, &req.to_address, amount).await?;
+		self.guard_token_transfer(WalletClass::of(wallet_id), network, Some(&req.token_contract), &req.to_address, amount)
+			.await?;
 
 		let handle = KeyHandle { wallet_id, network };
 		let owner = tron_tx::owner_address(&self.backend.public_key(handle).await?).map_err(sign_status("trc20 transfer"))?;
@@ -343,7 +347,7 @@ impl SignerService for Signer {
 			},
 		)?;
 		let class = WalletClass::of(wallet_id);
-		self.guard_token_transfer(class, network, &req.to_address, amount).await?;
+		self.guard_token_transfer(class, network, None, &req.to_address, amount).await?;
 		self.guard_jetton_wallet(class, &req.our_jetton_wallet)?;
 
 		let handle = KeyHandle { wallet_id, network };
@@ -691,8 +695,7 @@ fn signed_ton_response(signed: ton_tx::SignedTonTx) -> SignedTonTxResponse {
 /// Parse a `0x`-prefixed (or bare) hex string into a 20-byte EVM address. `None` if it is
 /// not valid hex of exactly 20 bytes.
 fn parse_evm_address(value: &str) -> Option<[u8; 20]> {
-	let hex = value.strip_prefix("0x").unwrap_or(value);
-	hex::decode(hex).ok()?.as_slice().try_into().ok()
+	evm_tx::parse_address(value)
 }
 
 #[cfg(test)]
