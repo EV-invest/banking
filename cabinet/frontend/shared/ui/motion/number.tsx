@@ -52,10 +52,11 @@ const DOM_DEPS: NumberDriverDeps = {
  *   plain number and `onUpdate` writes the text. A 60fps count that went
  *   through `setState` would re-render this component ~40 times per second and,
  *   through it, everything the parent re-renders with it. Nothing here needs to
- *   be in the React tree, so it isn't. The write goes to the text node React
- *   rendered — `nodeValue`, not `textContent` — because `textContent` replaces
- *   that node, and React's next render of the value would then update a node no
- *   longer in the document.
+ *   be in the React tree, so it isn't. The write sets `nodeValue` on the text
+ *   node already there rather than `textContent`, which would discard it and
+ *   create a new one on every frame — the same in-place update React itself
+ *   makes for a string child. `textContent` is only the fallback for a span
+ *   with no text node to update.
  * - **`useLayoutEffect`, not `useEffect`.** The JSX renders the *final* string
  *   so that SSR, a crawler, or a JS failure all show the true figure. The layout
  *   effect overwrites it with the starting figure before the browser paints, so
