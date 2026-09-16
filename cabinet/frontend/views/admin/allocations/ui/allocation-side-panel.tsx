@@ -39,9 +39,11 @@ export function AllocationSidePanel({ panel, onClose }: { panel: OpenAllocationP
   if (compact) {
     return (
       <Drawer open={panel !== null} onOpenChange={(open) => !open && onClose()}>
-        {/* The kit animates the sheet itself; what it does not do is cap it. A long
-            holders roster has to scroll inside the sheet, not push it off-screen. */}
-        <DrawerContent className="max-h-[85vh] overflow-y-auto">
+        {/* The kit animates the sheet and scrolls its body (uikit ≥ 0.16); what it does
+            not do is cap it. A long holders roster has to scroll inside the sheet, not
+            push it off-screen — the cap goes on the panel, never `overflow` (see the
+            operations timeline for why). */}
+        <DrawerContent className="max-h-[85vh]">
           {panel && (
             <>
               <DrawerTitle className="sr-only">{panel.row.title}</DrawerTitle>

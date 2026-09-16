@@ -366,9 +366,11 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
     return (
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerTrigger asChild>{trigger}</DrawerTrigger>
-        {/* The kit animates the sheet itself; what it does not do is cap it. A tall
-            in-flight withdrawal has to scroll inside the sheet, not push it off-screen. */}
-        <DrawerContent className="max-h-[85vh] overflow-y-auto">
+        {/* The kit animates the sheet and scrolls its body (uikit ≥ 0.16); what it does
+            not do is cap it. A tall in-flight withdrawal has to scroll inside the sheet,
+            not push it off-screen — and the cap goes on the panel, never `overflow`: the
+            panel is `touch-action: none` for the swipe and clips its own over-drag skirt. */}
+        <DrawerContent className="max-h-[85vh]">
           <DrawerTitle className="sr-only">{title}</DrawerTitle>
           {detail}
         </DrawerContent>
