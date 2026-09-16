@@ -208,12 +208,17 @@ names, so a new component appears the moment gitops adds its pair. No directory,
 
 For each GitHub repository the page asks the public API once per (repository, tag) for
 the tag's commit and pull request — a fact that never changes, so it is cached for the
-process lifetime — and once per repository for the newest `vX.Y.Z` tag (pre-releases
-ignored), re-asked every ten minutes. Four banking images at one tag cost one lookup.
+process lifetime — and per repository for the newest `vX.Y.Z` tag (pre-releases
+ignored), re-asked every ten minutes. GitHub lists tags by name, not by version, so the
+listing is followed page by page (100 tags each) through its `Link: rel="next"` chain,
+at most five pages deep. Four banking images at one tag cost one lookup.
 A failure (network, an exhausted anonymous budget) is remembered for two minutes and
 degrades the row (`release`/`latest_tag` null, `github_error` set) rather than the page.
-`GITHUB_TOKEN` is optional; the repositories are public and the cache keeps the
-anonymous 60 requests/hour budget sufficient.
+`GITHUB_TOKEN` is optional; the repositories are public and, at under 100 tags each,
+the cache keeps the anonymous 60 requests/hour budget sufficient. Past 100 tags a
+repository costs up to five requests per refresh — 30/hour with the page reloaded
+every ten minutes, so two large repositories could exhaust the anonymous budget — and
+the token (5000/hour) becomes the right answer.
 
 ## Checking the deploy contract
 
