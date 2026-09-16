@@ -75,60 +75,6 @@ fn rate_field(v: &Value, key: &str) -> Option<u32> {
 	required_u32(v, key)
 }
 
-// ── overview (fleet health; health RPCs are public — no token) ─────────────────
-
-/// `GET /api/admin/overview` — fleet health across the two hubs + the money plane's
-/// readiness diagnostics. The frontend composes the remaining rows (microservices,
-/// redis, Sentry, PostHog) against the shared observability libs.
-pub async fn overview(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AdminOverview>, ApiError> {
-	require_admin(&st, &jar).await?;
-
-	let mut services = Vec::new();
-	let core = st.grpc.check().await;
-	let core_ok = core.is_ok();
-	services.push(fleet("piggybank · core", "hub", core_ok, core.map(|c| c.status).unwrap_or_else(|_| "unreachable".into())));
-	// Auth runs in-process with core, so it shares core's liveness.
-	services.push(fleet("piggybank · auth", "hub", core_ok, if core_ok { "ok".into() } else { "unreachable".into() }));
-
-	let readiness = st.grpc.readiness().await.ok();
-	if let Some(r) = &readiness {
-		services.push(fleet("postgres", "datastore", r.db_ok, if r.db_ok { "ok".into() } else { "unreachable".into() }));
-		services.push(fleet("tigerbeetle", "datastore", r.ledger_ok, if r.ledger_ok { "ok".into() } else { "unreachable".into() }));
-	}
-
-	let concierge = st.grpc.concierge_check().await;
-	services.push(fleet("concierge", "hub", concierge.is_ok(), concierge.map(|c| c.status).unwrap_or_else(|_| "unreachable".into())));
-
-	Ok(Json(dto::AdminOverview {
-		services,
-		parked_rows: readiness.as_ref().map(|r| r.parked_rows.to_string()).unwrap_or_else(|| "0".into()),
-		backlog: readiness.as_ref().map(|r| r.backlog.to_string()).unwrap_or_else(|| "0".into()),
-		oldest_backlog_age_secs: readiness.as_ref().map(|r| r.oldest_backlog_age_secs.to_string()).unwrap_or_else(|| "0".into()),
-		deposit_scan: readiness
-			.as_ref()
-			.map(|r| {
-				r.scan_cursors
-					.iter()
-					.map(|c| dto::DepositScan {
-						network: c.network.clone(),
-						age_secs: c.age_secs.to_string(),
-					})
-					.collect()
-			})
-			.unwrap_or_default(),
-		unseal_failures: readiness.as_ref().map(|r| r.unseal_failures.to_string()).unwrap_or_else(|| "0".into()),
-	}))
-}
-
-fn fleet(name: &str, kind: &str, healthy: bool, detail: String) -> dto::FleetService {
-	dto::FleetService {
-		name: name.into(),
-		kind: kind.into(),
-		status: if healthy { "healthy".into() } else { "degraded".into() },
-		detail,
-	}
-}
-
 // ── users (concierge identity plane) ───────────────────────────────────────────
 
 /// `GET /api/admin/users` — paginated/filtered user list.

@@ -1053,37 +1053,6 @@ impl From<bk::BookEvent> for BookEvent {
 
 // ── admin console ─────────────────────────────────────────────────────────────
 
-/// One fleet-health row (Overview). Backend-sourced where a plane serves it; the
-/// frontend renders the rest (Sentry/PostHog/incidents) against the shared obs libs.
-#[derive(Serialize)]
-pub struct FleetService {
-	pub name: String,
-	pub kind: String,
-	pub status: String,
-	pub detail: String,
-}
-
-/// Per-rail deposit scan-cursor age from Readiness — a growing age means deposits are
-/// confirming on-chain but not being credited.
-#[derive(Serialize)]
-pub struct DepositScan {
-	pub network: String,
-	pub age_secs: String,
-}
-
-#[derive(Serialize)]
-pub struct AdminOverview {
-	pub services: Vec<FleetService>,
-	/// Parked outbox rows on the money plane (the "money didn't move" set), from Readiness.
-	pub parked_rows: String,
-	pub backlog: String,
-	pub oldest_backlog_age_secs: String,
-	pub deposit_scan: Vec<DepositScan>,
-	/// Signer unseal failures on money-moving paths since the hub booted — any non-zero
-	/// value means a provably dead key (KEK epoch) was asked to sign; funds are stranded.
-	pub unseal_failures: String,
-}
-
 /// A user row in the operator user list.
 #[derive(Serialize)]
 pub struct AdminUserSummary {
@@ -1205,7 +1174,7 @@ impl From<bk::Treasury> for Treasury {
 	}
 }
 
-/// One outbox row the relay parked — the "money didn't move" set (Overview screen).
+/// One outbox row the relay parked — the "money didn't move" set (Outbox screen).
 /// `reason` is the relay's last error; a `compensated` row already ran its recovery and
 /// must never be unparked (the hub refuses).
 #[derive(Serialize)]

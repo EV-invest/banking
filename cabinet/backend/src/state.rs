@@ -137,10 +137,6 @@ impl Grpc {
 		cc::owner_removal_approval_service_client::OwnerRemovalApprovalServiceClient::new(self.concierge.clone())
 	}
 
-	fn concierge_health(&self) -> cc::health_service_client::HealthServiceClient<Channel> {
-		cc::health_service_client::HealthServiceClient::new(self.concierge.clone())
-	}
-
 	// ── concierge identity plane ───────────────────────────────────────────────
 	// The auth issuance RPCs (Exchange/Refresh/Logout/sessions) left with the OAuth
 	// flow — the shell-owned auth surface calls them; the BFF only forwards the
@@ -464,14 +460,6 @@ impl Grpc {
 
 	pub async fn set_book_policy(&self, token: &str, req: bk::SetBookPolicyRequest) -> Result<bk::BookPolicy, Status> {
 		Ok(self.book().set_book_policy(bearer(token, req)?).await?.into_inner())
-	}
-
-	pub async fn readiness(&self) -> Result<bk::ReadinessResponse, Status> {
-		Ok(self.health().readiness(bk::ReadinessRequest {}).await?.into_inner())
-	}
-
-	pub async fn concierge_check(&self) -> Result<cc::CheckResponse, Status> {
-		Ok(self.concierge_health().check(cc::CheckRequest {}).await?.into_inner())
 	}
 
 	// ── admin: concierge identity plane (identity token) ────────────────────────
