@@ -99,7 +99,6 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Commit",
     "Details",
     "{title} — Details",
-    "EV Investment — Cabinet",
     "Hurdle",
     "IN ORDERS",
     "In Orders",
@@ -156,7 +155,7 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "6M",
   ]),
   ru: new Set(),
-  vi: new Set(["Cabinet", "Commit", "Consilium", "EV Investment — Cabinet", "Email"]),
+  vi: new Set(["Cabinet", "Commit", "Consilium", "Email"]),
 };
 
 const isLegitimatelyIdentical = (locale: Translated, text: string): boolean =>
