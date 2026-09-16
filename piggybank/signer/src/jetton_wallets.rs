@@ -13,6 +13,11 @@
 //! right jetton wallet — every pure check on the request had passed — so keeping the pin is
 //! correct, and coupling it to the ledger's advisory lock would serialize unrelated windows.
 //! The race between two first transfers is settled by the primary key, not a lock.
+//!
+//! A pin lives exactly as long as the wallet's active `wallet_secrets` row: a rotation or a
+//! custody migration gives the wallet a new address, hence a new jetton wallet, and retires
+//! the pin in the same transaction that archives the row (`WalletSecrets::supersede`,
+//! `WalletSecrets::migrate_to_custodian`), so the replacement key's first sweep pins afresh.
 
 use domain::money::Network;
 use sqlx::PgPool;
@@ -62,8 +67,10 @@ impl JettonWallets {
 			.bind(network.as_str())
 			.fetch_optional(&self.pool)
 			.await?;
-		// The signer never deletes a row, so a conflict with nothing to read back is an
-		// operator's concurrent manual DELETE; refusing (not re-inserting) is the safe shape.
+		// A row disappears only with its wallet's active `wallet_secrets` row (a rotation or a
+		// custody migration, `secrets.rs`) or by an operator's hand; a conflict with nothing to
+		// read back is one of those racing this sweep, and refusing (not re-inserting) is the
+		// safe shape.
 		pinned
 			.map(JettonWalletPin::Pinned)
 			.ok_or_else(|| SignerError::Repository(format!("jetton_wallets row for {wallet_id}/{network} vanished between insert and read")))

@@ -125,6 +125,19 @@ pub struct WalletSecrets {
 	pool: PgPool,
 }
 
+/// Delete the `jetton_wallets` pin of `(wallet, network)` inside the transaction that archives
+/// the wallet's active row. The pin's `wallet_id` is the hub-facing wallet id — the same
+/// `user_id` `wallet_secrets` is keyed on. A no-op on the rails that have no jetton wallet
+/// (no row to delete), and on a wallet that never swept.
+async fn retire_jetton_pin(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, wallet_id: Uuid, network: Network) -> Result<(), SignerError> {
+	sqlx::query("DELETE FROM jetton_wallets WHERE wallet_id = $1 AND network = $2")
+		.bind(wallet_id)
+		.bind(network.as_str())
+		.execute(&mut **tx)
+		.await?;
+	Ok(())
+}
+
 impl WalletSecrets {
 	pub fn new(pool: PgPool) -> Self {
 		Self { pool }
@@ -370,13 +383,26 @@ impl WalletSecrets {
 
 	/// Archive the active `(user, network)` row so a rotation can mint a replacement.
 	/// Returns whether a row was actually superseded.
+	///
+	/// The wallet's first-use jetton pin (`jetton_wallets`, migration 0007) goes with it, in
+	/// the same transaction: a jetton wallet is derived from its owner's address, so the
+	/// replacement key's first sweep will name a different one, and a pin left behind would
+	/// refuse every sweep from the new address forever. Same transaction, not a second call —
+	/// an archived row with its pin still standing is the exact state this must never leave.
 	pub async fn supersede(&self, user_id: Uuid, network: Network) -> Result<bool, SignerError> {
-		let result = sqlx::query("UPDATE wallet_secrets SET superseded_at = now() WHERE user_id = $1 AND network = $2 AND superseded_at IS NULL")
+		let mut tx = self.pool.begin().await?;
+		let archived = sqlx::query("UPDATE wallet_secrets SET superseded_at = now() WHERE user_id = $1 AND network = $2 AND superseded_at IS NULL")
 			.bind(user_id)
 			.bind(network.as_str())
-			.execute(&self.pool)
-			.await?;
-		Ok(result.rows_affected() > 0)
+			.execute(&mut *tx)
+			.await?
+			.rows_affected();
+		if archived == 0 {
+			return Ok(false);
+		}
+		retire_jetton_pin(&mut tx, user_id, network).await?;
+		tx.commit().await?;
+		Ok(true)
 	}
 
 	/// The active `(user, network)` row a custody migration would retire, or `None` if there
@@ -412,6 +438,10 @@ impl WalletSecrets {
 	///   row at all — an address that receives deposits nothing serves. A conflict must abort
 	///   the transaction and put the old row back.
 	///
+	/// The wallet's first-use jetton pin is retired in the same transaction, for the reason
+	/// [`supersede`](Self::supersede) gives: the custody-held key has a new address and so a
+	/// new jetton wallet.
+	///
 	/// Returns `false` when the row was no longer the active one to archive.
 	pub async fn migrate_to_custodian(&self, old_id: Uuid, secret: &NewTurnkeySecret<'_>) -> Result<bool, SignerError> {
 		let mut tx = self.pool.begin().await?;
@@ -424,6 +454,7 @@ impl WalletSecrets {
 			// Dropping `tx` rolls back; nothing was written either way.
 			return Ok(false);
 		}
+		retire_jetton_pin(&mut tx, secret.user_id, secret.network).await?;
 
 		sqlx::query(
 			"INSERT INTO wallet_secrets (id, user_id, network, public_key, address, key_alg, key_version, backend, turnkey_sign_with, derivation_index) \

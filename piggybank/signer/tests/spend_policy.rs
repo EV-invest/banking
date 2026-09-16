@@ -1,8 +1,8 @@
 //! The per-wallet-class spend rules, end to end: real Postgres, the real local vault, the real
 //! handlers (no mocks). One harness for #183 (wallet classes), #184 (treasury native + token
 //! pin), #369 (the native spend window) and the security review of that branch (the treasury
-//! USDT window, jetton wallets pinned on first use, reservations released on a failed
-//! signature).
+//! USDT window, jetton wallets pinned on first use and retired with their wallet row,
+//! reservations released on a failed signature).
 //!
 //! Every refusal here is `PermissionDenied`, and where the sending wallet is deliberately
 //! left unprovisioned it is still `PermissionDenied` — not `FailedPrecondition` — which proves
@@ -12,14 +12,22 @@
 
 mod common;
 
-use std::str::FromStr as _;
+use std::{collections::HashMap, str::FromStr as _, sync::Arc};
 
 use domain::money::Network;
+use ed25519_dalek::Signer as _;
 use evbanking_contracts::signer::v1::{
-	SignErc20TransferRequest, SignJettonTransferRequest, SignNativeTransferRequest, SignTonTransferRequest, SignTrc20TransferRequest, SignTrxTransferRequest,
-	signer_service_server::SignerService,
+	MigrateAddressToCustodianRequest, RotateAddressRequest, SignErc20TransferRequest, SignJettonTransferRequest, SignNativeTransferRequest, SignTonTransferRequest, SignTrc20TransferRequest,
+	SignTrxTransferRequest, signer_service_server::SignerService,
 };
-use piggybank_signer::{key_vault::Vault, policy::SignerPolicy, provision, secrets::WalletSecrets, service::Signer};
+use piggybank_signer::{
+	backend::{BackendError, ChainSignature, Curve, CustodyMinter, KeyBackend, KeyHandle, LocalVault, MintedCustodyKey},
+	key_vault::{Vault, ed25519_pubkey, gen_ed25519, ton_address},
+	policy::SignerPolicy,
+	provision::{self, ProvisionedAddress},
+	secrets::WalletSecrets,
+	service::Signer,
+};
 use tonic::{Code, Request, Status};
 use uuid::Uuid;
 
@@ -39,6 +47,79 @@ const OTHER_JETTON_WALLET: &str = "0:1111111111111111111111111111111111111111111
 
 fn test_vault() -> Vault {
 	Vault::from_hex(&hex::encode([9u8; 32])).unwrap()
+}
+
+/// A KEK the signer under test does NOT hold: a key sealed under it is provably dead, which
+/// is the one state `RotateAddress` accepts.
+fn other_vault() -> Vault {
+	Vault::from_hex(&hex::encode([8u8; 32])).unwrap()
+}
+
+/// A stand-in TON custodian for the migration path: mints genuine Ed25519 keys, keeps their
+/// seeds in memory and signs for the custody rows it minted; everything else — the local rows
+/// every test provisions — goes to the real local vault. Only the network call is missing.
+struct TonCustody {
+	local: LocalVault,
+	secrets: WalletSecrets,
+	seeds: std::sync::Mutex<HashMap<String, [u8; 32]>>,
+}
+
+impl TonCustody {
+	fn signer(secrets: WalletSecrets, policy: SignerPolicy) -> Signer {
+		let vault = Arc::new(test_vault());
+		let custody = Arc::new(Self {
+			local: LocalVault::new(Arc::clone(&vault), secrets.clone()),
+			secrets: secrets.clone(),
+			seeds: std::sync::Mutex::new(HashMap::new()),
+		});
+		Signer::with_backend(Arc::clone(&custody) as Arc<dyn KeyBackend>, Some(custody as Arc<dyn CustodyMinter>), vault, secrets, policy)
+	}
+
+	/// The minted seed for a custody row, or `None` for a local row.
+	async fn minted_seed(&self, handle: KeyHandle) -> Result<Option<[u8; 32]>, BackendError> {
+		Ok(match self.secrets.find_turnkey(handle.wallet_id, handle.network).await? {
+			Some(Ok(key)) => Some(*self.seeds.lock().unwrap().get(&key.sign_with).expect("a custody row this stand-in minted")),
+			_ => None,
+		})
+	}
+}
+
+#[tonic::async_trait]
+impl CustodyMinter for TonCustody {
+	async fn mint(&self, _user_id: Uuid, _network: Network) -> Result<MintedCustodyKey, BackendError> {
+		let seed = gen_ed25519();
+		let public_key = ed25519_pubkey(&seed);
+		let address = ton_address(&public_key).expect("derive the TON address of a fresh key");
+		self.seeds.lock().unwrap().insert(address.clone(), *seed);
+		Ok(MintedCustodyKey {
+			sign_with: address.clone(),
+			public_key: public_key.to_vec(),
+			address,
+			key_alg: "ed25519",
+			derivation_index: 0,
+		})
+	}
+}
+
+#[tonic::async_trait]
+impl KeyBackend for TonCustody {
+	async fn provision(&self, user_id: Uuid, network: Network) -> Result<ProvisionedAddress, BackendError> {
+		self.local.provision(user_id, network).await
+	}
+
+	async fn public_key(&self, handle: KeyHandle) -> Result<Vec<u8>, BackendError> {
+		match self.minted_seed(handle).await? {
+			Some(seed) => Ok(ed25519_pubkey(&seed).to_vec()),
+			None => self.local.public_key(handle).await,
+		}
+	}
+
+	async fn sign_digest(&self, handle: KeyHandle, curve: Curve, digest: &[u8; 32]) -> Result<ChainSignature, BackendError> {
+		match self.minted_seed(handle).await? {
+			Some(seed) => Ok(ChainSignature::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed).sign(digest).to_bytes())),
+			None => self.local.sign_digest(handle, curve, digest).await,
+		}
+	}
 }
 
 /// A policy from `vars` on top of the defaults, with Tron signing switched on: the rail is
@@ -865,6 +946,106 @@ async fn concurrent_first_sweeps_pin_exactly_one_jetton_wallet() {
 	let pinned = pinned_jetton_wallet(&db, rail.user).await.expect("one jetton wallet was pinned");
 	assert!(!signed_via.is_empty(), "the winner's own sweep is signed");
 	assert!(signed_via.iter().all(|via| *via == pinned), "every signature named the pin {pinned}: {signed_via:?}");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn migrating_a_wallet_to_the_custodian_retires_its_jetton_pin() {
+	let db = db_or_skip!();
+	let secrets = WalletSecrets::new(db.pool.clone());
+	let user = Uuid::new_v4();
+	let old_address = provision::provision(&test_vault(), &secrets, user, Network::Ton)
+		.await
+		.expect("provision a deposit wallet")
+		.address;
+	let treasury = provision::provision(&test_vault(), &secrets, TREASURY, Network::Ton)
+		.await
+		.expect("provision the treasury")
+		.address;
+	let station = provision::provision(&test_vault(), &secrets, GAS_STATION, Network::Ton)
+		.await
+		.expect("provision the gas station")
+		.address;
+	let signer = TonCustody::signer(secrets.clone(), policy(&[]));
+
+	// The first sweep from the local key pins its jetton wallet.
+	signer
+		.sign_jetton_transfer(jetton_via(user, JETTON_WALLET, &treasury, &station))
+		.await
+		.expect("the first sweep pins");
+	assert_eq!(pinned_jetton_wallet(&db, user).await.as_deref(), Some(JETTON_WALLET));
+
+	// The custody-held replacement has a new address, hence a new jetton wallet: the pin goes
+	// with the archived row.
+	let migrated = signer
+		.migrate_address_to_custodian(Request::new(MigrateAddressToCustodianRequest {
+			user_id: user.to_string(),
+			network: "ton".to_owned(),
+			drained_address: base64_of(&old_address),
+		}))
+		.await
+		.expect("a healthy local key migrates")
+		.into_inner();
+	assert_ne!(migrated.new_address, old_address);
+	assert_eq!(pinned_jetton_wallet(&db, user).await, None, "the pin was retired with the row");
+
+	// So the new key's first sweep, naming a different jetton wallet, is signed and pins afresh
+	// — where a surviving pin would have refused it forever.
+	signer
+		.sign_jetton_transfer(jetton_via(user, OTHER_JETTON_WALLET, &treasury, &station))
+		.await
+		.expect("the migrated wallet's first sweep pins its new jetton wallet");
+	assert_eq!(pinned_jetton_wallet(&db, user).await.as_deref(), Some(OTHER_JETTON_WALLET));
+	denied(
+		signer.sign_jetton_transfer(jetton_via(user, JETTON_WALLET, &treasury, &station)).await,
+		"the old jetton wallet after migration",
+	);
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn rotating_a_dead_key_retires_its_jetton_pin() {
+	let db = db_or_skip!();
+	let secrets = WalletSecrets::new(db.pool.clone());
+	let user = Uuid::new_v4();
+	// A key sealed under another KEK: dead under the signer's, so it cannot sweep — the pin it
+	// learned while alive is seeded directly.
+	let old_address = provision::provision(&other_vault(), &secrets, user, Network::Ton)
+		.await
+		.expect("provision a dead deposit wallet")
+		.address;
+	let treasury = provision::provision(&test_vault(), &secrets, TREASURY, Network::Ton)
+		.await
+		.expect("provision the treasury")
+		.address;
+	let station = provision::provision(&test_vault(), &secrets, GAS_STATION, Network::Ton)
+		.await
+		.expect("provision the gas station")
+		.address;
+	sqlx::query("INSERT INTO jetton_wallets (wallet_id, network, jetton_wallet) VALUES ($1, 'ton', $2)")
+		.bind(user)
+		.bind(JETTON_WALLET)
+		.execute(&db.pool)
+		.await
+		.expect("seed the pin the dead key learned");
+	let signer = Signer::new(test_vault(), secrets.clone(), policy(&[]));
+
+	let rotated = signer
+		.rotate_address(Request::new(RotateAddressRequest {
+			user_id: user.to_string(),
+			network: "ton".to_owned(),
+		}))
+		.await
+		.expect("a dead key rotates")
+		.into_inner();
+	assert_ne!(rotated.address, old_address);
+	assert_eq!(pinned_jetton_wallet(&db, user).await, None, "the pin was retired with the row");
+
+	signer
+		.sign_jetton_transfer(jetton_via(user, OTHER_JETTON_WALLET, &treasury, &station))
+		.await
+		.expect("the rotated wallet's first sweep pins its new jetton wallet");
+	assert_eq!(pinned_jetton_wallet(&db, user).await.as_deref(), Some(OTHER_JETTON_WALLET));
 	db.cleanup().await;
 }
 

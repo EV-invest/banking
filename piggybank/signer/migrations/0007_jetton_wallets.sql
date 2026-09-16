@@ -17,8 +17,11 @@
 --
 -- The write is a plain `INSERT … ON CONFLICT DO NOTHING`: two first sweeps racing on one
 -- wallet both try to pin, one wins, and the loser re-reads the winner's row and is held to
--- it — no advisory lock needed. Rows are never updated or deleted by the signer; a pin an
--- operator has to change (a jetton master migration) is a manual `DELETE` on this table.
+-- it — no advisory lock needed. A row lives as long as the wallet's active `wallet_secrets`
+-- row: a key rotation or a custody migration gives the wallet a new address and so a new
+-- jetton wallet, and deletes the pin in the same transaction that archives the row. A pin an
+-- operator has to change for any other reason (a jetton master migration) is a manual
+-- `DELETE` on this table.
 --
 -- Irreversible? No: additive, and the previous binary neither reads nor writes it. A `down`
 -- would be `DROP TABLE jetton_wallets` — this repo's migrator carries no down files (see
