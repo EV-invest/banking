@@ -6719,6 +6719,18 @@
     "en": "No deposit or withdrawal rails are available right now — check back soon.",
     "t": "Aucun rail de dépôt ou de retrait n’est disponible pour l’instant — revenez bientôt."
   },
+  "wallet.noRailsTitle": {
+    "en": "No networks available yet",
+    "t": "Aucun réseau disponible pour l'instant"
+  },
+  "wallet.overviewVerifyTitle": {
+    "en": "Verify your identity to use these networks",
+    "t": "Vérifiez votre identité pour utiliser ces réseaux"
+  },
+  "wallet.overviewVerifyBody": {
+    "en": "Deposit addresses are issued and withdrawals open once your identity is verified. Your balance above is unaffected.",
+    "t": "Les adresses de dépôt sont émises et les retraits s'ouvrent une fois votre identité vérifiée. Votre solde ci-dessus reste intact."
+  },
   "wallet.noWithdrawRails": {
     "en": "No withdrawal rails are available right now — check back soon.",
     "t": "Aucun rail de retrait n’est disponible pour l’instant — revenez bientôt."
