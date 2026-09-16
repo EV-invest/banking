@@ -7,12 +7,14 @@
 //! the transport (through [`config::bridge_transport`], the same reader the boot gate
 //! uses, so what is refused and what is encrypted can never disagree on a spelling); a
 //! pinned CA (`BRIDGE_TLS_CA_PEM_FILE`) is the trust anchor; the address's host is the name
-//! the server's certificate must carry.
+//! the server's certificate must carry; and a client identity
+//! (`BRIDGE_TLS_CLIENT_CERT_PEM_FILE` + `BRIDGE_TLS_CLIENT_KEY_PEM_FILE`) turns the seam
+//! into mTLS the moment concierge asks for it, with no code change on this side.
 
 use std::time::Duration;
 
 use color_eyre::eyre::{Context, bail, eyre};
-use tonic::transport::{Certificate, ClientTlsConfig, Endpoint};
+use tonic::transport::{Certificate, ClientTlsConfig, Endpoint, Identity};
 
 use crate::config::{self, BridgeTransport};
 
@@ -22,14 +24,22 @@ use crate::config::{self, BridgeTransport};
 pub struct BridgeTlsFiles {
 	/// `BRIDGE_TLS_CA_PEM_FILE` — the trust anchor; certificates and nothing else.
 	pub ca: Option<String>,
+	/// `BRIDGE_TLS_CLIENT_CERT_PEM_FILE` — the hub's certificate, presented for mTLS.
+	pub client_cert: Option<String>,
+	/// `BRIDGE_TLS_CLIENT_KEY_PEM_FILE` — its private key.
+	pub client_key: Option<String>,
 }
 
 impl BridgeTlsFiles {
-	/// Read the path from the environment; an empty value counts as unset, so a Secret key
-	/// left blank does not become a file named `""`.
+	/// Read the three paths from the environment; an empty value counts as unset, so a
+	/// Secret key left blank does not become a file named `""`.
 	pub fn from_env() -> Self {
 		let var = |key: &str| std::env::var(key).ok().filter(|s| !s.is_empty());
-		Self { ca: var("BRIDGE_TLS_CA_PEM_FILE") }
+		Self {
+			ca: var("BRIDGE_TLS_CA_PEM_FILE"),
+			client_cert: var("BRIDGE_TLS_CLIENT_CERT_PEM_FILE"),
+			client_key: var("BRIDGE_TLS_CLIENT_KEY_PEM_FILE"),
+		}
 	}
 }
 
@@ -69,12 +79,17 @@ pub fn bridge_endpoint(addr: &str, tls: &BridgeTlsFiles) -> color_eyre::Result<E
 /// by default, but the pin is the point of this seam and a default is not a contract; it
 /// is also read by [`config::bridge_host`], so an IPv6 literal arrives without its
 /// brackets, which is the only spelling rustls accepts as a name.
+///
+/// A client identity is the hub's half of mTLS: both files or neither. One without the
+/// other is a Secret half-written, and half of an identity presents nothing — the
+/// handshake would then fail against a concierge that demands a client certificate, with
+/// the hub live, ready and reading as configured.
 fn bridge_client_tls(addr: &str, tls: &BridgeTlsFiles) -> color_eyre::Result<ClientTlsConfig> {
 	let host = config::bridge_host(addr);
 	if host.is_empty() {
 		bail!("CONCIERGE_BRIDGE_ADDR {addr} has no host to pin the server certificate against");
 	}
-	let config = match &tls.ca {
+	let mut config = match &tls.ca {
 		Some(ca_file) => {
 			let ca = std::fs::read_to_string(ca_file).with_context(|| format!("failed to read BRIDGE_TLS_CA_PEM_FILE at {ca_file}"))?;
 			// A file that is not certificates builds an EMPTY root store and says nothing about
@@ -87,6 +102,16 @@ fn bridge_client_tls(addr: &str, tls: &BridgeTlsFiles) -> color_eyre::Result<Cli
 		None => ClientTlsConfig::new().with_enabled_roots(),
 	}
 	.domain_name(host);
+	match (&tls.client_cert, &tls.client_key) {
+		(Some(cert_file), Some(key_file)) => {
+			let cert = std::fs::read_to_string(cert_file).with_context(|| format!("failed to read BRIDGE_TLS_CLIENT_CERT_PEM_FILE at {cert_file}"))?;
+			let key = std::fs::read_to_string(key_file).with_context(|| format!("failed to read BRIDGE_TLS_CLIENT_KEY_PEM_FILE at {key_file}"))?;
+			config = config.identity(Identity::from_pem(cert, key));
+		}
+		(None, None) => {}
+		(Some(_), None) => bail!("BRIDGE_TLS_CLIENT_CERT_PEM_FILE is set but BRIDGE_TLS_CLIENT_KEY_PEM_FILE is not: a client identity is both files or neither"),
+		(None, Some(_)) => bail!("BRIDGE_TLS_CLIENT_KEY_PEM_FILE is set but BRIDGE_TLS_CLIENT_CERT_PEM_FILE is not: a client identity is both files or neither"),
+	}
 	Ok(config)
 }
 
@@ -110,6 +135,7 @@ mod tests {
 	fn pinned(path: &std::path::Path) -> BridgeTlsFiles {
 		BridgeTlsFiles {
 			ca: Some(path.to_str().expect("a utf-8 temp path").to_string()),
+			..BridgeTlsFiles::default()
 		}
 	}
 
@@ -121,6 +147,7 @@ mod tests {
 	fn the_bridge_endpoint_negotiates_tls_for_every_spelling_of_https_and_for_nothing_else() {
 		let missing = BridgeTlsFiles {
 			ca: Some("/nonexistent/piggybank-bridge-ca.pem".to_string()),
+			..BridgeTlsFiles::default()
 		};
 		for addr in ["https://concierge:55672", "HTTPS://concierge:55672", "https://concierge.apps.svc.cluster.local/"] {
 			let Err(err) = bridge_endpoint(addr, &missing) else {
@@ -164,5 +191,38 @@ mod tests {
 			panic!("a CA file holding no certificate must fail the boot, not build an empty root store");
 		};
 		assert!(err.to_string().contains("BRIDGE_TLS_CA_PEM_FILE"), "the refusal must name the variable that caused it: {err}");
+	}
+
+	/// Half an identity presents nothing, so a Secret with one of the two keys written is
+	/// refused at boot with the missing variable named — not carried into a handshake that
+	/// fails later, against a concierge that asked for a certificate the hub never sent.
+	#[test]
+	fn a_client_identity_is_both_files_or_neither() {
+		let ca = temp_file(TEST_CA_PEM);
+		let ca_path = ca.to_str().expect("a utf-8 temp path").to_string();
+		let cases = [
+			(Some("/nonexistent/client.pem"), None, "BRIDGE_TLS_CLIENT_KEY_PEM_FILE"),
+			(None, Some("/nonexistent/client.key"), "BRIDGE_TLS_CLIENT_CERT_PEM_FILE"),
+		];
+		for (cert, key, missing) in cases {
+			let files = BridgeTlsFiles {
+				ca: Some(ca_path.clone()),
+				client_cert: cert.map(str::to_string),
+				client_key: key.map(str::to_string),
+			};
+			let Err(err) = bridge_endpoint("https://concierge:55672", &files) else {
+				panic!("cert {cert:?} with key {key:?} is half an identity and must be refused");
+			};
+			assert!(err.to_string().contains(missing), "the refusal must name the half that is missing ({missing}): {err}");
+		}
+
+		let unreadable = BridgeTlsFiles {
+			ca: Some(ca_path),
+			client_cert: Some("/nonexistent/client.pem".to_string()),
+			client_key: Some("/nonexistent/client.key".to_string()),
+		};
+		let err = bridge_endpoint("https://concierge:55672", &unreadable).expect_err("an identity that cannot be read stops the boot");
+		assert!(err.to_string().contains("BRIDGE_TLS_CLIENT_CERT_PEM_FILE"), "the refusal must name the variable: {err}");
+		let _ = std::fs::remove_file(&ca);
 	}
 }
