@@ -70,12 +70,14 @@
 //! the USDT cap cannot price a native amount, so before this the treasury's whole native
 //! balance — the gas float on all four rails — was one forged request away. An operator who
 //! needs the flow opts in with `SIGNER_ALLOW_TREASURY_NATIVE=true`, which then REQUIRES a
-//! non-empty destination allowlist and a ceiling in the network's base units
-//! (`SIGNER_MAX_TREASURY_NATIVE_{BEP20,POLYGON,TRC20,TON}`; a network without one stays
-//! refused) — the boot fails otherwise, since "allowed, unbounded, to anywhere" is the hole
-//! this closes. The allowlist is a **no-op until configured** — the normal withdrawal model
-//! sends to arbitrary user addresses. An operator enabling it must either pin the
-//! treasury's jetton wallet or put it on the list, or every TON withdrawal is refused.
+//! non-empty **treasury native allowlist** (`SIGNER_TREASURY_NATIVE_ALLOWLIST`) and a
+//! ceiling in the network's base units (`SIGNER_MAX_TREASURY_NATIVE_{BEP20,POLYGON,TRC20,TON}`;
+//! a network without one stays refused) — the boot fails otherwise, since "allowed,
+//! unbounded, to anywhere" is the hole this closes. The native allowlist is its own list on
+//! purpose: the USDT allowlist above gates every user withdrawal, so requiring IT for a
+//! native opt-in would make an operator who only wants to refill the gas station park every
+//! payout. The two lists never read each other. Both are **no-ops until configured** — the
+//! normal withdrawal model sends to arbitrary user addresses.
 //!
 //! Everything else is **on by default** with ceilings an honest hub never reaches, and an
 //! operator may raise them via their `SIGNER_MAX_*` variables but cannot switch them off
@@ -96,6 +98,13 @@
 //!     signature. What counts is the native coin a signature can burn or move: EVM
 //!     `gas_price × gas_limit` plus a native transfer's `value`, Tron `fee_limit` or the TRX
 //!     amount, TON `msg_value` or the Toncoin amount.
+//!
+//! **A window refusal parks the withdrawal.** The two windows (this one and the treasury
+//! USDT window) refuse with `permission_denied` like every other rule here, and the hub
+//! treats that as a policy verdict: a withdrawal is parked (`custody.rs` in the hub), a
+//! sweep backs off. Deliberate — a retryable code would have the hub hammer the same window
+//! and block its whole outbox for up to an hour behind one request. Treat a window refusal
+//! as an alert: check the volume that filled it, raise the ceiling deliberately or unpark.
 //!
 //! **Tron signing is off by default** (`SIGNER_TRON_SIGNING_ENABLED`): the hub keeps the rail
 //! frozen (`TRC20_FROZEN` in `piggybank/core/src/config.rs`), so no legitimate Tron signature
@@ -142,11 +151,15 @@ pub struct SignerPolicy {
 	max_transfer_usdt: u64,
 	/// Max USDT (whole units) the treasury may pay out per rail over [`SPEND_WINDOW`].
 	treasury_usdt_per_hour: u64,
-	/// If non-empty, a treasury transfer's destination must agree with one of these (wire
+	/// If non-empty, a treasury USDT transfer's destination must agree with one of these (wire
 	/// address strings in any rendering — membership goes through
 	/// [`provision::addresses_agree`], not string equality). Empty ⇒ any destination is
-	/// allowed (the default withdrawal model).
+	/// allowed (the default withdrawal model). Never consulted for a native transfer.
 	destination_allowlist: Vec<String>,
+	/// The destinations a native transfer FROM the treasury may go to, once opted in; same
+	/// membership rule, its own list (`SIGNER_TREASURY_NATIVE_ALLOWLIST`). Never consulted
+	/// for a USDT transfer.
+	treasury_native_allowlist: Vec<String>,
 	/// The treasury's own USDT jetton wallet, when the operator pinned it: a treasury jetton
 	/// transfer's `our_jetton_wallet` must be this address. `None` ⇒ pinned on first use like
 	/// every other wallet's.
@@ -172,6 +185,7 @@ impl Default for SignerPolicy {
 			max_transfer_usdt: DEFAULT_MAX_TRANSFER_USDT,
 			treasury_usdt_per_hour: DEFAULT_MAX_TREASURY_USDT_PER_HOUR,
 			destination_allowlist: Vec::new(),
+			treasury_native_allowlist: Vec::new(),
 			ton_treasury_jetton_wallet: None,
 			fee_budget: FeeBudget::default(),
 			gas_topup: GasTopupCaps::default(),
@@ -530,6 +544,20 @@ where
 	Ok(Some(value))
 }
 
+/// A comma-separated list from `lookup`, trimmed, blanks dropped; unset ⇒ empty.
+fn env_list(lookup: &impl Fn(&str) -> Option<String>, name: &str) -> Vec<String> {
+	lookup(name)
+		.map(|raw| raw.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect())
+		.unwrap_or_default()
+}
+
+/// Rendering-aware membership in an allowlist: an operator may list an address in any
+/// spelling the network accepts (EIP-55 or lowercase, TON raw or base64) and the hub may
+/// send another.
+fn listed(list: &[String], network: Network, address: &str) -> bool {
+	list.iter().any(|listed| provision::addresses_agree(network, listed, address))
+}
+
 /// A boolean opt-in from `lookup`: unset/empty ⇒ `false`; `true`/`false` (any case) ⇒ that;
 /// anything else ⇒ error, so a mistyped `ture` cannot pass for either.
 fn env_flag(lookup: &impl Fn(&str) -> Option<String>, name: &str) -> color_eyre::Result<bool> {
@@ -630,9 +658,8 @@ impl SignerPolicy {
 	pub fn from_lookup(lookup: &impl Fn(&str) -> Option<String>) -> color_eyre::Result<Self> {
 		let max_transfer_usdt = env_cap(lookup, "SIGNER_MAX_TRANSFER_USDT", DEFAULT_MAX_TRANSFER_USDT)?;
 		let treasury_usdt_per_hour = env_cap(lookup, "SIGNER_MAX_TREASURY_USDT_PER_HOUR", DEFAULT_MAX_TREASURY_USDT_PER_HOUR)?;
-		let destination_allowlist: Vec<String> = lookup("SIGNER_DESTINATION_ALLOWLIST")
-			.map(|raw| raw.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect())
-			.unwrap_or_default();
+		let destination_allowlist = env_list(lookup, "SIGNER_DESTINATION_ALLOWLIST");
+		let treasury_native_allowlist = env_list(lookup, "SIGNER_TREASURY_NATIVE_ALLOWLIST");
 		let ton_treasury_jetton_wallet = match lookup("SIGNER_TON_TREASURY_JETTON_WALLET").map(|raw| raw.trim().to_owned()).filter(|s| !s.is_empty()) {
 			// A pin that does not parse would refuse every TON withdrawal; fail the boot instead.
 			Some(raw) if tonlib_core::TonAddress::from_str(&raw).is_ok() => Some(raw),
@@ -645,8 +672,8 @@ impl SignerPolicy {
 		let treasury_native = if env_flag(lookup, "SIGNER_ALLOW_TREASURY_NATIVE")? {
 			// Opting in without the two bounds is the exact hole the default closes; refuse to
 			// boot rather than run "allowed, unbounded, to anywhere".
-			if destination_allowlist.is_empty() {
-				return Err(color_eyre::eyre::eyre!("SIGNER_ALLOW_TREASURY_NATIVE=true requires a non-empty SIGNER_DESTINATION_ALLOWLIST"));
+			if treasury_native_allowlist.is_empty() {
+				return Err(color_eyre::eyre::eyre!("SIGNER_ALLOW_TREASURY_NATIVE=true requires a non-empty SIGNER_TREASURY_NATIVE_ALLOWLIST"));
 			}
 			let caps = TreasuryNativeCaps::from_lookup(lookup)?;
 			if caps.is_empty() {
@@ -664,6 +691,7 @@ impl SignerPolicy {
 			max_transfer_usdt,
 			treasury_usdt_per_hour,
 			destination_allowlist,
+			treasury_native_allowlist,
 			ton_treasury_jetton_wallet,
 			fee_budget,
 			gas_topup,
@@ -695,6 +723,10 @@ impl SignerPolicy {
 
 	pub fn allowlist_len(&self) -> usize {
 		self.destination_allowlist.len()
+	}
+
+	pub fn treasury_native_allowlist_len(&self) -> usize {
+		self.treasury_native_allowlist.len()
 	}
 
 	pub fn fee_budget(&self) -> &FeeBudget {
@@ -797,8 +829,9 @@ impl SignerPolicy {
 	}
 
 	/// Enforce the policy on a treasury-sourced NATIVE (gas-coin) transfer: refused unless an
-	/// operator opted in (`SIGNER_ALLOW_TREASURY_NATIVE`), and then only to an allowlisted
-	/// destination, under the rail's `SIGNER_MAX_TREASURY_NATIVE_*` ceiling. No core flow sends
+	/// operator opted in (`SIGNER_ALLOW_TREASURY_NATIVE`), and then only to a destination on
+	/// the native allowlist (`SIGNER_TREASURY_NATIVE_ALLOWLIST` — not the USDT one), under the
+	/// rail's `SIGNER_MAX_TREASURY_NATIVE_*` ceiling. No core flow sends
 	/// native funds FROM the treasury (gas top-ups are signed from the gas-station wallet), and
 	/// the USDT cap cannot price a native amount, so "off" is the only safe default.
 	pub fn check_treasury_native_transfer(&self, network: Network, to_address: &str, amount: u128) -> Result<(), Status> {
@@ -812,10 +845,10 @@ impl SignerPolicy {
 				"native transfers from the treasury have no ceiling on {network} (SIGNER_MAX_TREASURY_NATIVE_*)"
 			)));
 		};
-		// Straight membership, not `check_allowlist`: the empty-list-means-anywhere reading is
-		// the withdrawal model's, never this flow's (loading refuses the opt-in with no list).
-		if !self.allowlisted(network, to_address) {
-			return Err(Status::permission_denied("treasury native transfer destination is not on the signer's allowlist"));
+		// Straight membership: the empty-list-means-anywhere reading is the withdrawal model's,
+		// never this flow's (loading refuses the opt-in with no list).
+		if !listed(&self.treasury_native_allowlist, network, to_address) {
+			return Err(Status::permission_denied("treasury native transfer destination is not on the signer's treasury native allowlist"));
 		}
 		deny_over(network, TREASURY_NATIVE, "amount", amount, cap)
 	}
@@ -842,10 +875,9 @@ impl SignerPolicy {
 		Ok(())
 	}
 
-	/// Rendering-aware membership: an operator may list an address in any spelling the
-	/// network accepts (EIP-55 or lowercase, TON raw or base64) and the hub may send another.
+	/// USDT-allowlist membership; see [`listed`].
 	fn allowlisted(&self, network: Network, address: &str) -> bool {
-		self.destination_allowlist.iter().any(|listed| provision::addresses_agree(network, listed, address))
+		listed(&self.destination_allowlist, network, address)
 	}
 
 	// === deposit (sweep) ==========================================================
@@ -1005,10 +1037,12 @@ mod tests {
 		denied(SignerPolicy::default().check_treasury_native_transfer(Network::Ton, "anything", 0));
 	}
 
+	/// Opted in with `allow` as the NATIVE allowlist and the USDT allowlist empty.
 	fn native_opted_in(allow: &[&str], caps: TreasuryNativeCaps) -> SignerPolicy {
 		SignerPolicy {
 			treasury_native: Some(caps),
-			..policy(1000, allow)
+			treasury_native_allowlist: allow.iter().map(|s| (*s).to_owned()).collect(),
+			..policy(1000, &[])
 		}
 	}
 
@@ -1023,7 +1057,17 @@ mod tests {
 		let over = denied(p.check_treasury_native_transfer(Network::Bep20, EIP55, 1_001));
 		assert!(over.message().contains("treasury native"), "{over:?}");
 		let off_list = denied(p.check_treasury_native_transfer(Network::Bep20, OTHER_EVM, 1));
-		assert!(off_list.message().contains("allowlist"), "{off_list:?}");
+		assert!(off_list.message().contains("treasury native allowlist"), "{off_list:?}");
+		// The lists do not read each other: a USDT payout to an address only the native list
+		// names is off the (empty ⇒ anywhere) USDT list's business, and a native transfer to an
+		// address only the USDT list names is refused.
+		assert!(p.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), OTHER_EVM, 1).is_ok());
+		let usdt_listed = SignerPolicy {
+			destination_allowlist: vec![OTHER_EVM.to_owned()],
+			..p.clone()
+		};
+		denied(usdt_listed.check_treasury_native_transfer(Network::Bep20, OTHER_EVM, 1));
+		denied(usdt_listed.check_treasury_transfer(Network::Bep20, usdt(Network::Bep20), EIP55, 1));
 		// A rail without a ceiling stays refused even though the flow is on.
 		let no_cap = denied(p.check_treasury_native_transfer(Network::Polygon, EIP55, 1));
 		assert!(no_cap.message().contains("SIGNER_MAX_TREASURY_NATIVE"), "{no_cap:?}");
@@ -1035,15 +1079,20 @@ mod tests {
 	#[test]
 	fn treasury_native_opt_in_is_refused_at_boot_without_its_bounds() {
 		let err = SignerPolicy::from_lookup(&lookup(&[("SIGNER_ALLOW_TREASURY_NATIVE", "true")])).unwrap_err();
-		assert!(err.to_string().contains("SIGNER_DESTINATION_ALLOWLIST"), "{err}");
+		assert!(err.to_string().contains("SIGNER_TREASURY_NATIVE_ALLOWLIST"), "{err}");
+		// The USDT allowlist does not satisfy the opt-in — it is the other list.
 		let err = SignerPolicy::from_lookup(&lookup(&[("SIGNER_ALLOW_TREASURY_NATIVE", "true"), ("SIGNER_DESTINATION_ALLOWLIST", EIP55)])).unwrap_err();
+		assert!(err.to_string().contains("SIGNER_TREASURY_NATIVE_ALLOWLIST"), "{err}");
+		let err = SignerPolicy::from_lookup(&lookup(&[("SIGNER_ALLOW_TREASURY_NATIVE", "true"), ("SIGNER_TREASURY_NATIVE_ALLOWLIST", EIP55)])).unwrap_err();
 		assert!(err.to_string().contains("SIGNER_MAX_TREASURY_NATIVE"), "{err}");
 		let p = SignerPolicy::from_lookup(&lookup(&[
 			("SIGNER_ALLOW_TREASURY_NATIVE", "TRUE"),
-			("SIGNER_DESTINATION_ALLOWLIST", EIP55),
+			("SIGNER_TREASURY_NATIVE_ALLOWLIST", &format!(" {EIP55} ,, ")),
 			("SIGNER_MAX_TREASURY_NATIVE_TON", "5"),
 		]))
 		.unwrap();
+		assert_eq!(p.treasury_native_allowlist_len(), 1);
+		assert_eq!(p.allowlist_len(), 0);
 		assert_eq!(
 			p.treasury_native(),
 			Some(&TreasuryNativeCaps {
@@ -1068,7 +1117,7 @@ mod tests {
 		assert!(
 			SignerPolicy::from_lookup(&lookup(&[
 				("SIGNER_ALLOW_TREASURY_NATIVE", "true"),
-				("SIGNER_DESTINATION_ALLOWLIST", EIP55),
+				("SIGNER_TREASURY_NATIVE_ALLOWLIST", EIP55),
 				("SIGNER_MAX_TREASURY_NATIVE_BEP20", "0"),
 			]))
 			.is_err()

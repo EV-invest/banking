@@ -66,6 +66,7 @@ async fn run() -> color_eyre::Result<()> {
 		max_transfer_usdt = policy.max_transfer_usdt(),
 		treasury_usdt_per_hour = policy.treasury_usdt_per_hour(),
 		allowlisted_destinations = policy.allowlist_len(),
+		treasury_native_allowlisted_destinations = policy.treasury_native_allowlist_len(),
 		treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(),
 		treasury_native = ?policy.treasury_native(),
 		native_spend_per_hour = ?policy.native_spend(),

@@ -590,7 +590,7 @@ async fn treasury_native_opted_in_signs_to_the_allowlist_under_the_ceiling() {
 	let db = db_or_skip!();
 	let opted_in = policy(&[
 		("SIGNER_ALLOW_TREASURY_NATIVE", "true"),
-		("SIGNER_DESTINATION_ALLOWLIST", OTHER_EVM),
+		("SIGNER_TREASURY_NATIVE_ALLOWLIST", OTHER_EVM),
 		("SIGNER_MAX_TREASURY_NATIVE_POLYGON", "1000000000000000000"),
 	]);
 	let rail = Rail::new(&db, Network::Polygon, opted_in.clone()).await;
@@ -626,6 +626,15 @@ async fn treasury_native_opted_in_signs_to_the_allowlist_under_the_ceiling() {
 		"treasury native on an uncapped rail",
 	);
 	assert!(status.message().contains("SIGNER_MAX_TREASURY_NATIVE"), "{status:?}");
+	// The native allowlist is not the USDT one: with SIGNER_DESTINATION_ALLOWLIST unset, a USDT
+	// payout to an arbitrary address — a user's withdrawal — is still signed.
+	let mut payout = erc20(TREASURY, "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", &rail.user_address, 1, GWEI, 60_000).into_inner();
+	payout.network = "polygon".to_owned();
+	payout.chain_id = 137;
+	rail.signer
+		.sign_erc20_transfer(Request::new(payout))
+		.await
+		.expect("a USDT withdrawal to an address only the native list would refuse is signed");
 	db.cleanup().await;
 }
 

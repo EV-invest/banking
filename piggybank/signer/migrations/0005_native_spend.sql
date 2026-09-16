@@ -8,8 +8,10 @@
 -- `msg_value` or the Toncoin amount — and refuses when the window's total would exceed the
 -- rail's `SIGNER_MAX_NATIVE_SPEND_PER_HOUR_*`. Check and insert run in one transaction under
 -- `pg_advisory_xact_lock(hashtext(wallet_id), hashtext(network))`, so two concurrent requests
--- cannot both see the window as open. A row is written whether or not the signature then
--- succeeds: counting a failed attempt against the window is the conservative side.
+-- cannot both see the window as open. A row is written BEFORE the signature is asked for,
+-- so a concurrent request sees the window as taken; if the request then fails before a
+-- signature exists (the backend refuses, a later window is full) the handler deletes the row
+-- again — a signed request keeps it whatever happens afterwards.
 --
 -- `spend` is NUMERIC(39,0): a `u128` wei amount (up to 3.4e38, 39 digits) does not fit a
 -- BIGINT, and the signer binds it as text on the way in and reads the window's SUM back as
