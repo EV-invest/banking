@@ -876,7 +876,14 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   backstop behind the gate; a shortfall **parks** (`Rejected`) rather than retrying, so an
   underfunded rail can't wedge the single-worker drain. That residual park is rare,
   operator-visible (reconciliation), and recovered via
-  [`docs/RUNBOOK-withdrawals.md`](../../docs/RUNBOOK-withdrawals.md). On BSC and TON a node
+  [`docs/RUNBOOK-withdrawals.md`](../../docs/RUNBOOK-withdrawals.md). A **gas-price spike**
+  is the one market condition checked *before* that read: an EVM rail compares the node's
+  `eth_gasPrice` quote against the hub's own ceiling (`BSC_MAX_GAS_PRICE_GWEI` /
+  `POLYGON_MAX_GAS_PRICE_GWEI`, defaulting to the signer's fee-budget values) and, above it,
+  reports `Unavailable` — retried from the same `seq` on the relay's next pass, so the
+  withdrawal resumes by itself when the spike passes. Only a quote under the hub's ceiling
+  reaches the signer; its own `PermissionDenied` is a policy verdict and still parks, which
+  is why the hub's ceiling must stay ≤ the signer's. On BSC and TON a node
   rejection of a *first-ever* send additionally frees its stored nonce/seqno (`discard_tx`)
   so the sequence never gaps at a slot nothing will fill.
 - **Provable death before re-sign (TRON/TON).** A nonce-free rail (TRON, TON) can only

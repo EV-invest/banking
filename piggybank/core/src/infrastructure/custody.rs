@@ -13,6 +13,13 @@
 //! [`Usdt::from_onchain`]. The on-chain SETTLE (reducing the ledger's rail custody) is a separate
 //! step — an operator's `SettleWithdrawal` (or the confirmation watcher) on the mined
 //! transaction; this adapter only gets the bytes onto the chain.
+//!
+//! **Gas-price spikes are transient, not refusals.** The node's `eth_gasPrice` quote is checked
+//! against the hub's own per-rail ceiling (`EvmConfig::max_gas_price_gwei`) BEFORE the treasury
+//! read or the signer call: above it, the broadcast reports `Unavailable`, which the relay retries
+//! from the same `seq` on its next pass (see `relay.rs`) — the spike passes on its own. Only a
+//! quote that clears the hub's ceiling reaches the signer's fee budget; a signer refusal there is
+//! a policy verdict and stays a park, which is why the hub's ceiling must not exceed the signer's.
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -33,6 +40,9 @@ use uuid::Uuid;
 /// The reserved sweep gas-station wallet id (see `sweep.rs` — same convention): a
 /// native-coin-only account (BNB/POL) whose funding view rides along on the treasury screen.
 const GAS_STATION: Uuid = Uuid::from_u128(1);
+
+/// Wei per gwei — the operator configures the gas-price ceiling in gwei, the node quotes wei.
+const WEI_PER_GWEI: u128 = 1_000_000_000;
 
 use crate::{
 	config::EvmConfig,
@@ -136,6 +146,8 @@ pub struct ChainCustody {
 	chain_id: u64,
 	usdt_contract: String,
 	gas_limit: u64,
+	/// The hub's ceiling on the node's gas-price quote, in wei (see [`gas_price_within_ceiling`]).
+	max_gas_price_wei: u128,
 	/// Blocks a transfer must be buried under before it counts. Shared with the deposit
 	/// scan so a hand-verified arrival is held to the same reorg safety as a scanned one.
 	confirmations: u64,
@@ -158,6 +170,7 @@ impl ChainCustody {
 			chain_id: evm.chain_id,
 			usdt_contract: evm.usdt_contract.clone(),
 			gas_limit: evm.gas_limit,
+			max_gas_price_wei: u128::from(evm.max_gas_price_gwei) * WEI_PER_GWEI,
 			confirmations: evm.confirmations,
 			treasury_address: OnceCell::new(),
 			gas_station_address: OnceCell::new(),
@@ -382,6 +395,10 @@ impl Custody for ChainCustody {
 
 		let treasury = self.treasury_address().await?;
 		let gas_price = self.rpc.gas_price().await.map_err(read_err)?;
+		// A spike above the hub's ceiling is transient: retry on a later pass rather than
+		// letting the signer's fee budget turn a market condition into a park. Checked before
+		// the treasury read so a spike does not also read as "gas underfunded" (a park).
+		gas_price_within_ceiling(self.network, gas_price, self.max_gas_price_wei)?;
 		// Balance Read-First BEFORE the nonce exists — an underfunded treasury parks the
 		// withdrawal without ever burning a slot in the nonce sequence.
 		self.ensure_treasury_funded(&treasury, request, gas_price).await?;
@@ -549,6 +566,22 @@ fn split_evm_tx_ref(tx_ref: &str) -> Option<(String, u64)> {
 	Some((hash.to_lowercase(), index.trim().parse().ok()?))
 }
 
+/// The withdrawal gas-price pre-check: a node quote above the hub's ceiling is a market
+/// spike — `Unavailable`, so the relay retries from the same `seq` on its next pass and the
+/// withdrawal resumes by itself once the spike passes. A quote AT the ceiling is fine (the
+/// signer's own budget is inclusive too). Without this, the spike would reach the signer and
+/// come back as `PermissionDenied` → `Rejected` → parked until a manual unpark (#370).
+fn gas_price_within_ceiling(network: Network, quoted_wei: u128, ceiling_wei: u128) -> Result<(), CustodyError> {
+	if quoted_wei <= ceiling_wei {
+		return Ok(());
+	}
+	Err(CustodyError::Unavailable(format!(
+		"gas price {} gwei above the hub's ceiling {} gwei on {network} — retrying on the next drain pass",
+		format_native_units(quoted_wei, 9),
+		format_native_units(ceiling_wei, 9)
+	)))
+}
+
 /// A read-path RPC failure (nonce/gas) is always retryable — nothing was sent.
 fn read_err(err: RpcError) -> CustodyError {
 	CustodyError::Unavailable(err.to_string())
@@ -568,7 +601,8 @@ fn already_accepted(msg: &str) -> bool {
 mod tests {
 	use domain::money::{Network, Usdt};
 
-	use super::{already_accepted, onchain_transfer_amount, split_evm_tx_ref};
+	use super::{WEI_PER_GWEI, already_accepted, gas_price_within_ceiling, onchain_transfer_amount, split_evm_tx_ref};
+	use crate::ports::custody::CustodyError;
 
 	/// The reference is operator-typed, so this parse is the outer edge of the verification.
 	/// Everything it lets through is looked up on-chain; everything malformed must be refused
@@ -598,6 +632,24 @@ mod tests {
 		assert!(already_accepted("transaction already imported"));
 		assert!(!already_accepted("insufficient funds for gas * price + value"));
 		assert!(!already_accepted("nonce too low"));
+	}
+
+	/// A gas-price spike is a market condition the relay must retry, never a policy refusal
+	/// that parks: only a quote strictly above the ceiling trips the pre-check, and it trips
+	/// as `Unavailable` (retry from the same `seq`), not `Rejected` (park until unparked).
+	#[test]
+	fn a_gas_price_spike_is_transient_not_a_refusal() {
+		let ceiling = 5_000 * WEI_PER_GWEI;
+		assert!(gas_price_within_ceiling(Network::Polygon, ceiling, ceiling).is_ok());
+		assert!(gas_price_within_ceiling(Network::Polygon, 0, ceiling).is_ok());
+		match gas_price_within_ceiling(Network::Polygon, ceiling + 1, ceiling) {
+			Err(CustodyError::Unavailable(detail)) => {
+				assert!(detail.contains("5000.000000001 gwei"), "quote: {detail}");
+				assert!(detail.contains("ceiling 5000 gwei"), "ceiling: {detail}");
+				assert!(detail.contains("on polygon"), "rail: {detail}");
+			}
+			other => panic!("a spike must be Unavailable, got {other:?}"),
+		}
 	}
 
 	#[test]
