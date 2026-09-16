@@ -40,15 +40,10 @@ test("no cabinet route has a loading boundary — the premise behind prefetch={f
 
 test("cabinet links opt out of automatic prefetching unless the caller says otherwise", () => {
   const source = readFileSync(LINK_SOURCE, "utf8");
-  const element = source.match(/<NextLink\b[^>]*\/>/);
-  assert.ok(element, "cabinet-link.tsx renders a single <NextLink … />");
-  const props = element[0];
-  const prefetchAt = props.indexOf("prefetch={false}");
-  const spreadAt = props.indexOf("{...props}");
-  assert.ok(prefetchAt !== -1, "the default must be prefetch={false} (banking#349)");
-  assert.ok(spreadAt !== -1, "the caller's props must still be spread onto the link");
+  // The default sits immediately before the caller's spread, so an explicit `prefetch`
+  // from a caller with a reason still wins.
   assert.ok(
-    prefetchAt < spreadAt,
-    "prefetch={false} is a default, so it goes before {...props} — a caller with a reason can override it",
+    source.includes("prefetch={false} {...props}"),
+    "cabinet-link.tsx must render <NextLink … prefetch={false} {...props} /> (banking#349)",
   );
 });
