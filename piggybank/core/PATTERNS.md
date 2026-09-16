@@ -719,7 +719,7 @@ per-transfer USDT cap (`SIGNER_MAX_TRANSFER_USDT`, default 100), a per-hour USDT
 (`SIGNER_MAX_TREASURY_USDT_PER_HOUR`, default 1000), the pinned USDT contract
 (`SIGNER_USDT_CONTRACT_{BEP20,POLYGON,TRC20}`, mainnet by default) and an optional destination
 allowlist (`SIGNER_DESTINATION_ALLOWLIST`); treasury-native transfers are refused unless
-`SIGNER_ALLOW_TREASURY_NATIVE` plus an allowlist and `SIGNER_MAX_TREASURY_NATIVE_*` opt in. A
+`SIGNER_ALLOW_TREASURY_NATIVE` plus `SIGNER_TREASURY_NATIVE_ALLOWLIST` and `SIGNER_MAX_TREASURY_NATIVE_*` opt in (a window refusal parks the withdrawal — an alert, not a retry). A
 **sweep** (from a deposit address) may only go to the treasury address the signer holds for
 that network; a **gas top-up** (from the gas station) may only be native, only to an address
 the signer holds a key for, and at most `SIGNER_MAX_GAS_TOPUP_*`. Every wallet also has a
