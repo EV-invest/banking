@@ -56,6 +56,8 @@ uuid = { workspace = true, features = ["v4", "v5"] }
 
 [dev-dependencies]
 domain.workspace = true
+# The TLS test server needs a crypto provider installed — see the workspace manifest.
+rustls.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
 tokio-util.workspace = true
 uuid = { workspace = true, features = ["v4"] }
