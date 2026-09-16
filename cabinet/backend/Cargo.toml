@@ -21,6 +21,10 @@ ev = { workspace = true, features = ["analytics", "error_monitoring", "otel", "s
 evbanking_contracts.workspace = true
 evconcierge_auth.workspace = true
 evconcierge_contracts.workspace = true
+# The one outbound HTTP client: the admin deployments page enriches the mounted
+# deployed-versions ConfigMap from the public GitHub API (`json` + rustls, as in
+# piggybank-core — no native TLS anywhere in the workspace).
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 serde.workspace = true
 serde_json.workspace = true
 subtle.workspace = true

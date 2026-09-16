@@ -713,6 +713,7 @@ mod book_route_tests {
 			approvals: Arc::new(crate::routes::approval::AttemptLimiter::default()),
 			verifier,
 			grpc: Grpc::connect_lazy(&endpoint, &endpoint, &endpoint, Some("test-issuance".into())).expect("build the lazy channels"),
+			deployments: Arc::new(crate::deployments::Deployments::new(config.deployed_versions_dir.clone(), None)),
 			config: Arc::new(config),
 		})
 	}

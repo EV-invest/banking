@@ -7,13 +7,14 @@ import { useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { unparkEvent } from "@/entities/admin/api/admin-client";
-import { overviewResource, parkedEventsResource } from "@/entities/admin/model/admin-resource";
+import { deploymentsResource, overviewResource, parkedEventsResource } from "@/entities/admin/model/admin-resource";
 import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ago, statusLabel } from "@/views/admin/lib/format";
 import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
+import { DeployedVersions } from "@/views/admin/overview/ui/deployed-versions";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
 
 export function OverviewView() {
@@ -31,18 +32,21 @@ export function OverviewView() {
   // together — the "Parked rows" KPI and the table below it must never disagree.
   const overviewRead = useResource(overviewResource);
   const parkedRead = useResource(parkedEventsResource);
+  // Same tag again: what is running is the first question after a health check goes red.
+  const deploymentsRead = useResource(deploymentsResource);
   const overview = overviewRead.data ?? null;
   const parked = parkedRead.data ? (parkedRead.data.events ?? []) : null;
+  const deployments = deploymentsRead.data ?? null;
   const error = overview || !overviewRead.error ? null : errorMessage(overviewRead.error, t);
   // Best-effort: a money plane that isn't connected renders as a muted hint, not an error
   // banner — the fleet grid above must stay useful without it.
   const parkedHint = parked || !parkedRead.error ? null : errorMessage(parkedRead.error, t);
 
-  // Manual "Run health check". Both, so the KPI and the table agree.
+  // Manual "Run health check". All three, so the KPI, the table and the versions agree.
   const load = () => {
     setRefreshing(true);
     setRefetchError(null);
-    void Promise.allSettled([overviewRead.refresh(), parkedRead.refresh()]).then(() => {
+    void Promise.allSettled([overviewRead.refresh(), parkedRead.refresh(), deploymentsRead.refresh()]).then(() => {
       setUnparked(new Set());
       setRefreshing(false);
     });
@@ -167,6 +171,12 @@ export function OverviewView() {
             <ObsPanel label={t("admin.overview.obs.eventStreamLabel")} hint={t("admin.overview.obs.eventStream")} />
           </CardContent>
         </Card>
+      </StaggerItem>
+
+      <StaggerItem>
+        {/* Best-effort, like the parked list: a BFF without the endpoint yet must not take
+            the fleet grid down with it, so the failure stays inside the card. */}
+        <DeployedVersions deployments={deployments} error={deployments ? null : deploymentsRead.error} onRetry={() => void deploymentsRead.refresh()} retrying={deploymentsRead.isValidating} />
       </StaggerItem>
 
       <StaggerItem as={Card}>
