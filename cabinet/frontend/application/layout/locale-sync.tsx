@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 import { useLocale } from "@evinvest/i18n/react";
 
-import { decideLocaleSync } from "@/shared/lib/locale-sync";
+import { decideLocaleSync } from "@/entities/user/lib/locale-sync";
 import { profileResource } from "@/entities/user/model/profile-resource";
 import { relocalise } from "@/shared/config/base-path";
 import { writeLocaleCookie } from "@/shared/lib/locale-cookie";
@@ -16,7 +16,7 @@ import { useResource } from "@/shared/lib/resource";
 //
 // Renders nothing and mounts once, in the signed-in `(app)` layout: the profile only
 // exists for a signed-in reader, and `(auth)` deliberately has no session to read one
-// with. The rule itself is `decideLocaleSync` in `shared/lib/locale-sync.ts`;
+// with. The rule itself is `decideLocaleSync` in `entities/user/lib/locale-sync.ts`;
 // this file only gathers its inputs and carries out the verdict.
 export function LocaleSync() {
   const locale = useLocale();
