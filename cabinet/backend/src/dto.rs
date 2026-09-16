@@ -7,8 +7,6 @@ use evbanking_contracts::banking::v1 as bk;
 use evconcierge_contracts::concierge::v1 as cc;
 use serde::Serialize;
 
-use crate::deployments;
-
 /// Declares one of the list DTOs: a `Vec` of an already-converted element type, the scalar
 /// fields the wire shape carries alongside it, and the `From` that builds it from the proto
 /// message. Every name is spelled out at the call site rather than derived from the DTO's,
@@ -1055,129 +1053,6 @@ impl From<bk::BookEvent> for BookEvent {
 
 // ── admin console ─────────────────────────────────────────────────────────────
 
-/// One fleet-health row (Overview). Backend-sourced where a plane serves it; the
-/// frontend renders the rest (Sentry/PostHog/incidents) against the shared obs libs.
-#[derive(Serialize)]
-pub struct FleetService {
-	pub name: String,
-	pub kind: String,
-	pub status: String,
-	pub detail: String,
-}
-
-/// Per-rail deposit scan-cursor age from Readiness — a growing age means deposits are
-/// confirming on-chain but not being credited.
-#[derive(Serialize)]
-pub struct DepositScan {
-	pub network: String,
-	pub age_secs: String,
-}
-
-#[derive(Serialize)]
-pub struct AdminOverview {
-	pub services: Vec<FleetService>,
-	/// Parked outbox rows on the money plane (the "money didn't move" set), from Readiness.
-	pub parked_rows: String,
-	pub backlog: String,
-	pub oldest_backlog_age_secs: String,
-	pub deposit_scan: Vec<DepositScan>,
-	/// Signer unseal failures on money-moving paths since the hub booted — any non-zero
-	/// value means a provably dead key (KEK epoch) was asked to sign; funds are stranded.
-	pub unseal_failures: String,
-}
-
-/// `GET /api/admin/deployments` — what runs in production, per component, with the
-/// GitHub side of each version. The frontend is written to exactly this shape.
-#[derive(Serialize)]
-pub struct AdminDeployments {
-	/// `false` when no deployed-versions directory is mounted (local development).
-	pub available: bool,
-	/// RFC 3339 UTC.
-	pub fetched_at: String,
-	pub components: Vec<DeployedComponent>,
-}
-
-#[derive(Serialize)]
-pub struct DeployedComponent {
-	pub name: String,
-	/// The image reference without its tag.
-	pub image: String,
-	pub tag: String,
-	/// `owner/name` on GitHub; `None` when the source is elsewhere or unknown.
-	pub repo: Option<String>,
-	pub repo_url: Option<String>,
-	pub tag_url: Option<String>,
-	/// `null` until GitHub has answered — see `github_error` for why it has not.
-	pub release: Option<ReleaseInfo>,
-	/// The newest release tag in the repository; equal to `tag` when everything is out.
-	pub latest_tag: Option<TagRef>,
-	pub github_error: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct ReleaseInfo {
-	pub commit_sha: String,
-	pub commit_url: String,
-	pub committed_at: String,
-	pub pr: Option<PullRef>,
-}
-
-#[derive(Serialize)]
-pub struct PullRef {
-	pub number: String,
-	pub title: String,
-	pub url: String,
-	pub merged_at: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct TagRef {
-	pub tag: String,
-	pub url: String,
-}
-
-impl From<deployments::Report> for AdminDeployments {
-	fn from(report: deployments::Report) -> Self {
-		Self {
-			available: report.available,
-			fetched_at: rfc3339(report.fetched_at),
-			components: report.components.into_iter().map(DeployedComponent::from).collect(),
-		}
-	}
-}
-
-impl From<deployments::Component> for DeployedComponent {
-	fn from(c: deployments::Component) -> Self {
-		let tree = |tag: &str| c.repo_url.as_ref().map(|repo_url| format!("{repo_url}/tree/{tag}"));
-		Self {
-			tag_url: tree(&c.tag),
-			latest_tag: c.latest_tag.as_deref().and_then(|tag| {
-				Some(TagRef {
-					tag: tag.to_owned(),
-					url: tree(tag)?,
-				})
-			}),
-			release: c.release.map(|r| ReleaseInfo {
-				commit_sha: r.commit_sha,
-				commit_url: r.commit_url,
-				committed_at: r.committed_at,
-				pr: r.pr.map(|p| PullRef {
-					number: p.number.to_string(),
-					title: p.title,
-					url: p.url,
-					merged_at: p.merged_at,
-				}),
-			}),
-			name: c.name,
-			image: c.image,
-			tag: c.tag,
-			repo: c.repo,
-			repo_url: c.repo_url,
-			github_error: c.github_error,
-		}
-	}
-}
-
 /// A user row in the operator user list.
 #[derive(Serialize)]
 pub struct AdminUserSummary {
@@ -1299,7 +1174,7 @@ impl From<bk::Treasury> for Treasury {
 	}
 }
 
-/// One outbox row the relay parked — the "money didn't move" set (Overview screen).
+/// One outbox row the relay parked — the "money didn't move" set (Outbox screen).
 /// `reason` is the relay's last error; a `compensated` row already ran its recovery and
 /// must never be unparked (the hub refuses).
 #[derive(Serialize)]

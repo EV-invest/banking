@@ -55,14 +55,26 @@ async fn run() -> color_eyre::Result<()> {
 	kek_guard::enforce(&vault, &secrets).await.context("KEK epoch guard refused to serve")?;
 
 	// The signer's independent spend policy — the second gate that holds even if the hub is
-	// compromised. The fee budget is always on; the cap/allowlist are no-ops until an operator
-	// sets them.
+	// compromised. The per-class rules (sweep → treasury only, gas station → own addresses
+	// only, deposit native never), the fee budget, the top-up cap, the treasury USDT caps and
+	// the spend windows are always on; only the allowlist is a no-op until an operator sets it.
 	let policy = SignerPolicy::from_env().context("failed to load signer spend policy")?;
-	tracing::info!(fee_budget = ?policy.fee_budget(), treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(), "signer fee budget active");
-	if policy.is_active() {
-		tracing::info!(max_transfer_usdt = ?policy.max_transfer_usdt(), allowlisted_destinations = policy.allowlist_len(), "signer spend policy active");
-	} else {
-		tracing::warn!("signer spend policy inactive — no per-transfer cap or destination allowlist (set SIGNER_MAX_TRANSFER_USDT before scaling liquidity)");
+	tracing::info!(
+		fee_budget = ?policy.fee_budget(),
+		gas_topup_caps = ?policy.gas_topup(),
+		token_pins = ?policy.token_pins(),
+		max_transfer_usdt = policy.max_transfer_usdt(),
+		treasury_usdt_per_hour = policy.treasury_usdt_per_hour(),
+		allowlisted_destinations = policy.allowlist_len(),
+		treasury_native_allowlisted_destinations = policy.treasury_native_allowlist_len(),
+		treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(),
+		treasury_native = ?policy.treasury_native(),
+		native_spend_per_hour = ?policy.native_spend(),
+		tron_signing_enabled = policy.tron_signing_enabled(),
+		"signer spend policy active: sweeps only to the treasury, gas top-ups only to own addresses, no native out of deposit wallets, treasury native off unless opted in, treasury USDT capped per payout and per hour, native spend windowed per wallet, jetton wallets pinned on first use"
+	);
+	if !policy.treasury_jetton_wallet_pinned() {
+		tracing::warn!("treasury jetton wallet will be pinned on first use — set SIGNER_TON_TREASURY_JETTON_WALLET");
 	}
 
 	// Where NEW keys are minted and existing ones signed. `local` is the default and the

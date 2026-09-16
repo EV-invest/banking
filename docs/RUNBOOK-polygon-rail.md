@@ -57,7 +57,9 @@ Required to turn the rail on:
 Sensible defaults (override only to deviate): `POLYGON_USDT_CONTRACT`, `POLYGON_CHAIN_ID` (137),
 `POLYGON_CONFIRMATIONS` (128), `POLYGON_POLL_SECS` (6), `POLYGON_MAX_BLOCK_RANGE` (500 in code,
 **overridden to 100 in the prod env** — see above), `POLYGON_GAS_LIMIT` (100_000),
-`POLYGON_DEPOSIT_START_BLOCK` (unset ⇒ watch from head).
+`POLYGON_MAX_GAS_PRICE_GWEI` (5_000 — the hub's ceiling on the node's gas-price quote; a spike
+above it is retried on the next drain pass instead of parking; keep it ≤ the signer's
+`SIGNER_MAX_GAS_PRICE_GWEI_POLYGON`), `POLYGON_DEPOSIT_START_BLOCK` (unset ⇒ watch from head).
 
 Sweep (opt-in, moves user funds on-chain — leave OFF until funded): `POLYGON_SWEEP_ENABLED`
 (falls back to the global `SWEEP_ENABLED`), `POLYGON_SWEEP_MIN_USDT` (1_000_000 = 1 USDT @ 6-dp),

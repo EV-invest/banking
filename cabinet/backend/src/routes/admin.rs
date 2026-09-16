@@ -75,69 +75,6 @@ fn rate_field(v: &Value, key: &str) -> Option<u32> {
 	required_u32(v, key)
 }
 
-// ── overview (fleet health; health RPCs are public — no token) ─────────────────
-
-/// `GET /api/admin/overview` — fleet health across the two hubs + the money plane's
-/// readiness diagnostics. The frontend composes the remaining rows (microservices,
-/// redis, Sentry, PostHog) against the shared observability libs.
-pub async fn overview(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AdminOverview>, ApiError> {
-	require_admin(&st, &jar).await?;
-
-	let mut services = Vec::new();
-	let core = st.grpc.check().await;
-	let core_ok = core.is_ok();
-	services.push(fleet("piggybank · core", "hub", core_ok, core.map(|c| c.status).unwrap_or_else(|_| "unreachable".into())));
-	// Auth runs in-process with core, so it shares core's liveness.
-	services.push(fleet("piggybank · auth", "hub", core_ok, if core_ok { "ok".into() } else { "unreachable".into() }));
-
-	let readiness = st.grpc.readiness().await.ok();
-	if let Some(r) = &readiness {
-		services.push(fleet("postgres", "datastore", r.db_ok, if r.db_ok { "ok".into() } else { "unreachable".into() }));
-		services.push(fleet("tigerbeetle", "datastore", r.ledger_ok, if r.ledger_ok { "ok".into() } else { "unreachable".into() }));
-	}
-
-	let concierge = st.grpc.concierge_check().await;
-	services.push(fleet("concierge", "hub", concierge.is_ok(), concierge.map(|c| c.status).unwrap_or_else(|_| "unreachable".into())));
-
-	Ok(Json(dto::AdminOverview {
-		services,
-		parked_rows: readiness.as_ref().map(|r| r.parked_rows.to_string()).unwrap_or_else(|| "0".into()),
-		backlog: readiness.as_ref().map(|r| r.backlog.to_string()).unwrap_or_else(|| "0".into()),
-		oldest_backlog_age_secs: readiness.as_ref().map(|r| r.oldest_backlog_age_secs.to_string()).unwrap_or_else(|| "0".into()),
-		deposit_scan: readiness
-			.as_ref()
-			.map(|r| {
-				r.scan_cursors
-					.iter()
-					.map(|c| dto::DepositScan {
-						network: c.network.clone(),
-						age_secs: c.age_secs.to_string(),
-					})
-					.collect()
-			})
-			.unwrap_or_default(),
-		unseal_failures: readiness.as_ref().map(|r| r.unseal_failures.to_string()).unwrap_or_else(|| "0".into()),
-	}))
-}
-
-/// `GET /api/admin/deployments` — which version of every component is in production,
-/// with the tag's commit and pull request and the newest tag of each repository. Read
-/// from the mounted deployed-versions ConfigMap and enriched from GitHub through the
-/// in-process cache; a GitHub failure degrades a row, never the page.
-pub async fn deployments(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AdminDeployments>, ApiError> {
-	require_admin(&st, &jar).await?;
-	Ok(Json(st.deployments.report().await.into()))
-}
-
-fn fleet(name: &str, kind: &str, healthy: bool, detail: String) -> dto::FleetService {
-	dto::FleetService {
-		name: name.into(),
-		kind: kind.into(),
-		status: if healthy { "healthy".into() } else { "degraded".into() },
-		detail,
-	}
-}
-
 // ── users (concierge identity plane) ───────────────────────────────────────────
 
 /// `GET /api/admin/users` — paginated/filtered user list.
@@ -1960,8 +1897,6 @@ mod admin_route_tests {
 				"AUTH_ISSUER" => ISSUER.into(),
 				"AUTH_CLIENT_AUDIENCE" => AUDIENCE.into(),
 				"MFE_REGISTRY_PATH" => "/mfe-registry.json".into(),
-				// Nothing mounted: the deployments page must answer "not available", not error.
-				"DEPLOYED_VERSIONS_DIR" => "/nonexistent/deployed-versions".into(),
 				"APP_ENV" => "development".into(),
 				_ => return None,
 			})
@@ -1982,7 +1917,6 @@ mod admin_route_tests {
 			approvals: Arc::new(crate::routes::approval::AttemptLimiter::default()),
 			verifier,
 			grpc: Grpc::connect_lazy(&endpoint, &endpoint, &endpoint, Some("test-issuance".into())).expect("build the lazy channels"),
-			deployments: Arc::new(crate::deployments::Deployments::new(config.deployed_versions_dir.clone(), None)),
 			config: Arc::new(config),
 		})
 	}
@@ -2076,23 +2010,6 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not price a fund");
 
 		assert!(seen.lock().unwrap().set_policy.is_none(), "a refused caller must never reach the hub");
-	}
-
-	/// The deployments page sits behind the coarse console gate like the overview, and
-	/// without a mounted deployed-versions directory it says so with a 200 — local
-	/// development and a misconfigured mount must not read as a broken console.
-	#[tokio::test]
-	async fn the_deployments_page_is_gated_and_honest_about_an_empty_mount() {
-		let investor = app(serve(Hub::new("investor")).await);
-		let (status, _) = send(&investor, signed("GET", "/api/admin/deployments", None, false)).await;
-		assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not see what is deployed");
-
-		let operator = app(serve(Hub::new("operator")).await);
-		let (status, body) = send(&operator, signed("GET", "/api/admin/deployments", None, false)).await;
-		assert_eq!(status, StatusCode::OK);
-		assert_eq!(body["available"], false);
-		assert_eq!(body["components"], serde_json::json!([]));
-		assert!(body["fetched_at"].as_str().is_some_and(|t| t.ends_with('Z')), "{body}");
 	}
 
 	/// An `operator` passes the coarse console gate but not the fee one. The money plane

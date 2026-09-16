@@ -293,7 +293,10 @@ relay outage would otherwise ask its owner, once the relay is back, to vote on a
 nobody can act on (#342). Only the invitations go — the verdict mail the closing queues and
 any burn notice already queued still reach the audience — and they are taken back before
 the consilium and its seats are locked, so a cancel never waits on a delivery in flight
-while holding the seat that delivery will mark as notified.
+while holding the seat that delivery will mark as notified. Closing a payment order without
+a verdict — the operator withdrawing it, or its window running out — withdraws its
+undelivered consent invitation the same way, blanking the token and code, before the order
+is locked (#368).
 
 Every transaction over a product's terms — scheduling, the owners carrying, promotion —
 opens by locking the product's `allocations` row. The requirement an operator's request

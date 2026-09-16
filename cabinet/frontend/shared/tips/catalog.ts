@@ -108,15 +108,11 @@ export const tips = {
   "admin.users.identity.token-version": { type: "input", roles: OPS },
   "admin.users.status.suspend": { type: "input", roles: OPS },
 
-  // ── admin · overview ────────────────────────────────────────────────────────
-  "admin.overview.kpi.parked-rows": { type: "input", roles: OPS },
-  "admin.overview.kpi.dispatch-backlog": { type: "input", roles: OPS },
-  "admin.overview.kpi.oldest-backlog": { type: "input", roles: OPS },
-  "admin.overview.kpi.dead-key-signings": { type: "input", roles: OPS },
-  "admin.overview.parked-events": { type: "section", roles: OPS },
-  "admin.overview.parked.reason": { type: "input", roles: OPS },
-  "admin.overview.parked.compensated": { type: "input", roles: OPS },
-  "admin.overview.parked.unpark": { type: "input", roles: OPS },
+  // ── admin · outbox ──────────────────────────────────────────────────────────
+  "admin.outbox.parked-events": { type: "section", roles: OPS },
+  "admin.outbox.parked.reason": { type: "input", roles: OPS },
+  "admin.outbox.parked.compensated": { type: "input", roles: OPS },
+  "admin.outbox.parked.unpark": { type: "input", roles: OPS },
 
   // ── admin · treasury ────────────────────────────────────────────────────────
   "admin.treasury.two-layer-model": { type: "section", roles: OPS },

@@ -43,7 +43,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
       <td className="px-5 py-3 text-xs">
         <p>{requirementLabel(payment.requirement, t)}</p>
         {payment.consilium_id ? (
-          <Link href="/consilium" className="rounded-md text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+          <Link href="/consilium" className="rounded-md text-primary-ink underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
             {t("admin.payments.openConsilium")}
           </Link>
         ) : payment.consent ? (

@@ -12,8 +12,12 @@
 //! every test here takes [`exclusive_payments`] and starts from [`reset_payments`]. The reset
 //! runs at the START of each test so a panicking one cannot wedge the rest.
 
-use std::sync::Arc;
+use std::sync::{
+	Arc,
+	atomic::{AtomicBool, Ordering},
+};
 
+use async_trait::async_trait;
 use domain::{
 	balance::{LedgerAccountKey, Party, TransferCode},
 	consilium::ConsiliumId,
@@ -24,9 +28,10 @@ use domain::{
 	withdrawals::WithdrawalId,
 };
 use piggybank_core::{
-	infrastructure::{custody::StubCustody, payments::PgPayments, relay::Relay, users::PgUsers},
+	infrastructure::{consilium_mailer::ConsiliumMailer, custody::StubCustody, payments::PgPayments, relay::Relay, users::PgUsers},
 	ports::{
 		LedgerTransfer, UserRepository,
+		governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError},
 		payments::{ApprovalSeat, ConsentAudit, ConsentCredential, ConsentDecision, ExecutionOutcome, MAX_CODE_ATTEMPTS, PaymentFeed, PaymentFilter, PaymentRepository},
 	},
 };
@@ -308,6 +313,13 @@ async fn a_consent_seat(pool: &PgPool, subject: UserId) -> ApprovalSeat {
 fn token_hash_of(seat: &ApprovalSeat) -> [u8; 32] {
 	match seat {
 		ApprovalSeat::Consent(credential) => credential.token_hash,
+		ApprovalSeat::Consilium(_) => unreachable!("this helper mints consent seats"),
+	}
+}
+
+fn token_of(seat: &ApprovalSeat) -> &str {
+	match seat {
+		ApprovalSeat::Consent(credential) => &credential.token,
 		ApprovalSeat::Consilium(_) => unreachable!("this helper mints consent seats"),
 	}
 }
@@ -625,6 +637,162 @@ async fn the_feed_filters_and_the_sweep_close_what_nobody_answered() {
 	assert_eq!(payments.find(investors_order).await.unwrap().unwrap().order.state(), PaymentState::Expired);
 
 	sqlx::query("DELETE FROM consilium WHERE initiator_user_id = $1").bind(investor.raw()).execute(&pool).await.ok();
+	reset_payments(&pool).await;
+}
+
+/// The identity plane's relay, stood in for at the mailer's port: DOWN (every send
+/// deferred, as an unreachable concierge is) or UP (every send taken and kept, with the
+/// recipient it was addressed to), switched by the test.
+#[derive(Default)]
+struct SwitchedRelay {
+	down: AtomicBool,
+	seen: std::sync::Mutex<Vec<(Uuid, GovernanceMail)>>,
+}
+
+#[async_trait]
+impl GovernanceMailer for SwitchedRelay {
+	async fn send(&self, recipient: Uuid, _dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError> {
+		if self.down.load(Ordering::SeqCst) {
+			return Err(MailDeliveryError::Deferred("governance mail relay: status: Unavailable".into()));
+		}
+		self.seen.lock().unwrap().push((recipient, mail.clone()));
+		Ok(())
+	}
+}
+
+/// The queue is shared by every suite on this database and drained in batches of 100 by id,
+/// so a test that runs the mailer first retires the backlog the others left behind.
+async fn quiet_queue(pool: &PgPool) {
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE sent_at IS NULL AND withdrawn_at IS NULL")
+		.execute(pool)
+		.await
+		.expect("retire the backlog");
+}
+
+/// The one consent row an order queued, as the queue holds it: `(sent, withdrawn, code,
+/// approval_url)`.
+async fn consent_mail(pool: &PgPool, order: PaymentId) -> (bool, bool, String, String) {
+	sqlx::query_as(
+		"SELECT sent_at IS NOT NULL, withdrawn_at IS NOT NULL, payload ->> 'code', payload ->> 'approval_url' \
+		 FROM consilium_mail WHERE payment_id = $1 AND kind = 'payment_consent'",
+	)
+	.bind(order.raw())
+	.fetch_one(pool)
+	.await
+	.expect("exactly one consent mail per order")
+}
+
+async fn consent_notified(pool: &PgPool, order: PaymentId) -> bool {
+	sqlx::query_scalar("SELECT notified FROM payment_consent WHERE payment_id = $1")
+		.bind(order.raw())
+		.fetch_one(pool)
+		.await
+		.expect("the seat row")
+}
+
+/// Stand in for a deferred row's backoff having run out, so the next pass asks the relay again.
+async fn let_the_backoff_run(pool: &PgPool, order: PaymentId) {
+	sqlx::query("UPDATE consilium_mail SET next_attempt_at = NULL WHERE payment_id = $1")
+		.bind(order.raw())
+		.execute(pool)
+		.await
+		.expect("clear the backoff");
+}
+
+/// Closing an order without a verdict — the operator withdrawing it, or its window running
+/// out — takes back the consent invitation the relay has not taken, with its token and code
+/// blanked (#368). Left in the queue, the relay coming back would ask the investor to consent
+/// to an order nobody can act on, with a token that still resolves. A consent already
+/// delivered stands: the row says sent, never withdrawn, and its secrets were stripped at
+/// delivery.
+#[tokio::test]
+async fn withdrawing_or_expiring_an_order_withdraws_the_consent_mail_the_relay_has_not_taken() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	quiet_queue(&pool).await;
+	let investor = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let relay = Arc::new(SwitchedRelay::default());
+	let mailer = ConsiliumMailer::new(pool.clone(), relay.clone());
+
+	// Relay down: the invitation is queued with its secrets, and every pass defers it.
+	relay.down.store(true, Ordering::SeqCst);
+	let mut first = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "5.00");
+	let withdrawn_order = first.id();
+	let seat = a_consent_seat(&pool, investor).await;
+	let token = token_of(&seat).to_owned();
+	payments.open(&mut first, seat, CONSENT_URL_BASE).await.expect("open the first order");
+	let (sent, withdrawn, code, url) = consent_mail(&pool, withdrawn_order).await;
+	assert_eq!((sent, withdrawn), (false, false));
+	assert_eq!(code, CODE, "queued with the plaintext code, to be delivered");
+	assert!(url.ends_with(&token), "queued with the token, to be delivered");
+	assert_eq!(mailer.drain().await.expect("a pass"), 0, "the relay is down: deferred, not delivered");
+	assert!(!consent_notified(&pool, withdrawn_order).await);
+
+	// The operator withdraws the order: the invitation goes with it, secrets and all.
+	payments.cancel(withdrawn_order, investor, now()).await.expect("the initiator may withdraw it");
+	let (sent, withdrawn, code, url) = consent_mail(&pool, withdrawn_order).await;
+	assert!(!sent, "never delivered");
+	assert!(withdrawn, "withdrawn with the order");
+	assert_eq!((code.as_str(), url.as_str()), ("", ""), "a credential nobody will ever be handed is blanked");
+	assert!(!consent_notified(&pool, withdrawn_order).await, "nobody was told");
+	assert_eq!(
+		piggybank_core::infrastructure::consilium_mailer::pending_count(&pool).await.unwrap(),
+		0,
+		"a withdrawn mail is not owed"
+	);
+
+	// The relay comes back: a withdrawn row is not the next pass's to deliver.
+	relay.down.store(false, Ordering::SeqCst);
+	let_the_backoff_run(&pool, withdrawn_order).await;
+	assert_eq!(mailer.drain().await.expect("a pass"), 0);
+	assert!(relay.seen.lock().unwrap().is_empty(), "the withdrawn invitation never reached the relay");
+
+	// The window running out closes the same way.
+	relay.down.store(true, Ordering::SeqCst);
+	let mut second = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "6.00");
+	let expired_order = second.id();
+	payments
+		.open(&mut second, a_consent_seat(&pool, investor).await, CONSENT_URL_BASE)
+		.await
+		.expect("open the second order");
+	assert_eq!(mailer.drain().await.expect("a pass"), 0);
+	let closed = payments.expire_due(now() + domain::payments::TTL_SECS + 1).await.expect("sweep");
+	assert_eq!(closed, 1, "the withdrawn order is already closed; only the pending one expires");
+	assert_eq!(payments.find(expired_order).await.unwrap().unwrap().order.state(), PaymentState::Expired);
+	let (sent, withdrawn, code, url) = consent_mail(&pool, expired_order).await;
+	assert_eq!((sent, withdrawn), (false, true));
+	assert_eq!((code.as_str(), url.as_str()), ("", ""));
+	assert!(!consent_notified(&pool, expired_order).await);
+	assert_eq!(piggybank_core::infrastructure::consilium_mailer::pending_count(&pool).await.unwrap(), 0);
+	relay.down.store(false, Ordering::SeqCst);
+	let_the_backoff_run(&pool, expired_order).await;
+	assert_eq!(mailer.drain().await.expect("a pass"), 0);
+	assert!(relay.seen.lock().unwrap().is_empty());
+
+	// Control: a delivered invitation stands. The relay took it, the seat says notified, and
+	// withdrawing the order afterwards neither takes the mail back nor unsays that.
+	let mut third = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "7.00");
+	let delivered_order = third.id();
+	payments
+		.open(&mut third, a_consent_seat(&pool, investor).await, CONSENT_URL_BASE)
+		.await
+		.expect("open the third order");
+	assert_eq!(mailer.drain().await.expect("a pass"), 1, "the relay is up: handed over");
+	assert!(matches!(relay.seen.lock().unwrap().as_slice(), [(_, GovernanceMail::PaymentConsent(_))]));
+	assert!(consent_notified(&pool, delivered_order).await, "the seat is notified once concierge has taken the message");
+	let (sent, withdrawn, code, _) = consent_mail(&pool, delivered_order).await;
+	assert_eq!((sent, withdrawn), (true, false));
+	assert_eq!(code, "", "redacted at delivery");
+	payments.cancel(delivered_order, investor, now()).await.expect("the initiator may withdraw it");
+	let (sent, withdrawn, _, _) = consent_mail(&pool, delivered_order).await;
+	assert_eq!((sent, withdrawn), (true, false), "a delivered mail is left as it is");
+	assert!(consent_notified(&pool, delivered_order).await);
+
 	reset_payments(&pool).await;
 }
 
@@ -1425,10 +1593,16 @@ async fn the_sweep_expires_what_nobody_consented_to() {
 		.order
 		.id();
 
+	// Read as the investor would have off a message delivered BEFORE the window ran out: the
+	// sweep blanks the queued copy (#368), so afterwards there is nothing left to read.
+	let (token, code) = consent_credentials(&a.pool, id).await;
+
 	let report = payments_app::sweep(&ports(&a), now() + domain::payments::TTL_SECS + 1).await.unwrap();
 	assert_eq!(report.expired, 1);
 	assert_eq!(payments_app::find(&a.payments, id).await.unwrap().order.state(), PaymentState::Expired);
-	let (token, code) = consent_credentials(&a.pool, id).await;
+	let (sent, withdrawn, queued_code, queued_url) = consent_mail(&a.pool, id).await;
+	assert_eq!((sent, withdrawn), (false, true), "the undelivered invitation went with the order");
+	assert_eq!((queued_code.as_str(), queued_url.as_str()), ("", ""), "and its secrets with it");
 	assert!(
 		matches!(
 			payments_app::submit_consent(&ports(&a), &token, &code, ConsentDecision::Approve, &audit(), now()).await,

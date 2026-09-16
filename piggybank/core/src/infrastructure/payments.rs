@@ -35,7 +35,7 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::{
-		consilium_mailer::{MailSubject, enqueue},
+		consilium_mailer::{MailSubject, enqueue, withdraw_undelivered_consent},
 		outbox, withdrawals,
 	},
 	ports::{
@@ -104,6 +104,7 @@ impl PgPayments {
 	/// and the lock, which is not a failure.
 	async fn expire_one(&self, id: Uuid, at: i64) -> Result<bool, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		withdraw_consent(&mut tx, PaymentId::from_raw(id)).await?;
 		let mut order = locked(&mut tx, PaymentId::from_raw(id)).await?;
 		if !order.state().is_pending() {
 			return Ok(false);
@@ -380,8 +381,30 @@ async fn lock_subject(conn: &mut PgConnection, payment: PaymentId) -> Result<(),
 	Ok(())
 }
 
+/// Take back the consent invitation a closing order still has queued (#368): an investor
+/// reached once the relay is back would be asked to consent to an order nobody can act on,
+/// with a token that still resolves. Runs BEFORE [`locked`] in every path that closes an
+/// order without a verdict — the worker flips the seat's `notified` while it holds the
+/// invitation's row, so this must not wait on that row with the order held
+/// ([`withdraw_undelivered_consent`]). Nothing of the transition is decided yet: an order
+/// found already decided under the lock has lost nothing but an invitation to a decision
+/// already made, and a rolled-back transition rolls this back with it. A no-op for a
+/// fund-owned order, whose seat is a consilium's and queues no consent mail.
+async fn withdraw_consent(conn: &mut PgConnection, id: PaymentId) -> Result<(), DomainError> {
+	let withdrawn = withdraw_undelivered_consent(conn, id.raw()).await?;
+	// `debug`, not `info`: the transaction is still open here and may yet roll back (a
+	// cancel refused as a stranger's, an expiry racing a consent), so this is what was
+	// ATTEMPTED, not what happened.
+	if withdrawn > 0 {
+		tracing::debug!(payment_id = %id, withdrawn, "payments: withdrawing the undelivered consent invitation with the closing order");
+	}
+	Ok(())
+}
+
 /// Load an order `FOR UPDATE` — the opening move of every transition here. The `payments` row
-/// is always the lock taken, and always first, so the transitions cannot deadlock each other.
+/// is always locked first, so the transitions cannot deadlock each other; the one thing taken
+/// ahead of it is the consent invitation a closing path withdraws, which no transition
+/// touches once it holds the order.
 async fn locked(conn: &mut PgConnection, id: PaymentId) -> Result<PaymentOrder, DomainError> {
 	let row = sqlx::query(concat!("SELECT ", payment_columns!(), " FROM payments p WHERE p.id = $1 FOR UPDATE"))
 		.bind(id.raw())
@@ -603,6 +626,7 @@ impl PaymentRepository for PgPayments {
 
 	async fn cancel(&self, id: PaymentId, by: UserId, at: i64) -> Result<PaymentView, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		withdraw_consent(&mut tx, id).await?;
 		let mut order = locked(&mut tx, id).await?;
 		if order.initiator() != by {
 			return Err(DomainError::Forbidden("only the operator who opened this payment may withdraw it".into()));

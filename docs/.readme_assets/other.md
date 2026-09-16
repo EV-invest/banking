@@ -8,6 +8,6 @@ All UI lives in one Figma file (`e0V2P1cQpEFRuXTeNtEMh6`) — a dark-navy system
 | ------- | ---- | ----- |
 | uikit | EV UIKit — tokens + component library (shadcn-class) | [node 10-2](https://www.figma.com/design/e0V2P1cQpEFRuXTeNtEMh6/Main?node-id=10-2) |
 | cabinet | Investor portal — `cabinet` host shell: **Banking** nav + **Products** (mounted service MFEs) + per-service surfaces; desktop + mobile | [node 75-3](https://www.figma.com/design/e0V2P1cQpEFRuXTeNtEMh6/Main?node-id=75-3) |
-| admin | Operator console over the central hub (`piggybank`) + microservices — fleet health, users, MFE registry, feature flags; desktop + mobile | [node 346-27](https://www.figma.com/design/e0V2P1cQpEFRuXTeNtEMh6/Main?node-id=346-27) |
+| admin | Operator console over the central hub (`piggybank`) + microservices — users, outbox, MFE registry, feature flags; desktop + mobile | [node 346-27](https://www.figma.com/design/e0V2P1cQpEFRuXTeNtEMh6/Main?node-id=346-27) |
 
 Admin surfaces **Sentry** (errors + tracing across hub and services) and **PostHog** (product analytics, feature flags, A/B experiments).

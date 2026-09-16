@@ -201,6 +201,7 @@ impl Rails {
 				logs_rpc_url: env::var("BSC_LOGS_RPC_URL").ok().filter(|s| !s.is_empty()),
 				chain_id: parse_opt("BSC_CHAIN_ID")?.unwrap_or(56),
 				gas_limit: parse_opt("BSC_GAS_LIMIT")?.unwrap_or(100_000),
+				max_gas_price_gwei: parse_opt("BSC_MAX_GAS_PRICE_GWEI")?.unwrap_or(100),
 			}),
 			None => None,
 		};
@@ -224,6 +225,7 @@ impl Rails {
 				logs_rpc_url: env::var("POLYGON_LOGS_RPC_URL").ok().filter(|s| !s.is_empty()),
 				chain_id: parse_opt("POLYGON_CHAIN_ID")?.unwrap_or(137),
 				gas_limit: parse_opt("POLYGON_GAS_LIMIT")?.unwrap_or(100_000),
+				max_gas_price_gwei: parse_opt("POLYGON_MAX_GAS_PRICE_GWEI")?.unwrap_or(5_000),
 			}),
 			None => None,
 		};
@@ -454,6 +456,15 @@ pub struct EvmConfig {
 	/// Gas limit for an ERC-20 transfer withdrawal (`BSC_GAS_LIMIT` / `POLYGON_GAS_LIMIT`); defaults
 	/// to 100_000 (a USDT transfer is ~50–65k — the headroom is safe, and unused gas is refunded).
 	pub gas_limit: u64,
+	/// The hub's own ceiling on the node's `eth_gasPrice` quote for a withdrawal, in gwei
+	/// (`BSC_MAX_GAS_PRICE_GWEI` / `POLYGON_MAX_GAS_PRICE_GWEI`); defaults to 100 (BSC) / 5_000
+	/// (Polygon) — the signer's own fee-budget defaults (`SIGNER_MAX_GAS_PRICE_GWEI_{BEP20,POLYGON}`).
+	/// A quote above it is a *market* condition: custody reports it transient (retried on the
+	/// next drain pass) instead of forwarding it to the signer, whose refusal is a *policy*
+	/// verdict that parks the withdrawal until an operator unparks it. This value MUST be ≤ the
+	/// signer's ceiling for the rail: set it above, and a spike between the two still reaches
+	/// the signer and parks — the pre-check protects nothing.
+	pub max_gas_price_gwei: u64,
 }
 impl EvmConfig {
 	/// This rail's chain reality for the single-realm boot check. Only the four chain ids the
@@ -815,7 +826,8 @@ fn bool_env(key: &str, default: bool) -> bool {
 /// Parse an optional env var that, when present and non-empty, must be a valid `T`.
 fn parse_opt<T: std::str::FromStr>(key: &str) -> color_eyre::Result<Option<T>>
 where
-	T::Err: std::fmt::Display, {
+	T::Err: std::fmt::Display,
+{
 	match env::var(key).ok().filter(|s| !s.is_empty()) {
 		Some(raw) => raw.parse::<T>().map(Some).map_err(|e| color_eyre::eyre::eyre!("{key} must be a valid value: {e}")),
 		None => Ok(None),
@@ -1199,6 +1211,7 @@ gRI8JvM30gtx/NBsGEV927PGd7imCZpKdAlR1pYzGA==
 			logs_rpc_url: None,
 			chain_id: 1,
 			gas_limit: 1,
+			max_gas_price_gwei: 1,
 		};
 		Rails {
 			bsc: bsc.then(|| evm(Network::Bep20)),
@@ -1257,6 +1270,7 @@ gRI8JvM30gtx/NBsGEV927PGd7imCZpKdAlR1pYzGA==
 			logs_rpc_url: None,
 			chain_id,
 			gas_limit: 1,
+			max_gas_price_gwei: 1,
 		};
 		let mut r = config(false, false, false, false);
 		r.bsc = bsc_chain.map(|c| evm(Network::Bep20, c));

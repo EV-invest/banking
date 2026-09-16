@@ -37,7 +37,7 @@ export function FundPicker({
             pressed={active}
             // Pressing the selected fund again keeps it selected: the screen always shows one.
             onPressedChange={(pressed) => pressed && onSelect(fund.service)}
-            className={cn("h-auto flex-col items-start gap-0 px-3 py-2 text-left text-sm", active && "border-primary bg-primary/10")}
+            className={cn("h-auto flex-col items-start gap-0 px-3 py-2 text-left text-sm", active && "border-primary-ink bg-primary-ink/5")}
           >
             <span className="block font-medium">{fund.title}</span>
             <span className="block text-xs tabular-nums text-ink-soft">

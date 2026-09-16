@@ -73,8 +73,6 @@ const SHARED_TERMS: ReadonlySet<string> = new Set([
   "The Open Network",
   "TRON",
   "Seq",
-  "PR",
-  "GitHub: {error}",
   "Gas",
   "gas",
   "Maker",
@@ -85,8 +83,8 @@ const SHARED_TERMS: ReadonlySet<string> = new Set([
 
 // Strings that coincide with English in *one* language — loanwords, shared Latin
 // roots, or a term the locale's own catalogue already uses untranslated
-// ("Wallet", "Treasury" and "Cabinet" in German; "wallet" and "rail" in French;
-// "email" and "consilium" in Vietnamese). Keyed by value, not by key: whether
+// ("Wallet", "Treasury", "Cabinet" and "Outbox" in German; "wallet", "rail" and
+// "outbox" in French; "email" and "consilium" in Vietnamese). Keyed by value, not by key: whether
 // "Status" is a German word does not depend on which screen shows it.
 const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
   de: new Set([
@@ -96,7 +94,6 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Browser",
     "Cabinet",
     "Chart",
-    "Commit",
     "Details",
     "{title} — Details",
     "Hurdle",
@@ -112,6 +109,7 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Operator",
     "ORDERS",
     "{n, plural, one {# Order} other {# Orders}}",
+    "Outbox",
     "Performance",
     "{amount} Performance",
     "Portfolio",
@@ -133,11 +131,11 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Admin",
     "Admissions",
     "Arbitrage",
-    "Commit",
     "Consilium",
     "Feature flags",
     "Max",
     "Onboarding",
+    "Outbox",
     "Performance",
     "Rail",
     "Service",
@@ -155,7 +153,7 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "6M",
   ]),
   ru: new Set(),
-  vi: new Set(["Cabinet", "Commit", "Consilium", "Email"]),
+  vi: new Set(["Cabinet", "Consilium", "Email"]),
 };
 
 const isLegitimatelyIdentical = (locale: Translated, text: string): boolean =>

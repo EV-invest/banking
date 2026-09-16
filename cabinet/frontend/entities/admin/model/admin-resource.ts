@@ -1,7 +1,7 @@
 "use client";
 
 // The operator console's reads, cached the same way the investor screens' are, so moving
-// between Overview, Users, Treasury and the queues doesn't re-fetch each one from scratch.
+// between Users, Treasury, Outbox and the queues doesn't re-fetch each one from scratch.
 //
 // Shorter windows than the investor side: these are operational screens, and an operator
 // looking at a queue is looking at it *now*. Cached data still paints first — the refresh
@@ -17,10 +17,8 @@ import {
   fetchAllocationAccessGrants,
   fetchAllocations as fetchAdminAllocations,
   fetchCabinet,
-  fetchDeployments,
   fetchFundRevenue,
   fetchMfeRegistry,
-  fetchOverview,
   fetchParkedEvents,
   fetchFeeAssessments,
   fetchFeePolicies,
@@ -49,28 +47,11 @@ const OPERATIONAL = 10;
 // nothing; the card and the history row are read by the two resources below, both on it.
 const PENDING_CHANGE_POLL = { startMs: 15_000, maxMs: 60_000 };
 
-export const overviewResource = defineResource({
-  name: "admin.overview",
-  fetch: fetchOverview,
-  revalidate: OPERATIONAL,
-  tags: [TAG.adminFleet],
-});
-
-// A rollout is minutes apart from the next one at the fastest, and the read costs a
-// GitHub call per component on the BFF side — so a full minute, not the operational
-// window, and the fleet tag so "Run health check" re-reads it with the grid.
-export const deploymentsResource = defineResource({
-  name: "admin.deployments",
-  fetch: fetchDeployments,
-  revalidate: 60,
-  tags: [TAG.adminFleet],
-});
-
 export const parkedEventsResource = defineResource({
   name: "admin.parked",
   fetch: fetchParkedEvents,
   revalidate: OPERATIONAL,
-  tags: [TAG.adminFleet],
+  tags: [TAG.adminOutbox],
 });
 
 export const treasuryResource = defineResource({

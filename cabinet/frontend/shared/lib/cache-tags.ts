@@ -74,9 +74,8 @@ export const TAG = {
   payments: "payments",
 
   // ── operator console ──────────────────────────────────────────────────────────
-  /** Fleet health, the parked-event backlog and the deployed versions — one screen, three
-   *  reads that "Run health check" refreshes together. */
-  adminFleet: "admin.fleet",
+  /** The parked outbox rows an operator unparks. Fleet health went to Grafana. */
+  adminOutbox: "admin.outbox",
   /** Custody and claim balances across the rails. */
   adminTreasury: "admin.treasury",
   /** Platform config: maintenance, read-only, announcement, flags. */
