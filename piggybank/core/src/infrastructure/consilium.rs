@@ -840,8 +840,10 @@ pub(crate) async fn open_on(conn: &mut PgConnection, consilium: &mut Consilium, 
 /// back with it.
 async fn withdraw_invitations(conn: &mut PgConnection, id: ConsiliumId) -> Result<(), DomainError> {
 	let withdrawn = withdraw_undelivered_invitations(conn, id.raw()).await?;
+	// `debug`, not `info`: the transaction is still open here and may yet roll back (an
+	// expiry racing a deciding vote), so this is what was ATTEMPTED, not what happened.
 	if withdrawn > 0 {
-		tracing::info!(consilium_id = %id, withdrawn, "consilium: withdrew undelivered approval invitations with the closing consilium");
+		tracing::debug!(consilium_id = %id, withdrawn, "consilium: withdrawing undelivered approval invitations with the closing consilium");
 	}
 	Ok(())
 }
