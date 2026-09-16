@@ -192,8 +192,18 @@ Rules:
   `PanelPresence`.** A submit that fails should swap review → error in place
   rather than emptying the column and refilling it. See `views/wallet/withdraw`
   and `views/invest/deal-panels`.
-- **`layoutId` is for a marker that moves**, like the rail's active pill and the
-  mobile tab bar's rule: one shared node that motion tracks from the old position
-  to the new one, instead of a per-item background that blinks between rows.
+- **A marker that moves is one node per surface, mounted once and translated** —
+  never a per-item background that blinks between rows, and never a `layoutId`
+  pill that mounts inside whichever item is active. The mobile tab bar's rule is
+  positioned by arithmetic, because its tabs are uniform; the rail's active
+  marker is positioned by measurement in a layout effect, because its sections
+  differ in row count and every label is a translation, and its move is a CSS
+  transition on `transform` (`globals.css`). `layoutId` is not used for either,
+  for two reasons found the hard way: the slide it produces is a layout
+  projection driven from the main thread, which drops frames while the page just
+  navigated to is rendering; and its measurement adds `window.scroll` to every
+  box unless the element itself is `position: fixed`, so a marker inside the
+  rail's fixed wrapper took its origin from the previous page's scroll offset and
+  flew in from below its row.
 - Note the eslint guard on arbitrary Tailwind values applies here too — motion
   values live in props and tokens, not in class strings.
