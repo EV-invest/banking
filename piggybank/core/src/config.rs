@@ -55,7 +55,9 @@ ev::settings! {
 		/// connection).
 		relay_db_max_connections: u32 = "3",
 		/// The concierge plane's gRPC endpoint serving `UserEvents.PullUserLifecycle` —
-		/// the cross-plane lifecycle bridge the consumer pulls from.
+		/// the cross-plane lifecycle bridge the consumer pulls from. In production it must
+		/// be `https://` with the CA pinned by `BRIDGE_TLS_CA_PEM_FILE`, or loopback; see
+		/// [`ensure_bridge_is_authenticated`].
 		concierge_bridge_addr: String,
 		/// The shared bridge service token (`authorization: Bearer …`), the same value
 		/// concierge verifies the pull against.
@@ -606,8 +608,8 @@ pub struct TonSweepConfig {
 /// who answered — so the transport is the whole of the reverse proof (EV-invest/banking#199).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BridgeTransport {
-	/// `https://` — the channel authenticates the server, against the public roots or the
-	/// CA pinned by `BRIDGE_TLS_CA_PEM_FILE`.
+	/// `https://` — the channel authenticates the server against the CA pinned by
+	/// `BRIDGE_TLS_CA_PEM_FILE`, or, outside production, against the public roots.
 	Tls,
 	/// Cleartext, but the peer is this host: the stream never reaches a network where
 	/// another party could answer or read it. The documented single-host exception, the
@@ -617,30 +619,46 @@ pub enum BridgeTransport {
 	Cleartext,
 }
 
-/// Classify a bridge address without pulling in a URL parser: scheme first, then the host
-/// out of the authority (userinfo dropped, port dropped, IPv6 literal unwrapped).
-///
-/// Anything that is not `https` and does not resolve *syntactically* to loopback is
-/// [`BridgeTransport::Cleartext`] — an unparseable address included. Classification only
-/// ever decides whether to WARN, so the uncertain reading is the loud one.
-pub fn bridge_transport(addr: &str) -> BridgeTransport {
-	let (scheme, rest) = match addr.split_once("://") {
-		Some((scheme, rest)) => (scheme.to_ascii_lowercase(), rest),
-		None => (String::new(), addr),
-	};
-	if scheme == "https" {
-		return BridgeTransport::Tls;
+/// The scheme (case-folded) and what follows `://` — or no scheme and the whole address.
+fn bridge_scheme(addr: &str) -> (Option<String>, &str) {
+	match addr.split_once("://") {
+		Some((scheme, rest)) => (Some(scheme.to_ascii_lowercase()), rest),
+		None => (None, addr),
 	}
+}
+
+/// The host of a bridge address, read without a URL parser: the authority with userinfo
+/// dropped, the port dropped and an IPv6 literal unwrapped from its brackets. Empty when
+/// there is nothing that reads as a host.
+///
+/// One reader for two decisions. [`bridge_transport`] asks it whether the peer is this
+/// host; the TLS builder pins it as the name the server's certificate must carry. Two
+/// parsers would let those drift — the classifier exempting one spelling of loopback
+/// while the pin verified another — and the brackets matter for the pin: rustls reads
+/// `::1` as an address and `[::1]` as nothing at all.
+pub fn bridge_host(addr: &str) -> &str {
+	let (_, rest) = bridge_scheme(addr);
 	let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
 	// `user:pass@host` — the host is what follows the LAST `@`.
 	let authority = authority.rsplit_once('@').map_or(authority, |(_, host)| host);
-	let host = if let Some(inside) = authority.strip_prefix('[') {
+	if let Some(inside) = authority.strip_prefix('[') {
 		// `[::1]:55670` — the brackets exist precisely because the address holds colons.
 		inside.split(']').next().unwrap_or_default()
 	} else {
 		authority.split(':').next().unwrap_or_default()
-	};
-	let host = host.to_ascii_lowercase();
+	}
+}
+
+/// Classify a bridge address: scheme first, then the host from [`bridge_host`].
+///
+/// Anything that is not `https` and does not resolve *syntactically* to loopback is
+/// [`BridgeTransport::Cleartext`] — an unparseable address included. Classification
+/// decides whether production boots at all, so the uncertain reading is the refusing one.
+pub fn bridge_transport(addr: &str) -> BridgeTransport {
+	if bridge_scheme(addr).0.as_deref() == Some("https") {
+		return BridgeTransport::Tls;
+	}
+	let host = bridge_host(addr).to_ascii_lowercase();
 	let loopback = host == "localhost" || host.ends_with(".localhost") || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback());
 	if loopback { BridgeTransport::Loopback } else { BridgeTransport::Cleartext }
 }
@@ -723,45 +741,67 @@ pub fn check_pinned_ca_pem(raw: &str) -> Result<(), PinnedCaProblem> {
 	}
 }
 
-/// What production is told when it pulls the lifecycle stream in cleartext from a peer it
-/// cannot authenticate. The ingress NetworkPolicy named here is the control that actually
-/// holds the seam shut until phase 2 of #199 replaces it with TLS.
-const CLEARTEXT_BRIDGE_NOTICE: &str = "CONCIERGE_BRIDGE_ADDR is cleartext to a non-loopback peer in production: the lifecycle stream is neither encrypted nor server-authenticated, so anything that can answer to that name can mirror a KYC tier or an operator role onto the money plane (EV-invest/banking#199). Reachability is the only control on it — the concierge ingress NetworkPolicy (EV-invest/gitops#37, generated by EV-invest/devops#5) admits port 55670 from the piggybank and cabinet-backend pods only. Terminate TLS at concierge and set an https:// address (pin its CA with BRIDGE_TLS_CA_PEM_FILE) to replace it.";
-
-/// The boot notice due for this environment and address, or `None` when there is nothing to
-/// say — outside production, or once the seam is https or loopback.
+/// Why production refuses to pull the lifecycle stream over a given `CONCIERGE_BRIDGE_ADDR`.
 ///
-/// Split out of [`note_if_bridge_is_unauthenticated`] so the scoping is a value and not
-/// just an early `return` inside a function that reports nothing: this notice is the whole
-/// of the operational signal phase 1 leaves behind, and a guard that silently stopped
-/// matching (or started matching everywhere) is precisely the regression to pin. At what
-/// level it is then emitted is the other half, and is asserted against a subscriber.
-fn cleartext_bridge_notice(app_env: &str, addr: &str) -> Option<&'static str> {
-	(app_env == "production" && bridge_transport(addr) == BridgeTransport::Cleartext).then_some(CLEARTEXT_BRIDGE_NOTICE)
+/// The address is carried so the message names the value an operator has to change, not
+/// only the variable; the variables to change it with are named in the text.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum BridgeRefusal {
+	/// Cleartext to a peer off-host: neither encrypted nor server-authenticated, so anything
+	/// that can answer to that name could mirror a KYC tier or an operator role onto the
+	/// money plane.
+	#[error(
+		"CONCIERGE_BRIDGE_ADDR {addr} is cleartext to a non-loopback peer, and production refuses to pull the lifecycle stream over it: the stream would be neither encrypted nor server-authenticated, so anything that can answer to that name could mirror a KYC tier or an operator role onto the money plane (EV-invest/banking#199). Set an https:// address and pin its CA with BRIDGE_TLS_CA_PEM_FILE."
+	)]
+	Cleartext { addr: String },
+	/// `https://` with nothing pinned: the public roots vouch for no cluster-internal name,
+	/// so an unpinned root store proves nothing about which concierge answered.
+	#[error(
+		"CONCIERGE_BRIDGE_ADDR {addr} is https:// but BRIDGE_TLS_CA_PEM_FILE is unset, and production refuses to trust the public roots for it: no public CA vouches for a cluster-internal name, so an unpinned root store is not proof of which concierge answered but a hope (EV-invest/banking#199). Pin concierge's CA with BRIDGE_TLS_CA_PEM_FILE."
+	)]
+	UnpinnedCa { addr: String },
 }
 
-/// Record at boot that production pulls the lifecycle stream in cleartext from a peer it
-/// cannot authenticate.
+/// The refusal due for this environment, address and pin, or `None` when the seam may be
+/// dialled — outside production, or once it is https with a pinned CA, or loopback.
 ///
-/// A WARN and not a refusal: production runs on `http://concierge:55670` today (h2c,
-/// inside the cluster), and a hub that refuses to start would take the money plane down to
-/// fix a seam currently held by network reachability. The refusal is phase 2, once
-/// concierge terminates TLS and the CA is pinned here — the signer seam's
-/// non-loopback-requires-TLS check (`piggybank/signer/src/config.rs`) is the shape it
-/// takes.
-///
-/// A WARN and not an INFO because warn is the level phase 1 of #199 is defined at, and
-/// because this is what the level is for: the one seam that can rewrite a KYC tier or an
-/// operator role is unauthenticated, and an unauthenticated money-plane seam has to be
-/// legible where production alerting looks, not only in a boot record nobody re-reads. The
-/// cost is real and taken knowingly — the deploy generator routes
-/// `{service_name="piggybank-core", level="warn"}` to the `discord-banking-warn` contact
-/// point at a threshold of zero, so this posts on every production restart until phase 2
-/// turns it into a refusal. That is the pressure, and an `https://` address ends it.
-pub fn note_if_bridge_is_unauthenticated(app_env: &str, addr: &str) {
-	if let Some(notice) = cleartext_bridge_notice(app_env, addr) {
-		tracing::warn!(bridge_addr = %addr, "{notice}");
+/// Split out of [`ensure_bridge_is_authenticated`] so the scoping is a value and not just
+/// an early `return`: this is the whole of the boot gate phase 2 of #199 leaves behind, and
+/// a guard that silently stopped matching (or started matching everywhere) is precisely
+/// the regression to pin.
+fn bridge_refusal(app_env: &str, addr: &str, ca_file: Option<&str>) -> Option<BridgeRefusal> {
+	if app_env != "production" {
+		return None;
 	}
+	match bridge_transport(addr) {
+		BridgeTransport::Cleartext => Some(BridgeRefusal::Cleartext { addr: addr.to_string() }),
+		BridgeTransport::Tls if ca_file.is_none_or(str::is_empty) => Some(BridgeRefusal::UnpinnedCa { addr: addr.to_string() }),
+		BridgeTransport::Tls | BridgeTransport::Loopback => None,
+	}
+}
+
+/// Refuse a production boot that would pull the lifecycle stream from a peer it cannot
+/// authenticate.
+///
+/// A refusal and not a WARN, which is what phase 1 of #199 emitted while production ran
+/// on `http://concierge:55670`: the one seam that can rewrite a KYC tier or an operator
+/// role is held to the same rule as the signer seam (`piggybank/signer/src/config.rs`),
+/// which refuses a non-loopback bind without TLS. A hub that refuses to start does take
+/// the money plane down with it — deliberately: the deploy contract in `flake.nix` moves
+/// to `https://concierge:55672` in the same release, so the only production that hits this
+/// is one whose Secret does not carry the CA yet, and that is a rollout ordered wrong, not
+/// a hub that should run anyway.
+///
+/// Two things are demanded of production, and only production. Cleartext is refused
+/// unless the peer is loopback — the documented single-host exception. And `https://` is
+/// refused without `BRIDGE_TLS_CA_PEM_FILE`: the public roots cannot vouch for the name
+/// `concierge`, so `with_enabled_roots` against a cluster-internal name is a root store
+/// that trusts nothing relevant and a handshake that can never succeed — or, worse, one
+/// that succeeds against whichever public certificate a hijacked name presents. Outside
+/// production the seam is whatever the address says: dev dials loopback in cleartext and
+/// a staging https address may lean on the public roots.
+pub fn ensure_bridge_is_authenticated(app_env: &str, addr: &str, ca_file: Option<&str>) -> Result<(), BridgeRefusal> {
+	bridge_refusal(app_env, addr, ca_file).map_or(Ok(()), Err)
 }
 
 /// A boolean env var: `true`/`1` ⇒ true, anything else ⇒ false, unset/empty ⇒ `default`.
@@ -915,64 +955,81 @@ gRI8JvM30gtx/NBsGEV927PGd7imCZpKdAlR1pYzGA==
 		);
 	}
 
-	/// Every event `note_if_bridge_is_unauthenticated` emits for this environment and
-	/// address, by level — captured from a real subscriber, because the level is decided by
-	/// which macro the function reaches for and no value it returns can show that.
-	fn levels_recorded_by_the_boot_notice(app_env: &str, addr: &str) -> Vec<tracing::Level> {
-		use std::sync::{Arc, Mutex};
+	/// The host is what the TLS pin verifies the certificate against, so every shape the
+	/// classifier already reads has to yield the same host here — and the IPv6 literal has
+	/// to come out of its brackets, because `[::1]` is not a name rustls can pin.
+	#[test]
+	fn the_bridge_host_is_the_authority_without_userinfo_port_or_brackets() {
+		for (addr, host) in [
+			("https://concierge:55672", "concierge"),
+			("https://concierge", "concierge"),
+			("https://concierge.apps.svc.cluster.local/", "concierge.apps.svc.cluster.local"),
+			("http://127.0.0.1:55670", "127.0.0.1"),
+			("http://[::1]:55670", "::1"),
+			("http://user:pass@localhost:55670/path?q#f", "localhost"),
+			("localhost:55670", "localhost"),
+			("https://", ""),
+			("", ""),
+		] {
+			assert_eq!(bridge_host(addr), host, "{addr}");
+		}
+	}
 
-		use tracing_subscriber::{layer::Context, prelude::*};
-
-		struct Capture(Arc<Mutex<Vec<tracing::Level>>>);
-		impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Capture {
-			fn on_event(&self, event: &tracing::Event<'_>, _: Context<'_, S>) {
-				self.0.lock().expect("nothing panics while holding this lock").push(*event.metadata().level());
+	/// The boot gate is the whole of what phase 2 of #199 leaves behind on this side, so
+	/// the matrix is pinned cell by cell: production refuses cleartext to anything but
+	/// loopback and refuses https without a pinned CA; everything else — every other
+	/// environment, loopback, https with a pin — boots. The refusal names the address and
+	/// the variable that ends it, because the operator reading it is looking at a Secret.
+	#[test]
+	fn production_refuses_an_unauthenticated_bridge_and_nothing_else_is_refused() {
+		let pinned = Some("/etc/settings/BRIDGE_TLS_CA_PEM");
+		for (addr, why) in [
+			("http://concierge:55670", "production on h2c to a cluster name is what phase 1 warned about and phase 2 refuses"),
+			("http://10.42.0.7:55670", "a pod address is not this host"),
+			("not a url", "an address nobody can parse is not a reason to boot"),
+		] {
+			for ca in [None, pinned] {
+				assert_eq!(
+					bridge_refusal("production", addr, ca),
+					Some(BridgeRefusal::Cleartext { addr: addr.to_string() }),
+					"{why} (ca {ca:?})"
+				);
+			}
+		}
+		for addr in ["https://concierge:55672", "HTTPS://concierge:55672", "https://concierge.apps.svc.cluster.local/"] {
+			for ca in [None, Some("")] {
+				assert_eq!(
+					bridge_refusal("production", addr, ca),
+					Some(BridgeRefusal::UnpinnedCa { addr: addr.to_string() }),
+					"{addr} without a pin trusts the public roots for a cluster name (ca {ca:?})"
+				);
+			}
+			assert_eq!(bridge_refusal("production", addr, pinned), None, "{addr} with a pinned CA is the production shape");
+		}
+		for addr in ["http://127.0.0.1:55670", "http://localhost:55670", "http://[::1]:55670"] {
+			assert_eq!(bridge_refusal("production", addr, None), None, "{addr} never reaches a network");
+		}
+		for env in ["development", "staging", ""] {
+			for addr in ["http://concierge:55670", "https://concierge:55672", "not a url"] {
+				assert_eq!(bridge_refusal(env, addr, None), None, "{env} is not production, so {addr} is whatever the operator says");
 			}
 		}
 
-		let seen = Arc::new(Mutex::new(Vec::new()));
-		let subscriber = tracing_subscriber::registry().with(Capture(Arc::clone(&seen)));
-		tracing::subscriber::with_default(subscriber, || note_if_bridge_is_unauthenticated(app_env, addr));
-		seen.lock().expect("the notice is emitted on this thread and the guard released").clone()
-	}
-
-	/// The boot notice is production-only, cleartext-only, and a WARN — the three things
-	/// phase 1 of #199 leaves behind. It must fire on the one shape production actually runs
-	/// (a cluster DNS name over h2c) and stay silent everywhere else — in dev, where the
-	/// address is loopback anyway, and once concierge terminates TLS. The level is asserted
-	/// against a live subscriber and not inferred: production alerting collects warn-level
-	/// lines from this service, so demoting this one leaves an unauthenticated money-plane
-	/// seam recorded where nobody is watching, while inverting the guard pages on every dev
-	/// boot until the channel stops being read.
-	#[test]
-	fn the_bridge_boot_notice_warns_and_only_for_production_cleartext() {
-		assert_eq!(
-			cleartext_bridge_notice("production", "http://concierge:55670"),
-			Some(CLEARTEXT_BRIDGE_NOTICE),
-			"production on h2c to a cluster name is the condition this notice exists for"
-		);
-		assert_eq!(
-			cleartext_bridge_notice("production", "not a url"),
-			Some(CLEARTEXT_BRIDGE_NOTICE),
-			"an address nobody can parse is not a reason to go quiet"
-		);
-		assert_eq!(
-			levels_recorded_by_the_boot_notice("production", "http://concierge:55670"),
-			vec![tracing::Level::WARN],
-			"the one unauthenticated seam on the money plane is a warn, which is what production alerting collects"
-		);
-		for addr in ["https://concierge:55670", "HTTPS://concierge:55670"] {
-			assert_eq!(cleartext_bridge_notice("production", addr), None, "{addr} authenticates the peer, so there is nothing to report");
-			assert!(levels_recorded_by_the_boot_notice("production", addr).is_empty(), "{addr} must not page anyone");
+		let Err(refusal) = ensure_bridge_is_authenticated("production", "http://concierge:55670", None) else {
+			panic!("the refusal must reach the caller as an error, not a log line");
+		};
+		let text = refusal.to_string();
+		for needle in ["http://concierge:55670", "https://", "BRIDGE_TLS_CA_PEM_FILE", "#199"] {
+			assert!(text.contains(needle), "the cleartext refusal must name {needle}: {text}");
 		}
-		assert_eq!(cleartext_bridge_notice("production", "http://127.0.0.1:55670"), None, "a loopback stream never reaches a network");
-		for env in ["development", "staging", ""] {
-			assert_eq!(cleartext_bridge_notice(env, "http://concierge:55670"), None, "{env} is not production");
-			assert!(
-				levels_recorded_by_the_boot_notice(env, "http://concierge:55670").is_empty(),
-				"{env} has no production alerting to reach"
-			);
+		let text = ensure_bridge_is_authenticated("production", "https://concierge:55672", None)
+			.expect_err("unpinned https is refused")
+			.to_string();
+		for needle in ["https://concierge:55672", "BRIDGE_TLS_CA_PEM_FILE", "#199"] {
+			assert!(text.contains(needle), "the unpinned refusal must name {needle}: {text}");
 		}
+		assert_eq!(ensure_bridge_is_authenticated("production", "https://concierge:55672", pinned), Ok(()));
+		assert_eq!(ensure_bridge_is_authenticated("development", "http://127.0.0.1:55670", None), Ok(()));
 	}
 
 	#[test]

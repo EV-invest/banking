@@ -991,22 +991,29 @@ at full fidelity until the upgrade lands. Marking it applied — which is what b
 revocation gets swallowed while the money plane keeps trading under withdrawn rules.
 
 **What the bridge trusts about its peer.** The channel is built once at boot from
-`CONCIERGE_BRIDGE_ADDR`, and in production that address is plaintext h2c inside the cluster
-(`http://concierge:55670`). The only credential on the wire is the outbound
-`BRIDGE_SERVICE_TOKEN` bearer, and it points the wrong way for this question: it proves
-banking to concierge, never concierge to banking. Anything that can answer on that address
-can hand the consumer a freeze, a revoke floor or a `KYC_CHANGED`, and the mirror will
-apply it. Phase 1 of #199 closes what banking can close on its own: boot **WARNs** — it
-does not refuse — when `APP_ENV=production` and `CONCIERGE_BRIDGE_ADDR` is neither `https`
-nor loopback, so a plaintext mirror shows up in a pod's first lines instead of in someone's
-memory; and `BRIDGE_TLS_CA_PEM_FILE` pins a private CA for the bridge channel exactly as
-`SIGNER_TLS_CA_PEM_FILE` already does for the signer client. It warns rather than refusing
-because production runs h2c today, and a bridge that refuses to boot mirrors nothing —
-freezes and tier revocations stop arriving, which is worse than the plaintext it objected
-to. The other half is not banking's to fix: phase 2 is a TLS listener at concierge with the
-CA pinned here, and only then does the WARN become a refusal. The network-level half — a
-NetworkPolicy that lets nothing but the piggybank pod reach `:55670` — is generated in
-devops, not in this repo.
+`CONCIERGE_BRIDGE_ADDR` (`infrastructure::bridge::endpoint`), and the lifecycle consumer
+and the governance-mail relay share it — one address, one trust relationship, one place it
+is configured. The only credential on the wire is the outbound `BRIDGE_SERVICE_TOKEN`
+bearer, and it points the wrong way for this question: it proves banking to concierge,
+never concierge to banking. The transport is the whole of the reverse proof. In production
+the hub therefore **refuses to boot** (`config::ensure_bridge_is_authenticated`) unless the
+address is `https://` **and** `BRIDGE_TLS_CA_PEM_FILE` pins concierge's CA — or the peer is
+loopback, the single-host exception the signer seam also makes. Cleartext to a cluster name
+is refused because anything that can answer to that name could hand the mirror a freeze, a
+revoke floor or a `KYC_CHANGED`; `https://` without a pin is refused because the public
+roots vouch for no cluster-internal name, so an unpinned root store is not proof of which
+concierge answered. The pin is explicit: the server's certificate must carry the host of
+the address (`concierge`, on the TLS listener at `:55672`), never a name service discovery
+happened to resolve. `BRIDGE_TLS_CLIENT_CERT_PEM_FILE` + `…KEY…` add the hub's identity,
+so the seam becomes mTLS the moment concierge's listener asks for a client certificate,
+with no code change here. Outside production the seam is whatever the address says: dev
+dials loopback in cleartext. Phase 1 of #199 only WARNed here, because production ran h2c
+on `:55670`; phase 2 moved the deploy contract in `flake.nix` to the TLS listener and the
+pinned CA in the same release as the refusal — a rollout that ships this hub before the
+listener, the Secret and the Service exist gets a hub that will not start, by design, and
+that is the correct outcome for a mirror that would otherwise trust a name. What this does
+not close is the database path (`pg_hba` `trust` for the cluster subnet, rpi5.nix#18):
+a pod that can `INSERT` into `concierge.user_outbox` never touches this channel.
 
 **Verification gate (`kyc_level`).** The mirrored tier is not just stored, it *gates* —
 and what it gates is **provisioning and payout, not the arrival of money**.
