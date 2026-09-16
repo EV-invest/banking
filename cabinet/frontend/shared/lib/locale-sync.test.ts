@@ -1,12 +1,9 @@
-// Run with `npm run test` (Node's built-in runner, native type-stripping).
-//
-// Why these exist: the wrong answer here is not an error but a silent PATCH that
-// rewrites an account setting on every device (#347). Each case is a page load that
-// really happens; the assertion is which of them are allowed to write.
+// Run with `npm run test`. Each case is a page load that really happens; the assertion
+// is which of them may write to the account — the wrong answer is a silent PATCH (#347).
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { decideLocaleSync } from "./locale-sync-policy.ts";
+import { decideLocaleSync } from "./locale-sync.ts";
 
 test("regression #347: a prefixed URL never overwrites a stored language", () => {
   assert.deepEqual(decideLocaleSync({ locale: "de", stored: "vi", guessed: false, cookie: "de" }), {

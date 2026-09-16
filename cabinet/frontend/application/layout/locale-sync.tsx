@@ -8,10 +8,9 @@ import { useLocale } from "@evinvest/i18n/react";
 import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
 import { relocalise } from "@/shared/config/base-path";
 import { readLocaleCookie, writeLocaleCookie } from "@/shared/lib/locale-cookie";
+import { decideLocaleSync } from "@/shared/lib/locale-sync";
 import { useResource } from "@/shared/lib/resource";
 import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
-
-import { decideLocaleSync } from "./locale-sync-policy";
 
 // Keeps three representations of "what language does this reader want" from drifting:
 // the URL they are on, the `ev_locale` cookie the proxy resolves unprefixed entries
@@ -21,30 +20,9 @@ import { decideLocaleSync } from "./locale-sync-policy";
 // exists for a signed-in reader, and `(auth)` deliberately has no session to read one
 // with.
 //
-// THE RULE: settings is the only thing that changes a stored language. A URL never
-// overwrites one (#347). This used to be the other way round — any of the four
-// prefixed locales was read as "the most recent thing the reader did" and written to
-// the account — and the consequence was that a `/de/cabinet/profile` link someone
-// shared, or a tester's GET, silently rewrote an account set to Vietnamese, on every
-// device at once. Settings promises "saved to your account, so every device follows";
-// a preference that follows the reader cannot also follow the link they clicked.
-//
-// What this component still does:
-//
-//   • Reads. When the proxy guessed the locale from Accept-Language (it marks those —
-//     by the time a page renders the evidence is gone) and the account has a routable
-//     language of its own, that one wins: the reader who chose Deutsch on a laptop
-//     opens the cabinet in German on a phone, not in the phone's OS language. A guess
-//     is never stored, whether or not the account has a language.
-//
-//   • One bootstrap write. An account with no language at all (`""` from the API),
-//     entered through a prefixed locale that was not a guess, has that locale stored
-//     — there is no choice to destroy, and it lets the language follow a new reader
-//     in from the landing without them opening settings. `en` is the unprefixed
-//     locale, so `/` is also "nothing expressed" and is never written from a URL.
-//
-// The verdict itself is `decideLocaleSync` in `./locale-sync-policy.ts`, pure and
-// tested; this file only gathers its inputs and carries it out.
+// This file only gathers the inputs and carries out the verdict; the rule itself is
+// `decideLocaleSync` in `shared/lib/locale-sync.ts`. Its one-line summary: a URL never
+// overwrites a stored language — settings is the only writer (#347).
 export function LocaleSync() {
   const locale = useLocale();
   const { data: profile } = useResource(profileResource);
