@@ -35,6 +35,7 @@ in production.
 | `session.rs` | the per-user banking money-token cache + single-flight refresh |
 | `cookies.rs` | the cookie names the BFF reads (must match the shell's) |
 | `governance.rs` | the concierge ownership-plane seam — see the pin note below |
+| `deployments.rs` | the admin deployments page's two sources: the mounted deployed-versions directory and the GitHub API, with the in-process cache — see below |
 | `dto.rs` | browser-facing JSON DTOs (snake_case; 64-bit values as strings) |
 | `error.rs` | gRPC status → HTTP status + `{ "error": … }` body |
 | `routes/` | one handler per endpoint: `identity`, `money`, `book`, `admin`, `notifications`, `platform`, `system`, `consilium`, `payments`, `approval`; the two socket bridges `governance_ws` and `book_ws` over the shared `ws` (origin guard, close codes, keepalive, expiry) |
@@ -193,6 +194,26 @@ to `.env`).
 > later request re-mints. Cross-plane revocation: a concierge `SUSPENDED` freezes money ops
 > immediately (per-op gate); a `SESSIONS_REVOKED` invalidates the money family within the
 > banking access TTL (enforced at refresh).
+
+## What is deployed
+
+`GET /api/admin/deployments` (console gate — any non-investor) answers which version of
+every component runs in production and how far behind its repository it is. The ground
+truth is the deployed-versions ConfigMap Flux mounts into the pod at
+`DEPLOYED_VERSIONS_DIR` (default `/etc/ev/deployed-versions`): one `<name>.image` (the
+full image reference, tag included) and, optionally, one `<name>.repo` (the source
+repository URL) per component. The directory is listed, never consulted for expected
+names, so a new component appears the moment gitops adds its pair. No directory, or no
+`.image` in it, is the local case and answers `available: false` with a `200`.
+
+For each GitHub repository the page asks the public API once per (repository, tag) for
+the tag's commit and pull request — a fact that never changes, so it is cached for the
+process lifetime — and once per repository for the newest `vX.Y.Z` tag (pre-releases
+ignored), re-asked every ten minutes. Four banking images at one tag cost one lookup.
+A failure (network, an exhausted anonymous budget) is remembered for two minutes and
+degrades the row (`release`/`latest_tag` null, `github_error` set) rather than the page.
+`GITHUB_TOKEN` is optional; the repositories are public and the cache keeps the
+anonymous 60 requests/hour budget sufficient.
 
 ## Checking the deploy contract
 
