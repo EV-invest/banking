@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { animate, useReducedMotion } from "motion/react";
 
+import { driveNumber, type NumberDriverDeps } from "./number-driver";
 import { DUR, EASE } from "./tokens";
 
 export interface AnimatedNumberProps {
@@ -17,6 +18,27 @@ export interface AnimatedNumberProps {
   className?: string;
 }
 
+// The browser-side deps of the driver, wired once. The fallback sits a little
+// past the count's own duration: in the normal case the animation completes
+// first and the timer is cancelled without ever firing.
+const DOM_DEPS: NumberDriverDeps = {
+  animate: (from, to, { onUpdate, onComplete }) =>
+    animate(from, to, { duration: DUR.slow, ease: EASE.out, onUpdate, onComplete }),
+  isHidden: () => document.visibilityState === "hidden",
+  onHidden: (cb) => {
+    const listener = () => {
+      if (document.visibilityState === "hidden") cb();
+    };
+    document.addEventListener("visibilitychange", listener);
+    return () => document.removeEventListener("visibilitychange", listener);
+  },
+  setTimer: (cb, ms) => {
+    const id = setTimeout(cb, ms);
+    return () => clearTimeout(id);
+  },
+  fallbackMs: DUR.slow * 1000 + 100,
+};
+
 /**
  * A figure that travels to its new value instead of being replaced by it.
  *
@@ -24,19 +46,28 @@ export interface AnimatedNumberProps {
  * number *became* 12,480" — after a deposit settles or a poll lands, the motion
  * is the only thing that says which digits changed and in which direction.
  *
- * Two deliberate implementation choices:
+ * Three deliberate implementation choices:
  *
  * - **The DOM is written directly, not through React.** `animate()` drives a
- *   plain number and `onUpdate` sets `textContent`. A 60fps count that went
+ *   plain number and `onUpdate` writes the text. A 60fps count that went
  *   through `setState` would re-render this component ~40 times per second and,
  *   through it, everything the parent re-renders with it. Nothing here needs to
- *   be in the React tree, so it isn't.
+ *   be in the React tree, so it isn't. The write goes to the text node React
+ *   rendered — `nodeValue`, not `textContent` — because `textContent` replaces
+ *   that node, and React's next render of the value would then update a node no
+ *   longer in the document.
  * - **`useLayoutEffect`, not `useEffect`.** The JSX renders the *final* string
  *   so that SSR, a crawler, or a JS failure all show the true figure. The layout
  *   effect overwrites it with the starting figure before the browser paints, so
  *   the correct-but-not-yet-animated value is never visible. In a plain effect
  *   that overwrite lands after a paint and the number visibly snaps back to the
  *   start before counting up.
+ * - **The final figure never depends on an animation frame.** The count runs on
+ *   `requestAnimationFrame`, which a hidden tab does not get; left to the
+ *   animation alone, a page opened in the background reads "$0.00" until it is
+ *   brought to the front (banking#346). `driveNumber` snaps to the final figure
+ *   when the page is hidden at the start, when it goes hidden mid-count, or on a
+ *   timer set just past the count's own duration — whichever comes first.
  *
  * Pair with `tabular-nums` at the call site. Proportional digits change width as
  * they cycle, and a figure that jitters sideways while it counts is worse than
@@ -57,26 +88,18 @@ export function AnimatedNumber({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (reduce || shown.current === value) {
-      shown.current = value;
-      el.textContent = format(value);
-      return;
-    }
-    const from = shown.current;
-    el.textContent = format(from);
-    const controls = animate(from, value, {
-      duration: DUR.slow,
-      ease: EASE.out,
-      onUpdate: (v) => {
-        shown.current = v;
-        el.textContent = format(v);
-      },
-    });
-    return () => {
-      controls.stop();
-      // Leave `shown` wherever it stopped: an interrupted count that is
-      // restarted should continue from what the eye last saw, not jump.
+    const write = (text: string) => {
+      const node = el.firstChild;
+      if (node?.nodeType === Node.TEXT_NODE) node.nodeValue = text;
+      else el.textContent = text;
     };
+    const onShown = (n: number) => {
+      shown.current = n;
+    };
+    return driveNumber(
+      { from: reduce ? value : shown.current, to: value, format, write, onShown },
+      DOM_DEPS,
+    );
   }, [value, format, reduce]);
 
   return (

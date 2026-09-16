@@ -179,6 +179,13 @@ Rules:
 - **Chrome does not animate on navigation.** The rail, the tab bar and the
   system banner stay put; the entrance belongs to page content. The mobile app
   bar is the exception, and only because it *is* the page's title.
+- **A figure lands without an animation frame.** `AnimatedNumber` counts on
+  `requestAnimationFrame`, which a hidden tab never gets — so the count alone
+  would leave a page opened in the background reading `$0.00` until it was
+  brought to the front (#346). Its driver (`shared/ui/motion/number-driver.ts`)
+  writes the final figure by whichever comes first: the count completing, the
+  page going hidden, or a timer just past `DUR.slow`. Hand-written motion that
+  gates a figure on a frame needs the same guarantee.
 - **`Settled` does not animate when no skeleton was shown.** Data already present
   on the first render cuts straight in — fading it would invent a delay the data
   never had. It decides by adjusting state *during render*, not in an effect: an
