@@ -1,10 +1,10 @@
 "use client";
 
 import { KeyRound, Loader2, TriangleAlert, X } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Badge, Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Badge, Button, Card, CardContent, FieldDescription, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { revokeSessions, setKycLevel, type UserFilters } from "@/entities/admin/api/admin-client";
 import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
@@ -429,6 +429,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
  */
 function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolean; isSelf: boolean; onSave: (level: KycLevel) => void }) {
   const t = useT();
+  const hintId = useId();
   const [draft, setDraft] = useState(level);
   const [seated, setSeated] = useState(level);
   if (seated !== level) {
@@ -443,6 +444,13 @@ function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolea
   const picked = KYC_LEVELS.find((l) => l === draft);
   const dirty = picked !== undefined && picked !== level;
 
+  // Two reasons a press is refused here, and they must not be announced the same way. `busy`
+  // is transient, so the native `disabled` is the honest state. `isSelf` is policy — and a
+  // control that leaves the tab order takes its explanation with it, leaving a keyboard or
+  // screen-reader operator with a gap where the reason should be. So the operator's own row
+  // keeps both controls focusable under `aria-disabled` (which also keeps the kit's
+  // `focus-visible:ring-ring`) and points them at the sentence below; the refusal itself is
+  // enforced by the controlled `open` and the `onClick` guard rather than by the browser.
   return (
     <div className="flex flex-col gap-1.5 py-1">
       {/* A `div` and not a `label`, for the reason `FilterSelect` gives: the uikit trigger
@@ -452,11 +460,25 @@ function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolea
           {t("ui.kycLevel")}
           <TipAnchor anchor="admin.users.access.kyc-level" />
         </span>
-        <Select value={String(draft)} onValueChange={(v) => setDraft(Number(v))}>
-          {/* Disabled on the trigger, which is the button — `RoleField` spells out why the
-              uikit `Select` root is not the place for it. The tier the account already holds
-              still renders, so the operator can READ their own standing here. */}
-          <SelectTrigger size="sm" className="border-border bg-secondary" disabled={busy || isSelf}>
+        <Select
+          value={String(draft)}
+          onValueChange={(v) => setDraft(Number(v))}
+          // Held shut at the root, not by a no-op handler on the trigger: the kit calls the
+          // trigger's `onClick` and then toggles `open` regardless, so a controlled `open` is
+          // the only thing that keeps the list closed while the trigger stays focusable.
+          open={isSelf ? false : undefined}
+        >
+          {/* The transient refusal is still `disabled`, and still on the trigger, which is the
+              button — `RoleField` spells out why the uikit `Select` root is not the place for
+              it. The tier the account already holds renders in every state, so the operator can
+              READ their own standing here. */}
+          <SelectTrigger
+            size="sm"
+            className="border-border bg-secondary aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            disabled={busy}
+            aria-disabled={isSelf ? true : undefined}
+            aria-describedby={isSelf ? hintId : undefined}
+          >
             <span className="truncate">{kycLevelLabel(draft, t)}</span>
           </SelectTrigger>
           <SelectContent>
@@ -476,18 +498,30 @@ function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolea
         type="button"
         variant="outline"
         size="sm"
-        className="self-end"
-        disabled={busy || isSelf || !dirty}
+        className="self-end aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        // Never the native attribute on the own row: that is the one refusal whose reason has
+        // to be reachable, and `disabled` would drop the button out of the tab order before
+        // `aria-describedby` could be read out.
+        disabled={!isSelf && (busy || !dirty)}
+        aria-disabled={isSelf ? true : undefined}
+        aria-describedby={isSelf ? hintId : undefined}
         onClick={() => {
-          if (picked !== undefined) onSave(picked);
+          if (isSelf || picked === undefined) return;
+          onSave(picked);
         }}
       >
         {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
         {t("ui.save")}
       </Button>
       {/* Below the control rather than instead of it, the way the owner seat's sentence sits
-          under the role select: a greyed-out select with no sentence reads as a fault. */}
-      {isSelf && <p className="text-xs leading-relaxed text-ink-soft">{t("admin.users.kycSelf")}</p>}
+          under the role select: a greyed-out select with no sentence reads as a fault. The `id`
+          is what makes it the two controls' accessible description rather than a sentence only
+          a sighted reader knows to pair with them. */}
+      {isSelf && (
+        <FieldDescription id={hintId} className="text-xs leading-relaxed">
+          {t("admin.users.kycSelf")}
+        </FieldDescription>
+      )}
     </div>
   );
 }
