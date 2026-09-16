@@ -23,7 +23,7 @@ use crate::{
 	evm_tx,
 	kek_guard::short_fp,
 	key_vault::Vault,
-	policy::SignerPolicy,
+	policy::{FeeQuote, SignerPolicy},
 	provision,
 	secrets::{NewTurnkeySecret, WalletSecrets},
 	ton_tx, tron_tx,
@@ -40,7 +40,7 @@ const TREASURY_WALLET: Uuid = Uuid::nil();
 
 /// The signer service: the key [`backend`](crate::backend) every signature goes through, the
 /// loaded [`Vault`] and `wallet_secrets` store the KEK-epoch diagnostics still read directly,
-/// and the independent spend [`SignerPolicy`] (the second gate — cap/allowlist).
+/// and the independent spend [`SignerPolicy`] (the second gate — cap/allowlist/fee budget).
 pub struct Signer {
 	backend: Arc<dyn KeyBackend>,
 	/// The custody minter the phase-4 migration path needs, when this signer is composed with
@@ -103,6 +103,27 @@ impl Signer {
 		Ok(())
 	}
 
+	/// Apply the policy to a treasury jetton transfer's `our_jetton_wallet` — the internal
+	/// message's destination, which receives `msg_value` in Toncoin whatever contract sits
+	/// there. Sweeps are signed from user wallets and pass.
+	fn guard_treasury_jetton_wallet(&self, wallet_id: Uuid, our_jetton_wallet: &str) -> Result<(), Status> {
+		if wallet_id == TREASURY_WALLET {
+			self.policy.check_treasury_jetton_wallet(our_jetton_wallet)?;
+		}
+		Ok(())
+	}
+
+	/// Apply the policy to a treasury jetton transfer's `response_destination` — where the
+	/// excess Toncoin returns, which on a withdrawal is always the sending wallet itself
+	/// (derived here from the key that will sign). Sweeps are signed from user wallets and pass.
+	fn guard_treasury_response_destination(&self, wallet_id: Uuid, public_key: &[u8], response_destination: &str) -> Result<(), Status> {
+		if wallet_id == TREASURY_WALLET {
+			let (own_address, _) = provision::render_address(Network::Ton, public_key)?;
+			self.policy.check_treasury_response_destination(&own_address, response_destination)?;
+		}
+		Ok(())
+	}
+
 	/// Resolve the sending wallet id from the wire `from_user_id`: empty ⇒ the treasury hot
 	/// wallet (nil), else a parsed UUID (a real user's deposit address, or the gas station).
 	fn resolve_wallet(from_user_id: &str) -> Result<Uuid, Status> {
@@ -142,11 +163,19 @@ impl SignerService for Signer {
 	async fn sign_erc20_transfer(&self, request: Request<SignErc20TransferRequest>) -> Result<Response<SignErc20TransferResponse>, Status> {
 		let req = request.into_inner();
 		let network = require_evm(&req.network)?;
+		require_evm_chain(network, req.chain_id)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let token = parse_evm_address(&req.token_contract).ok_or_else(|| Status::invalid_argument("token_contract must be a 0x 20-byte address"))?;
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let gas_price: u128 = req.gas_price.parse().map_err(|_| Status::invalid_argument("gas_price must be a u128 decimal"))?;
+		self.policy.check_fee_budget(
+			network,
+			FeeQuote::Evm {
+				gas_price,
+				gas_limit: req.gas_limit,
+			},
+		)?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let data = evm_tx::erc20_transfer_calldata(&to, amount);
@@ -171,10 +200,18 @@ impl SignerService for Signer {
 	async fn sign_native_transfer(&self, request: Request<SignNativeTransferRequest>) -> Result<Response<SignNativeTransferResponse>, Status> {
 		let req = request.into_inner();
 		let network = require_evm(&req.network)?;
+		require_evm_chain(network, req.chain_id)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let gas_price: u128 = req.gas_price.parse().map_err(|_| Status::invalid_argument("gas_price must be a u128 decimal"))?;
+		self.policy.check_fee_budget(
+			network,
+			FeeQuote::Evm {
+				gas_price,
+				gas_limit: req.gas_limit,
+			},
+		)?;
 		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
 		// A native transfer carries the value directly and no calldata.
@@ -204,6 +241,7 @@ impl SignerService for Signer {
 		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
+		self.policy.check_fee_budget(network, FeeQuote::Tron { fee_limit: req.fee_limit })?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let handle = KeyHandle { wallet_id, network };
@@ -225,6 +263,8 @@ impl SignerService for Signer {
 		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
+		// No fee budget to check: a TRX transfer is bandwidth-only and carries no caller-supplied
+		// fee field (`build_unsigned_trx` omits `fee_limit`), so the amount is all it can spend.
 		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
 		let handle = KeyHandle { wallet_id, network };
@@ -245,10 +285,21 @@ impl SignerService for Signer {
 		let network = require_ton(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
+		self.policy.check_fee_budget(
+			network,
+			FeeQuote::Ton {
+				msg_value: req.msg_value,
+				forward_ton_amount: req.forward_ton_amount,
+			},
+		)?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
+		self.guard_treasury_jetton_wallet(wallet_id, &req.our_jetton_wallet)?;
 
 		let handle = KeyHandle { wallet_id, network };
+		// The key comes before the last check: the wallet's own address, which a withdrawal's
+		// `response_destination` legitimately is, is derived from it.
 		let public_key = self.ton_public_key(handle).await?;
+		self.guard_treasury_response_destination(wallet_id, &public_key, &req.response_destination)?;
 		let (parts, digest) = ton_tx::build_unsigned_jetton(
 			&public_key,
 			&ton_tx::JettonTransfer {
@@ -273,6 +324,9 @@ impl SignerService for Signer {
 		let network = require_ton(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal (nanotons)"))?;
+		// No fee budget to check: a native TON transfer carries no caller-supplied fee field —
+		// the wallet contract pays the forwarding fee out of its balance, and the amount is the
+		// only value the caller chooses.
 		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
 		let handle = KeyHandle { wallet_id, network };
@@ -517,6 +571,29 @@ fn require_evm(raw: &str) -> Result<Network, Status> {
 	}
 }
 
+/// The EIP-155 chain ids each EVM rail runs on (mainnet | testnet) — the same four the hub
+/// classifies in its single-realm boot guard.
+const BEP20_CHAIN_IDS: [u64; 2] = [56, 97];
+const POLYGON_CHAIN_IDS: [u64; 2] = [137, 80002];
+
+/// Require `chain_id` to belong to `network`. The fee budget's gas-price ceiling is chosen by
+/// `network`, so a request naming one rail while carrying the other's chain id would get the
+/// wrong ceiling on a transaction that is valid on the chain it actually names. Fail-closed
+/// on purpose: an unlisted id (a local dev chain) is refused, not waved through.
+fn require_evm_chain(network: Network, chain_id: u64) -> Result<(), Status> {
+	let known = match network {
+		Network::Bep20 => BEP20_CHAIN_IDS,
+		Network::Polygon => POLYGON_CHAIN_IDS,
+		// Unreachable after `require_evm`; refusing is the safe shape if that ever changes.
+		Network::Trc20 | Network::Ton => return Err(Status::invalid_argument(format!("{network} is not an EVM network"))),
+	};
+	if known.contains(&chain_id) {
+		Ok(())
+	} else {
+		Err(Status::invalid_argument(format!("chain_id {chain_id} does not belong to network {network}")))
+	}
+}
+
 /// Parse the wire network and require a Tron rail — the TRC20/TRX signers unseal a secp256k1
 /// key and sign a Tron tx, so a TON network would feed an Ed25519 seed to the secp256k1 signer
 /// (the same curve-confusion hole `require_evm` guards on the EVM side).
@@ -569,7 +646,9 @@ fn parse_evm_address(value: &str) -> Option<[u8; 20]> {
 
 #[cfg(test)]
 mod tests {
-	use super::{parse_evm_address, require_evm, require_tron};
+	use domain::money::Network;
+
+	use super::{parse_evm_address, require_evm, require_evm_chain, require_tron};
 
 	#[test]
 	fn parses_evm_addresses() {
@@ -592,6 +671,19 @@ mod tests {
 		assert!(require_evm("ton").is_err());
 		assert!(require_evm("trc20").is_err());
 		assert!(require_evm("bogus").is_err());
+	}
+
+	#[test]
+	fn require_evm_chain_pins_the_chain_id_to_its_rail() {
+		assert!(require_evm_chain(Network::Bep20, 56).is_ok());
+		assert!(require_evm_chain(Network::Bep20, 97).is_ok());
+		assert!(require_evm_chain(Network::Polygon, 137).is_ok());
+		assert!(require_evm_chain(Network::Polygon, 80002).is_ok());
+		// The other rail's chain, and an unknown one, are both refused as malformed.
+		assert_eq!(require_evm_chain(Network::Polygon, 56).unwrap_err().code(), tonic::Code::InvalidArgument);
+		assert_eq!(require_evm_chain(Network::Bep20, 137).unwrap_err().code(), tonic::Code::InvalidArgument);
+		assert!(require_evm_chain(Network::Bep20, 31337).is_err());
+		assert!(require_evm_chain(Network::Ton, 56).is_err());
 	}
 
 	#[test]

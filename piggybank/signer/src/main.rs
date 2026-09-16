@@ -55,8 +55,10 @@ async fn run() -> color_eyre::Result<()> {
 	kek_guard::enforce(&vault, &secrets).await.context("KEK epoch guard refused to serve")?;
 
 	// The signer's independent spend policy — the second gate that holds even if the hub is
-	// compromised. No-op until an operator sets a cap/allowlist.
+	// compromised. The fee budget is always on; the cap/allowlist are no-ops until an operator
+	// sets them.
 	let policy = SignerPolicy::from_env().context("failed to load signer spend policy")?;
+	tracing::info!(fee_budget = ?policy.fee_budget(), treasury_jetton_wallet_pinned = policy.treasury_jetton_wallet_pinned(), "signer fee budget active");
 	if policy.is_active() {
 		tracing::info!(max_transfer_usdt = ?policy.max_transfer_usdt(), allowlisted_destinations = policy.allowlist_len(), "signer spend policy active");
 	} else {
