@@ -38,8 +38,12 @@ const GITHUB_API: &str = "https://api.github.com";
 /// GitHub lists tags by name, not by version, so the newest can sit on any page and every
 /// page must be read — but each page is one request against the anonymous 60/hour budget
 /// shared by everything behind the pod's IP, and the newest tag is re-asked per repository
-/// every [`LATEST_TAG_TTL`]. Five pages is 500 tags — years of releases at this cadence —
-/// while a worst-case refresh of one repository stays under a tenth of the hourly budget.
+/// every [`LATEST_TAG_TTL`]. Five pages is 500 tags — years of releases at this cadence.
+/// The worst case is 5 requests per repository per refresh, so with the page reloaded
+/// every ten minutes, 30/hour per repository: two repositories past 400 tags would spend
+/// the whole anonymous budget on tags alone. Today the deployed repositories are under
+/// 100 tags and cost one page each; before they grow past the bound, set `GITHUB_TOKEN`
+/// (see [`crate::config`]), which lifts the limit to 5000/hour for the token.
 const TAG_PAGES: usize = 5;
 
 /// One `<name>.image` (+ optional `<name>.repo`) pair from the mounted directory.
