@@ -23,11 +23,24 @@ import { useCabinetHref } from "@/shared/lib/cabinet-route";
  * handed something every caller would forward identically. That resolution now lives in
  * `shared/lib/cabinet-route.ts` next to its reading counterpart, so the writing and
  * reading halves of one rule cannot drift apart.
+ *
+ * Automatic prefetching is off by default, and the reason is measured, not assumed
+ * (banking#349). Every cabinet route is rendered on demand and none has a `loading.tsx`,
+ * so a prefetch has nothing to carry: Next answers the viewport prefetch with the route
+ * tree alone and then goes back for the page's `<head>` in a second request — two
+ * documents per link, and neither one shortens the click, which still has to make the
+ * full dynamic request for the page. On the admin console that was 40 RSC requests per
+ * page load for the rail. The data the click does need is warmed by
+ * `application/prefetch.ts` on intent, which is where the head start actually comes from.
+ *
+ * `shared/ui/cabinet-link.test.ts` pins the premise: the day a route gains a loading
+ * boundary, a prefetch starts carrying a real skeleton and this default is due for
+ * a rethink. A caller with a reason can still pass `prefetch` explicitly.
  */
 export function Link({
   href,
   ...props
 }: Omit<ComponentProps<typeof NextLink>, "href"> & { href: `/${string}` }) {
   const toHref = useCabinetHref();
-  return <NextLink href={toHref(href)} {...props} />;
+  return <NextLink href={toHref(href)} prefetch={false} {...props} />;
 }

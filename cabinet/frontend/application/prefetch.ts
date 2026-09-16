@@ -3,9 +3,11 @@
 // What each screen reads, so the reading can start before the screen does.
 //
 // The cache in `shared/lib/resource.ts` removes the skeleton on the SECOND visit to a
-// screen — the value is already there. This closes the first visit too. `next/link` already
-// prefetches the route's code and RSC payload on hover; this is the same idea for the data
-// that code will ask for, driven off the same signal. By the time the click lands the answer
+// screen — the value is already there. This closes the first visit too. `next/link` would
+// prefetch the route's RSC payload on hover, but the cabinet turns that off (see
+// `shared/ui/cabinet-link.tsx`: a dynamic route with no loading boundary has nothing to
+// carry); this is the same idea applied where it pays — the data the screen will ask for,
+// driven off the same signal. By the time the click lands the answer
 // is usually in the cache, and the screen paints its figures on the first frame.
 //
 // Two triggers, both cheap and both cancel-free (a warm that turns out to be unnecessary
