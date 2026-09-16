@@ -937,6 +937,8 @@
   "err.fundRefresh": "Couldn't refresh this fund",
   "err.fundServiceRequired": "Select a fund to continue.",
   "err.kycStartFailed": "We couldn't start verification. Please try again.",
+  "err.kycThrottled": "You've started verification too many times today. Try again tomorrow.",
+  "err.kycUnavailable": "Verification is unavailable right now. Please contact support.",
   "err.language.format": "Language must be a BCP 47 code such as 'en' or 'en-US'",
   "err.language.maxLength": "Language must be at most 16 characters",
   "err.network": "Can't reach the server. Check your connection and try again.",

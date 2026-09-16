@@ -3751,6 +3751,14 @@
     "en": "We couldn't start verification. Please try again.",
     "t": "Impossible de démarrer la vérification. Veuillez réessayer."
   },
+  "err.kycThrottled": {
+    "en": "You've started verification too many times today. Try again tomorrow.",
+    "t": "Vous avez lancé la vérification trop de fois aujourd'hui. Réessayez demain."
+  },
+  "err.kycUnavailable": {
+    "en": "Verification is unavailable right now. Please contact support.",
+    "t": "La vérification est indisponible pour le moment. Veuillez contacter le support."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "La langue doit être un code BCP 47 tel que « en » ou « en-US »"

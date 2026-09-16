@@ -101,6 +101,13 @@ interface JsonRequest {
  */
 const STALE_PAGE_MESSAGE = "This page went stale. Reload it and try again.";
 
+/**
+ * The English source for `err.serverUnavailable`. Shared by the status fallback below and by
+ * the identity plane's `internal` code in the table — they are the same sentence, and a
+ * caller that copied it out to re-key a code was the third copy of it in the repo.
+ */
+const SERVER_UNAVAILABLE_MESSAGE = "The service is temporarily unavailable. Please try again.";
+
 /** See {@link isVerificationRequired}. Named so the table and the predicate cannot drift. */
 const VERIFICATION_REQUIRED = "err.verificationRequired";
 
@@ -126,6 +133,21 @@ const FRIENDLY: Record<string, { code: string; en: string }> = {
     code: VERIFICATION_REQUIRED,
     en: "Verify your identity to continue.",
   },
+  // The identity plane's closed dictionary (`features/kyc/api/kyc-contract`). It is a
+  // SECOND backend answering this transport, and its codes were unknown to this table, so
+  // every one of them reached the reader as the literal word `internal` / `throttled` /
+  // `kyc_unavailable` in all five locales. Keyed here rather than in the slice: one policy
+  // per code is what this table is, and a screen that re-words a code is a second place the
+  // wording can drift from (`unauthenticated` and `csrf` above already serve both planes).
+  internal: { code: "err.serverUnavailable", en: SERVER_UNAVAILABLE_MESSAGE },
+  throttled: {
+    code: "err.kycThrottled",
+    en: "You've started verification too many times today. Try again tomorrow.",
+  },
+  kyc_unavailable: {
+    code: "err.kycUnavailable",
+    en: "Verification is unavailable right now. Please contact support.",
+  },
 };
 
 /**
@@ -144,11 +166,7 @@ function statusMessage(status: number): { code: string; en: string } {
   if (status === 404) return { code: "err.notFound", en: "Not found." };
   if (status === 429)
     return { code: "err.rateLimited", en: "Too many requests — give it a moment and try again." };
-  if (status >= 500)
-    return {
-      code: "err.serverUnavailable",
-      en: "The service is temporarily unavailable. Please try again.",
-    };
+  if (status >= 500) return { code: "err.serverUnavailable", en: SERVER_UNAVAILABLE_MESSAGE };
   return { code: "err.requestFailed", en: `Request failed (${status}).` };
 }
 

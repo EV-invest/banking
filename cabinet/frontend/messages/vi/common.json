@@ -3751,6 +3751,14 @@
     "en": "We couldn't start verification. Please try again.",
     "t": "Không thể bắt đầu xác minh. Vui lòng thử lại."
   },
+  "err.kycThrottled": {
+    "en": "You've started verification too many times today. Try again tomorrow.",
+    "t": "Hôm nay bạn đã bắt đầu xác minh quá nhiều lần. Vui lòng thử lại vào ngày mai."
+  },
+  "err.kycUnavailable": {
+    "en": "Verification is unavailable right now. Please contact support.",
+    "t": "Hiện chưa thể xác minh. Vui lòng liên hệ bộ phận hỗ trợ."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "Ngôn ngữ phải là mã BCP 47, ví dụ 'en' hoặc 'en-US'"
