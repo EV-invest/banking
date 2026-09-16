@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, path::PathBuf};
+use std::net::SocketAddr;
 
 ev::settings! {
 	/// Runtime configuration for the cabinet BFF, read from the environment only
@@ -50,14 +50,6 @@ ev::settings! {
 		/// production — where a missing value fails the boot rather than failing open.
 		#[required_in("production")]
 		cabinet_ws_origin: Option<String>,
-		/// The directory Flux mounts the deployed-versions ConfigMap into (`<name>.image` +
-		/// `<name>.repo` per component) — what `/api/admin/deployments` reads. Missing or
-		/// empty locally ⇒ the page reports nothing deployed rather than an error.
-		deployed_versions_dir: PathBuf = "/etc/ev/deployed-versions",
-		/// Optional bearer for the GitHub API behind `/api/admin/deployments`. The app
-		/// repositories are public, so unset works — it only raises the per-hour budget.
-		#[secret]
-		github_token: Option<String>,
 		app_env: String,
 		/// Unset ⇒ error monitoring is a silent no-op. Right locally; in
 		/// production it means the BFF's errors reach nobody, so there the boot
@@ -146,8 +138,6 @@ mod tests {
 				"MFE_REGISTRY_PATH",
 				"MFE_ALLOWED_ORIGINS",
 				"CABINET_WS_ORIGIN",
-				"DEPLOYED_VERSIONS_DIR",
-				"GITHUB_TOKEN",
 				"APP_ENV",
 				"SENTRY_DSN",
 				"POSTHOG_KEY",

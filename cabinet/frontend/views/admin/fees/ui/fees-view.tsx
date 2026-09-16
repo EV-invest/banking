@@ -92,7 +92,7 @@ export function FeesView() {
           </EmptyHeader>
           <EmptyContent>
             <Button asChild variant="outline">
-              <Link href="/admin/overview">{t("nav.overview")}</Link>
+              <Link href="/admin/users">{t("nav.users")}</Link>
             </Button>
           </EmptyContent>
         </StaggerItem>

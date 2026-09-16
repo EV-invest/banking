@@ -7,7 +7,7 @@ use tonic::{
 	transport::{Channel, Endpoint},
 };
 
-use crate::{config::AppConfig, cookies::CookieNames, deployments::Deployments, routes::approval::AttemptLimiter, session::BankingTokens};
+use crate::{config::AppConfig, cookies::CookieNames, routes::approval::AttemptLimiter, session::BankingTokens};
 
 /// Cap on establishing a TCP/TLS connection to an upstream plane: a black-holed or
 /// half-open replica must fail fast rather than wedge the awaiting request task.
@@ -35,8 +35,6 @@ pub struct AppState {
 	/// Local verifier for the shared concierge access JWT (JWKS-cached — no
 	/// per-request round trip).
 	pub verifier: evconcierge_auth::Verifier,
-	/// The admin deployments page's reader + GitHub cache — see [`crate::deployments`].
-	pub deployments: Arc<Deployments>,
 }
 
 /// gRPC egress to both planes. Channels are lazily connected and cheap to clone, so a
@@ -137,10 +135,6 @@ impl Grpc {
 
 	fn removal_approval(&self) -> cc::owner_removal_approval_service_client::OwnerRemovalApprovalServiceClient<Channel> {
 		cc::owner_removal_approval_service_client::OwnerRemovalApprovalServiceClient::new(self.concierge.clone())
-	}
-
-	fn concierge_health(&self) -> cc::health_service_client::HealthServiceClient<Channel> {
-		cc::health_service_client::HealthServiceClient::new(self.concierge.clone())
 	}
 
 	// ── concierge identity plane ───────────────────────────────────────────────
@@ -466,14 +460,6 @@ impl Grpc {
 
 	pub async fn set_book_policy(&self, token: &str, req: bk::SetBookPolicyRequest) -> Result<bk::BookPolicy, Status> {
 		Ok(self.book().set_book_policy(bearer(token, req)?).await?.into_inner())
-	}
-
-	pub async fn readiness(&self) -> Result<bk::ReadinessResponse, Status> {
-		Ok(self.health().readiness(bk::ReadinessRequest {}).await?.into_inner())
-	}
-
-	pub async fn concierge_check(&self) -> Result<cc::CheckResponse, Status> {
-		Ok(self.concierge_health().check(cc::CheckRequest {}).await?.into_inner())
 	}
 
 	// ── admin: concierge identity plane (identity token) ────────────────────────

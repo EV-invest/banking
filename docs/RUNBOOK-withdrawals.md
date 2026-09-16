@@ -138,7 +138,7 @@ A key sealed under a different `WALLET_KEK` than the signer booted with is **pro
 dead**: funds on its address can never be moved. The signer refuses to boot on a
 whole-database mismatch (the `kek_sentinel`); per-key casualties surface as:
 
-- the **Dead-key signings** counter on the admin Overview (any non-zero = stranded funds);
+- the `unseal_failures` reading of the hub's Readiness RPC — a Grafana alert once banking#378 lands (any non-zero = stranded funds);
 - `PROVABLY DEAD KEY` `error!` lines in the signer / hub logs;
 - the signer's diagnostics RPC (loopback; needs the hub's service token in prod):
 
