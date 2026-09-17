@@ -7,14 +7,16 @@ import { ArrowLeftRight } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Table, TableBody, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { paymentStateLabel } from "@/entities/payment/lib/format";
 import { cancelPayment, paymentsResource } from "@/entities/payment/model/payment-resource";
 import { errorMessage } from "@/shared/lib/api-client";
+import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
+import { EDGE_CELL, TABLE_HEAD } from "@/views/admin/lib/table";
 import { PaymentRow } from "@/views/admin/payments/ui/payment-row";
 
 /** The lifecycle as the plane spells it, in the order an order passes through it. */
@@ -90,27 +92,25 @@ export function PaymentList() {
                   </Empty>
                 </div>
               ) : (
-                // Seven columns do not fit a phone: the table scrolls inside its own box.
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-200 text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
-                        <th className="px-5 py-3 font-medium">{t("admin.payments.col.opened")}</th>
-                        <th className="px-5 py-3 font-medium">{t("admin.payments.col.ends")}</th>
-                        <th className="px-5 py-3 font-medium">{t("admin.payments.col.amountUsdt")}</th>
-                        <th className="px-5 py-3 font-medium">{t("admin.payments.tier")}</th>
-                        <th className="px-5 py-3 font-medium">{t("admin.payments.col.approval")}</th>
-                        <th className="px-5 py-3 font-medium">{t("admin.col.state")}</th>
-                        <th className="px-5 py-3 text-right font-medium">{t("admin.col.actions")}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {items.map((payment) => (
-                        <PaymentRow key={payment.id} payment={payment} busy={busy === payment.id} onCancel={() => void cancel(payment.id)} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                // Seven columns do not fit a phone: the kit's wrapper scrolls the table inside its box.
+                <Table className="min-w-200">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.opened")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.ends")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.amountUsdt")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.tier")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.approval")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.state")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((payment) => (
+                      <PaymentRow key={payment.id} payment={payment} busy={busy === payment.id} onCancel={() => void cancel(payment.id)} />
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </Settled>
           </CardContent>

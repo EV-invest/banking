@@ -8,15 +8,17 @@
 import { Banknote } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Spinner } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import type { RevenuePayout } from "@/shared/contracts/admin";
+import { cn } from "@/shared/lib/cn";
 import { shortAddress } from "@/shared/lib/money";
 import { networkLabel } from "@/shared/lib/rail";
 import { NetworkMark } from "@/shared/ui/icons/networks";
 import { Settled } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { formatUsd, stateLabel } from "@/views/admin/lib/format";
+import { EDGE_CELL, TABLE_HEAD } from "@/views/admin/lib/table";
 
 /** In flight — the operator can still act on these; the rest are history. */
 const OPEN_STATES = new Set(["queued", "processing"]);
@@ -54,26 +56,24 @@ export function PayoutHistory({
               </Empty>
             </div>
           ) : (
-            // Five columns do not fit a phone: the table scrolls inside its own box.
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-140 text-sm">
-                <thead>
-                  {/* i18n-max: 14 per header — a long header widens the scroll, not a cell. */}
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
-                    <th className="px-5 py-3 font-medium">{t("ui.destination")}</th>
-                    <th className="px-5 py-3 font-medium">{t("ui.amount")}</th>
-                    <th className="px-5 py-3 font-medium">{t("admin.col.state")}</th>
-                    <th className="px-5 py-3 font-medium">{t("admin.col.transaction")}</th>
-                    <th className="px-5 py-3 text-right font-medium">{t("admin.col.actions")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {history.map((payout) => (
-                    <PayoutRow key={payout.id} payout={payout} busy={busy === payout.id} onCancel={() => onCancel(payout.id)} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            // Five columns do not fit a phone: the kit's wrapper scrolls the table inside its box.
+            <Table className="min-w-140">
+              <TableHeader>
+                {/* i18n-max: 14 per header — a long header widens the scroll, not a cell. */}
+                <TableRow>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("ui.destination")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("ui.amount")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.state")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.transaction")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.map((payout) => (
+                  <PayoutRow key={payout.id} payout={payout} busy={busy === payout.id} onCancel={() => onCancel(payout.id)} />
+                ))}
+              </TableBody>
+            </Table>
           )}
         </Settled>
       </CardContent>
@@ -86,8 +86,8 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
   const locale = useLocale();
   const open = OPEN_STATES.has(payout.state);
   return (
-    <tr>
-      <td className="px-5 py-3">
+    <TableRow>
+      <TableCell className={EDGE_CELL}>
         <p className="flex items-center gap-1.5 text-xs text-ink-soft">
           <NetworkMark network={payout.network} className="size-3.5 shrink-0" />
           {networkLabel(payout.network)}
@@ -95,15 +95,15 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
         <p className="font-mono-tech text-xs" title={payout.address}>
           {shortAddress(payout.address)}
         </p>
-      </td>
-      <td className="px-5 py-3 tabular-nums">{formatUsd(payout.amount, locale)}</td>
-      <td className="px-5 py-3">
+      </TableCell>
+      <TableCell className={cn(EDGE_CELL, "tabular-nums")}>{formatUsd(payout.amount, locale)}</TableCell>
+      <TableCell className={EDGE_CELL}>
         <span className={stateTone(payout.state)}>{stateLabel(payout.state, t)}</span>
-      </td>
-      <td className="px-5 py-3 font-mono-tech text-xs text-ink-soft" title={payout.tx_ref || undefined}>
+      </TableCell>
+      <TableCell className={cn(EDGE_CELL, "font-mono-tech text-xs text-ink-soft")} title={payout.tx_ref || undefined}>
         {payout.tx_ref ? shortAddress(payout.tx_ref) : "—"}
-      </td>
-      <td className="px-5 py-3">
+      </TableCell>
+      <TableCell className={EDGE_CELL}>
         <div className="flex justify-end">
           {payout.state === "queued" ? (
             <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={onCancel}>
@@ -114,8 +114,8 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
             <span className="text-xs text-ink-soft">{open ? t("admin.revenue.inFlight") : "—"}</span>
           )}
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 

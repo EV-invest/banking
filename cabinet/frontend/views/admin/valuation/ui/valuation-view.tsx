@@ -1,11 +1,11 @@
 "use client";
 
-import { Loader2, TriangleAlert } from "lucide-react";
+import { Inbox, Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { failRedemption, setAllocationUnitCap, settleRedemption } from "@/entities/admin/api/admin-client";
 import { adminAllocationsResource, redemptionQueueResource } from "@/entities/admin/model/admin-resource";
@@ -19,6 +19,7 @@ import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor } from "@/shared/tips";
 import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, stateLabel, toBaseUnits } from "@/views/admin/lib/format";
+import { EDGE_CELL, TABLE_HEAD } from "@/views/admin/lib/table";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 import { ValuationActions } from "@/views/admin/valuation/ui/valuation-actions";
 
@@ -239,40 +240,49 @@ export function ValuationView() {
               }
             >
               {!queue ? null : queue.length === 0 ? (
-                <p className="p-8 text-center text-sm text-ink-soft">{t("admin.valuation.queueEmpty")}</p>
+                <div className="p-8">
+                  <Empty className="border md:p-6">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Inbox />
+                      </EmptyMedia>
+                      <EmptyTitle>{t("admin.valuation.queueEmpty")}</EmptyTitle>
+                    </EmptyHeader>
+                  </Empty>
+                </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    {/* i18n-max: 14 per header — auto-layout table with no scroll wrapper. */}
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
-                      <th className="px-5 py-3 font-medium">{t("admin.col.user")}</th>
-                      <th className="px-5 py-3 font-medium">{t("invest.units")}</th>
-                      <th className="px-5 py-3 font-medium">
+                <Table>
+                  <TableHeader>
+                    {/* i18n-max: 14 per header — auto-layout table; the kit's wrapper scrolls past it. */}
+                    <TableRow>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.user")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("invest.units")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>
                         <span className="flex items-center gap-1.5">
                           {t("admin.valuation.col.estCash")}
                           <TipAnchor anchor="admin.valuation.queue.est-cash" />
                         </span>
-                      </th>
-                      <th className="px-5 py-3 font-medium">{t("admin.col.age")}</th>
-                      <th className="px-5 py-3 text-right font-medium">{t("admin.col.actions")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
+                      </TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.age")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {queue.map((item) => {
                       const est = currentNav > 0 ? Number(item.units) * currentNav : null;
                       return (
-                        <tr key={item.redemption_id}>
-                          <td className="px-5 py-3">
+                        <TableRow key={item.redemption_id}>
+                          <TableCell className={EDGE_CELL}>
                             <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
                             <p className="font-mono-tech text-xs text-ink-soft">{item.service}</p>
-                          </td>
+                          </TableCell>
                           {/* A bare unit count in the reader's locale — it is not money, so
                               it takes `Intl`'s own precision rather than one of the
                               `shared/lib/money.ts` policies. */}
-                          <td className="px-5 py-3 tabular-nums">{Number(item.units).toLocaleString(locale)}</td>
-                          <td className="px-5 py-3 tabular-nums text-ink-soft">{est ? t("admin.valuation.approx", { amount: formatUsd(est, locale) }) : "—"}</td>
-                          <td className="px-5 py-3 text-ink-soft">{ago(item.created_at, t)}</td>
-                          <td className="px-5 py-3">
+                          <TableCell className={cn(EDGE_CELL, "tabular-nums")}>{Number(item.units).toLocaleString(locale)}</TableCell>
+                          <TableCell className={cn(EDGE_CELL, "tabular-nums text-ink-soft")}>{est ? t("admin.valuation.approx", { amount: formatUsd(est, locale) }) : "—"}</TableCell>
+                          <TableCell className={cn(EDGE_CELL, "text-ink-soft")}>{ago(item.created_at, t)}</TableCell>
+                          <TableCell className={EDGE_CELL}>
                             {/* i18n-max: 12 per verb — two `shrink-0` Buttons, each with a
                                 tip anchor, share this cell. */}
                             <div className="flex justify-end gap-2">
@@ -296,12 +306,12 @@ export function ValuationView() {
                                 <TipAnchor anchor="admin.valuation.queue.fail" />
                               </span>
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               )}
             </Settled>
           </CardContent>

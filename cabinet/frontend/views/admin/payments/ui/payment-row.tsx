@@ -9,7 +9,7 @@
 import { ArrowDown } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, InfoTip, InfoTipContent, InfoTipTrigger, Spinner } from "@evinvest/uikit";
+import { Button, InfoTip, InfoTipContent, InfoTipTrigger, Spinner, TableCell, TableRow } from "@evinvest/uikit";
 
 import { consentLabel, consentTone, isPaymentOpen, paymentStateLabel, paymentStateTone, requirementLabel, tierLabel } from "@/entities/payment/lib/format";
 import { PaymentEndSummary } from "@/entities/payment/ui/payment-end";
@@ -18,29 +18,32 @@ import { cn } from "@/shared/lib/cn";
 import { expiresIn, formatMoment } from "@/shared/lib/datetime";
 import { formatExactUsdt } from "@/shared/lib/money";
 import { Link } from "@/shared/ui/cabinet-link";
+import { EDGE_CELL } from "@/views/admin/lib/table";
 
 export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy: boolean; onCancel: () => void }) {
   const t = useT();
   const locale = useLocale();
   const open = isPaymentOpen(payment.state);
+  // Top-aligned per cell rather than once on the row: the kit's cell sets `align-middle`
+  // itself, and a class on the `tr` never wins against the cell's own.
   return (
-    <tr className="align-top">
-      <td className="px-5 py-3">
+    <TableRow>
+      <TableCell className={cn(EDGE_CELL, "align-top")}>
         <p className="text-xs tabular-nums text-ink-soft">{formatMoment(payment.created_at, locale)}</p>
         <p className="truncate text-xs" title={payment.initiator_email}>
           {payment.initiator_email}
         </p>
-      </td>
-      <td className="px-5 py-3">
+      </TableCell>
+      <TableCell className={cn(EDGE_CELL, "align-top")}>
         <div className="flex flex-col gap-1.5 text-sm">
           <PaymentEndSummary end={payment.source} />
           <ArrowDown aria-hidden className="size-3 text-ink-soft" />
           <PaymentEndSummary end={payment.destination} />
         </div>
-      </td>
-      <td className="px-5 py-3 text-sm font-medium tabular-nums">{formatExactUsdt(payment.amount, locale)}</td>
-      <td className="px-5 py-3 text-xs">{tierLabel(payment.tier, t)}</td>
-      <td className="px-5 py-3 text-xs">
+      </TableCell>
+      <TableCell className={cn(EDGE_CELL, "align-top text-sm font-medium tabular-nums")}>{formatExactUsdt(payment.amount, locale)}</TableCell>
+      <TableCell className={cn(EDGE_CELL, "align-top text-xs")}>{tierLabel(payment.tier, t)}</TableCell>
+      <TableCell className={cn(EDGE_CELL, "align-top text-xs")}>
         <p>{requirementLabel(payment.requirement, t)}</p>
         {payment.consilium_id ? (
           <Link href="/consilium" className="rounded-md text-primary-ink underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
@@ -59,13 +62,13 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
             )}
           </p>
         ) : null}
-      </td>
-      <td className="px-5 py-3 text-xs">
+      </TableCell>
+      <TableCell className={cn(EDGE_CELL, "align-top whitespace-normal text-xs")}>
         <span className={cn("font-medium", paymentStateTone(payment.state))}>{paymentStateLabel(payment.state, t)}</span>
         {open && <p className="tabular-nums text-ink-soft">{expiresIn(payment.expires_at, t)}</p>}
         {payment.failure_reason && <p className="break-words text-accent-error">{payment.failure_reason}</p>}
-      </td>
-      <td className="px-5 py-3">
+      </TableCell>
+      <TableCell className={cn(EDGE_CELL, "align-top")}>
         <div className="flex justify-end">
           {open ? (
             <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={onCancel}>
@@ -76,7 +79,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
             <span className="text-xs text-ink-soft">—</span>
           )}
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }

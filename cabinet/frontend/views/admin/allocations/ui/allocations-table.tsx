@@ -1,13 +1,17 @@
 "use client";
 
+import { Boxes } from "lucide-react";
+
 import { useT } from "@evinvest/i18n/react";
-import { Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Table, TableBody, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import type { AllocationWrite } from "@/entities/admin/api/admin-client";
 import type { Allocation, AllocationAccessLevel } from "@/shared/contracts/admin";
+import { cn } from "@/shared/lib/cn";
 import { useIsCompact } from "@/shared/lib/use-is-compact";
 import { Settled } from "@/shared/ui/motion";
 import type { AllocationPanelKind } from "@/views/admin/allocations/lib/panel";
+import { EDGE_CELL, TABLE_HEAD } from "@/views/admin/lib/table";
 import { AllocationCard } from "@/views/admin/allocations/ui/allocation-card";
 import { AllocationRow, type AllocationRowProps } from "@/views/admin/allocations/ui/allocation-row";
 
@@ -58,7 +62,16 @@ export function AllocationsTable({
           }
         >
           {!rows ? null : rows.length === 0 ? (
-            <p className="p-8 text-center text-sm text-ink-soft">{t("admin.alloc.empty")}</p>
+            <div className="p-8">
+              <Empty className="border md:p-6">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Boxes />
+                  </EmptyMedia>
+                  <EmptyTitle>{t("admin.alloc.empty")}</EmptyTitle>
+                </EmptyHeader>
+              </Empty>
+            </div>
           ) : compact ? (
             <div className="divide-y divide-border">
               {rows.map((row) => (
@@ -66,30 +79,28 @@ export function AllocationsTable({
               ))}
             </div>
           ) : (
-            // The wrapper scrolls sideways rather than the card clipping: with the side
+            // The kit's wrapper scrolls sideways rather than the card clipping: with the side
             // panel open the table can be narrower than its six columns want, and a cut
             // Actions cell must stay reachable, with its half-visible button as the cue.
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  {/* i18n-max: 14 per header — auto-layout table; a long header widens its
-                      column and squeezes the Product cell. */}
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
-                    <th className="px-5 py-3 font-medium">{t("admin.alloc.col.product")}</th>
-                    <th className="px-5 py-3 font-medium">{t("admin.alloc.col.serviceId")}</th>
-                    <th className="px-5 py-3 font-medium">{t("admin.col.state")}</th>
-                    <th className="px-5 py-3 font-medium">{t("admin.alloc.col.access")}</th>
-                    <th className="px-5 py-3 font-medium">{t("admin.alloc.col.unitCap")}</th>
-                    <th className="px-5 py-3 text-right font-medium">{t("admin.col.actions")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {rows.map((row) => (
-                    <AllocationRow key={row.service} {...propsFor(row)} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                {/* i18n-max: 14 per header — auto-layout table; a long header widens its
+                    column and squeezes the Product cell. */}
+                <TableRow>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.product")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.serviceId")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.state")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.access")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.unitCap")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <AllocationRow key={row.service} {...propsFor(row)} />
+                ))}
+              </TableBody>
+            </Table>
           )}
         </Settled>
       </CardContent>
