@@ -1,10 +1,9 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Select, SelectContent, SelectItem, SelectTrigger } from "@evinvest/uikit";
+import { Button, Select, SelectContent, SelectItem, SelectTrigger, Spinner } from "@evinvest/uikit";
 
 import type { AllocationGrantLevel } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
@@ -49,7 +48,7 @@ export function GrantForm({ busy, onSubmit }: { busy: boolean; onSubmit: (userId
         disabled={busy || !user}
         onClick={() => user && onSubmit(user.userId, level)}
       >
-        {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+        {busy ? <Spinner aria-hidden /> : null}
         {t("admin.alloc.grants.submit")}
       </Button>
     </div>

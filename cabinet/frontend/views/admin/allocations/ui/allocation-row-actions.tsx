@@ -5,10 +5,10 @@
 // the same reason `AllocationAccessCell` is — one cell per file keeps the row itself under
 // the component-size ceiling as columns grow.
 
-import { ChartCandlestick, Coins, KeyRound, Loader2 } from "lucide-react";
+import { ChartCandlestick, Coins, KeyRound } from "lucide-react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button } from "@evinvest/uikit";
+import { Button, Spinner } from "@evinvest/uikit";
 
 import type { AllocationState } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
@@ -58,7 +58,7 @@ export function AllocationRowActions({
           {editing ? t("ui.cancel") : t("ui.edit")}
         </Button>
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onToggle}>
-          {busy ? <Loader2 className="size-4 animate-spin" /> : state === "open" ? t("admin.alloc.close") : t("admin.alloc.open")}
+          {busy ? <Spinner aria-hidden /> : state === "open" ? t("admin.alloc.close") : t("admin.alloc.open")}
         </Button>
       </div>
     </div>

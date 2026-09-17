@@ -1,14 +1,15 @@
 "use client";
 
-import { Loader2, Users } from "lucide-react";
+import { Users } from "lucide-react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@evinvest/uikit";
+import { Button, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import type { AllocationAccessGrant } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { accessLabel, accessTone } from "@/views/admin/allocations/lib/access";
 import { ago } from "@/views/admin/lib/format";
+import { TABLE_HEAD } from "@/views/admin/lib/table";
 
 export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: AllocationAccessGrant[]; busyUserId: string | null; onRevoke: (userId: string) => void }) {
   const t = useT();
@@ -28,22 +29,22 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
   }
 
   return (
-    <table className="w-full text-sm">
-      <thead>
+    <Table>
+      <TableHeader>
         {/* i18n-max: 10 per header — the grants table sits in a 340px panel. */}
-        <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
-          <th className="py-2 font-medium">{t("admin.col.user")}</th>
-          <th className="py-2 font-medium">{t("admin.alloc.grants.col.level")}</th>
-          <th className="py-2 font-medium">{t("admin.alloc.grants.col.grantedBy")}</th>
-          <th className="py-2 text-right font-medium">{t("admin.col.when")}</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-border">
+        <TableRow>
+          <TableHead className={TABLE_HEAD}>{t("admin.col.user")}</TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.alloc.grants.col.level")}</TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.alloc.grants.col.grantedBy")}</TableHead>
+          <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.col.when")}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {grants.map((g) => (
-          <tr key={g.user_id}>
+          <TableRow key={g.user_id}>
             {/* Capped width so a long email truncates instead of pushing the other columns
                 out of the 340px panel — `truncate` alone does nothing in an auto-layout cell. */}
-            <td className="max-w-32 py-2 pr-2" title={g.user_id}>
+            <TableCell className="max-w-32" title={g.user_id}>
               {g.email ? (
                 <>
                   <div className="truncate text-sm" title={g.email}>
@@ -54,22 +55,23 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
               ) : (
                 <div className="truncate font-mono-tech text-xs">{g.user_id}</div>
               )}
-            </td>
-            <td className="py-2 pr-2">
+            </TableCell>
+            <TableCell>
               <span className={cn("inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", accessTone(g.level))}>{accessLabel(g.level, t)}</span>
-            </td>
-            <td className="py-2 pr-2 font-mono-tech text-xs text-ink-soft">{g.granted_by}</td>
-            <td className="py-2 text-right">
+            </TableCell>
+            <TableCell className="font-mono-tech text-xs text-ink-soft">{g.granted_by}</TableCell>
+            <TableCell className="text-right">
               <div className="flex items-center justify-end gap-2">
                 <span className="text-xs text-ink-soft">{ago(g.granted_at, t)}</span>
                 <Button type="button" variant="outline" size="sm" disabled={busyUserId === g.user_id} onClick={() => onRevoke(g.user_id)}>
-                  {busyUserId === g.user_id ? <Loader2 className="size-3.5 animate-spin" /> : t("admin.alloc.grants.revoke")}
+                  {/* The spinner stands in for the label, so it keeps the kit's `role="status"` name. */}
+                  {busyUserId === g.user_id ? <Spinner /> : t("admin.alloc.grants.revoke")}
                 </Button>
               </div>
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }

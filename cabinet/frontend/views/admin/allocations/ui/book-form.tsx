@@ -9,11 +9,11 @@
 // product held `in_kind` the hub refuses to open the book without it, so the button stays
 // off and the reason is printed beside the tick rather than relayed as a 412.
 
-import { CheckCircle2, ChevronDown, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Input, Switch } from "@evinvest/uikit";
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Input, Spinner, Switch } from "@evinvest/uikit";
 
 import type { Allocation } from "@/shared/contracts/admin";
 import type { BookPolicy, SetBookPolicyBody } from "@/shared/contracts/book";
@@ -67,7 +67,7 @@ export function BookForm({ allocation, policy, busy, saved, onSubmit }: { alloca
       </Collapsible>
 
       <Button type="button" className={cn("w-full", TEAL_CTA)} disabled={busy || problem !== null || unacknowledged} onClick={submit}>
-        {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+        {busy ? <Spinner aria-hidden /> : null}
         {t("admin.alloc.book.submit")}
       </Button>
       {saved && (

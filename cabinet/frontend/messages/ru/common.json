@@ -172,8 +172,12 @@
     "t": "Лимит паёв"
   },
   "admin.alloc.empty": {
-    "en": "No allocations registered yet — until one is, every subscription is refused.",
-    "t": "Ни одного продукта пока не зарегистрировано — до этого любая подписка отклоняется."
+    "en": "No allocations registered yet",
+    "t": "Ни одного продукта пока не зарегистрировано"
+  },
+  "admin.alloc.emptyHint": {
+    "en": "Until one is, every subscription is refused.",
+    "t": "До этого любая подписка отклоняется."
   },
   "admin.alloc.field.icon": {
     "en": "Icon",
@@ -1196,8 +1200,12 @@
     "t": "Ключ подписи недоступен — инженеры уже оповещены; возврат в обработку не сработает, пока ключ не заменят"
   },
   "admin.outbox.noParkedEvents": {
-    "en": "No parked events — the relay is clean.",
-    "t": "Отложенных событий нет — релей чист."
+    "en": "No parked events",
+    "t": "Отложенных событий нет"
+  },
+  "admin.outbox.noParkedEventsHint": {
+    "en": "The relay is clean.",
+    "t": "Релей чист."
   },
   "admin.outbox.parkedEvents": {
     "en": "Parked events",
@@ -1880,8 +1888,12 @@
     "t": "Снять приостановку"
   },
   "admin.users.noMatch": {
-    "en": "No users match these filters.",
-    "t": "Нет пользователей, подходящих под эти фильтры."
+    "en": "No users match these filters",
+    "t": "Нет пользователей, подходящих под эти фильтры"
+  },
+  "admin.users.noMatchHint": {
+    "en": "Loosen the search, role or status filter to see more accounts.",
+    "t": "Ослабьте поиск, фильтр по роли или статусу, чтобы увидеть больше аккаунтов."
   },
   "admin.users.ownerSeatHeld": {
     "en": "This account holds an owner's seat, so its role cannot be changed here. A seat is given up by resigning, or taken by a removal the other owners vote through, in",
@@ -2104,8 +2116,12 @@
     "t": "Предложено владельцам"
   },
   "admin.valuation.queueEmpty": {
-    "en": "The redemption queue is empty.",
-    "t": "Очередь погашений пуста."
+    "en": "The redemption queue is empty",
+    "t": "Очередь погашений пуста"
+  },
+  "admin.valuation.queueEmptyHint": {
+    "en": "A request appears here when an investor asks to redeem units.",
+    "t": "Заявка появится здесь, когда инвестор попросит погасить паи."
   },
   "admin.valuation.queueFootnote": {
     "en": "Settle pays at settle-time NAV once the fund claim is liquid; if the rail is short the payout queues until treasury tops up. Fail voids the request and refunds the units.",
@@ -2156,8 +2172,12 @@
     "t": "Подтвердить исполнение"
   },
   "admin.withdrawals.empty": {
-    "en": "No withdrawals are awaiting action.",
-    "t": "Нет выводов, ожидающих действия."
+    "en": "No withdrawals awaiting action",
+    "t": "Нет выводов, ожидающих действия"
+  },
+  "admin.withdrawals.emptyHint": {
+    "en": "A withdrawal appears here once an investor asks for one.",
+    "t": "Вывод появится здесь, как только инвестор его запросит."
   },
   "admin.withdrawals.failWarning": {
     "en": "Failing refunds the user. If the broadcast reached the chain this would double-pay — the hub refuses while a broadcast record exists, but verify on-chain first.",

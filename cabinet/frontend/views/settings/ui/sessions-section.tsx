@@ -6,9 +6,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { Loader2 } from "lucide-react";
-
-import { Button, Skeleton } from "@evinvest/uikit";
+import { Button, Skeleton, Spinner } from "@evinvest/uikit";
 
 import type { Session } from "@/shared/contracts";
 import { TipAnchor } from "@/shared/tips";
@@ -119,7 +117,7 @@ export function SessionsSection({
             onClick={onRevokeOthers}
             className="w-full min-w-0 shrink truncate border-chart-4/40 text-chart-4 hover:text-chart-4"
           >
-            {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />} {t("settings.signOutOthers")}
+            {busy && <Spinner className="mr-1.5" aria-hidden />} {t("settings.signOutOthers")}
           </Button>
           <TipAnchor anchor="settings.sessions.revoke-others" />
         </div>

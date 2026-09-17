@@ -13,10 +13,8 @@ import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { triggerLabel } from "@/views/admin/fees/lib/format";
 import { ago, formatUnits, formatUsdt } from "@/views/admin/lib/format";
+import { TABLE_HEAD } from "@/views/admin/lib/table";
 
-// The house table idiom (`views/trade/ui/fills-table.tsx`): uikit's `Table` carries the
-// borders, the cell padding and the scroll wrapper; only the header treatment is ours.
-const HEAD = "h-8 text-xs font-medium uppercase tracking-wide text-ink-soft";
 
 export function AssessmentsCard({ service }: { service: string }) {
   const t = useT();
@@ -50,12 +48,12 @@ export function AssessmentsCard({ service }: { service: string }) {
               {/* i18n-max: 14 per header — the wrapper scrolls, so a long header costs a
                   sideways drag rather than a clipped column. */}
               <TableRow>
-                <TableHead className={HEAD}>{t("admin.col.when")}</TableHead>
-                <TableHead className={HEAD}>{t("admin.fees.col.trigger")}</TableHead>
-                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.managementUsdt")}</TableHead>
-                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.performanceUsdt")}</TableHead>
-                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.unitsTaken")}</TableHead>
-                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.deferredUsdt")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.col.when")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.trigger")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.managementUsdt")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.performanceUsdt")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.unitsTaken")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.deferredUsdt")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

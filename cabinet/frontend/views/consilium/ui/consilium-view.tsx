@@ -10,7 +10,7 @@
 // only place it is ever computed is inside one Postgres transaction with the request row
 // locked (docs/CONSILIUM.md, policy 14, 21).
 
-import { Banknote, Loader2, ShieldAlert, Users } from "lucide-react";
+import { Banknote, ShieldAlert, Users } from "lucide-react";
 import { Fragment, useState, type CSSProperties } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
@@ -41,6 +41,7 @@ import {
   Progress,
   Separator,
   Skeleton,
+  Spinner,
 } from "@evinvest/uikit";
 
 import { useConsiliumStream, type StreamStatus } from "@/entities/governance/model/consilium-socket";
@@ -571,7 +572,7 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
           <p className="text-sm leading-relaxed text-ink">{t("consilium.payout.cancelWarning", { approvals })}</p>
           <div className="flex flex-col gap-2.5 sm:flex-row">
             <Button variant="destructive" size="sm" disabled={busy} onClick={() => void cancel()}>
-              {busy && <Loader2 className="size-4 animate-spin" />}
+              {busy && <Spinner aria-hidden />}
               {t("consilium.payout.cancelConfirm")}
             </Button>
             {/* Not "Cancel": beside "Cancel and void the votes" that word answers both ways. */}
@@ -660,7 +661,7 @@ function ResignCard({ email, loadingProfile }: { email: string; loadingProfile: 
             {error !== null && <ResourceError message={errorMessage(error, t)} />}
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <Button variant="destructive" className="sm:flex-1" disabled={!matches || busy} onClick={() => void submit()}>
-                {busy && <Loader2 className="size-4 animate-spin" />}
+                {busy && <Spinner aria-hidden />}
                 {t("consilium.resign.confirm")}
               </Button>
               <Button

@@ -1,10 +1,10 @@
 "use client";
 
-import { ArrowUpRight, Loader2, X } from "lucide-react";
+import { ArrowUpRight, X } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type CSSProperties, useState } from "react";
 
-import { Skeleton } from "@evinvest/uikit";
+import { Skeleton, Spinner } from "@evinvest/uikit";
 
 import { cancelWithdrawal, depositsResource, withdrawalsResource } from "@/entities/wallet/model/wallet-resource";
 import type { Deposit, Withdrawal } from "@/shared/contracts";
@@ -161,7 +161,7 @@ function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; b
               aria-label={t("wallet.cancelWithdrawal")}
               className="rounded-md border border-border p-1 text-ink-soft outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
-              {busy ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+              {busy ? <Spinner className="size-3" aria-hidden /> : <X className="size-3" />}
             </button>
           )}
         </span>

@@ -6,9 +6,8 @@
 // reference material that decision is read against.
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Loader2 } from "lucide-react";
 
-import { Card, CardContent } from "@evinvest/uikit";
+import { Card, CardContent, Spinner } from "@evinvest/uikit";
 
 import type { AccruedFees, FeePolicy, FundNav } from "@/shared/contracts";
 import { basisLabel, crystallizationLabel } from "@/shared/lib/fee-terms";
@@ -32,7 +31,7 @@ export function SupplyCard({ nav }: { nav: FundNav | null }) {
     return (
       <Card>
         <CardContent className="py-6">
-          <Loader2 className="size-4 animate-spin text-ink-soft" />
+          <Spinner className="text-ink-soft" aria-hidden />
         </CardContent>
       </Card>
     );

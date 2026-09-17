@@ -1,10 +1,10 @@
 "use client";
 
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { Button } from "@evinvest/uikit";
+import { Button, Spinner } from "@evinvest/uikit";
 
 import { revokeSession, sessionsResource } from "@/entities/session/model/session-resource";
 import { isLocale } from "@evinvest/i18n";
@@ -218,7 +218,7 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
           dirty ? (
             // i18n-max: 11 — a `shrink-0` Button in the app bar, beside the truncated title.
             <Button type="button" size="sm" onClick={save} disabled={saving} className="rounded-full font-semibold">
-              {saving && <Loader2 className="size-3.5 animate-spin" />} {t("ui.save")}
+              {saving && <Spinner aria-hidden />} {t("ui.save")}
             </Button>
           ) : pushed ? undefined : (
             // The in-cabinet account chip, on mobile: the avatar is the way to the profile
@@ -251,7 +251,7 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
               )}
               {/* i18n-max: 20 */}
               <Button type="button" onClick={save} disabled={loading || saving || !dirty} className="rounded-lg font-semibold">
-                {saving && <Loader2 className="size-4 animate-spin" />} {t("ui.saveChanges")}
+                {saving && <Spinner aria-hidden />} {t("ui.saveChanges")}
               </Button>
             </div>
           )}

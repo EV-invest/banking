@@ -8,11 +8,11 @@
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 
-import { BadgeCheck, Loader2, LogOut } from "lucide-react";
+import { BadgeCheck, LogOut } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type ReactNode, useState } from "react";
 
-import { Skeleton } from "@evinvest/uikit";
+import { Skeleton, Spinner } from "@evinvest/uikit";
 
 import { cabinetPath } from "@/shared/config/base-path";
 import type { Session } from "@/shared/contracts";
@@ -224,7 +224,7 @@ export function SignOutButton() {
       disabled={busy}
       className="flex w-full items-center justify-center gap-2 rounded-lg border border-border py-3.5 text-sm font-semibold text-accent-error outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:bg-accent-error/10 disabled:opacity-60"
     >
-      {busy ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />} {t("auth.signOut")}
+      {busy ? <Spinner aria-hidden /> : <LogOut className="size-4" />} {t("auth.signOut")}
     </button>
   );
 }

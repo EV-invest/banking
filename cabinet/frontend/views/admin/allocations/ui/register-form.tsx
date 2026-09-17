@@ -1,10 +1,9 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input } from "@evinvest/uikit";
+import { Button, Card, CardContent, Input, Spinner } from "@evinvest/uikit";
 
 import type { AllocationWrite } from "@/entities/admin/api/admin-client";
 import type { AllocationIcon } from "@/shared/contracts/admin";
@@ -64,7 +63,7 @@ export function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCa
             {t("ui.cancel")}
           </Button>
           <Button type="button" className={cn(TEAL_CTA)} disabled={busy || !slugOk || !title.trim()} onClick={() => onSubmit({ service, title, summary, icon })}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            {busy ? <Spinner aria-hidden /> : null}
             {t("admin.alloc.registerSubmit")}
           </Button>
         </div>

@@ -7,10 +7,9 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Button, type ButtonSize } from "@evinvest/uikit";
+import { Button, type ButtonSize, Spinner } from "@evinvest/uikit";
 
 import type { StartState, StartVerification } from "@/features/kyc/model/use-start-verification";
 import { errorMessage } from "@/shared/lib/api-client";
@@ -20,7 +19,7 @@ import { SupportLink } from "@/shared/ui/support-link";
 export function StartVerificationButton({ start, label, size, className }: { start: StartVerification; label: string; size?: ButtonSize; className?: string }) {
   return (
     <Button type="button" size={size} onClick={start.begin} disabled={start.starting} aria-busy={start.starting} className={className}>
-      {start.starting && <Loader2 className="size-4 animate-spin" aria-hidden />}
+      {start.starting && <Spinner aria-hidden />}
       {label}
     </Button>
   );

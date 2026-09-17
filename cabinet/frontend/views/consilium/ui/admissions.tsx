@@ -24,7 +24,7 @@
 // legitimately, which would make every other control in this feature decorative
 // (docs/CONSILIUM.md, policy 21).
 
-import { Loader2, UserPlus, Users } from "lucide-react";
+import { UserPlus, Users } from "lucide-react";
 import { Fragment, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
@@ -47,6 +47,7 @@ import {
   ItemSeparator,
   ItemTitle,
   Separator,
+  Spinner,
   Textarea,
 } from "@evinvest/uikit";
 
@@ -222,11 +223,11 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
                   disabled={busy !== null}
                   onClick={() => void act("reject")}
                 >
-                  {busy === "reject" && <Loader2 className="size-4 animate-spin" />}
+                  {busy === "reject" && <Spinner aria-hidden />}
                   {t("consilium.admission.voteReject")}
                 </Button>
                 <Button variant="outline" className="sm:flex-1" disabled={busy !== null} onClick={() => void act("admit")}>
-                  {busy === "admit" && <Loader2 className="size-4 animate-spin" />}
+                  {busy === "admit" && <Spinner aria-hidden />}
                   {t("consilium.admission.voteAdmit")}
                 </Button>
               </div>
@@ -238,7 +239,7 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
 
             {standing.role === "initiator" && (
               <Button variant="ghost" size="sm" className="self-start" disabled={busy !== null} onClick={() => void act("cancel")}>
-                {busy === "cancel" && <Loader2 className="size-4 animate-spin" />}
+                {busy === "cancel" && <Spinner aria-hidden />}
                 {t("consilium.admission.cancel")}
               </Button>
             )}
@@ -410,7 +411,7 @@ export function ProposeAdmission({
                 disabled={busy || candidate.trim().length === 0 || reason.trim().length === 0}
                 onClick={() => void submit()}
               >
-                {busy ? <Loader2 className="size-4 animate-spin" /> : <Users className="size-4" />}
+                {busy ? <Spinner aria-hidden /> : <Users className="size-4" />}
                 {t("consilium.admit.submit")}
               </Button>
             </FieldGroup>

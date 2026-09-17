@@ -1,22 +1,24 @@
 "use client";
 
-import { Loader2, TriangleAlert } from "lucide-react";
+import { Inbox, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Input, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { dispatchWithdrawal, failWithdrawal, settleWithdrawal } from "@/entities/admin/api/admin-client";
 import { withdrawalQueueResource } from "@/entities/admin/model/admin-resource";
 import type { WithdrawalQueueItem } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
+import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { networkLabel } from "@/shared/lib/rail";
 import { NetworkMark } from "@/shared/ui/icons/networks";
-import { ago, formatUsd, stateLabel } from "@/views/admin/lib/format";
+import { ago, formatUsdt, stateLabel } from "@/views/admin/lib/format";
+import { EDGE_CELL, TABLE_HEAD } from "@/views/admin/lib/table";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
 // Which confirm panel is open under a row: settle asks for the mined tx ref,
@@ -88,37 +90,47 @@ export function WithdrawalsView() {
               }
             >
               {!queue ? null : queue.length === 0 ? (
-                <p className="p-8 text-center text-sm text-ink-soft">{t("admin.withdrawals.empty")}</p>
+                <div className="p-8">
+                  <Empty className="border md:p-6">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Inbox />
+                      </EmptyMedia>
+                      <EmptyTitle>{t("admin.withdrawals.empty")}</EmptyTitle>
+                      <EmptyDescription>{t("admin.withdrawals.emptyHint")}</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    {/* i18n-max: 14 per header — auto-layout table with no scroll wrapper;
-                        the address cell is the one that gives width back. */}
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
-                      <th className="px-5 py-3 font-medium">{t("admin.col.user")}</th>
-                      <th className="px-5 py-3 font-medium">
+                <Table>
+                  <TableHeader>
+                    {/* i18n-max: 14 per header — auto-layout table; the address cell is
+                        the one that gives width back before the kit's wrapper scrolls. */}
+                    <TableRow>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.user")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>
                         <span className="flex items-center gap-1.5">
                           {t("ui.destination")}
                           <TipAnchor anchor="admin.withdrawals.destination" />
                         </span>
-                      </th>
-                      <th className="px-5 py-3 font-medium">
+                      </TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>
                         <span className="flex items-center gap-1.5">
                           {t("admin.withdrawals.col.grossNet")}
                           <TipAnchor anchor="admin.withdrawals.gross-net" />
                         </span>
-                      </th>
-                      <th className="px-5 py-3 font-medium">
+                      </TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>
                         <span className="flex items-center gap-1.5">
                           {t("admin.col.state")}
                           <TipAnchor anchor="admin.withdrawals.state" />
                         </span>
-                      </th>
-                      <th className="px-5 py-3 font-medium">{t("admin.col.age")}</th>
-                      <th className="px-5 py-3 text-right font-medium">{t("admin.col.actions")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
+                      </TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.age")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {queue.map((item) => {
                       const isBusy = busy === item.withdrawal_id;
                       const open = panel?.id === item.withdrawal_id ? panel : null;
@@ -139,8 +151,8 @@ export function WithdrawalsView() {
                         />
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               )}
             </Settled>
           </CardContent>
@@ -181,8 +193,8 @@ function WithdrawalRow({
   const queued = item.state === "queued";
   return (
     <>
-      <tr>
-        <td className="px-5 py-3">
+      <TableRow>
+        <TableCell className={EDGE_CELL}>
           {/* A revenue payout has no investor behind it — the fund is paying its own
               earnings out. Naming that beats rendering a blank User cell, and it tells
               the operator whose money the dispatch/settle below is about to move. */}
@@ -192,8 +204,8 @@ function WithdrawalRow({
             <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
           )}
           <p className="font-mono-tech text-xs text-ink-soft">{item.withdrawal_id.slice(0, 8)}</p>
-        </td>
-        <td className="px-5 py-3">
+        </TableCell>
+        <TableCell className={EDGE_CELL}>
           {/* Was the bare wire id under a `uppercase` class. The rail's short mark comes
               from `@/shared/lib/rail` — the same one the investor cabinet renders — so a
               chain is not named two different ways in two consoles, and `Polygon` keeps
@@ -206,21 +218,21 @@ function WithdrawalRow({
           <p className="font-mono-tech text-xs" title={item.address}>
             {shortAddr(item.address)}
           </p>
-        </td>
-        <td className="px-5 py-3 tabular-nums">
-          <p>{formatUsd(item.amount, locale)}</p>
-          <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", { amount: formatUsd(item.net_amount, locale) })}</p>
-        </td>
-        <td className="px-5 py-3">
+        </TableCell>
+        <TableCell className={cn(EDGE_CELL, "tabular-nums")}>
+          <p>{formatUsdt(item.amount, locale)} USDT</p>
+          <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", { amount: formatUsdt(item.net_amount, locale) })}</p>
+        </TableCell>
+        <TableCell className={EDGE_CELL}>
           <span className={queued ? "text-accent-warn" : "text-positive"}>{stateLabel(item.state, t)}</span>
-        </td>
-        <td className="px-5 py-3 text-ink-soft">{ago(item.created_at, t)}</td>
-        <td className="px-5 py-3">
+        </TableCell>
+        <TableCell className={cn(EDGE_CELL, "text-ink-soft")}>{ago(item.created_at, t)}</TableCell>
+        <TableCell className={EDGE_CELL}>
           {/* i18n-max: 12 per verb — up to two `shrink-0` Buttons share this cell. */}
           <div className="flex justify-end gap-2">
             {queued ? (
               <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onDispatch}>
-                {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                {busy ? <Spinner aria-hidden /> : null}
                 {t("admin.dispatch")}
               </Button>
             ) : (
@@ -241,11 +253,11 @@ function WithdrawalRow({
               </>
             )}
           </div>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
       {panel && (
-        <tr className="bg-ink/5">
-          <td colSpan={6} className="px-5 py-3">
+        <TableRow data-state="selected">
+          <TableCell colSpan={6} className={cn(EDGE_CELL, "whitespace-normal")}>
             {panel.kind === "settle" ? (
               <div className="flex items-center gap-3">
                 <Input
@@ -257,7 +269,7 @@ function WithdrawalRow({
                 />
                 <TipAnchor anchor="admin.withdrawals.settle.tx-hash" />
                 <Button type="button" size="sm" disabled={busy || !txRef.trim()} onClick={onSettle}>
-                  {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {busy ? <Spinner aria-hidden /> : null}
                   {t("admin.withdrawals.confirmSettle")}
                 </Button>
               </div>
@@ -276,15 +288,15 @@ function WithdrawalRow({
                     disabled={busy}
                     onClick={onFail}
                   >
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {busy ? <Spinner aria-hidden /> : null}
                     {t("admin.withdrawals.confirmFail")}
                   </Button>
 
                 </div>
               </div>
             )}
-          </td>
-        </tr>
+          </TableCell>
+        </TableRow>
       )}
     </>
   );

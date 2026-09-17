@@ -17,10 +17,8 @@ import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { changeStateLabel, changeStateTone, termsSummary } from "@/views/admin/fees/lib/format";
 import { WaiverNote } from "@/views/admin/fees/ui/notice-waiver";
+import { TABLE_HEAD } from "@/views/admin/lib/table";
 
-// The house table idiom (`views/trade/ui/fills-table.tsx`): uikit's `Table` carries the
-// borders, the cell padding and the scroll wrapper; only the header treatment is ours.
-const HEAD = "h-8 text-xs font-medium uppercase tracking-wide text-ink-soft";
 
 export function ChangeHistory({ service }: { service: string }) {
   const t = useT();
@@ -52,11 +50,11 @@ export function ChangeHistory({ service }: { service: string }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={HEAD}>{t("admin.fees.col.version")}</TableHead>
-                <TableHead className={HEAD}>{t("admin.col.state")}</TableHead>
-                <TableHead className={HEAD}>{t("admin.fees.terms")}</TableHead>
-                <TableHead className={HEAD}>{t("admin.fees.col.effective")}</TableHead>
-                <TableHead className={HEAD}>{t("admin.fees.col.reason")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.version")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.col.state")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.terms")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.effective")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.reason")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

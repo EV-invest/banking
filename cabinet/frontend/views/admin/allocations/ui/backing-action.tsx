@@ -5,11 +5,11 @@
 // out of the fund's cash or refuses them to the book — a policy, not a label. The hub
 // sets `in_kind` by itself on the first in-kind mint; this is the only way back.
 
-import { Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import { RefreshCw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button } from "@evinvest/uikit";
+import { Button, Spinner } from "@evinvest/uikit";
 
 import { setAllocationBacking } from "@/entities/admin/api/admin-client";
 import type { Allocation } from "@/shared/contracts/admin";
@@ -61,7 +61,7 @@ export function BackingAction({ allocation }: { allocation: Allocation }) {
               {t("ui.cancel")}
             </Button>
             <Button type="button" size="sm" className="flex-1" disabled={busy} onClick={flip}>
-              {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+              {busy ? <Spinner aria-hidden /> : null}
               {t(next === "cash" ? "admin.alloc.backing.markCash" : "admin.alloc.backing.markInKind")}
             </Button>
           </div>

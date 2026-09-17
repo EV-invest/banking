@@ -10,10 +10,15 @@
 // says so rather than printing 0%.
 
 import { useT } from "@evinvest/i18n/react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { cn } from "@/shared/lib/cn";
 import { basisLabel, crystallizationLabel, type FeeTermsLike } from "@/shared/lib/fee-terms";
 import { pct } from "@/shared/lib/rate";
+
+// Plain, not tracked-uppercase: this table is read on the emailed approval page as well
+// as in the admin console, and there it sits among prose.
+const HEAD = "h-8 px-3 text-xs font-medium text-ink-soft";
 
 export function FeeTermsDiff({ from, to }: { from: FeeTermsLike | null | undefined; to: FeeTermsLike }) {
   const t = useT();
@@ -25,28 +30,32 @@ export function FeeTermsDiff({ from, to }: { from: FeeTermsLike | null | undefin
     { key: "invest.lockedIn", now: from ? crystallizationLabel(from.crystallization, t) : null, next: crystallizationLabel(to.crystallization, t) },
   ];
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-xs text-ink-soft">
-            <th className="px-3 py-2 font-medium" />
-            <th className="px-3 py-2 font-medium">{t("consilium.feePolicy.now")}</th>
-            <th className="px-3 py-2 font-medium">{t("consilium.feePolicy.proposed")}</th>
-          </tr>
-        </thead>
-        <tbody>
+    // The kit's wrapper already scrolls; the border is the frame the approval page draws
+    // around the five rows, and it goes on the outside of that wrapper.
+    <div className="rounded-lg border border-border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className={HEAD} />
+            <TableHead className={HEAD}>{t("consilium.feePolicy.now")}</TableHead>
+            <TableHead className={HEAD}>{t("consilium.feePolicy.proposed")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {/* The kit's cells are nowrap; on the emailed approval page a French or Russian
+              label has to wrap inside a phone-width frame, not push it into a scroll. */}
           {rows.map((row) => {
             const moved = row.now !== row.next;
             return (
-              <tr key={row.key} className="border-b border-border/50 last:border-0">
-                <td className="px-3 py-2 text-ink-soft">{t(row.key)}</td>
-                <td className="px-3 py-2 tabular-nums text-ink-soft">{row.now ?? t("consilium.feePolicy.nothingCharged")}</td>
-                <td className={cn("px-3 py-2 tabular-nums", moved ? "font-semibold text-accent-warn" : "text-ink")}>{row.next}</td>
-              </tr>
+              <TableRow key={row.key}>
+                <TableCell className="whitespace-normal px-3 text-ink-soft">{t(row.key)}</TableCell>
+                <TableCell className="whitespace-normal px-3 tabular-nums text-ink-soft">{row.now ?? t("consilium.feePolicy.nothingCharged")}</TableCell>
+                <TableCell className={cn("whitespace-normal px-3 tabular-nums", moved ? "font-semibold text-accent-warn" : "text-ink")}>{row.next}</TableCell>
+              </TableRow>
             );
           })}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

@@ -9,11 +9,11 @@
 // The draft, the retry key and the result live here rather than in the form, because the
 // confirmation step sits between the two and must see the same draft the form built.
 
-import { ArrowRightLeft, Loader2, TriangleAlert } from "lucide-react";
+import { ArrowRightLeft, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button } from "@evinvest/uikit";
+import { Button, Spinner } from "@evinvest/uikit";
 
 import { transferCompanyStake } from "@/entities/admin/api/admin-client";
 import type { Allocation, UnitHolders } from "@/shared/contracts/admin";
@@ -93,7 +93,7 @@ export function TransferStakeAction({ allocation, holders }: { allocation: Alloc
               {t("ui.back")}
             </Button>
             <Button type="button" size="sm" className="flex-1" disabled={busy} onClick={send}>
-              {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+              {busy ? <Spinner aria-hidden /> : null}
               {t("admin.alloc.transfer.submit")}
             </Button>
           </div>

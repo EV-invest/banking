@@ -18,11 +18,11 @@
 // Its own file because the drawer it sits in was already well past the size where a reader
 // can hold the whole thing in their head, and because this is the part with a rule in it.
 
-import { Loader2, ShieldBan, ShieldCheck, ShieldQuestion } from "lucide-react";
+import { ShieldBan, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button } from "@evinvest/uikit";
+import { Button, Spinner } from "@evinvest/uikit";
 
 import { holdUser, reinstateUser } from "@/entities/admin/api/admin-client";
 import { openUserReinstatement, openUserSuspension } from "@/entities/governance/model/governance-resource";
@@ -80,7 +80,7 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
           role control was already fixed for, on the surface where it matters most. */}
       {(standing.kind === "hold" || standing.kind === "legacy") && (
         <Button type="button" variant="outline" size="sm" className="w-full" disabled={working} onClick={() => void submit(() => reinstateUser(userId))}>
-          {working && pending === null ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
+          {working && pending === null ? <Spinner className="size-3.5" aria-hidden /> : <ShieldCheck className="size-3.5" />}
           {standing.kind === "hold" ? t("admin.users.liftHold") : t("admin.users.liftSuspension")}
         </Button>
       )}

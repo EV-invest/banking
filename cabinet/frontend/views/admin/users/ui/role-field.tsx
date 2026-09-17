@@ -15,11 +15,11 @@
 // keeps a live, enabled control here rather than being greyed out the way an owner's is.
 // If you are tempted to make these two cases symmetrical: that is the bug, not the tidy-up.
 
-import { Loader2, ShieldPlus } from "lucide-react";
+import { ShieldPlus } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@evinvest/uikit";
+import { Select, SelectContent, SelectItem, SelectTrigger, Spinner } from "@evinvest/uikit";
 
 import { setUserRole } from "@/entities/admin/api/admin-client";
 import { openAdminAdmission } from "@/entities/governance/model/governance-resource";
@@ -58,7 +58,7 @@ export function RoleField({ userId, role, busy, run }: RoleFieldProps) {
         <Select value={role} onValueChange={(next) => void run("role", () => setUserRole(userId, next))}>
           <SelectTrigger size="sm" className="border-border bg-secondary" disabled={working || seated}>
             <span className="flex items-center gap-1.5">
-              {working && <Loader2 className="size-3 animate-spin" />}
+              {working && <Spinner aria-hidden />}
               {roleLabel(role, t)}
             </span>
           </SelectTrigger>

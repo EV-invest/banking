@@ -5,12 +5,12 @@
 // the second sends it. The rules that disable it — including "wait, a mint is still in
 // the relay" — live in `lib/pin-cap.ts`, tested.
 
-import { Loader2, Pin, TriangleAlert } from "lucide-react";
+import { Pin, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button } from "@evinvest/uikit";
+import { Button, Spinner } from "@evinvest/uikit";
 
 import { setAllocationUnitCap } from "@/entities/admin/api/admin-client";
 import type { Allocation, UnitHolders } from "@/shared/contracts/admin";
@@ -62,7 +62,7 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
               {t("ui.cancel")}
             </Button>
             <Button type="button" size="sm" className={cn("flex-1", TEAL_CTA)} disabled={busy} onClick={pin}>
-              {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+              {busy ? <Spinner aria-hidden /> : null}
               {t("admin.alloc.pinCap.submit")}
             </Button>
           </div>

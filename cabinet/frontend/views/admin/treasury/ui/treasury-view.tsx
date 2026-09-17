@@ -1,11 +1,11 @@
 "use client";
 
-import { Check, Copy, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import { Check, Copy, RefreshCw, TriangleAlert } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Spinner } from "@evinvest/uikit";
 
 import { recordTreasuryDeposit, type RecordedArrival } from "@/entities/admin/api/admin-client";
 import { treasuryResource } from "@/entities/admin/model/admin-resource";
@@ -17,7 +17,7 @@ import { useResource } from "@/shared/lib/resource";
 import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { NetworkMark } from "@/shared/ui/icons/networks";
-import { formatUsd, railLabel } from "@/views/admin/lib/format";
+import { formatUsd, formatUsdt, railLabel } from "@/views/admin/lib/format";
 import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
@@ -80,7 +80,7 @@ export function TreasuryView() {
               {treasury.rails.map((rail) => (
                 <MoneyCard key={rail.network} network={rail.network} label={railLabel(rail.network, t)} value={rail.custody} loading={false} footer={<RailFunding rail={rail} />} />
               ))}
-              <MoneyCard label={t("admin.treasury.bank")} value={treasury.bank} hint={t("admin.treasury.bankHint")} loading={false} tip="admin.treasury.bank" />
+              <MoneyCard label={t("admin.treasury.bank")} value={treasury.bank} unit="USD" hint={t("admin.treasury.bankHint")} loading={false} tip="admin.treasury.bank" />
             </>
           ) : (
             Array.from({ length: 4 }).map((_, i) => <MoneyCard key={i} label="" value={undefined} loading={loading} unavailable={!loading} />)
@@ -202,13 +202,13 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
           )}
           {state.result?.recorded && (
             <p className="text-sm text-accent-debug">
-              {t("admin.treasury.recorded", { amount: formatUsd(state.result.amount, locale), party: partyLabel(state.result, t) })}
+              {t("admin.treasury.recorded", { amount: `${formatUsdt(state.result.amount, locale)} USDT`, party: partyLabel(state.result, t) })}
             </p>
           )}
           {state.result && !state.result.recorded && <p className="text-sm text-accent-warn">{t("admin.treasury.alreadyRecorded")}</p>}
 
           <Button type="button" className={cn("ml-auto flex", TEAL_CTA)} disabled={state.busy || !network || !txRef.trim()} onClick={submit}>
-            {state.busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            {state.busy ? <Spinner aria-hidden /> : null}
             {t("admin.treasury.recordArrivalSubmit")}
           </Button>
         </CardContent>
@@ -225,11 +225,32 @@ function partyLabel({ party_kind, party_id }: RecordedArrival, t: Translate): st
   return party_id ? t("admin.treasury.party.generic", { kind: party_kind, id: party_id }) : party_kind;
 }
 
-/** `unavailable` is the read-failed state: a muted dash, never a formatted `$0.00` —
+/** `unavailable` is the read-failed state: a muted dash, never a formatted `0.00` —
  *  a zero the treasury never reported would be read as a real balance. */
 // `network` is set only on the per-rail cards; the fund-level ones (bank, reserved) name
-// no chain and get no mark.
-function MoneyCard({ label, network, value, hint, loading, unavailable, footer, tip }: { label: string; network?: string; value: string | undefined; hint?: string; loading: boolean; unavailable?: boolean; footer?: ReactNode; tip?: TipKey }) {
+// no chain and get no mark. Every figure here is ledger USDT except the bank line, which
+// is the mocked USD off-ramp and the one card that keeps the "$".
+function MoneyCard({
+  label,
+  network,
+  value,
+  unit = "USDT",
+  hint,
+  loading,
+  unavailable,
+  footer,
+  tip,
+}: {
+  label: string;
+  network?: string;
+  value: string | undefined;
+  unit?: "USDT" | "USD";
+  hint?: string;
+  loading: boolean;
+  unavailable?: boolean;
+  footer?: ReactNode;
+  tip?: TipKey;
+}) {
   const locale = useLocale();
   return (
     <Card>
@@ -244,7 +265,15 @@ function MoneyCard({ label, network, value, hint, loading, unavailable, footer, 
         ) : unavailable ? (
           <p className="text-3xl font-semibold tabular-nums text-ink-soft">—</p>
         ) : (
-          <p className="text-3xl font-semibold tabular-nums">{formatUsd(value, locale)}</p>
+          <p className="text-3xl font-semibold tabular-nums">
+            {unit === "USD" ? (
+              formatUsd(value, locale)
+            ) : (
+              <>
+                {formatUsdt(value, locale)} <span className="text-base font-medium text-ink-soft">USDT</span>
+              </>
+            )}
+          </p>
         )}
         {hint && !loading && !unavailable && <p className="text-xs text-positive">{hint}</p>}
         {footer && !loading && footer}

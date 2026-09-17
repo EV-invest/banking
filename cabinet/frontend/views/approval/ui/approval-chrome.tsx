@@ -10,7 +10,7 @@
 // uikit's `Empty` (AGENTS.md § Frontend design rules: never a bare grey sentence in a blank
 // box), and both pages compose the same ones.
 
-import { Clock, Link2Off, Loader2, ShieldX, Unplug } from "lucide-react";
+import { Clock, Link2Off, ShieldX, Unplug } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { useT } from "@evinvest/i18n/react";
@@ -29,6 +29,7 @@ import {
   FieldLabel,
   Input,
   Skeleton,
+  Spinner,
 } from "@evinvest/uikit";
 
 import { Logo } from "@/shared/ui/logo";
@@ -303,7 +304,7 @@ export function ApprovalUnreachable({ onRetry, retrying }: { onRetry: () => void
   return (
     <ApprovalOutcome icon={<Unplug />} title={t("approval.loadFailed")} description={t("approval.loadFailedHint")}>
       <Button variant="outline" onClick={onRetry} disabled={retrying}>
-        {retrying && <Loader2 className="size-4 animate-spin" />}
+        {retrying && <Spinner aria-hidden />}
         {t("status.tryAgain")}
       </Button>
     </ApprovalOutcome>
@@ -326,7 +327,7 @@ export function ApprovalUnrenderable({ description, onRetry, retrying }: { descr
   return (
     <ApprovalOutcome icon={<Unplug />} title={t("approval.unavailableTitle")} description={description ?? t("approval.unavailableBody")}>
       <Button variant="outline" onClick={onRetry} disabled={retrying}>
-        {retrying && <Loader2 className="size-4 animate-spin" />}
+        {retrying && <Spinner aria-hidden />}
         {t("status.tryAgain")}
       </Button>
     </ApprovalOutcome>

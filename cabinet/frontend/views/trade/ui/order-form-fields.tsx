@@ -3,10 +3,8 @@
 // The form's controls and its summary rows. Stateless: the pane owns the draft, this
 // draws it and reports edits back.
 
-import { Loader2 } from "lucide-react";
-
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Input, Label, OrderForm, OrderFormRow, OrderFormSubmit, Select, SelectContent, SelectItem, SelectTrigger, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
+import { Input, Label, OrderForm, OrderFormRow, OrderFormSubmit, Select, SelectContent, SelectItem, SelectTrigger, Spinner, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
 
 import { ORDER_TIFS } from "@/entities/book/lib/vocabulary";
 import type { Position } from "@/shared/contracts";
@@ -112,7 +110,7 @@ export function OrderFormFields({
       </div>
 
       <OrderFormSubmit side={draft.side} disabled={disabled || problem !== null}>
-        {busy ? <Loader2 className="size-4 animate-spin" /> : t(buying ? "trade.form.submitBuy" : "trade.form.submitSell")}
+        {busy ? <Spinner /> : t(buying ? "trade.form.submitBuy" : "trade.form.submitSell")}
       </OrderFormSubmit>
     </OrderForm>
   );

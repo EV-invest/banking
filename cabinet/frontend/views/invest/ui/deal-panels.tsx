@@ -11,10 +11,10 @@
 // panel was the same job done once per call site, which is the version that goes stale.
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { ArrowDownToLine, Clock, Loader2, TriangleAlert, X } from "lucide-react";
+import { ArrowDownToLine, Clock, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
-import { Alert, AlertDescription, AlertTitle, Button, Input } from "@evinvest/uikit";
+import { Alert, AlertDescription, AlertTitle, Button, Input, Spinner } from "@evinvest/uikit";
 
 import { cancelRedemption, submitRedeem } from "@/entities/fund/model/fund-resource";
 import type { FundNav, Position, Redemption } from "@/shared/contracts";
@@ -108,7 +108,7 @@ export function RedeemPanel({ service, position, nav, inKind = false }: { servic
           <Input value={units} onChange={(e) => setUnits(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
         </label>
         <Button type="button" variant="outline" disabled={inKind || submitting || estimate === null || overdraw} onClick={submit}>
-          {submitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowDownToLine className="size-4" />}
+          {submitting ? <Spinner aria-hidden /> : <ArrowDownToLine className="size-4" />}
           {t("invest.redeem")}
         </Button>
       </div>
@@ -168,7 +168,7 @@ export function QueuedList({ items }: { items: Redemption[] }) {
           </span>
           <span className="flex items-center gap-2">
             <Button type="button" variant="outline" size="sm" disabled={busy === (r.id ?? "")} onClick={() => cancel(r.id ?? "")}>
-              {busy === (r.id ?? "") ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+              {busy === (r.id ?? "") ? <Spinner className="size-3" aria-hidden /> : <X className="size-3" />}
               {t("ui.cancel")}
             </Button>
             <TipAnchor anchor="invest.activity.cancel" />

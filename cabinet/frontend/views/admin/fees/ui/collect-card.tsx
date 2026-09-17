@@ -7,11 +7,10 @@
 // money out — once settled, fee cash lands in the `fee` claim, which is exactly what
 // `Fund revenue` withdraws on-chain, and a second door to the same money would be a bug.
 
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Skeleton, Spinner } from "@evinvest/uikit";
 
 import { settleFeeShares } from "@/entities/admin/api/admin-client";
 import { feeSharesResource } from "@/entities/admin/model/admin-resource";
@@ -86,7 +85,7 @@ export function CollectCard({ service }: { service: string }) {
         {done && !problem && <p className="text-xs text-positive">{`${done} ${t("admin.fees.withdrawableFrom", { screen: t("nav.revenue") })}`}</p>}
 
         <Button type="button" variant="outline" onClick={settle} disabled={busy || data === null || nothing}>
-          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy && <Spinner aria-hidden />}
           {t("admin.fees.settleAll")}
         </Button>
         {nothing && <p className="text-xs text-ink-soft">{t("admin.fees.nothingToSettle")}</p>}

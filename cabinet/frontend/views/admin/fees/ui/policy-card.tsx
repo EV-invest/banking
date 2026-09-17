@@ -9,11 +9,10 @@
 // surface has to carry that, because the failure it invites is an operator reading
 // "scheduled" as "changed".
 
-import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@evinvest/uikit";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "@evinvest/uikit";
 
 import { scheduleFeePolicy } from "@/entities/admin/api/admin-client";
 import type { FeePolicy, FeePolicyChange } from "@/shared/contracts/admin";
@@ -172,7 +171,7 @@ export function PolicyCard({
         {problem && <p className="text-xs text-accent-error">{problem}</p>}
 
         <Button type="button" onClick={schedule} disabled={busy || blocked || invalid}>
-          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy && <Spinner aria-hidden />}
           {requirement === "owner_consilium" ? t("admin.fees.askOwners") : current ? t("admin.fees.scheduleChange") : t("admin.fees.startCharging")}
         </Button>
       </CardContent>

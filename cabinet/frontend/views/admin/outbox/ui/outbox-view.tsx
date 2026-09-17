@@ -1,10 +1,10 @@
 "use client";
 
-import { KeyRound, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import { Inbox, KeyRound, RefreshCw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { unparkEvent } from "@/entities/admin/api/admin-client";
 import { parkedEventsResource } from "@/entities/admin/model/admin-resource";
@@ -12,6 +12,7 @@ import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { ago } from "@/views/admin/lib/format";
+import { TABLE_HEAD } from "@/views/admin/lib/table";
 import { isDeadKeyPark } from "@/views/admin/outbox/lib/dead-key";
 import { StaggerItem } from "@/shared/ui/motion";
 import type { ParkedEvent } from "@/shared/contracts/admin";
@@ -110,7 +111,15 @@ export function OutboxView() {
           ) : parkedHint ? (
             <p className="text-sm text-ink-soft">{parkedHint}</p>
           ) : parked.length === 0 ? (
-            <p className="text-sm text-ink-soft">{t("admin.outbox.noParkedEvents")}</p>
+            <Empty className="border md:p-6">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Inbox />
+                </EmptyMedia>
+                <EmptyTitle>{t("admin.outbox.noParkedEvents")}</EmptyTitle>
+                <EmptyDescription>{t("admin.outbox.noParkedEventsHint")}</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <ParkedTable parked={parked} unparked={unparked} unparking={unparking} onUnpark={(seq) => void unpark(seq)} />
           )}
@@ -133,46 +142,46 @@ function ParkedTable({
 }) {
   const t = useT();
   return (
-    <table className="w-full text-sm">
-      <thead>
+    <Table>
+      <TableHeader>
         {/* i18n-max: 14 per header — auto-layout table; the Reason cell is the one
             that gives width back, and it is already `truncate`d. */}
-        <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
-          <th className="py-2 font-medium">{t("admin.outbox.col.seq")}</th>
-          <th className="py-2 font-medium">{t("admin.outbox.col.event")}</th>
-          <th className="py-2 font-medium">
+        <TableRow>
+          <TableHead className={TABLE_HEAD}>{t("admin.outbox.col.seq")}</TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.outbox.col.event")}</TableHead>
+          <TableHead className={TABLE_HEAD}>
             <span className="flex items-center gap-1.5">
               {t("admin.outbox.col.reason")}
               <TipAnchor anchor="admin.outbox.parked.reason" />
             </span>
-          </th>
-          <th className="py-2 font-medium">{t("admin.outbox.col.parked")}</th>
-          <th className="py-2 font-medium" />
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-border">
+          </TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.outbox.col.parked")}</TableHead>
+          <TableHead className={TABLE_HEAD} />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {parked.map((e) => (
-          <tr key={e.seq}>
-            <td className="py-2.5 font-mono-tech text-xs text-ink-soft">{e.seq}</td>
-            <td className="py-2.5">
+          <TableRow key={e.seq}>
+            <TableCell className="font-mono-tech text-xs text-ink-soft">{e.seq}</TableCell>
+            <TableCell>
               <p className="font-medium">{e.kind}</p>
               <p className="font-mono-tech text-xs text-ink-soft">
                 {e.aggregate} · {e.aggregate_id}
               </p>
-            </td>
-            <td className="py-2.5 text-ink-soft">
+            </TableCell>
+            <TableCell className="text-ink-soft">
               <div className="max-w-70 truncate" title={e.reason}>
                 {e.reason || "—"}
               </div>
-            </td>
-            <td className="whitespace-nowrap py-2.5 text-ink-soft">{ago(e.parked_at, t)}</td>
-            <td className="py-2.5 text-right">
+            </TableCell>
+            <TableCell className="text-ink-soft">{ago(e.parked_at, t)}</TableCell>
+            <TableCell className="text-right">
               <ParkedActions event={e} unparked={unparked.has(e.seq)} unparking={unparking} onUnpark={() => onUnpark(e.seq)} />
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }
 
@@ -216,7 +225,7 @@ function ParkedActions({
             disabled={event.compensated || unparked || unparking !== null}
             onClick={onUnpark}
           >
-            {unparking === event.seq ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {unparking === event.seq ? <Spinner aria-hidden /> : null}
             {t("admin.outbox.unpark")}
           </Button>
           <TipAnchor anchor="admin.outbox.parked.unpark" />

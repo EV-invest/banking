@@ -66,7 +66,7 @@ function decimalSeparator(locale: Locale): string {
 // and a rounded "$85" loses the P&L.
 const CENTS = { minimumFractionDigits: 2, maximumFractionDigits: 2 } as const;
 
-/** Summary money: "$48,250.00", "$1,234.56". Dashboards, profile and the admin console. */
+/** Summary money: "$48,250.00", "$1,234.56". Dashboards, profile and the treasury bank line. */
 export function formatUsd(value: string | number | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = typeof value === "number" ? value : num(value);
   return numberFormat(locale, "usd", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", ...CENTS }).format(n);
