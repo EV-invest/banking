@@ -5,7 +5,7 @@ import { isLocale, negotiate, type Locale } from "@evinvest/i18n";
 
 import { experiments } from "@/application/experiments";
 import { config as appConfig } from "@/config";
-import { BASE_PATH, isNonPagePath, localeRepairedPath } from "@/shared/config/base-path";
+import { BASE_PATH, isNonPagePath, localeRepairedPath, zonePathname } from "@/shared/config/base-path";
 import { COOKIES } from "@/shared/config/cookies";
 import { isPublicPath, isTokenApprovalPath, zoneGatePath } from "@/shared/config/public-routes";
 import { contentSecurityPolicy, websocketOrigin } from "@/shared/config/security";
@@ -130,7 +130,10 @@ export function proxy(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = `/${locale ?? "en"}${BASE_PATH}/login`;
     url.search = "";
-    const returnTo = `${pathname}${search}`;
+    // Zone-relative, like `SessionKeeper`'s: the login view puts `/{locale}/cabinet` back
+    // on when it hands returnTo to the shell. Passing the real path here doubled the
+    // prefix and landed every deep link on `/cabinet/{locale}/cabinet/…` (#390).
+    const returnTo = `${zonePathname(pathname)}${search}`;
     if (returnTo !== "/") url.searchParams.set("returnTo", returnTo);
     return withCsp(NextResponse.redirect(url), csp);
   }
