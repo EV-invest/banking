@@ -67,7 +67,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
   }
 
   return (
-    <Card className="h-fit border-accent-debug/40">
+    <Card className="h-fit border-primary-ink/40">
       <CardContent className="space-y-3 py-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-sm font-semibold">{t("admin.fees.pendingTitle")}</p>

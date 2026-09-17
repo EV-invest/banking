@@ -266,7 +266,7 @@ function Avatar({ email }: { email: string }) {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
-  return <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-debug/15 text-xs font-semibold text-accent-debug">{initials || "?"}</span>;
+  return <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-ink/15 text-xs font-semibold text-primary-ink">{initials || "?"}</span>;
 }
 
 function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: () => void }) {

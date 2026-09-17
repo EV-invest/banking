@@ -124,7 +124,7 @@ export function WalletOverviewView() {
       <StaggerItem className="flex items-center justify-between">
         <p className="text-sm font-semibold text-ink">{t("ui.networks")}</p>
         {/* The Figma frames leave the activity screen with no entry point; this is it. */}
-        <Link href="/wallet/activity" className="rounded-md text-xs text-accent-debug outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
+        <Link href="/wallet/activity" className="rounded-md text-xs text-primary-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
           {t("ui.walletHistory")}
         </Link>
         <p className="hidden text-xs text-ink-soft lg:block">{t("wallet.railsCaption")}</p>

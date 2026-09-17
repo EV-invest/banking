@@ -53,7 +53,7 @@ export function SettingsRail({ section, onSelect }: { section: Section; onSelect
                   onClick={() => onSelect(id)}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                    active ? "bg-accent-debug/15 font-semibold text-accent-debug" : "text-ink hover:bg-ink/5",
+                    active ? "bg-primary-ink/15 font-semibold text-primary-ink" : "text-ink hover:bg-ink/5",
                   )}
                 >
                   <Icon className="size-4.5 shrink-0" />

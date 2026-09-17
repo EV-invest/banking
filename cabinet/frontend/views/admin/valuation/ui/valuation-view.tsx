@@ -152,8 +152,8 @@ export function ValuationView() {
                 {/* Read-only on purpose: NAV is derived (AUM / units read live from the
                     ledger), never posted directly — an editable field here would imply
                     an operator can set a price. */}
-                <div className="flex h-9 items-center rounded-md border border-accent-debug/40 bg-accent-debug/10 px-3 text-sm" aria-readonly="true">
-                  <span className="font-semibold text-accent-debug tabular-nums">{derivedNav ? formatNav(derivedNav, locale) : "—"}</span>
+                <div className="flex h-9 items-center rounded-md border border-primary-ink/40 bg-primary-ink/10 px-3 text-sm" aria-readonly="true">
+                  <span className="font-semibold text-primary-ink tabular-nums">{derivedNav ? formatNav(derivedNav, locale) : "—"}</span>
                   {/* An ICU plural, so `units` agrees with the count and `#` groups the
                       digits in the reader's convention — the hard-coded `en-US` is gone. */}
                   {units > 0 && <span className="ml-2 text-xs tabular-nums text-ink-soft">{t("admin.valuation.derivedFormula", { n: units })}</span>}
@@ -392,7 +392,7 @@ function SupplyCapCard({
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
             {/* Proportional, no minimum sliver — see `SupplyBar`. The exact issued figure
                 sits directly above it. */}
-            <div className={cn("h-full rounded-full", nearCap ? "bg-accent-warn" : "bg-accent-debug")} style={{ width: `${fraction * 100}%` }} />
+            <div className={cn("h-full rounded-full", nearCap ? "bg-accent-warn" : "bg-primary-ink")} style={{ width: `${fraction * 100}%` }} />
           </div>
           {/* Two whole sentences rather than a shared " — …" tail: a suffix key would be a
               fragment no translator could place, and the loading branch reads differently

@@ -7,7 +7,7 @@ import { useT } from "@evinvest/i18n/react";
 
 import { useState } from "react";
 
-import { Skeleton, Switch } from "@evinvest/uikit";
+import { Skeleton, Switch, Toggle } from "@evinvest/uikit";
 
 import {
   notificationSettingsResource,
@@ -17,7 +17,6 @@ import {
 import { refreshUnreadCount } from "@/entities/notification/model/notification-store";
 import type { NotificationSettings } from "@/shared/contracts/notifications";
 import { errorMessage } from "@/shared/lib/api-client";
-import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Hairline, ListCard, ListCardTitle, Row, RowLabel } from "@/shared/ui/list-card";
 
@@ -120,21 +119,21 @@ export function NotificationsSection() {
                       they stay English until the hub localises them. */}
                   <RowLabel title={topic.label} sub={topic.description} />
                   <div className="flex shrink-0 items-center gap-3">
-                    {/* Kept hand-written: at 28px it is shorter than uikit's smallest Button, and
-                        growing it would push the switch beside it out of the row. */}
+                    {/* A pressed/unpressed pair rather than a Button: "Following" is a state the
+                        reader is in, and the toggle's `aria-pressed` says so. The `xs` size is
+                        the 28px that keeps the switch beside it on one row. */}
                     {/* i18n-max: 12 — the row wraps rather than clips, but a longer label
                         drops the controls onto their own line on every phone. */}
-                    <button
-                      type="button"
+                    <Toggle
+                      variant="outline"
+                      size="xs"
+                      pressed={topic.subscribed}
                       disabled={busy}
-                      onClick={() => void run(() => setTopicSubscription(topic.topic, !topic.subscribed, topic.email_enabled))}
-                      className={cn(
-                        "rounded-lg px-3 py-1.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-                        topic.subscribed ? "border border-border/60 text-ink hover:bg-ink/5" : "border border-accent-debug/50 text-accent-debug hover:bg-accent-debug/10",
-                      )}
+                      onPressedChange={(pressed) => void run(() => setTopicSubscription(topic.topic, pressed, topic.email_enabled))}
+                      className="px-3 text-xs"
                     >
                       {topic.subscribed ? t("notif.following") : t("notif.follow")}
-                    </button>
+                    </Toggle>
                     <Switch
                       checked={topic.subscribed && topic.email_enabled && settings.email_enabled}
                       disabled={busy || !topic.subscribed || !settings.email_enabled}

@@ -201,7 +201,7 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
             </p>
           )}
           {state.result?.recorded && (
-            <p className="text-sm text-accent-debug">
+            <p className="text-sm text-positive">
               {t("admin.treasury.recorded", { amount: `${formatUsdt(state.result.amount, locale)} USDT`, party: partyLabel(state.result, t) })}
             </p>
           )}

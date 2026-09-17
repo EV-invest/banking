@@ -129,7 +129,7 @@ export function ProfileView() {
             {!loading && (
               // i18n-max: 12 per Pill — they sit beside the truncated display name.
               <div className="mt-1 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-                {profile?.email_verified && <Pill icon={BadgeCheck}>{t("ui.verified")}</Pill>}
+                {profile?.email_verified && <Pill tone="success" icon={BadgeCheck}>{t("ui.verified")}</Pill>}
                 {profile?.status && <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill>}
                 {profile?.kyc_level !== undefined && <Pill tone="neutral">{t("profile.kycLevelPill", { n: profile.kyc_level })}</Pill>}
                 {profile?.role && <Pill tone="neutral">{enumLabel("admin.role", profile.role, t)}</Pill>}

@@ -24,7 +24,7 @@ import { formatPhone } from "@/views/settings/lib/contact";
 import { PERSONAL } from "@/views/settings/lib/sections";
 
 // The text links that lead out of a card — hand-written, so they carry their own focus ring.
-const TEXT_LINK = "shrink-0 rounded-sm text-xs font-medium text-accent-debug outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
+const TEXT_LINK = "shrink-0 rounded-sm text-xs font-medium text-primary-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
 
 // uikit's Empty draws a dashed frame but leaves the border width to the caller, and doubles
 // its padding at `md`; this one sits inside a card, not on a page of its own.
@@ -185,7 +185,7 @@ export function VerificationCard({ loading, profile, email, className }: { loadi
       <Row>
         <RowLabel title={t("ui.emailAddress")} sub={loading ? "…" : email || "—"} />
         {/* i18n-max: 12 — `shrink-0` Pills beside the `min-w-0` row label. */}
-        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill icon={BadgeCheck}>{t("ui.verified")}</Pill> : <Pill tone="pending">{t("profile.unverified")}</Pill>}
+        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill tone="success" icon={BadgeCheck}>{t("ui.verified")}</Pill> : <Pill tone="pending">{t("profile.unverified")}</Pill>}
       </Row>
       <Hairline />
       <Row>

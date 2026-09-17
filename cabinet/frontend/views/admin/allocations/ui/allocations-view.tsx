@@ -79,7 +79,7 @@ export function AllocationsView() {
         <div className="min-w-0 flex-1 space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
             {t("admin.alloc.registry")}
-            {rows && <span className="rounded-full bg-accent-debug/15 px-2 py-0.5 text-xs font-semibold text-accent-debug">{rows.length}</span>}
+            {rows && <span className="rounded-full bg-primary-ink/15 px-2 py-0.5 text-xs font-semibold text-primary-ink">{rows.length}</span>}
           </p>
           <AllocationsTable
             rows={rows}

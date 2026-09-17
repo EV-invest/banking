@@ -101,7 +101,7 @@ export function RedeemPanel({ service, position, nav, inKind = false }: { servic
               {t("invest.unitsToRedeem")}
               <TipAnchor anchor="invest.redeem.units" />
             </span>
-            <button type="button" className="text-xs text-accent-debug hover:underline" onClick={() => setUnits(position.units ?? "0")}>
+            <button type="button" className="text-xs text-primary-ink hover:underline" onClick={() => setUnits(position.units ?? "0")}>
               {t("ui.max")}
             </button>
           </span>

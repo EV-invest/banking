@@ -79,7 +79,7 @@ export function enumLabel(namespace: "admin.status" | "admin.role", value: strin
 
 export function statusTone(status: string): PillTone {
   const s = status.toLowerCase();
-  if (s === "active") return "positive";
+  if (s === "active") return "success";
   if (s === "pending" || s === "review") return "pending";
   return "neutral";
 }

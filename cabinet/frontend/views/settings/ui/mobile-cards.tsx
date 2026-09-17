@@ -42,12 +42,12 @@ export function ProfileSummaryCard({ loading, name, email, verified }: { loading
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-sm font-semibold text-ink">{name}</span>
             {/* i18n-max: 12 — a `shrink-0` Pill beside the truncated display name. */}
-            {verified && <Pill icon={BadgeCheck}>{t("ui.verified")}</Pill>}
+            {verified && <Pill tone="success" icon={BadgeCheck}>{t("ui.verified")}</Pill>}
           </div>
         )}
         {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-xs text-ink-soft">{formatEmail(email) || t("auth.notSignedIn")}</span>}
         {/* Says where the tap goes: without it the card read as a header, not a destination. */}
-        <span className="text-xs font-medium text-accent-debug">{t("settings.viewProfile")}</span>
+        <span className="text-xs font-medium text-primary-ink">{t("settings.viewProfile")}</span>
       </div>
       <Chevron className="size-5" />
     </Link>
