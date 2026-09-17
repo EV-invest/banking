@@ -69,7 +69,7 @@ pub use nav::{NavMarks, Valuation};
 pub use operations::OperationFeed;
 pub use outflow::{OutflowPolicy, PayoutStanding};
 pub use payments::{PaymentFeed, PaymentRepository};
-pub use positions::{FundPosition, FundPositionReader};
+pub use positions::{FundPosition, FundPositionReader, UnitFlow};
 pub use redemptions::{QueuedRedemption, RedemptionRepository};
 pub use subscriptions::SubscriptionRepository;
 pub use withdrawals::WithdrawalRepository;

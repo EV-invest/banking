@@ -3543,6 +3543,10 @@
     "en": "fund positions",
     "t": "vị thế trong quỹ"
   },
+  "dash.historyTruncated": {
+    "en": "Only the most recent marks in this range are shown; the fund curve starts from the oldest one shown, not from the start of the range.",
+    "t": "Chỉ hiển thị các mốc định giá gần nhất trong khoảng này; đường cong của quỹ bắt đầu từ mốc cũ nhất được hiển thị, không phải từ đầu khoảng."
+  },
   "dash.investedWhatIOwn": {
     "en": "Invested · what I own",
     "t": "Đã đầu tư · những gì tôi sở hữu"
@@ -3622,6 +3626,10 @@
   "dash.range.all": {
     "en": "All",
     "t": "Tất cả"
+  },
+  "dash.rangeLabel": {
+    "en": "Chart range",
+    "t": "Khoảng thời gian biểu đồ"
   },
   "dash.recentOperations": {
     "en": "Recent operations",
@@ -5720,8 +5728,8 @@
     "t": "Giá trị danh mục"
   },
   "tips.dashboard.performance.series.body": {
-    "en": "'Fund performance' is the fund's own return; 'Your participation' is how your stake performed, which differs by when you contributed. The live series isn't wired up yet.",
-    "t": "“Hiệu suất quỹ” là lợi nhuận của chính quỹ; “Phần tham gia của bạn” là hiệu quả phần vốn của bạn, khác nhau tùy thời điểm bạn góp vốn. Dữ liệu trực tiếp chưa được kết nối."
+    "en": "'Fund performance' is the fund's return since the first valuation in the range, from the marks the operator posted; 'Your participation' is what your units were worth at each of them, which differs by when you contributed.",
+    "t": "“Hiệu suất quỹ” là lợi nhuận của quỹ kể từ lần định giá đầu tiên trong khoảng, theo các mốc mà vận hành viên đã đăng; “Phần tham gia của bạn” là giá trị đơn vị của bạn tại mỗi mốc đó, khác nhau tùy thời điểm bạn góp vốn."
   },
   "tips.dashboard.performance.series.title": {
     "en": "Performance chart",

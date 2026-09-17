@@ -36,6 +36,14 @@ pub struct ServiceQuery {
 	service: Option<String>,
 }
 
+/// `?allocation=&from=&to=` — a history window over one allocation, unix seconds.
+#[derive(Deserialize)]
+pub struct HistoryQuery {
+	allocation: Option<String>,
+	from: Option<i64>,
+	to: Option<i64>,
+}
+
 // ── wallet ───────────────────────────────────────────────────────────────────
 
 /// `GET /api/wallet` — the unified lifecycle balance, deposit rails, and per-rail withdraw options.
@@ -159,6 +167,23 @@ pub async fn fund_nav(State(st): State<AppState>, jar: CookieJar, Query(q): Quer
 		.await
 		.map_err(|s| ApiError::read(s, "fund nav unavailable"))?;
 	Ok(Json(nav.into()))
+}
+
+/// `GET /api/funds/nav/history?allocation=&from=&to=` — the valuation log of one
+/// allocation over `[from, to]` (unix seconds; absent = all-time / now) plus the caller's
+/// own participation through it: the two series of the dashboard's performance chart.
+/// Keyed by the allocation, not the service, so a hidden allocation can serve its holders
+/// the same way later. A seed-only fund answers empty `marks`, not an error.
+pub async fn fund_nav_history(State(st): State<AppState>, jar: CookieJar, Query(q): Query<HistoryQuery>) -> Result<Json<dto::FundNavHistory>, ApiError> {
+	let allocation = q.allocation.filter(|a| !a.is_empty()).ok_or_else(|| ApiError::BadRequest("allocation is required".into()))?;
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::ListFundNavHistoryRequest {
+		allocation,
+		from: q.from.unwrap_or(0),
+		to: q.to.unwrap_or(0),
+	};
+	let history = st.grpc.fund_nav_history(&token, req).await.map_err(|s| ApiError::read(s, "fund history unavailable"))?;
+	Ok(Json(history.into()))
 }
 
 /// `GET /api/funds/fee-policy?service=` — what this fund charges. Not gated on holding a

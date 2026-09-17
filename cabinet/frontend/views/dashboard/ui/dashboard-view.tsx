@@ -1,10 +1,10 @@
 "use client";
 
-import { ArrowLeftRight, LineChart, type LucideIcon, Minus, PieChart, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeftRight, type LucideIcon, PieChart } from "lucide-react";
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Link } from "@/shared/ui/cabinet-link";
-import { type CSSProperties, Fragment, useCallback, useState } from "react";
+import { type CSSProperties, Fragment, useCallback } from "react";
 
 import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle, Progress, Skeleton } from "@evinvest/uikit";
 
@@ -14,36 +14,19 @@ import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
-import { AnimatedNumber, SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor } from "@/shared/tips";
 import { formatCount, STAT_STRIP, StatDivider, StatTile } from "@/shared/ui/stat-tile";
-import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
+import { CARD_FROM_LG, CARD_PAD, EMPTY_BOX } from "@/views/dashboard/lib/chrome";
+import { DASH_ADDRESS, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
 import { GetStartedSection } from "@/views/dashboard/ui/get-started-section";
+import { PerfCard } from "@/views/dashboard/ui/perf-card";
 import { amountTone, kindBadge, kindLabel, kindMeta, networkLabel, stateLabel } from "@/views/operations/lib/format";
 
 // The card is a preview, not the record — `/operations` holds the full timeline. Asked
 // of the hub rather than sliced client-side, so the six shown are the six most recent
 // across all four kinds, not the newest six of whatever happened to be fetched. The count
 // lives with the resource because the shell's warm-up has to ask for the same one.
-
-// No performance series exists in `shared/contracts` yet (#383), so everything on the
-// hero that only means something over a series — the range control, the legend, the
-// plot's claim on the column height — hangs off this one flag rather than being cut out.
-// Wiring the chart flips it (or derives it from the series it fetches); nothing has to
-// come back from history. Declared `boolean` so the gates below read as conditions, not
-// as dead branches.
-const HAS_SERIES: boolean = false;
-
-// The four ranges. `1M`/`6M`/`1Y` are near-universal abbreviations but still travel as
-// keys — a locale that spells its months differently should be able to say so.
-// i18n-max: 4 — four equal columns of a grid segmented control on mobile.
-const RANGES = ["1m", "6m", "1y", "all"] as const;
-const RANGE_LABEL_KEYS: Readonly<Record<(typeof RANGES)[number], string>> = {
-  "1m": "dash.range.1m",
-  "6m": "dash.range.6m",
-  "1y": "dash.range.1y",
-  all: "dash.range.all",
-};
 
 // Allocation slices cycle the chart palette — distinguishable hues carrying no
 // significance. The bar names its rung twice because Progress paints track and indicator
@@ -58,20 +41,9 @@ const ACCENTS = [
 
 type Accent = (typeof ACCENTS)[number];
 
-// Cards inset 16px on mobile (Figma `cabinet/mobile/home`), the uikit 24px from `lg`.
-const CARD_PAD = "px-4 lg:px-6";
-
-// Mobile reads the hero and the stat strip as page content rather than as cards: those two
-// surfaces sit flat on the background and only take their Card chrome from `lg`.
-const CARD_FROM_LG = "rounded-none border-0 bg-transparent py-0 shadow-none lg:rounded-xl lg:border lg:bg-card lg:py-5 lg:shadow-sm";
-
-// uikit's Empty draws a dashed frame but leaves the border width to the caller, and doubles
-// its padding at `md`; these sit inside cards, not on a page of their own.
-const EMPTY_BOX = "border md:p-6";
-
 // The portfolio dashboard (Figma `cabinet/home`). Bound to live wallet + fund-position
-// data; figures with no backing series yet (the performance chart) are honest empty states
-// rather than fabricated numbers.
+// data; a surface with nothing behind it yet is an honest empty state rather than a
+// fabricated number.
 export function DashboardView() {
   const t = useT();
   const locale = useLocale();
@@ -87,7 +59,8 @@ export function DashboardView() {
   const wallet = useResource(walletResource);
   const positions = useResource(positionsResource);
   const operations = useResource(operationsResource, RECENT_OPS);
-  const catalog = useResource(allocationsResource).data?.allocations ?? [];
+  const catalogRead = useResource(allocationsResource);
+  const catalog = catalogRead.data?.allocations ?? [];
 
   const balance = wallet.data?.balance;
   const pos = positions.data?.positions ?? [];
@@ -98,6 +71,11 @@ export function DashboardView() {
   const posLoading = positions.isLoading;
 
   const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : t("dash.fundFallback"));
+  // The chart is per allocation, never "the fund" (#245): the first one the caller holds,
+  // or — for an account that holds nothing yet — the first open product, so a new investor
+  // sees what the curve of the thing on offer looks like. `null` until both reads have
+  // answered, so the plot shows a skeleton rather than an empty state that then fills.
+  const allocation = posLoading || catalogRead.isLoading ? null : (pos[0]?.service ?? catalog[0]?.service ?? "");
   const allocations = pos.map((p, i) => ({ name: titleOf(p.service), value: num(p.value), accent: ACCENTS[i % ACCENTS.length]! }));
   const allocTotal = allocations.reduce((s, a) => s + a.value, 0) || 1;
 
@@ -148,7 +126,7 @@ export function DashboardView() {
           </div>
         </StaggerItem>
 
-        <PerfCard value={balance?.total} loading={walletLoading} allTimePct={allTimePct} className="lg:order-1 xl:col-start-1 xl:row-span-2 xl:row-start-2" />
+        <PerfCard value={balance?.total} loading={walletLoading} allTimePct={allTimePct} allocation={allocation} className="lg:order-1 xl:col-start-1 xl:row-span-2 xl:row-start-2" />
 
         {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
         <StaggerItem as={Card} className={cn(STAT_STRIP, CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
@@ -218,102 +196,6 @@ export function DashboardView() {
         </StaggerItem>
       </Stagger>
     </>
-  );
-}
-
-// Mobile (Figma `cabinet/mobile/home`) reads the hero as page content, not as a card: the
-// value sits flat on the background, the range switch spans the width below it, and only the
-// plot is boxed — with its legend above. From `lg` the whole block is the desktop card again.
-// Until `HAS_SERIES`, the hero is the value, its all-time badge and a compact placeholder
-// for the plot: no control over a chart that is not there, and no fixed plot height that
-// would make an empty box the largest element on the page.
-function PerfCard({ value, loading, allTimePct, className }: { value: string | undefined; loading: boolean; allTimePct: number | null; className?: string }) {
-  const t = useT();
-  const locale = useLocale();
-  // Same reason as the `usd` binding in DashboardView: a stable identity per locale.
-  const usd = useCallback((n: number) => formatUsd(n, locale), [locale]);
-  const [range, setRange] = useState<(typeof RANGES)[number]>("all");
-  // Three tones, not two: a flat all-time return is neither a gain nor a loss, and an
-  // upward arrow on "+0.0%" claims a gain that did not happen — same rule as StatTile.
-  const trend = allTimePct === null || allTimePct === 0 ? "flat" : allTimePct < 0 ? "down" : "up";
-  return (
-    // From `xl` the hero spans both rows of the side column. With a plot it has to fill
-    // that area — otherwise the plot keeps its natural height and leaves a gap under the
-    // card whenever the side column is the taller of the two. Without one it must not:
-    // stretched, the placeholder becomes a tall empty frame, and the gap is the lesser
-    // evil until #383 gives the space a chart.
-    //
-    // A `StaggerItem` rather than a wrapped `Card` because that `xl:h-full` — and the
-    // row-span it fills — are the parent's business, and a wrapper would take them
-    // from the card and keep them for itself.
-    <StaggerItem as={Card} className={cn("flex-1 gap-4 lg:gap-5", HAS_SERIES && "xl:h-full", CARD_FROM_LG, className)}>
-      <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
-        <div className="flex min-w-0 flex-col gap-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-primary-ink">
-            {t("dash.portfolioValue")}
-            <TipAnchor anchor="dashboard.performance.portfolio-value" />
-          </p>
-          <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
-            {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={usd} /></p>}
-            {allTimePct !== null && (
-              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", trend === "down" ? "border-accent-error/40 text-accent-error" : trend === "up" ? "border-accent-warn/40 text-accent-warn" : "border-border text-ink-soft")}>
-                {trend === "down" ? <TrendingDown /> : trend === "up" ? <TrendingUp /> : <Minus />}
-                {t("dash.allTimeSuffix", { pct: formatPct(allTimePct, locale) })}
-                <TipAnchor anchor="dashboard.performance.all-time-return" />
-              </Badge>
-            )}
-          </div>
-        </div>
-        {/* Hand-written segmented control — uikit has no equivalent, so it carries its own focus ring. */}
-        {HAS_SERIES && (
-          <div className="grid shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-secondary p-1 lg:flex">
-            {RANGES.map((r) => (
-              <button
-                key={r}
-                type="button"
-                aria-pressed={r === range}
-                onClick={() => setRange(r)}
-                className={cn(
-                  "rounded-md py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:px-3 lg:py-1.5 lg:text-xs",
-                  r === range ? "bg-primary/15 font-semibold text-primary-ink" : "font-medium text-ink-soft hover:text-ink",
-                )}
-              >
-                {t(RANGE_LABEL_KEYS[r])}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <CardContent className={cn("flex flex-col gap-3 px-0 lg:gap-5 lg:px-6", HAS_SERIES && "xl:flex-1")}>
-        {HAS_SERIES && (
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5 lg:order-2">
-            <Legend dot="bg-chart-3" label={t("dash.fundPerformance")} />
-            <Legend dot="bg-chart-2" label={t("dash.yourParticipation")} />
-          </div>
-        )}
-        {/* The plot area says there is no series rather than drawing a line that traces
-            back to nothing. Its height is whatever the copy needs — a minimum sized for a
-            chart belongs to the chart. */}
-        <Empty className={cn(EMPTY_BOX, "lg:order-1")}>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <LineChart />
-            </EmptyMedia>
-            <EmptyTitle>{t("dash.noHistory")}</EmptyTitle>
-            <EmptyDescription>{t("dash.noHistoryHint")}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </CardContent>
-    </StaggerItem>
-  );
-}
-
-function Legend({ dot, label }: { dot: string; label: string }) {
-  return (
-    <span className="flex items-center gap-2 text-xs font-medium text-ink-soft">
-      <span className={cn("size-2 rounded-full", dot)} />
-      {label}
-    </span>
   );
 }
 

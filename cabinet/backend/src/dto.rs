@@ -657,6 +657,62 @@ impl From<bk::FundNav> for FundNav {
 	}
 }
 
+/// One posted valuation mark. Stamps are strings like every timestamp here.
+#[derive(Serialize)]
+pub struct NavMark {
+	pub nav: String,
+	pub aum: String,
+	pub posted_at: String,
+}
+
+impl From<bk::NavMark> for NavMark {
+	fn from(m: bk::NavMark) -> Self {
+		Self {
+			nav: m.nav,
+			aum: m.aum,
+			posted_at: m.posted_at.to_string(),
+		}
+	}
+}
+
+/// The caller's holding valued at one instant (units held then × the NAV in force then).
+#[derive(Serialize)]
+pub struct ParticipationPoint {
+	pub at: String,
+	pub value: String,
+}
+
+impl From<bk::ParticipationPoint> for ParticipationPoint {
+	fn from(p: bk::ParticipationPoint) -> Self {
+		Self {
+			at: p.at.to_string(),
+			value: p.value,
+		}
+	}
+}
+
+/// The two series of the performance chart, oldest first. `participation` ends at the
+/// window's end priced off the live holding, so its last point equals the position card;
+/// `truncated` says the window held more marks than the cap and the OLDEST were dropped.
+#[derive(Serialize)]
+pub struct FundNavHistory {
+	pub allocation: String,
+	pub marks: Vec<NavMark>,
+	pub participation: Vec<ParticipationPoint>,
+	pub truncated: bool,
+}
+
+impl From<bk::FundNavHistory> for FundNavHistory {
+	fn from(h: bk::FundNavHistory) -> Self {
+		Self {
+			allocation: h.allocation,
+			marks: h.marks.into_iter().map(NavMark::from).collect(),
+			participation: h.participation.into_iter().map(ParticipationPoint::from).collect(),
+			truncated: h.truncated,
+		}
+	}
+}
+
 // ── fees ──────────────────────────────────────────────────────────────────────
 
 /// A fund's fee terms as the investor should read them. `configured` distinguishes "this

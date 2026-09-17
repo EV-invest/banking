@@ -34,6 +34,11 @@ export type {
   BankingV1Position as Position,
   BankingV1PositionList as PositionList,
   BankingV1FundNav as FundNav,
+  // The performance chart: a fund's posted marks over a window and the caller's own
+  // participation through it (`GET /api/funds/nav/history?allocation=&from=&to=`).
+  BankingV1FundNavHistory as FundNavHistory,
+  BankingV1NavMark as NavMark,
+  BankingV1ParticipationPoint as ParticipationPoint,
   BankingV1Subscription as Subscription,
   BankingV1SubscribeRequest as SubscribeRequest,
   BankingV1RedeemRequest as RedeemRequest,

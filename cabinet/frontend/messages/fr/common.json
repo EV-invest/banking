@@ -3543,6 +3543,10 @@
     "en": "fund positions",
     "t": "positions en fonds"
   },
+  "dash.historyTruncated": {
+    "en": "Only the most recent marks in this range are shown; the fund curve starts from the oldest one shown, not from the start of the range.",
+    "t": "Seules les valorisations les plus récentes de cette période sont affichées ; la courbe du fonds part de la plus ancienne affichée, pas du début de la période."
+  },
   "dash.investedWhatIOwn": {
     "en": "Invested · what I own",
     "t": "Investi · mes avoirs"
@@ -3622,6 +3626,10 @@
   "dash.range.all": {
     "en": "All",
     "t": "Tout"
+  },
+  "dash.rangeLabel": {
+    "en": "Chart range",
+    "t": "Période du graphique"
   },
   "dash.recentOperations": {
     "en": "Recent operations",
@@ -5720,8 +5728,8 @@
     "t": "Valeur du portefeuille"
   },
   "tips.dashboard.performance.series.body": {
-    "en": "'Fund performance' is the fund's own return; 'Your participation' is how your stake performed, which differs by when you contributed. The live series isn't wired up yet.",
-    "t": "« Performance du fonds » est le rendement propre du fonds ; « Votre participation » est la performance de votre quote-part, qui diffère selon le moment de vos apports. La série en direct n’est pas encore branchée."
+    "en": "'Fund performance' is the fund's return since the first valuation in the range, from the marks the operator posted; 'Your participation' is what your units were worth at each of them, which differs by when you contributed.",
+    "t": "« Performance du fonds » est le rendement du fonds depuis la première valorisation de la période, d’après les marques publiées par l’opérateur ; « Votre participation » est ce que valaient vos parts à chacune d’elles, ce qui dépend du moment où vous avez contribué."
   },
   "tips.dashboard.performance.series.title": {
     "en": "Performance chart",

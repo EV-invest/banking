@@ -3543,6 +3543,10 @@
     "en": "fund positions",
     "t": "позиций в фондах"
   },
+  "dash.historyTruncated": {
+    "en": "Only the most recent marks in this range are shown; the fund curve starts from the oldest one shown, not from the start of the range.",
+    "t": "Показаны только последние отметки в этом диапазоне; кривая фонда начинается с самой старой из показанных, а не с начала диапазона."
+  },
   "dash.investedWhatIOwn": {
     "en": "Invested · what I own",
     "t": "Инвестировано · что мне принадлежит"
@@ -3622,6 +3626,10 @@
   "dash.range.all": {
     "en": "All",
     "t": "Всё"
+  },
+  "dash.rangeLabel": {
+    "en": "Chart range",
+    "t": "Диапазон графика"
   },
   "dash.recentOperations": {
     "en": "Recent operations",
@@ -5720,8 +5728,8 @@
     "t": "Стоимость портфеля"
   },
   "tips.dashboard.performance.series.body": {
-    "en": "'Fund performance' is the fund's own return; 'Your participation' is how your stake performed, which differs by when you contributed. The live series isn't wired up yet.",
-    "t": "«Доходность фонда» — собственный результат фонда; «Ваша доля» — результат вашего участия, который зависит от того, когда вы вносили средства. Реальные данные пока не подключены."
+    "en": "'Fund performance' is the fund's return since the first valuation in the range, from the marks the operator posted; 'Your participation' is what your units were worth at each of them, which differs by when you contributed.",
+    "t": "«Доходность фонда» — результат фонда с первой оценки в диапазоне, по отметкам, которые опубликовал оператор; «Ваша доля» — сколько стоили ваши юниты в каждой из них, что зависит от того, когда вы вносили средства."
   },
   "tips.dashboard.performance.series.title": {
     "en": "Performance chart",

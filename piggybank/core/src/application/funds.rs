@@ -20,7 +20,7 @@ use tokio::sync::Notify;
 use crate::{
 	application::allocations as allocations_app,
 	ports::{
-		FundPositionReader, RedemptionRepository, SubscriptionRepository,
+		FundPositionReader, RedemptionRepository, SubscriptionRepository, UnitFlow,
 		allocations::AllocationRegistry,
 		ledger::Ledger,
 		nav::{NavMarks, Valuation},
@@ -51,6 +51,10 @@ pub const VALUATION_REDEEM_COOLDOWN_SECS: i64 = 7 * 24 * 60 * 60;
 /// A mark older than this (seconds) is stale; subscribe/redeem refuse to deal on it
 /// rather than price off a drifted NAV (the backward-pricing arbitrage guard). 24h for v1.
 pub const MAX_NAV_AGE_SECS: i64 = 24 * 60 * 60;
+/// The most marks one [`fund_nav_history`] answer carries. Marks are posted by hand, a
+/// few a week at most, so this is years of history for any real fund; a window with more
+/// keeps the NEWEST and reports itself truncated rather than paging or refusing.
+pub const MAX_NAV_HISTORY_MARKS: usize = 2000;
 /// A user's position in one fund, assembled from the live unit balances (TigerBeetle),
 /// the current NAV, and the cost-basis projection. `value = (units + units_in_orders) ×
 /// nav`; P&L is `value − cost_basis` (computed at the wire boundary, where a signed value
@@ -89,6 +93,27 @@ pub struct FundNavView {
 	/// Unix seconds of the latest mark (0 = never marked / seed).
 	pub posted_at: i64,
 	pub stale: bool,
+}
+
+/// A fund's valuation log over a window plus the caller's participation through it —
+/// the two series of the performance chart.
+#[derive(Debug)]
+pub struct FundNavHistoryView {
+	pub service: ServiceId,
+	/// Oldest first, within the window, at most [`MAX_NAV_HISTORY_MARKS`].
+	pub marks: Vec<Valuation>,
+	/// Oldest first; see [`participation_series`] for which instants get a point.
+	pub participation: Vec<ParticipationPoint>,
+	/// More marks fell in the window than the cap; the oldest were dropped.
+	pub truncated: bool,
+}
+
+/// The caller's holding valued at one instant: the units they held then × the NAV in
+/// force then.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParticipationPoint {
+	pub at_unix: i64,
+	pub value: Usdt,
 }
 
 /// The driven ports a dealing use-case borrows: the registry it gates on, the ledger its
@@ -367,6 +392,124 @@ pub async fn fund_nav_view(
 		},
 	})
 }
+
+/// The marks of `service` with `from ≤ posted_at ≤ to` (`0` = unbounded on that side;
+/// `to` is clamped to `now`), oldest first, plus `caller`'s participation through the
+/// same window. Visible to exactly whom [`fund_nav_view`] is: the history of a product
+/// hidden from this caller is `NotFound`, as its price is.
+///
+/// The participation is walked BACKWARDS from the live holding: the units at instant `t`
+/// are today's units (free plus escrowed on the book) less every recorded flow after
+/// `t`. Anchoring on the ledger rather than summing flows forward from zero means the
+/// series always ends exactly where the position card is, whatever the history missed
+/// — a channel that moved units without a control-plane record shows as a wrong deep
+/// past, never as a jump at the end of the line.
+///
+/// Four ports and a six-field request; a struct to carry them would serve this one call
+/// site only, so the lint is waived the way `AppState::new` waives it.
+#[allow(clippy::too_many_arguments)]
+pub async fn fund_nav_history(
+	allocations: &dyn AllocationRegistry,
+	nav: &dyn NavMarks,
+	ledger: &dyn Ledger,
+	positions: &dyn FundPositionReader,
+	service: ServiceId,
+	caller: UserId,
+	unrestricted: bool,
+	from_unix: i64,
+	to_unix: i64,
+	now_unix: i64,
+) -> Result<FundNavHistoryView, DomainError> {
+	allocations_app::get_for(allocations, &service, caller, unrestricted).await?;
+	let to_unix = if to_unix == 0 { now_unix } else { to_unix.min(now_unix) };
+	if from_unix < 0 || from_unix > to_unix {
+		return Err(DomainError::Validation("history window is empty — `from` must not be after `to`".into()));
+	}
+	let mut marks = nav.history(&service, from_unix, to_unix, MAX_NAV_HISTORY_MARKS + 1).await?;
+	let truncated = marks.len() > MAX_NAV_HISTORY_MARKS;
+	if truncated {
+		marks.remove(0);
+	}
+	// The price in force when the window opens comes from the newest mark before it. With
+	// no lower bound and no cap hit there is none: before a fund's first mark it trades at
+	// the seed NAV. `anchor` falls back to the fund's EARLIEST mark when none is old enough;
+	// that one is inside the window (or past it) and must not price the instants before it.
+	let window_start = if from_unix > 0 {
+		from_unix
+	} else if truncated {
+		marks[0].posted_at_unix
+	} else {
+		0
+	};
+	let pre_window = if window_start > 0 {
+		nav.anchor(&service, window_start).await?.filter(|v| v.posted_at_unix <= window_start)
+	} else {
+		None
+	};
+	let free = ledger.balance(&LedgerAccountKey::UserShares(service.clone(), caller)).await?.posted;
+	let escrowed = ledger.balance(&LedgerAccountKey::BookShares(service.clone(), caller)).await?.posted;
+	let live_units = free.checked_add(escrowed).ok_or_else(|| DomainError::Validation("position units overflow".into()))?;
+	let flows = positions.unit_flows(caller, &service).await?;
+	let participation = participation_series(live_units, &flows, pre_window.as_ref(), &marks, from_unix, to_unix)?;
+	Ok(FundNavHistoryView {
+		service,
+		marks,
+		participation,
+		truncated,
+	})
+}
+
+/// The participation series over `[from, to]`: one point at the window's start (when it
+/// has one), at every mark, at every unit flow inside it, and at `to` — each valued at
+/// the units held after everything up to that second × the NAV in force then (the seed
+/// NAV before the first mark; `pre_window` is the mark in force when the window opens).
+/// Instants before the caller's first flow are left out — a fund's marks are not this
+/// holder's history until they hold something. A caller with no flows and no units has
+/// no series at all.
+fn participation_series(live_units: u128, flows: &[UnitFlow], pre_window: Option<&Valuation>, marks: &[Valuation], from: i64, to: i64) -> Result<Vec<ParticipationPoint>, DomainError> {
+	if flows.is_empty() && live_units == 0 {
+		return Ok(Vec::new());
+	}
+	// `after[i]` = the net units that arrived strictly after `flows[i - 1]`, i.e. the sum
+	// of `flows[i..]`; `units_at(t)` subtracts the flows later than `t` from the live count.
+	let mut after = vec![0i128; flows.len() + 1];
+	for (i, flow) in flows.iter().enumerate().rev() {
+		after[i] = after[i + 1].saturating_add(flow.delta);
+	}
+	let units_at = |t: i64| -> Shares {
+		let i = flows.partition_point(|f| f.at_unix <= t);
+		let units = i128::try_from(live_units).unwrap_or(i128::MAX).saturating_sub(after[i]);
+		Shares::from_base_units(u128::try_from(units).unwrap_or(0))
+	};
+	let price_at = |t: i64| -> Nav {
+		let i = marks.partition_point(|m| m.posted_at_unix <= t);
+		match i.checked_sub(1) {
+			Some(last) => marks[last].nav,
+			None => pre_window.filter(|v| v.posted_at_unix <= t).map_or(Nav::SEED, |v| v.nav),
+		}
+	};
+	let first_flow = flows.first().map_or(to, |f| f.at_unix);
+	let mut instants: Vec<i64> = Vec::with_capacity(marks.len() + flows.len() + 2);
+	if from > 0 {
+		instants.push(from);
+	}
+	instants.extend(marks.iter().map(|m| m.posted_at_unix));
+	instants.extend(flows.iter().map(|f| f.at_unix).filter(|&at| at >= from && at <= to));
+	instants.push(to);
+	instants.retain(|&t| t >= first_flow);
+	instants.sort_unstable();
+	instants.dedup();
+	instants
+		.into_iter()
+		.map(|t| {
+			Ok(ParticipationPoint {
+				at_unix: t,
+				value: price_at(t).value(units_at(t))?,
+			})
+		})
+		.collect()
+}
+
 /// Operator posts a fund's total AUM; NAV is derived (`AUM / units_outstanding`, read
 /// live from TigerBeetle). Rejects zero units (NAV undefined) and a move beyond
 /// [`MAX_NAV_MOVE_PCT`] measured against BOTH the previous mark and the mark anchoring
@@ -481,5 +624,84 @@ mod tests {
 		assert!(nav_move_exceeds(one, Nav::parse_decimal("10").unwrap(), MAX_NAV_MOVE_PCT));
 		assert!(nav_move_exceeds(one, Nav::parse_decimal("0").unwrap(), MAX_NAV_MOVE_PCT));
 		assert!(nav_move_exceeds(Nav::parse_decimal("0").unwrap(), one, MAX_NAV_MOVE_PCT));
+	}
+
+	fn mark(at: i64, nav: &str) -> Valuation {
+		Valuation {
+			service: ServiceId::parse("svc").unwrap(),
+			aum: Usdt::ZERO,
+			units_outstanding: Shares::from_base_units(1),
+			nav: Nav::parse_decimal(nav).unwrap(),
+			posted_by: "op".into(),
+			posted_at_unix: at,
+		}
+	}
+
+	fn flow(at: i64, units: &str) -> UnitFlow {
+		let (sign, digits) = units.strip_prefix('-').map_or((1, units), |d| (-1, d));
+		UnitFlow {
+			at_unix: at,
+			delta: sign * i128::try_from(Shares::parse_decimal(digits).unwrap().base_units()).unwrap(),
+		}
+	}
+
+	fn points(series: &[ParticipationPoint]) -> Vec<(i64, String)> {
+		series.iter().map(|p| (p.at_unix, p.value.to_decimal_string())).collect()
+	}
+
+	#[test]
+	fn participation_walks_back_from_the_live_holding_and_steps_at_marks_and_flows() {
+		// Bought 100 at seed, marked to 1.5, bought 50 more, marked to 2, sold 30 on the
+		// book: 120 units live. The series is anchored on that 120, so every earlier
+		// point is 120 less what arrived after it.
+		let flows = [flow(10, "100"), flow(30, "50"), flow(50, "-30")];
+		let marks = [mark(20, "1.5"), mark(40, "2")];
+		let live = Shares::parse_decimal("120").unwrap().base_units();
+		let series = participation_series(live, &flows, None, &marks, 0, 60).unwrap();
+		assert_eq!(
+			points(&series),
+			vec![
+				(10, "100".to_string()), // 100 units at the seed NAV
+				(20, "150".to_string()), // marked to 1.5
+				(30, "225".to_string()), // +50 units at 1.5
+				(40, "300".to_string()), // marked to 2
+				(50, "240".to_string()), // −30 units at 2
+				(60, "240".to_string()), // "now": the live holding at the current mark
+			]
+		);
+	}
+
+	#[test]
+	fn participation_window_opens_on_the_pre_window_price_and_the_units_held_then() {
+		let flows = [flow(10, "100"), flow(30, "50")];
+		let in_window = [mark(40, "2")];
+		let before = mark(20, "1.5");
+		let live = Shares::parse_decimal("150").unwrap().base_units();
+		let series = participation_series(live, &flows, Some(&before), &in_window, 25, 60).unwrap();
+		// Opens at `from` with the 100 units held then, priced at the mark before the window.
+		assert_eq!(
+			points(&series),
+			vec![(25, "150".to_string()), (30, "225".to_string()), (40, "300".to_string()), (60, "300".to_string())]
+		);
+	}
+
+	#[test]
+	fn participation_ignores_marks_before_the_holder_arrived_and_is_empty_for_a_stranger() {
+		let marks = [mark(5, "1.2"), mark(20, "1.5")];
+		assert!(participation_series(0, &[], None, &marks, 0, 60).unwrap().is_empty());
+		let flows = [flow(10, "100")];
+		let live = Shares::parse_decimal("100").unwrap().base_units();
+		let series = participation_series(live, &flows, None, &marks, 0, 60).unwrap();
+		assert_eq!(points(&series), vec![(10, "120".to_string()), (20, "150".to_string()), (60, "150".to_string())]);
+	}
+
+	#[test]
+	fn participation_never_goes_negative_when_the_history_is_missing_a_channel() {
+		// Live says 10, the records say 40 arrived after t=10: the past clamps at zero
+		// rather than underflowing — the wrong deep past the doc promises, not a panic.
+		let flows = [flow(10, "5"), flow(30, "40")];
+		let live = Shares::parse_decimal("10").unwrap().base_units();
+		let series = participation_series(live, &flows, None, &[], 0, 60).unwrap();
+		assert_eq!(points(&series), vec![(10, "0".to_string()), (30, "10".to_string()), (60, "10".to_string())]);
 	}
 }
