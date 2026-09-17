@@ -197,7 +197,7 @@ export function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
     <ListCard>
       <ListCardTitle>{t("nav.notifications")}</ListCardTitle>
       <Hairline />
-      <Link href="/notifications" className={ROW_BUTTON}>
+      <Link href="/notifications" className={ROW_INTERACTIVE}>
         <RowLabel title={t("settings.inbox")} sub={t("notif.subtitle")} />
         {/* The count the tab's badge promised, so the tap that followed it finds it here. */}
         {unread ? <RowValue className="shrink-0 font-semibold text-primary-ink tabular-nums">{t("notif.unreadCount", { n: unread })}</RowValue> : null}
