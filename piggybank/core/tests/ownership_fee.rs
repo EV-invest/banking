@@ -17,7 +17,13 @@
 //!
 //! Every test here reads the one platform-wide `service:fee` claim and its NAV, so the
 //! suite runs serially under the shared outbox guard — the same rule `allocation_registry`
-//! applies, for the same reason.
+//! applies, for the same reason. Serial is not isolated, though: the claim, the supply and
+//! the fee-unit holders are one set of accounts per binary, and the tests take the guard
+//! in whatever order the runtime hands it out. So each test brackets its own effect
+//! (before/after, never an absolute), puts value behind `fee` **before** it mints any of
+//! its units (a grant into an empty allocation prices the next one at zero, and a
+//! zero-NAV issuance is refused by the row's check), and sizes an "uncovered" ask off
+//! the claim's balance it reads, not off the claim being empty.
 
 use std::sync::Arc;
 
@@ -200,12 +206,29 @@ async fn open_fund(h: &Harness, service: &ServiceId) {
 	assert!(h.changes.promote(change.id, now_unix()).await.unwrap(), "a fund with no holders takes new terms at once");
 }
 
-async fn fund_user(h: &Harness, user: UserId, amount: &str) {
+async fn fund_party(h: &Harness, party: Party, amount: &str) {
 	let tx_ref = TxRef::parse(&format!("own-{}", Uuid::new_v4())).unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), Network::Bep20, usdt(amount))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, party, Network::Bep20, usdt(amount)).await.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
+}
+
+async fn fund_user(h: &Harness, user: UserId, amount: &str) {
+	fund_party(h, Party::User(user), amount).await;
+}
+
+/// Put `amount` of cash behind the `fee` allocation, posted straight onto its claim — what
+/// a settled fee class leaves there, minus the product, the investor and the year it takes
+/// to earn one. A test that only needs the allocation to be *worth something* before it
+/// mints units calls this instead of restaging the whole fee chain.
+async fn fund_fee_claim(h: &Harness, amount: &str) {
+	fund_party(h, Party::Service(ServiceId::fee()), amount).await;
+}
+
+/// Units worth no less than `cash` at `price`. `Shares::from_cash` floors, so its answer can
+/// be worth up to one base unit of price *less* than `cash`; one more base unit of shares
+/// closes that gap whatever the price is — `price.value(result) >= cash`.
+fn units_worth_at_least(cash: Usdt, price: Nav) -> Shares {
+	Shares::from_base_units(Shares::from_cash(cash, price).unwrap().base_units() + 1)
 }
 
 /// Subscribe and wait for the position projection — the accrual clocks live on it, and
@@ -321,8 +344,10 @@ async fn settled_fee_cash_lands_in_the_fee_allocation_and_its_holders_nav_rises(
 		"the fee class is counted at the seed NAV"
 	);
 
-	// A person is granted `fee` units worth what the allocation is worth right now, so
-	// after the grant one unit is worth one USDT more or less — the migration's shape.
+	// A person is granted as many `fee` units as the allocation is worth in USDT — the
+	// migration's shape: to the first holder, one unit is then worth one USDT more or
+	// less. A sibling's holders dilute that, so the price is checked as value over the
+	// supply that results, not as a figure.
 	let granted = Shares::from_cash(value_before, Nav::SEED).unwrap();
 	grant_fee_units(&h, owner, &granted.to_decimal_string()).await;
 	let supply = fee_units_before.checked_add(granted).unwrap();
@@ -376,6 +401,8 @@ async fn a_retained_withdrawal_fee_lands_in_the_fee_allocation_and_raises_its_ho
 	let Some(h) = harness().await else { return };
 	let (user, owner) = (person(&h).await, person(&h).await);
 	fund_user(&h, user, "100").await;
+	// Value first, units second: the holder's price is what stands behind the units.
+	fund_fee_claim(&h, "10").await;
 	grant_fee_units(&h, owner, "10").await;
 	let claim_before = cash_of(&h, fee_claim()).await;
 	let quote_before = funds_app::nav_of(&h.nav, h.ledger.as_ref(), &ServiceId::fee()).await.unwrap();
@@ -422,19 +449,28 @@ async fn a_redemption_of_fee_units_the_allocations_cash_cannot_cover_is_refused_
 	let (investor, owner) = (UserId::new(), person(&h).await);
 	let service = unique_service();
 	open_fund(&h, &service).await;
-	fund_user(&h, investor, "1000").await;
-	subscribe(&h, investor, &service, "1000").await;
+	// A large position, so the year's fee class (2 %) is worth far more than the cash a
+	// sibling test settles into the claim — the shortfall below is by construction.
+	fund_user(&h, investor, "1000000").await;
+	subscribe(&h, investor, &service, "1000000").await;
 	let fee_class = charge_a_year(&h, investor, &service).await;
 
-	// The owner is granted the whole allocation at its current value: their units are
-	// backed by the product's fee class plus whatever cash the claim already holds.
+	// The owner is granted as many units as the allocation is worth: their stake is backed
+	// by the product's fee class plus whatever cash the claim already holds, less what the
+	// siblings' holders own of it.
 	let value = funds_app::nav_of(&h.nav, h.ledger.as_ref(), &ServiceId::fee()).await.unwrap().aum.unwrap();
 	let claim_before = cash_of(&h, fee_claim()).await;
 	let granted = Shares::from_cash(value, Nav::SEED).unwrap();
 	grant_fee_units(&h, owner, &granted.to_decimal_string()).await;
 	let price = fee_nav(&h).await;
-	// Ask for more than the claim holds: the part of the value that is still fee units.
-	let uncovered = Shares::from_cash(claim_before.checked_add(usdt("1")).unwrap(), price).unwrap().min(granted);
+	// Ask for more than the claim can pay right now — read, not assumed empty: the part of
+	// the value that is still the product's fee units.
+	let available = Usdt::from_base_units(h.ledger.balance(&fee_claim()).await.unwrap().available());
+	let uncovered = units_worth_at_least(available.checked_add(usdt("1")).unwrap(), price);
+	assert!(
+		uncovered <= granted,
+		"the owner's stake ({granted}) outweighs the claim's cash ({available}) — the fee class is the bulk of the value"
+	);
 
 	let err = funds_app::request_redemption(&fund_ports(&h), &h.reds, owner, ServiceId::fee(), uncovered, now_unix())
 		.await
@@ -470,6 +506,8 @@ async fn a_redemption_of_fee_units_the_allocations_cash_cannot_cover_is_refused_
 async fn a_holder_of_the_hidden_fee_allocation_sees_their_position_with_its_title_and_price() {
 	let Some(h) = harness().await else { return };
 	let (owner, stranger) = (person(&h).await, person(&h).await);
+	// Value first, units second — a position priced at zero is no position to read.
+	fund_fee_claim(&h, "10").await;
 	grant_fee_units(&h, owner, "10").await;
 
 	// Not in anyone's catalog, holder or not.
