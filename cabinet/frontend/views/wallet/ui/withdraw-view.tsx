@@ -5,7 +5,7 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 import { Clock, TriangleAlert } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
-import { Skeleton, Spinner } from "@evinvest/uikit";
+import { Button, Skeleton, Spinner } from "@evinvest/uikit";
 
 import { isUnverified } from "@/entities/user/lib/kyc";
 import { profileResource } from "@/entities/user/model/profile-resource";
@@ -20,7 +20,7 @@ import { NetworkMark } from "@/shared/ui/icons/networks";
 import { Panel, PanelPresence, Settled, StaggerItem } from "@/shared/ui/motion";
 import { formatUsdt, fromBaseUnits, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
 import { NetworkSegments } from "@/views/wallet/ui/network-segments";
-import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
+import { FieldLabel, WALLET_CARD, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
 const FIELD =
   "w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-soft focus-visible:ring-2 focus-visible:ring-ring";
@@ -207,14 +207,15 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
               {t("wallet.minInstantQueued", { min: formatUsdt(opts?.min_withdrawal, locale), network: label, instant: formatUsdt(opts?.instant, locale) })}
             </p>
 
-            <button
+            <Button
               type="button"
+              size="lg"
               disabled={!valid || submitting}
               onClick={() => setConfirming({ network, address, amount, fee: opts?.withdrawal_fee, instant: opts?.instant, rails })}
-              className={cn(WALLET_CTA, "w-full py-3 text-sm font-semibold")}
+              className="w-full font-semibold"
             >
               {t("wallet.reviewWithdrawal")}
-            </button>
+            </Button>
           </div>
 
           <div className="flex flex-col gap-3.5 empty:hidden lg:w-100 lg:max-w-full lg:flex-none lg:gap-5">
@@ -278,13 +279,13 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   {/* A `flex-1` Confirm beside a fixed-width Back in a ≤400px column.
                       i18n-max: 20 on the confirm label, 11 on the back one. */}
                   <div className="flex gap-2">
-                    <button type="button" disabled={submitting} onClick={submit} className={cn(WALLET_CTA, "min-w-0 flex-1 gap-2 py-3 text-sm font-semibold")}>
+                    <Button type="button" size="lg" disabled={submitting} onClick={submit} className="min-w-0 flex-1 font-semibold">
                       {submitting && <Spinner aria-hidden />}
                       <span className="truncate">{t("wallet.confirmWithdrawal")}</span>
-                    </button>
-                    <button type="button" disabled={submitting} onClick={() => setConfirming(null)} className={cn(WALLET_CTA_GHOST, "shrink-0 px-4 py-3 text-sm")}>
+                    </Button>
+                    <Button type="button" size="lg" variant="outline" disabled={submitting} onClick={() => setConfirming(null)} className="shrink-0">
                       {t("ui.back")}
-                    </button>
+                    </Button>
                   </div>
                   <p className="text-xs text-ink-soft">{t("wallet.acceptedInstantly", { network: networkLabel(confirming.network) })}</p>
                 </Panel>

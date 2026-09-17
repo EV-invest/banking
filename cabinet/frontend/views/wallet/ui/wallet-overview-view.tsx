@@ -4,7 +4,7 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { Waypoints } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
-import { Alert, AlertDescription, AlertTitle, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
+import { Alert, AlertDescription, AlertTitle, Button, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
 
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { useKycGate, VerificationRequired } from "@/features/kyc";
@@ -16,7 +16,7 @@ import { TipAnchor, type TipKey } from "@/shared/tips";
 import { NetworkMark } from "@/shared/ui/icons/networks";
 import { formatUsdt, railMeta } from "@/views/wallet/lib/format";
 import { useFirstDepositSignal } from "@/views/wallet/model/use-first-deposit-signal";
-import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
+import { FieldLabel, WALLET_CARD, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
 // The wallet landing surface (Figma `cabinet/wallet` + `cabinet/mobile/wallet`): one balance
 // up top, then the rails as cards — each rail is only a way in and out of that single balance,
@@ -52,18 +52,18 @@ export function WalletOverviewView() {
       subtitle={t("wallet.overviewSub")}
       actions={
         <>
-          <Link href="/wallet/deposit" className={cn(WALLET_CTA, "px-4 py-2.5 text-sm")}>
-            {t("ui.deposit")}
-          </Link>
-          <Link href="/wallet/withdraw" className={cn(WALLET_CTA_GHOST, "px-4 py-2.5 text-sm")}>
-            {t("ui.withdraw")}
-          </Link>
-          <Link href="/invest" className={cn(WALLET_CTA_GHOST, "px-4 py-2.5 text-sm")}>
-            {t("ui.allocate")}
-          </Link>
-          <Link href="/wallet/activity" className={cn(WALLET_CTA_GHOST, "px-4 py-2.5 text-sm")}>
-            {t("ui.walletHistory")}
-          </Link>
+          <Button asChild>
+            <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/invest">{t("ui.allocate")}</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/wallet/activity">{t("ui.walletHistory")}</Link>
+          </Button>
         </>
       }
     >
@@ -110,15 +110,15 @@ export function WalletOverviewView() {
 
       {/* Three equal buttons across a 390px phone, ~113px each. i18n-max: 11 on all three. */}
       <StaggerItem className="grid grid-cols-3 gap-2 lg:hidden">
-        <Link href="/wallet/deposit" className={cn(WALLET_CTA, "py-2.5 text-sm")}>
-          {t("ui.deposit")}
-        </Link>
-        <Link href="/wallet/withdraw" className={cn(WALLET_CTA_GHOST, "py-2.5 text-sm")}>
-          {t("ui.withdraw")}
-        </Link>
-        <Link href="/invest" className={cn(WALLET_CTA_GHOST, "py-2.5 text-sm")}>
-          {t("ui.allocate")}
-        </Link>
+        <Button asChild>
+          <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/invest">{t("ui.allocate")}</Link>
+        </Button>
       </StaggerItem>
 
       <StaggerItem className="flex items-center justify-between">
@@ -206,10 +206,10 @@ function RailCard({ network, canDeposit, canWithdraw }: { network: string; canDe
         </div>
       </div>
       <div className="flex gap-2">
-        <RailAction href={`/wallet/deposit?network=${network}`} enabled={canDeposit} className={WALLET_CTA}>
+        <RailAction href={`/wallet/deposit?network=${network}`} enabled={canDeposit} variant="primary">
           {t("ui.deposit")}
         </RailAction>
-        <RailAction href={`/wallet/withdraw?network=${network}`} enabled={canWithdraw} className={WALLET_CTA_GHOST}>
+        <RailAction href={`/wallet/withdraw?network=${network}`} enabled={canWithdraw} variant="outline">
           {t("ui.withdraw")}
         </RailAction>
       </div>
@@ -218,19 +218,21 @@ function RailCard({ network, canDeposit, canWithdraw }: { network: string; canDe
 }
 
 // An unavailable direction stays visible but inert, so the card reads the same on every rail
-// and the missing capability is legible rather than silently absent.
-function RailAction({ href, enabled, className, children }: { href: `/${string}`; enabled: boolean; className: string; children: string }) {
+// and the missing capability is legible rather than silently absent. A span rather than a
+// disabled button, because a disabled control drops out of the tab order and loses its
+// `title` — the one place the reason is told.
+function RailAction({ href, enabled, variant, children }: { href: `/${string}`; enabled: boolean; variant: "primary" | "outline"; children: string }) {
   const t = useT();
   if (!enabled) {
     return (
-      <span aria-disabled className={cn(className, "flex-1 cursor-not-allowed py-2 text-xs opacity-40")} title={t("wallet.railActionUnavailable", { action: children })}>
-        {children}
-      </span>
+      <Button asChild variant={variant} size="sm" className="flex-1 cursor-not-allowed opacity-40">
+        <span aria-disabled title={t("wallet.railActionUnavailable", { action: children })}>{children}</span>
+      </Button>
     );
   }
   return (
-    <Link href={href} className={cn(className, "flex-1 py-2 text-xs")}>
-      {children}
-    </Link>
+    <Button asChild variant={variant} size="sm" className="flex-1">
+      <Link href={href}>{children}</Link>
+    </Button>
   );
 }

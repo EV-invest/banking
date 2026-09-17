@@ -51,13 +51,6 @@ export function WalletScreen({ title, subtitle, back, actions, children }: { tit
 }
 
 export const WALLET_CARD = "rounded-xl border border-border bg-card";
-// The teal primary and the hairline-outlined secondary, shared by every wallet CTA. Both are
-// hand-written rather than uikit Buttons, so the keyboard focus ring rides along here — every
-// wallet CTA is a link or a button built from one of these two strings.
-export const WALLET_CTA =
-  "flex items-center justify-center rounded-lg bg-primary font-medium text-on-primary outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
-export const WALLET_CTA_GHOST =
-  "flex items-center justify-center rounded-lg border border-border font-medium text-ink outline-none transition-colors hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
 
 // The all-caps field/section label used across the wallet cards. With `htmlFor` it is a
 // real label pinned to one control; a `<label>` wrapped around the label text, a tip button

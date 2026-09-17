@@ -6,6 +6,8 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 import { intlLocale } from "@/shared/lib/intl-locale";
 
 import { Bell } from "lucide-react";
+
+import { Button } from "@evinvest/uikit";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useEffect, useState } from "react";
 
@@ -20,11 +22,9 @@ import { useResource } from "@/shared/lib/resource";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 
 const CARD = "rounded-xl border border-border bg-card";
-// Every control on this screen is hand-written rather than a uikit Button, so the keyboard
-// focus ring has to be written out — once, here, so the four of them cannot drift apart.
+// The filter pills and the rows are hand-written rather than uikit Buttons, so the keyboard
+// focus ring has to be written out — once, here, so they cannot drift apart.
 const FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
-// "Mark all read" and "Load older" are the same control in two places.
-const GHOST_BUTTON = `rounded-lg border border-border/60 px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/5 disabled:opacity-40 ${FOCUS}`;
 // Rows are dense, so the inset is wider than the vertical rhythm.
 const ROW_PAD = "px-5.5 py-4.5";
 // A row spans the full width of a card that clips its overflow, so an outset ring would be
@@ -135,9 +135,9 @@ export function NotificationsView() {
           <h1 className="text-3xl font-semibold text-ink">{t("nav.notifications")}</h1>
           <p className="mt-1 text-sm text-ink-soft">{t("notif.subtitle")}</p>
         </div>
-        <button type="button" onClick={markAll} disabled={busy || unread === 0} className={GHOST_BUTTON}>
+        <Button type="button" variant="outline" onClick={markAll} disabled={busy || unread === 0}>
           {t("notif.markAllRead")}
-        </button>
+        </Button>
       </StaggerItem>
 
       {/* `inline-flex` on the bar itself, so the item that carries it has to stay inline
@@ -193,9 +193,9 @@ export function NotificationsView() {
 
       {nextCursor && items && items.length > 0 && (
         <StaggerItem className="mt-4 flex justify-center">
-          <button type="button" onClick={loadMore} disabled={busy} className={GHOST_BUTTON}>
+          <Button type="button" variant="outline" onClick={loadMore} disabled={busy}>
             {busy ? t("ui.loading") : t("notif.loadOlder")}
-          </button>
+          </Button>
         </StaggerItem>
       )}
     </Stagger>

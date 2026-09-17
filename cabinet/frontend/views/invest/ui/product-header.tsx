@@ -15,7 +15,7 @@ import { cn } from "@/shared/lib/cn";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { StaggerItem } from "@/shared/ui/motion";
 import { blockedReasonKey, isClosed, isInKind, isLocked, type Product } from "@/views/invest/lib/product";
-import { ProductBadges, TEAL_CTA } from "@/views/invest/ui/atoms";
+import { ProductBadges } from "@/views/invest/ui/atoms";
 import { InKindBadge } from "@/views/invest/ui/backing-badge";
 import { VerifyToInvestCta } from "@/views/invest/ui/product-cta";
 import { TradeLink } from "@/views/invest/ui/trade-link";
@@ -72,7 +72,7 @@ function SubscribeControl({ product, blocked, panel, onPanel }: { product: Produ
   const { gated, loading } = useKycGate();
   if (gated && !isLocked(product)) return <VerifyToInvestCta />;
   return (
-    <Button type="button" className={cn(TEAL_CTA)} disabled={blocked || loading} onClick={() => onPanel((p) => (p === "subscribe" ? null : "subscribe"))}>
+    <Button type="button" disabled={blocked || loading} onClick={() => onPanel((p) => (p === "subscribe" ? null : "subscribe"))}>
       <Sparkles className="size-4" />
       {panel === "subscribe" ? t("ui.close") : t("invest.subscribe")}
     </Button>

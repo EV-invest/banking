@@ -13,8 +13,6 @@ import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
 import { compactUnits, fractionOfCap } from "@/views/invest/lib/format";
 
-export const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
-
 export function Stat({
   label,
   value,
