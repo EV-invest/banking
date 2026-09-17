@@ -755,6 +755,74 @@ async fn a_company_row_written_before_the_retirement_still_reads_and_replays() {
 	assert_eq!(investor_units(&holders), Shares::ZERO);
 }
 
+/// H-2 / M-2 of the #245 security review: one `AllocationManage` holder could grant
+/// themselves `invest` on `fee` or `fund` and subscribe cash into the owners' money without
+/// a quorum, or close, re-back or cap a reserved allocation and lock its holders in. Every
+/// operator write on a reserved allocation is refused, and a subscription into one is
+/// refused before the catalog is even consulted — so what 0044 wrote stays as written.
+#[tokio::test]
+async fn a_reserved_allocation_is_not_an_operators_to_manage_or_buy_into() {
+	let Some(h) = harness().await else { return };
+	let admin = provisioned_user(&h).await;
+	fund_user(&h, admin, "1000").await;
+	for reserved in [ServiceId::fee(), ServiceId::fund()] {
+		let before = h.allocations.find(&reserved).await.unwrap().expect("0044 wrote the reserved row");
+		let forbidden = |err: DomainError, what: &str| {
+			assert!(matches!(err, DomainError::Forbidden(ref m) if m.contains("reserved")), "{reserved} {what}: got {err:?}");
+		};
+		// Letting themselves in: the grant is refused, and so is the subscription it would
+		// have opened — with or without the grant.
+		forbidden(
+			allocations_app::grant_access(&h.allocations, &reserved, admin, AllocationAccess::Invest, admin)
+				.await
+				.unwrap_err(),
+			"grant_access",
+		);
+		assert!(h.allocations.list_grants(&reserved).await.unwrap().is_empty(), "{reserved}: no grant was written");
+		forbidden(subscribe(&h, admin, &reserved, "100").await.unwrap_err(), "subscribe");
+		// Even a grant written past the use case (a hand edit of the registry) buys nothing.
+		h.allocations.grant_access(&reserved, admin, AllocationAccess::Invest, admin).await.unwrap();
+		forbidden(subscribe(&h, admin, &reserved, "100").await.unwrap_err(), "subscribe after a direct grant");
+		h.allocations.revoke_access(&reserved, admin, admin).await.unwrap();
+		assert_eq!(
+			sqlx::query_scalar::<_, i64>("SELECT count(*) FROM subscriptions WHERE user_id = $1 AND service = $2")
+				.bind(admin.raw())
+				.bind(reserved.as_str())
+				.fetch_one(&h.pool)
+				.await
+				.unwrap(),
+			0,
+			"{reserved}: nothing was opened"
+		);
+		// Locking the holders in, or out: state, access, backing, cap and presentation.
+		forbidden(allocations_app::set_access(&h.allocations, &reserved, AllocationAccess::Invest).await.unwrap_err(), "set_access");
+		forbidden(allocations_app::close(&h.allocations, &reserved).await.unwrap_err(), "close");
+		forbidden(allocations_app::open(&h.allocations, &reserved).await.unwrap_err(), "open");
+		forbidden(
+			allocations_app::set_backing(&h.allocations, &reserved, AllocationBacking::InKind).await.unwrap_err(),
+			"set_backing",
+		);
+		forbidden(allocations_app::set_unit_cap(&h.allocations, &reserved, shares("1")).await.unwrap_err(), "set_unit_cap");
+		forbidden(allocations_app::update_details(&h.allocations, &reserved, "Mine", "", None).await.unwrap_err(), "update_details");
+		forbidden(allocations_app::revoke_access(&h.allocations, &reserved, admin, admin).await.unwrap_err(), "revoke_access");
+		let after = h.allocations.find(&reserved).await.unwrap().unwrap();
+		assert_eq!(
+			(after.state(), after.access(), after.backing(), after.unit_cap(), after.title()),
+			(before.state(), before.access(), before.backing(), before.unit_cap(), before.title())
+		);
+		assert_eq!(
+			(after.state(), after.access(), after.backing()),
+			(AllocationState::Open, AllocationAccess::Hidden, AllocationBacking::Cash),
+			"{reserved}: as 0044 wrote it"
+		);
+	}
+	// The same admin, with the same cash, still buys into an ordinary open product.
+	let product = unique_service();
+	register(&h, &product).await;
+	open_to_everyone(&h, &product).await;
+	subscribe(&h, admin, &product, "100").await.expect("a product is bought as before");
+}
+
 #[tokio::test]
 async fn the_fee_allocation_holds_a_products_fee_class_and_nothing_holds_a_reserved_one_but_people() {
 	// #245: an allocation may hold units of a product only when it is reserved and the

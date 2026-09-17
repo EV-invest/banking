@@ -275,6 +275,13 @@ async fn holds_units(ledger: &dyn Ledger, service: &ServiceId, user: UserId) -> 
 /// refusal is its own kind ([`DomainError::Precondition`]) so a client can tell "ask an
 /// operator" from "the product is closed" from "over the cap".
 ///
+/// A **reserved allocation** is refused before either (#245): `fee` and `fund` are the
+/// platform's own money, and a seat at them is the owners' quorum's to give — a holder
+/// grant, or the seed of a chain-proven arrival — never something cash buys. The catalog
+/// hides them from everyone, which would refuse this anyway; the explicit check is what
+/// keeps a grant of `invest` on them (itself refused in `allocations`) from ever being a
+/// way in. The seed prices through [`price_fund_seed`], which is not this path.
+///
 /// The **supply gate** runs second, once the mint has been priced and is therefore
 /// known: `issued + minting` must fit the allocation's unit cap. Like the cash check
 /// above it is Read-First — and unlike the cash check it has no TigerBeetle backstop
@@ -292,6 +299,11 @@ async fn holds_units(ledger: &dyn Ledger, service: &ServiceId, user: UserId) -> 
 /// a figure TigerBeetle already owns, which is the trade this architecture refuses
 /// everywhere else.
 pub async fn subscribe(ports: &FundPorts<'_>, subscriptions: &dyn SubscriptionRepository, user: UserId, service: ServiceId, cash: Usdt, now_unix: i64) -> Result<Subscription, DomainError> {
+	if service.is_reserved() {
+		return Err(DomainError::Forbidden(format!(
+			"units of the reserved '{service}' allocation are seated only by a holder grant or a seed, never bought"
+		)));
+	}
 	let allocation = allocations_app::require_subscribable(ports.allocations, &service, user).await?;
 	let claim = ports.ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
 	if Usdt::from_base_units(claim.available()) < cash {

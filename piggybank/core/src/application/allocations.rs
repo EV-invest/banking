@@ -6,6 +6,12 @@
 //! filtered to what that user may see, with the unrestricted view behind the same
 //! permission.
 //!
+//! The reserved `fee` and `fund` allocations (#245) are registered by migration 0044 and
+//! are NOT an operator's to manage: every write here refuses them first
+//! ([`refuse_on_reserved`]). Their holders are seated by the owners' quorum, their state,
+//! access, backing and cap are what the migration wrote, and a single `AllocationManage`
+//! holder can neither let themselves in nor lock the holders out.
+//!
 //! [`require_subscribable`] / [`require_redeemable`] are the reason the context exists:
 //! they are the gate the fund use cases run before any money moves, turning "this slug
 //! parses" into "an operator registered and opened this product — and let this
@@ -23,6 +29,21 @@ use domain::{
 
 use crate::ports::allocations::{AllocationAccessGrant, AllocationRecord, AllocationRegistry};
 
+/// The one gate every operator write runs first: a reserved allocation is the platform's
+/// own money, held by people the owners seated, and nothing about it is one administrator's
+/// to change. Opening the catalog's `invest` to themselves would let them buy in past the
+/// quorum; closing it, changing its backing or its cap would let them lock the holders in.
+/// `Forbidden`, not `Validation`: the request is well-formed and the caller is not
+/// entitled to it.
+pub(crate) fn refuse_on_reserved(service: &ServiceId) -> Result<(), DomainError> {
+	if service.is_reserved() {
+		return Err(DomainError::Forbidden(format!(
+			"'{service}' is a reserved allocation: its holders are seated by the owners' consilium, and its state, access, backing and cap are not an operator's to change"
+		)));
+	}
+	Ok(())
+}
+
 /// Register `service` as a new investable product, in `draft` and at the default
 /// access level (`view`: listed once opened, locked until an operator says otherwise).
 /// A slug already in the registry is a [`DomainError::Conflict`] — registration never
@@ -37,29 +58,34 @@ pub async fn register(allocations: &dyn AllocationRegistry, service: ServiceId, 
 /// identity are untouched. `icon: None` leaves the stored pick alone (the request never
 /// mentioned it); `Some` sets it, including a `Some(default)` reset.
 pub async fn update_details(allocations: &dyn AllocationRegistry, service: &ServiceId, title: &str, summary: &str, icon: Option<AllocationIcon>) -> Result<Allocation, DomainError> {
+	refuse_on_reserved(service)?;
 	allocations.update_details(service, title, summary, icon).await
 }
 
 /// Resize an allocation's authorised unit supply (idempotent). Lifecycle is untouched:
 /// this bounds how many units may still be minted, not whether the product is open.
 pub async fn set_unit_cap(allocations: &dyn AllocationRegistry, service: &ServiceId, unit_cap: Shares) -> Result<Allocation, DomainError> {
+	refuse_on_reserved(service)?;
 	allocations.set_unit_cap(service, unit_cap).await
 }
 
 /// Open an allocation for subscriptions (idempotent).
 pub async fn open(allocations: &dyn AllocationRegistry, service: &ServiceId) -> Result<Allocation, DomainError> {
+	refuse_on_reserved(service)?;
 	allocations.open(service).await
 }
 
 /// Close an allocation to new subscriptions (idempotent). Redemptions keep working —
 /// see [`Allocation::ensure_redeemable`].
 pub async fn close(allocations: &dyn AllocationRegistry, service: &ServiceId) -> Result<Allocation, DomainError> {
+	refuse_on_reserved(service)?;
 	allocations.close(service).await
 }
 
 /// Set an allocation's default access level (idempotent). Lifecycle and grants are
 /// untouched: this decides who the product deals with by default, not whether it deals.
 pub async fn set_access(allocations: &dyn AllocationRegistry, service: &ServiceId, access: AllocationAccess) -> Result<Allocation, DomainError> {
+	refuse_on_reserved(service)?;
 	allocations.set_access(service, access).await
 }
 
@@ -67,6 +93,7 @@ pub async fn set_access(allocations: &dyn AllocationRegistry, service: &ServiceI
 /// may redeem, or `in_kind`, so they may not and exit through the book. The operator's
 /// command; the first in-kind mint sets `in_kind` through the same port on its own.
 pub async fn set_backing(allocations: &dyn AllocationRegistry, service: &ServiceId, backing: AllocationBacking) -> Result<Allocation, DomainError> {
+	refuse_on_reserved(service)?;
 	allocations.set_backing(service, backing).await
 }
 
@@ -79,11 +106,13 @@ pub async fn grant_access(
 	level: AllocationAccess,
 	granted_by: UserId,
 ) -> Result<AllocationAccessGrant, DomainError> {
+	refuse_on_reserved(service)?;
 	allocations.grant_access(service, user, level, granted_by).await
 }
 
 /// Take one investor's grant back (idempotent); they hold the default again.
 pub async fn revoke_access(allocations: &dyn AllocationRegistry, service: &ServiceId, user: UserId, revoked_by: UserId) -> Result<(), DomainError> {
+	refuse_on_reserved(service)?;
 	allocations.revoke_access(service, user, revoked_by).await
 }
 
