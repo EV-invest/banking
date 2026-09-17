@@ -19,6 +19,10 @@ import { cn } from "@/shared/lib/cn";
 
 export const CARD = "rounded-xl border border-border bg-card";
 
+/** A tappable row — a button into a pushed screen, a link out. Hand-written (uikit has no
+ *  list-row control), so it carries its own focus ring. */
+export const ROW_INTERACTIVE = "flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 export function ListCard({ className, children }: { className?: string; children: ReactNode }) {
   return <section className={cn(CARD, "flex w-full min-w-0 flex-col px-4 pb-1.5 pt-1", className)}>{children}</section>;
 }

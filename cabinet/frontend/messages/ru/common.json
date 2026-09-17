@@ -2651,13 +2651,21 @@
     "en": "Open your investor account",
     "t": "Откройте инвесторский счёт"
   },
-  "auth.stat.aum": {
-    "en": "Assets under mgmt",
-    "t": "Активы под упр."
+  "auth.stat.asOf": {
+    "en": "As of {date}",
+    "t": "По состоянию на {date}"
+  },
+  "auth.stat.closingTarget": {
+    "en": "Closing target",
+    "t": "Целевой объём закрытия"
+  },
+  "auth.stat.risk": {
+    "en": "Capital at risk. A target is not a forecast, and returns are not guaranteed.",
+    "t": "Капитал под риском. Цель — не прогноз, доходность не гарантирована."
   },
   "auth.stat.targetIrr": {
-    "en": "Avg. target IRR",
-    "t": "Средний целевой IRR"
+    "en": "Target IRR",
+    "t": "Целевой IRR"
   },
   "auth.switch.haveAccount": {
     "en": "Already have an account?",
@@ -4247,6 +4255,10 @@
     "en": "Verified",
     "t": "Проверен"
   },
+  "kyc.custodyNote": {
+    "en": "Deposits are held in custody under your verified identity; nothing moves without it.",
+    "t": "Депозиты хранятся в кастодиальном кошельке под вашей проверенной личностью; без неё ничего не перемещается."
+  },
   "kyc.verifyNow": {
     "en": "Verify now",
     "t": "Подтвердить"
@@ -4366,6 +4378,10 @@
   "nav.settings": {
     "en": "Settings",
     "t": "Настройки"
+  },
+  "nav.support": {
+    "en": "Support",
+    "t": "Поддержка"
   },
   "nav.treasury": {
     "en": "Treasury",
@@ -5115,6 +5131,42 @@
     "en": "{n, plural, one {# device currently signed in} other {# devices currently signed in}}",
     "t": "Сейчас выполнен вход с {n, plural, one {# устройства} few {# устройств} many {# устройств} other {# устройств}}"
   },
+  "settings.documents.custody": {
+    "en": "How funds are held",
+    "t": "Как хранятся средства"
+  },
+  "settings.documents.custodySub": {
+    "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
+    "t": "Депозиты хранятся в кастодиальных кошельках фонда в той сети, по которой вы их отправили, и записываются на вашу проверенную личность. Без неё ничего не перемещается, а выводы идут только на адрес, который вы указали."
+  },
+  "settings.documents.published": {
+    "en": "Published documents",
+    "t": "Опубликованные документы"
+  },
+  "settings.documents.risk": {
+    "en": "Risk",
+    "t": "Риск"
+  },
+  "settings.documents.rowSub": {
+    "en": "Whitepaper, how funds are held, risk",
+    "t": "Уайтпейпер, хранение средств, риск"
+  },
+  "settings.documents.sub": {
+    "en": "What the fund has published, and how your money is held",
+    "t": "Что фонд опубликовал и как хранятся ваши деньги"
+  },
+  "settings.documents.title": {
+    "en": "Documents and disclosures",
+    "t": "Документы и раскрытия"
+  },
+  "settings.documents.whitepaper": {
+    "en": "Whitepaper",
+    "t": "Уайтпейпер"
+  },
+  "settings.documents.whitepaperSub": {
+    "en": "The fund's thesis and structure, on the public site",
+    "t": "Тезис и структура фонда на публичном сайте"
+  },
   "settings.fixHighlighted": {
     "en": "Please fix the highlighted fields",
     "t": "Исправьте выделенные поля"
@@ -5134,6 +5186,14 @@
   "settings.group.cabinetSub": {
     "en": "How the cabinet looks and how it reaches you",
     "t": "Как кабинет выглядит и как с вами связывается"
+  },
+  "settings.group.help": {
+    "en": "Help",
+    "t": "Помощь"
+  },
+  "settings.group.helpSub": {
+    "en": "What the fund has published, and how to reach a person",
+    "t": "Что опубликовал фонд и как связаться с человеком"
   },
   "settings.group.profileSub": {
     "en": "Who you are and how your account is protected",
@@ -5170,6 +5230,10 @@
   "settings.hint.timeZone": {
     "en": "Saved to your account. The cabinet itself shows times in your device's time zone.",
     "t": "Хранится в аккаунте. Сам кабинет показывает время в часовом поясе вашего устройства."
+  },
+  "settings.nav.documents": {
+    "en": "Documents",
+    "t": "Документы"
   },
   "settings.nav.personal": {
     "en": "Personal details",
@@ -5262,6 +5326,14 @@
   "settings.subtitle": {
     "en": "Manage your account, security and access",
     "t": "Управление аккаунтом, безопасностью и доступом"
+  },
+  "settings.support.email": {
+    "en": "Email support",
+    "t": "Написать в поддержку"
+  },
+  "settings.support.sub": {
+    "en": "A person reads every message",
+    "t": "Каждое письмо читает человек"
   },
   "settings.thisDevice": {
     "en": "This device",

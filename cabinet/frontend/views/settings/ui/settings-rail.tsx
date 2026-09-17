@@ -6,7 +6,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { Bell, type LucideIcon, Monitor, Shield, SlidersHorizontal, UserRound } from "lucide-react";
+import { Bell, FileText, type LucideIcon, Monitor, Shield, SlidersHorizontal, UserRound } from "lucide-react";
 
 import { cn } from "@/shared/lib/cn";
 import { GROUPS, type Section } from "@/views/settings/lib/sections";
@@ -19,11 +19,13 @@ const ROWS: Record<Section, { labelKey: string; icon: LucideIcon }> = {
   personal: { labelKey: "settings.nav.personal", icon: UserRound },
   security: { labelKey: "ui.security", icon: Shield },
   sessions: { labelKey: "ui.sessionsDevices", icon: Monitor },
+  documents: { labelKey: "settings.nav.documents", icon: FileText },
 };
 
 const GROUP_COPY = {
   cabinet: { labelKey: "settings.group.cabinet", subKey: "settings.group.cabinetSub" },
   profile: { labelKey: "ui.profile", subKey: "settings.group.profileSub" },
+  help: { labelKey: "settings.group.help", subKey: "settings.group.helpSub" },
 } as const;
 
 export function SettingsRail({ section, onSelect }: { section: Section; onSelect: (id: Section) => void }) {

@@ -159,6 +159,18 @@ export function formatPct(value: number, locale: Locale = DEFAULT_MONEY_LOCALE):
   return `${sign}${digits}%`;
 }
 
+/** An unsigned percentage in the locale's own percent form — "16.4%" / "16,4 %" (the space
+ *  is Intl's NBSP). The form the landing writes its headline figures in, unlike `formatPct`,
+ *  whose "%" hugs the digits to match the signed money beside it. */
+export function formatPlainPct(value: number, locale: Locale = DEFAULT_MONEY_LOCALE): string {
+  return numberFormat(locale, "pct-plain", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value / 100);
+}
+
+/** A whole number in the locale's digits and grouping — "1,000" / "1 000". */
+export function formatWhole(value: number, locale: Locale = DEFAULT_MONEY_LOCALE): string {
+  return numberFormat(locale, "whole", { maximumFractionDigits: 0 }).format(value);
+}
+
 // Whether a signed decimal P&L string is negative (a loss) — exact, no float.
 export function isNegative(value: string | undefined): boolean {
   return (value ?? "").trim().startsWith("-");

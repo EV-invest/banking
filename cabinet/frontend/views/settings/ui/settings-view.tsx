@@ -25,6 +25,7 @@ import { Reveal, SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motio
 import { EDITABLE, type Form, formFrom } from "@/views/settings/lib/form";
 import { displayName, initialsOfName, truncateName } from "@/views/settings/lib/format";
 import { DEFAULT_SECTION, EDITING, pushableOf, type Section } from "@/views/settings/lib/sections";
+import { DocumentsSection, MobileHelpCard } from "@/views/settings/ui/documents-section";
 import { MobileNotificationsCard, MobileSecurityCard, PersonalDetailsCard, PreferencesCard, ProfileSummaryCard, SignOutButton } from "@/views/settings/ui/mobile-cards";
 import { NotificationsSection } from "@/views/settings/ui/notifications-section";
 import { PersonalSection, PersonalStack } from "@/views/settings/ui/personal-section";
@@ -39,12 +40,14 @@ import { SessionsSection } from "@/views/settings/ui/sessions-section";
 // stack of row cards, with the editors pushed as their own screens — and `cabinet/settings`
 // (node 481:250) above it, a section rail beside the pane.
 //
-// Five sections in two groups. Cabinet: Preferences (language, currency, time zone) and
+// Six sections in three groups. Cabinet: Preferences (language, currency, time zone) and
 // Notifications (the real delivery-preference store). Profile: Personal details (the
 // identity fields the fund records), Security (the real auth model — Google-managed —
 // with the live session count) and Sessions & devices (the refresh-token families at the
 // hub, listed and revocable). The split replaced one "General" pane that mixed how the
 // cabinet behaves with who the reader is, so nobody could say where a thing was changed.
+// Help: Documents and disclosures, with the support mailbox — the entry points a footer
+// would carry on a site with one (#385).
 //
 // Preferences and Personal details edit the same core user record (full-replace, so the
 // one form carries every editable field whichever pane is open). Auth is Google-OAuth-only
@@ -281,6 +284,8 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
               sessionsPanel(false)
             ) : pushed === "notifications" ? (
               <NotificationsSection />
+            ) : pushed === "documents" ? (
+              <DocumentsSection />
             ) : (
               <>
                 <MobileGroup label={t("settings.group.cabinet")}>
@@ -291,8 +296,12 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
                   <ProfileSummaryCard loading={loading} name={name} email={email} verified={!!profile?.email_verified} />
                   <PersonalDetailsCard onOpen={() => select("personal")} />
                   <MobileSecurityCard loading={loading} email={email} sessions={sessions} onOpenSessions={() => select("sessions")} />
-                  <SignOutButton />
                 </MobileGroup>
+                <MobileGroup label={t("settings.group.help")}>
+                  <MobileHelpCard onOpen={() => select("documents")} />
+                </MobileGroup>
+                {/* Last on the screen, under no eyebrow: leaving is not a setting of any group. */}
+                <SignOutButton />
               </>
             )}
           </Reveal>
@@ -318,6 +327,12 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
             {section === "personal" && <PersonalSection {...personalProps} />}
             {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => select("sessions")} />}
             {section === "sessions" && sessionsPanel(true)}
+            {section === "documents" && (
+              <div>
+                <SectionHeader title={t("settings.documents.title")} sub={t("settings.documents.sub")} />
+                <DocumentsSection />
+              </div>
+            )}
           </Reveal>
         </StaggerItem>
       </Stagger>
@@ -330,6 +345,7 @@ const PUSHED_TITLE = {
   personal: "settings.nav.personal",
   sessions: "ui.sessionsDevices",
   notifications: "nav.notifications",
+  documents: "settings.nav.documents",
 } as const;
 
 /** A mobile root-screen group: the same eyebrow the desktop rail and the sidebar use, over its cards. */

@@ -1,11 +1,15 @@
-import type { Translate } from "@evinvest/i18n";
+import type { Locale, Translate } from "@evinvest/i18n";
 
+import { formatFundFigures } from "@/shared/lib/fund-figures";
 import { Logo } from "@/shared/ui/logo";
 
 // The branded left panel of the sign-in page (Figma `cabinet/login`). Locked to the
 // brand palette (white on navy, the fixed teal washes), so it deliberately does not
 // follow the app's ink token.
-export function BrandPanel({ t }: { t: Translate }) {
+export function BrandPanel({ t, locale }: { t: Translate; locale: Locale }) {
+  // The same two figures the landing's hero shows, from the one place that owns them
+  // (`shared/config/fund-figures`) — this panel used to hand-type a different pair.
+  const figures = formatFundFigures(locale);
   return (
     <aside className="relative hidden w-150 shrink-0 flex-col justify-between overflow-hidden bg-brand p-16 lg:flex">
       {/* Both washes are bespoke art direction with no equivalent on the colour scale, so
@@ -32,11 +36,17 @@ export function BrandPanel({ t }: { t: Translate }) {
         <p className="text-base leading-6 text-ink-soft">{t("auth.brandBlurb")}</p>
       </div>
 
-      {/* TODO(#385): sourced figures — these two are hand-typed marketing numbers, kept
-          as they were until the one place that owns them exists. */}
-      <div className="relative flex gap-8">
-        <BrandStat value="18.4%" label={t("auth.stat.targetIrr")} />
-        <BrandStat value="$120M+" label={t("auth.stat.aum")} />
+      <div className="relative flex flex-col gap-4">
+        <div className="flex gap-8">
+          <BrandStat value={figures.targetIrr} label={t("auth.stat.targetIrr")} />
+          <BrandStat value={figures.closingTarget} label={t("auth.stat.closingTarget")} />
+        </div>
+        {/* Only once the owner has dated the figures: a placeholder date beside a return
+            figure would read as a fact (see `FUND_FIGURES.asOf`). */}
+        {figures.asOf !== undefined && <p className="text-xs text-ink-soft">{t("auth.stat.asOf", { date: figures.asOf })}</p>}
+        {/* The risk beside the benefit, at the same place on the page: a target is not a
+            forecast, and the panel must not read as a promise. */}
+        <p className="text-xs leading-5 text-ink-soft">{t("auth.stat.risk")}</p>
       </div>
     </aside>
   );
@@ -45,7 +55,7 @@ export function BrandPanel({ t }: { t: Translate }) {
 function BrandStat({ value, label }: { value: string; label: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-2xl font-semibold text-accent-warn">{value}</p>
+      <p className="text-2xl font-semibold text-accent-warn tabular-nums">{value}</p>
       <p className="text-xs text-ink-soft">{label}</p>
     </div>
   );

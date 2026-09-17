@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Gavel, Home, Inbox, Landmark, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UserRound, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Gavel, Home, Inbox, Landmark, LifeBuoy, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UserRound, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
@@ -12,6 +12,7 @@ import { useUnreadCount, useUnreadCountPolling } from "@/entities/notification/m
 import { KycStatusChip } from "@/features/kyc";
 import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
+import { SUPPORT_EMAIL } from "@/shared/config/support";
 import { useResource } from "@/shared/lib/resource";
 import { visibleFor } from "@/shared/lib/roles";
 import { useSession } from "@/shared/lib/use-session";
@@ -217,6 +218,7 @@ export function Sidebar() {
             const trailing = item.href === "/profile" ? <KycStatusChip active={active} /> : item.href === "/notifications" && unread ? <UnreadPill count={unread} active={active} /> : undefined;
             return <NavLink key={item.label} item={item} active={active} onClick={onRailClick(item.href, mark)} trailing={trailing} />;
           })}
+          <SupportLink />
         </Section>
       </nav>
     </aside>
@@ -352,6 +354,22 @@ function NavLink({
       </span>
       {trailing}
     </Link>
+  );
+}
+
+// The way to a person, last in the rail. A mail link rather than a NavItem: there is no
+// support page to be "on", so it never takes the marker, and the address is the one every
+// KYC dead end already offers. The mobile tab bar has no slot for it — there the same row
+// sits under Settings (#385).
+function SupportLink() {
+  const t = useT();
+  return (
+    <a href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}`} className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/5", NAV_FOCUS)}>
+      <LifeBuoy className="size-4.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate" title={t("nav.support")}>
+        {t("nav.support")}
+      </span>
+    </a>
   );
 }
 
