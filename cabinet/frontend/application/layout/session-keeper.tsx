@@ -47,8 +47,9 @@ export function SessionKeeper() {
     () =>
       onSessionChange((session) => {
         if (session.authenticated) return;
-        // The login view re-adds the zone prefix when it hands returnTo to the shell, so
-        // this stays zone-relative — `useCabinetPathname` is what makes that true now that
+        // returnTo is zone-relative by convention (`features/auth/lib/return-to.ts`): the
+        // login view puts `/{locale}/cabinet` on once, and the proxy's signed-out bounce
+        // writes the same shape. `useCabinetPathname` is what keeps this true now that
         // `usePathname` reports the whole `/{locale}/cabinet/...` path.
         const returnTo = `${pathname}${window.location.search}`;
         router.replace(href(returnTo === "/" ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`));

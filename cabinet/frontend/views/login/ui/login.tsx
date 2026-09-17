@@ -1,8 +1,7 @@
 import { translator } from "@evinvest/i18n";
 
 import { Logo } from "@/shared/ui/logo";
-import { safeReturnTo } from "@/features/auth/lib/return-to";
-import { withBasePath } from "@/shared/config/base-path";
+import { loginHref } from "@/features/auth/lib/return-to";
 import { messagesFor } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
 
@@ -25,12 +24,10 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
   const locale = await currentLocale();
   const t = translator(messagesFor(locale), locale);
   const message = error ? t(ERROR_KEYS[error] ?? "auth.err.generic") : null;
-  const dest = safeReturnTo(returnTo ?? null);
-  // Full navigation to the SHELL-owned login (site-root /api/auth, not the zone's
-  // BFF — the cabinet runs no OAuth); returnTo is site-root-relative, so it carries
-  // the zone prefix.
-  // safeReturnTo guarantees the leading slash withBasePath's type asks for.
-  const href = `/api/auth/login?returnTo=${encodeURIComponent(withBasePath(dest as `/${string}`))}`;
+  // `returnTo` arrives zone-relative (`/wallet`) and leaves for the shell as a site-root
+  // page (`/{locale}/cabinet/wallet`) — the prefix goes on here and nowhere else, see
+  // `features/auth/lib/return-to.ts`.
+  const href = loginHref(locale, returnTo);
 
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))]">

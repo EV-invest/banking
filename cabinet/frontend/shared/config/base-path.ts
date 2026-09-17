@@ -148,6 +148,3 @@ export const relocalise = (
   locale: Locale,
   url: { pathname: string; search: string; hash: string },
 ): string => cabinetPath(locale, zonePathname(url.pathname)) + url.search + url.hash;
-
-/** @deprecated Ambiguous now that pages and assets diverge — say which you mean. */
-export const withBasePath = apiPath;
