@@ -4,6 +4,7 @@
 
 export {
   compactUnits,
+  formatExactUsdt,
   formatNav,
   formatSignedUsdt,
   formatUnits,

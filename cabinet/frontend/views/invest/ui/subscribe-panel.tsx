@@ -22,17 +22,16 @@ import { hasHoldings } from "@/entities/fund/lib/holdings";
 import { positionsResource, submitSubscribe } from "@/entities/fund/model/fund-resource";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { useKycGate, VerificationRequired } from "@/features/kyc";
-import { ACTIVATION, once } from "@/shared/analytics";
 import type { FundNav } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
-import { cachedSession } from "@/shared/lib/session";
 import { Panel, PanelPresence } from "@/shared/ui/motion";
-import { formatUnits, formatUsdt } from "@/views/invest/lib/format";
+import { recordFirstSubscription } from "@/views/invest/lib/first-subscription";
+import { formatExactUsdt, formatUnits, formatUsdt } from "@/views/invest/lib/format";
 import { canSubmit, checkSubscribe } from "@/views/invest/lib/subscribe-check";
 import { TEAL_CTA } from "@/views/invest/ui/atoms";
-import { AmountField, SubscribeHint } from "@/views/invest/ui/subscribe-field";
+import { SubscribeField } from "@/views/invest/ui/subscribe-field";
 
 export function SubscribePanel({ service, nav }: { service: string; nav: FundNav | null }) {
   const t = useT();
@@ -50,16 +49,6 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
 
   const check = checkSubscribe({ amount, available, nav });
 
-  // `first_subscription`: an accepted subscription by an account that held no units. The
-  // positions are what `/invest/<service>` warms on the way in, so "unread" is rare and is
-  // counted as "none" — flagged, rather than losing the step. Keyed by user per browser so
-  // a retry, or a second tab, does not repeat it.
-  const recordFirstSubscription = (held: boolean | null) => {
-    if (held === true) return;
-    const userId = cachedSession()?.user?.userId ?? "anon";
-    if (once(`${ACTIVATION.firstSubscription}:${userId}`, "browser")) capture(ACTIVATION.firstSubscription, { service, holdings_known: held !== null });
-  };
-
   const submit = async () => {
     if (submitting || !canSubmit(check)) return;
     setSubmitting(true);
@@ -72,7 +61,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
       const receipt = await submitSubscribe({ service, amount });
       setDone({ units: receipt.units, nav: receipt.nav });
       setAmount("");
-      recordFirstSubscription(held);
+      recordFirstSubscription(capture, service, held);
     } catch (e) {
       // The error itself: `errorMessage` resolves its `code` in the reader's locale.
       setError(e);
@@ -111,16 +100,22 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
         )}
       </PanelPresence>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <AmountField amount={amount} available={available} onChange={setAmount} />
-        <Button type="button" className={cn(TEAL_CTA)} disabled={submitting || !canSubmit(check)} onClick={submit}>
-          {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-          {/* The button names the outcome once there is one to name; before that it names the act. */}
-          {check.preview !== null ? t("invest.investAmount", { amount: formatUsdt(amount, locale) }) : t("invest.subscribe")}
-        </Button>
-      </div>
-
-      <SubscribeHint check={check} nav={nav} />
+      <SubscribeField
+        amount={amount}
+        available={available}
+        check={check}
+        nav={nav}
+        onChange={setAmount}
+        action={
+          <Button type="button" className={cn(TEAL_CTA, "tabular-nums")} disabled={submitting || !canSubmit(check)} onClick={submit}>
+            {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {/* Names the outcome once there is one to name, and names it EXACTLY: the check
+                runs at 18 dp, so a rounding formatter could read "0.00" over an amount
+                that still buys a fraction of a unit and submits. */}
+            {check.preview !== null ? t("invest.investAmount", { amount: formatExactUsdt(amount, locale) }) : t("invest.subscribe")}
+          </Button>
+        }
+      />
     </div>
   );
 }

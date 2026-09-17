@@ -54,6 +54,15 @@ test("dust: an amount that floors to zero units", () => {
   assert.equal(canSubmit(c), false);
 });
 
+test("a sub-cent amount that still buys a fraction of a unit is not dust", () => {
+  // The button prints this amount with the exact formatter for the same reason: a
+  // 6-dp one would show "Invest 0.00 USDT" over a submit that goes through.
+  const c = checkSubscribe({ amount: "0.0000001", available: "100", nav: nav() });
+  assert.equal(c.preview, 5n * 10n ** 10n);
+  assert.equal(c.issue, null);
+  assert.equal(canSubmit(c), true);
+});
+
 test("no mark yet: no preview, no verdict, no submit", () => {
   const c = checkSubscribe({ amount: "10", available: "100", nav: null });
   assert.equal(c.preview, null);
