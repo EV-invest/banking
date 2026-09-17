@@ -133,7 +133,12 @@ pub struct UnitHolding {
 /// price units the fund cannot pay for, which is the failure this flag exists to stop.
 ///
 /// A reserved allocation is refused before any of that (see the module header): its
-/// units come only through [`grant_units`].
+/// units come only through [`grant_units`]. So is a reserved allocation AS THE HOLDER
+/// (#245, L-1): the `fee` allocation's units of a product are its fee class, minted by
+/// the fee accrual as the charge earns them, and an operator minting product units into
+/// `fee` by hand would be inflating the owners' allocation at the product's investors'
+/// expense with no fee behind it. The relay, the consilium and the data migration reach
+/// [`mint`] through [`grant_units`], never through here.
 pub async fn issue_units(
 	ports: &FundPorts<'_>,
 	issuances: &dyn UnitIssuanceRepository,
@@ -145,6 +150,11 @@ pub async fn issue_units(
 		return Err(DomainError::Forbidden(format!(
 			"'{}' is a reserved allocation: its units are granted by the owners' consilium (a holder grant), never issued by hand",
 			request.service
+		)));
+	}
+	if let UnitHolder::Allocation(allocation) = &request.holder {
+		return Err(DomainError::Forbidden(format!(
+			"the '{allocation}' allocation's units of a product are its fee class, minted only by the fee accrual — never issued by hand"
 		)));
 	}
 	mint(ports, issuances, users, request, now_unix).await
