@@ -16,35 +16,35 @@ import type { Locale, Messages } from "@evinvest/i18n";
 // values here are copies, which is a real duplication — `chip-messages.test.ts`
 // exists to make it a checked one: it fails if any of these drifts from
 // `messages/<locale>/common.json`.
-export const CHIP_KEYS = ["auth.investorPortal", "auth.signOut", "ui.account", "ui.verified"] as const;
+export const CHIP_KEYS = ["auth.cabinet", "auth.signOut", "ui.account", "ui.verified"] as const;
 
 const CHIP_MESSAGES: Record<Locale, Messages> = {
   en: {
-    "auth.investorPortal": "Investor Portal",
+    "auth.cabinet": "Cabinet",
     "auth.signOut": "Sign out",
     "ui.account": "Account",
     "ui.verified": "Verified"
   },
   ru: {
-    "auth.investorPortal": "Кабинет инвестора",
+    "auth.cabinet": "Кабинет",
     "auth.signOut": "Выйти",
     "ui.account": "Аккаунт",
     "ui.verified": "Проверен"
   },
   vi: {
-    "auth.investorPortal": "Cổng nhà đầu tư",
+    "auth.cabinet": "Cabinet",
     "auth.signOut": "Đăng xuất",
     "ui.account": "Tài khoản",
     "ui.verified": "Đã xác minh"
   },
   fr: {
-    "auth.investorPortal": "Espace investisseur",
+    "auth.cabinet": "Mon espace",
     "auth.signOut": "Se déconnecter",
     "ui.account": "Compte",
     "ui.verified": "Vérifié"
   },
   de: {
-    "auth.investorPortal": "Investorenportal",
+    "auth.cabinet": "Cabinet",
     "auth.signOut": "Abmelden",
     "ui.account": "Konto",
     "ui.verified": "Bestätigt"

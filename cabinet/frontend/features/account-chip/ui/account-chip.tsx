@@ -47,10 +47,10 @@ function chipTranslator(): Translate {
 
 // The account chip, rendered as a cabinet microfrontend inside the conductor's shared
 // header (registered in site_conductor's mfe-registry as `cabinet.account`). It replaces
-// the header's old Investor Portal button and owns all three states itself:
+// the header's old "Investor Portal" button and owns all three states itself:
 //   • loading      → a compact skeleton
 //   • authenticated → avatar + name + Verified + sign-out
-//   • signed-out   → the Investor Portal CTA (so anonymous marketing-site visitors still
+//   • signed-out   → the Cabinet CTA (so anonymous marketing-site visitors still
 //                     get a way into the cabinet)
 //
 // Framework-agnostic on purpose: the bundle mounts as a vanilla-React custom element on
@@ -200,7 +200,7 @@ function chipHref(): string {
   return cabinetPath(documentLocale(), inCabinet ? "/profile" : "/");
 }
 
-// Signed-out (or BFF-unavailable) state — the Investor Portal CTA the chip supersedes.
+// Signed-out (or BFF-unavailable) state — the sign-in CTA, labelled "Cabinet" (#399).
 // Styled to match the conductor's old InvestorPortalButton (uikit outline) without pulling
 // the uikit Button into the bundle. Links into the cabinet zone's sign-in.
 function SignInCta({ className }: { className?: string }) {
@@ -216,7 +216,7 @@ function SignInCta({ className }: { className?: string }) {
         className,
       )}
     >
-      {t("auth.investorPortal")}
+      {t("auth.cabinet")}
     </a>
   );
 }

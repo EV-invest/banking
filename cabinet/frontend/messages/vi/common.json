@@ -2571,6 +2571,10 @@
     "en": "Private capital for Vietnam's coastal economy.",
     "t": "Vốn tư nhân cho kinh tế biển Việt Nam."
   },
+  "auth.cabinet": {
+    "en": "Cabinet",
+    "t": "Cabinet"
+  },
   "auth.continueWithGoogle": {
     "en": "Continue with Google",
     "t": "Tiếp tục với Google"
@@ -2590,10 +2594,6 @@
   "auth.err.invalid": {
     "en": "That sign-in attempt expired. Please try again.",
     "t": "Lượt đăng nhập đó đã hết hạn. Vui lòng thử lại."
-  },
-  "auth.investorPortal": {
-    "en": "Investor Portal",
-    "t": "Cổng nhà đầu tư"
   },
   "auth.newToEv": {
     "en": "New to EV Invest? Continuing with Google sets up your cabinet.",
