@@ -79,11 +79,13 @@ export function formatAmount(value: string | undefined, locale: Locale = DEFAULT
   return numberFormat(locale, "amount", CENTS).format(n);
 }
 
-// Signed summary money: "+$84.83" / "−$540.00". The Unicode minus (U+2212) is the plus
-// sign's mirror — a hyphen is narrower and the sign column stops lining up.
+// Signed summary money: "+$84.83" / "−$540.00" / "$0.00". The Unicode minus (U+2212) is
+// the plus sign's mirror — a hyphen is narrower and the sign column stops lining up. Zero
+// carries no sign: "+$0.00" claims a gain that did not happen.
 export function formatSignedUsd(value: string | number | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = typeof value === "number" ? value : num(value);
-  return `${n < 0 ? "−" : "+"}${formatUsd(Math.abs(n), locale)}`;
+  const sign = n < 0 ? "−" : n > 0 ? "+" : "";
+  return `${sign}${formatUsd(Math.abs(n), locale)}`;
 }
 
 /** NAV per share: "$1.0423" (Figma `cabinet/invest`). */
@@ -148,12 +150,13 @@ export function formatUnits(value: string | undefined, locale: Locale = DEFAULT_
   return numberFormat(locale, "units", { minimumFractionDigits: 2, maximumFractionDigits: 8 }).format(n);
 }
 
-/** Signed percentage: "+4.2%" / "−1.8%", same Unicode minus as the signed money. The "%"
- *  is appended rather than left to `Intl`'s percent style, which pads it with a locale
- *  space ("4,2 %") that the figures beside it do not use. */
+/** Signed percentage: "+4.2%" / "−1.8%" / "0.0%", same Unicode minus as the signed money
+ *  and, like it, no sign on zero. The "%" is appended rather than left to `Intl`'s percent
+ *  style, which pads it with a locale space ("4,2 %") that the figures beside it do not use. */
 export function formatPct(value: number, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const digits = numberFormat(locale, "pct", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(value));
-  return `${value < 0 ? "−" : "+"}${digits}%`;
+  const sign = value < 0 ? "−" : value > 0 ? "+" : "";
+  return `${sign}${digits}%`;
 }
 
 // Whether a signed decimal P&L string is negative (a loss) — exact, no float.

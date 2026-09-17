@@ -76,7 +76,6 @@ export const tips = {
   "dashboard.performance.portfolio-value": { type: "input" },
   "dashboard.performance.all-time-return": { type: "input" },
   "dashboard.performance.series": { type: "section" },
-  "dashboard.move-money.auto-deploy": { type: "input" },
   "dashboard.invested.allocation": { type: "input" },
   "dashboard.stats.unrealized-pnl": { type: "input" },
   "dashboard.stats.available": { type: "input" },

@@ -3467,14 +3467,6 @@
     "en": "{pct} all-time",
     "t": "{pct} depuis l’origine"
   },
-  "dash.autoDeploy": {
-    "en": "Auto-deploy idle cash",
-    "t": "Déployer automatiquement les liquidités"
-  },
-  "dash.autoDeployHint": {
-    "en": "Available balance commits at end of day",
-    "t": "Le solde disponible est engagé en fin de journée"
-  },
   "dash.available": {
     "en": "Available",
     "t": "Disponible"
@@ -5546,14 +5538,6 @@
   "tips.dashboard.invested.allocation.title": {
     "en": "Invested — what I own",
     "t": "Investi — mes avoirs"
-  },
-  "tips.dashboard.move-money.auto-deploy.body": {
-    "en": "When on, your available cash is automatically committed into strategies at end of day.",
-    "t": "Lorsque l’option est active, vos liquidités disponibles sont automatiquement engagées dans des stratégies en fin de journée."
-  },
-  "tips.dashboard.move-money.auto-deploy.title": {
-    "en": "Auto-deploy idle cash",
-    "t": "Déployer automatiquement les liquidités"
   },
   "tips.dashboard.performance.all-time-return.body": {
     "en": "Total unrealized P&L divided by what you put in at cost basis, across every position. A paper figure, not realized cash.",

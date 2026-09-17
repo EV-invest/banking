@@ -3467,14 +3467,6 @@
     "en": "{pct} all-time",
     "t": "{pct} từ trước đến nay"
   },
-  "dash.autoDeploy": {
-    "en": "Auto-deploy idle cash",
-    "t": "Tự động phân bổ tiền nhàn rỗi"
-  },
-  "dash.autoDeployHint": {
-    "en": "Available balance commits at end of day",
-    "t": "Số dư khả dụng được phân bổ vào cuối ngày"
-  },
   "dash.available": {
     "en": "Available",
     "t": "Khả dụng"
@@ -5546,14 +5538,6 @@
   "tips.dashboard.invested.allocation.title": {
     "en": "Invested — what I own",
     "t": "Đã đầu tư — những gì tôi sở hữu"
-  },
-  "tips.dashboard.move-money.auto-deploy.body": {
-    "en": "When on, your available cash is automatically committed into strategies at end of day.",
-    "t": "Khi bật, tiền mặt khả dụng của bạn sẽ tự động được đưa vào các chiến lược vào cuối ngày."
-  },
-  "tips.dashboard.move-money.auto-deploy.title": {
-    "en": "Auto-deploy idle cash",
-    "t": "Tự động phân bổ tiền nhàn rỗi"
   },
   "tips.dashboard.performance.all-time-return.body": {
     "en": "Total unrealized P&L divided by what you put in at cost basis, across every position. A paper figure, not realized cash.",
