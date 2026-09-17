@@ -1,12 +1,14 @@
 //! Consilium use cases — open, cancel and read (owners); the emailed invitation and vote
-//! (no session); and the execution that turns an approved consilium into a revenue payout.
+//! (no session); and the execution that carries an approved consilium into its effect: a
+//! payment's approval, a NAV mark, a scheduled change of fee terms, a holder grant's mint.
 //!
-//! The consilium is a **separate aggregate** from the withdrawal it authorizes. It reserves
-//! nothing and refunds nothing; on approval it calls the ordinary
-//! [`request_revenue_payout`](crate::application::withdrawals::request_revenue_payout) path,
-//! so the queue, the chain watchers, the dispatcher, the reaper and reconciliation cover the
-//! resulting payout with no new machinery — and the money aggregate never learns that
-//! governance exists.
+//! The consilium is a **separate aggregate** from whatever it authorizes. It reserves
+//! nothing and refunds nothing; on approval it calls the ordinary path the subject already
+//! has, so the queue, the relay, the sweepers and reconciliation cover the result with no
+//! new machinery — and the money aggregates never learn that governance exists. The
+//! revenue payout (a withdrawal out of the retired `fee` claim) is retired with #245:
+//! [`open_revenue_payout`] refuses, and [`execute`] still carries the consilia that were
+//! already open when it did.
 
 use domain::{
 	balance::{LedgerAccountKey, ValuationId},
@@ -224,20 +226,13 @@ pub(crate) fn require_governance_mail(wired: bool) -> Result<(), DomainError> {
 	))
 }
 
-pub async fn open_revenue_payout(ports: &ConsiliumPorts<'_>, initiator: UserId, terms: RevenuePayoutTerms, now: i64) -> Result<ConsiliumView, DomainError> {
-	require_governance_mail(ports.governance_mail_wired)?;
-	require_settled_roster(ports.consilia, ConsiliumKind::RevenuePayout, now).await?;
-	withdrawal_app::check_revenue_payout(ports.ledger, ports.configured, terms.network, terms.address.clone(), terms.amount).await?;
-	let owners = ports.consilia.owner_roster().await?;
-	let terms = ConsiliumTerms::RevenuePayout(terms);
-	let payload_hash = digest(&terms.canonical_bytes());
-	let mut consilium = Consilium::open(ConsiliumId::new(), terms, payload_hash, initiator, &owners, now)?;
-	// One token and one code per ELIGIBLE seat. The initiator is not among them, which is
-	// what makes "the initiator cannot vote" a fact about what exists rather than a check
-	// somewhere that could be forgotten.
-	let credentials = consilium.eligible().iter().map(|voter| mint_credential(*voter)).collect::<Result<Vec<_>, _>>()?;
-	ports.consilia.open(&mut consilium, &credentials, ports.approval_url_base).await?;
-	find(ports.consilia, consilium.id()).await
+/// RETIRED (#245): the fund's earnings are the `fee` allocation's, held by people, and
+/// cash leaves it only through a holder's redemption. Refused for every caller; the kind
+/// stays so the consilia opened before the retirement execute and read as they did.
+pub async fn open_revenue_payout(_ports: &ConsiliumPorts<'_>, _initiator: UserId, _terms: RevenuePayoutTerms, _now: i64) -> Result<ConsiliumView, DomainError> {
+	Err(DomainError::Validation(
+		"the revenue payout is retired: the fund's earnings are held through the fee allocation, and a holder is paid by redeeming their units".into(),
+	))
 }
 
 /// Open a consilium over a NAV mark the move guard refuses (banking#232).
@@ -266,6 +261,9 @@ pub async fn open_valuation_override(ports: &ConsiliumPorts<'_>, initiator: User
 	let terms = ConsiliumTerms::ValuationOverride(terms);
 	let payload_hash = digest(&terms.canonical_bytes());
 	let mut consilium = Consilium::open(ConsiliumId::new(), terms, payload_hash, initiator, &owners, now)?;
+	// One token and one code per ELIGIBLE seat. The initiator is not among them, which is
+	// what makes "the initiator cannot vote" a fact about what exists rather than a check
+	// somewhere that could be forgotten.
 	let credentials = consilium.eligible().iter().map(|voter| mint_credential(*voter)).collect::<Result<Vec<_>, _>>()?;
 	ports.consilia.open(&mut consilium, &credentials, ports.approval_url_base).await?;
 	find(ports.consilia, consilium.id()).await
@@ -568,8 +566,9 @@ pub async fn execute_payment(ports: &ConsiliumPorts<'_>, consilium: &Consilium, 
 
 /// Create the withdrawal an approved revenue payout authorizes, and say how it went.
 ///
-/// The id is derived from the consilium, so a retried execution re-creates the same row
-/// rather than paying twice.
+/// Replay only (#245): nothing opens this kind any more, but a consilium approved before
+/// the retirement still carries. The id is derived from the consilium, so a retried
+/// execution re-creates the same row rather than paying twice.
 async fn execute_revenue_payout(ports: &ConsiliumPorts<'_>, id: ConsiliumId, terms: RevenuePayoutTerms) -> Result<ExecutionOutcome, DomainError> {
 	let withdrawal = payout_id(id);
 	if ports.withdrawals.find_by_id(withdrawal).await?.is_some() {

@@ -68,6 +68,8 @@ impl WithdrawalRow {
 	fn source(&self) -> Result<WithdrawalSource, DomainError> {
 		match (self.source.as_str(), self.user_id) {
 			("user", Some(user)) => Ok(WithdrawalSource::User(UserId::from_raw(user))),
+			// The retired source still reads: the rows exist.
+			#[allow(deprecated)]
 			(WithdrawalSource::REVENUE, None) => Ok(WithdrawalSource::Revenue),
 			_ => Err(DomainError::Repository(format!("withdrawal {} has an inconsistent source", self.id))),
 		}
@@ -162,12 +164,9 @@ impl WithdrawalRepository for PgWithdrawals {
 		// [`outbox::lock_user`]) so two of them can't both pass the optimistic Read-First
 		// and both park a reserve (TB's flag is the money backstop; this lock keeps the PG
 		// projection from diverging). For a user that's withdraw + subscribe on their
-		// unified claim; for the fund it's concurrent payouts out of the single `fee`
-		// claim, which contend exactly the same way.
-		match withdrawal.user() {
-			Some(user) => outbox::lock_user(&mut tx, user.raw()).await?,
-			None => outbox::lock_revenue_claim(&mut tx).await?,
-		}
+		// unified claim; for a replayed revenue payout it's the retired `fee` claim, whose
+		// lock name `claim_lock_name` keeps frozen.
+		outbox::lock_claim(&mut tx, &withdrawal.source().claim_key()).await?;
 		insert_row(&mut tx, withdrawal).await?;
 		outbox::drain_to_outbox(&mut tx, withdrawal, true).await?;
 		tx.commit().await.map_err(repo_err)?;
@@ -282,6 +281,7 @@ impl WithdrawalRepository for PgWithdrawals {
 				let fee = Usdt::from_base_units(fee.parse::<u128>().map_err(|_| DomainError::Repository("malformed withdrawal fee".into()))?);
 				let source = match (source.as_str(), user_id) {
 					("user", Some(user)) => WithdrawalSource::User(UserId::from_raw(user)),
+					#[allow(deprecated)]
 					(WithdrawalSource::REVENUE, None) => WithdrawalSource::Revenue,
 					_ => return Err(DomainError::Repository(format!("withdrawal {id} has an inconsistent source"))),
 				};
