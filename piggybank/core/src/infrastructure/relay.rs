@@ -663,10 +663,11 @@ async fn project_trade(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error
 /// `saga_steps` marker discipline as [`project_subscription`], in one transaction. The
 /// projection carries the issuance's `nav` as the high-water mark blend, exactly as a
 /// subscription at that NAV would: an investor handed units in kind is measured for
-/// performance fees from the price they were handed them at. The company holder gets no
-/// projection — there is no investor to report P&L or charge fees to. Whether the units
-/// were minted or came out of the company's stake, the recipient's position gains the
-/// same units and basis; a **retirement** runs the seller's side of a trade instead —
+/// performance fees from the price they were handed them at. An allocation holder (and the
+/// retired company one) gets no projection — there is no investor to report P&L or charge
+/// fees to. Whether the units were minted or (historically) came out of the company's
+/// stake, the recipient's position gains the same units and basis; a **retirement** runs
+/// the seller's side of a trade instead —
 /// units off, basis down pro rata (clamped at zero, for the reasons [`project_trade`]
 /// gives), high-water mark untouched, because nothing was realised at any price.
 async fn project_issuance(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error> {
@@ -701,6 +702,9 @@ async fn project_issuance(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Er
 				.await
 				.map_err(|err| sqlx::Error::Protocol(format!("carry fee accrual before issuance basis change: {err}")))?;
 			match source {
+				// A hand-over row still in the outbox across the deploy projects like the
+				// mint it is from the recipient's side.
+				#[allow(deprecated)]
 				IssuanceSource::Mint | IssuanceSource::Company => {
 					sqlx::query(
 						"INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5) \
@@ -971,30 +975,30 @@ fn plan_subscription(event: SubscriptionEvent, aggregate_id: Uuid, reference: u1
 ///   supply growth the fund's cash never paid for is distinguishable from a
 ///   subscription's on the Share ledger alone. It cannot fail for funds (both accounts
 ///   are supply we control), so the only park is a genuine conflict.
-/// - **Company** — the company's stake handed to a user, `Dr user shares / Cr company
-///   shares` under [`TransferCode::CompanyStakeTransfer`]: a move between holders, so
-///   `SharesOutstanding` is not touched. `CompanyShares` is debit-normal with the
-///   non-negative flag, so a hand-over of more than the company holds is refused by
-///   TigerBeetle and parks — the backstop under the use case's Read-First.
+/// - **Company** (retired, replay only) — the company's stake handed to a user, `Dr user
+///   shares / Cr company shares` under [`TransferCode::CompanyStakeTransfer`]: a move
+///   between holders, so `SharesOutstanding` is not touched. No producer any more; an
+///   outbox row written before the deploy still plans and posts.
 /// - **Retire** — the mint reversed, `Dr shares-outstanding / Cr <holder shares>` under
 ///   [`TransferCode::UnitRetire`]: supply shrinks by `units`, no cash moves. The
-///   holder's account (`UserShares` or `CompanyShares`) is debit-normal with the
-///   non-negative flag, so retiring more than it holds parks — the backstop under the
-///   use case's Read-First on `available()`.
+///   holder's account is debit-normal with the non-negative flag, so retiring more than
+///   it holds parks — the backstop under the use case's Read-First on `available()`.
 ///
-/// A `Company` source naming the company as its holder is unplannable rather than a
-/// same-account transfer TigerBeetle would refuse anyway: the aggregate cannot build
-/// one, so the park reason should say "corrupt payload", not "accounts must differ".
+/// A holder with no account in the product (an allocation other than `fee`, or a
+/// `Company` source naming the company as its holder) is unplannable rather than a
+/// transfer TigerBeetle would refuse anyway: the aggregate cannot build one, so the park
+/// reason should say "corrupt payload", not "accounts must differ".
 fn plan_issuance(event: IssuanceEvent, aggregate_id: Uuid, reference: u128) -> Result<PlannedOp, String> {
 	let IssuanceEvent::Issued { holder, source, service, units, .. } = event;
 	let (role, salt, debit, credit, code) = match source {
 		IssuanceSource::Mint => (
 			"issue_mint",
 			ISSUE_MINT,
-			holder.shares_key(&service),
+			holder.shares_key(&service).map_err(|err| err.to_string())?,
 			LedgerAccountKey::SharesOutstanding(service),
 			TransferCode::UnitIssue,
 		),
+		#[allow(deprecated)]
 		IssuanceSource::Company => {
 			let UnitHolder::User(user) = holder else {
 				return Err("company stake transfer names the company as its holder".to_owned());
@@ -1011,7 +1015,7 @@ fn plan_issuance(event: IssuanceEvent, aggregate_id: Uuid, reference: u128) -> R
 			"issue_retire",
 			ISSUE_RETIRE,
 			LedgerAccountKey::SharesOutstanding(service.clone()),
-			holder.shares_key(&service),
+			holder.shares_key(&service).map_err(|err| err.to_string())?,
 			TransferCode::UnitRetire,
 		),
 	};
@@ -1551,13 +1555,16 @@ mod tests {
 
 	use super::*;
 
-	// A mint grows supply; a hand-over of the company's stake moves units between two
-	// holders and leaves `SharesOutstanding` alone. Same event, two legs, told apart by
-	// the source — and by the transfer id, so a reconciler can tell them from the row.
+	// A mint grows supply; a (historical) hand-over of the company's stake moves units
+	// between two holders and leaves `SharesOutstanding` alone. Same event, two legs, told
+	// apart by the source — and by the transfer id, so a reconciler can tell them from the
+	// row. The retired arm is still planned: an outbox row from before the deploy must post.
 	#[test]
+	#[allow(deprecated)]
 	fn an_issuance_mints_or_moves_the_companys_stake_by_its_source() {
 		let user = UserId::new();
 		let service = ServiceId::parse("service_arb").unwrap();
+		let fee = UnitHolder::Allocation(ServiceId::fee());
 		let issuance_id = UnitIssuanceId::new();
 		let event = |holder, source| IssuanceEvent::Issued {
 			issuance_id,
@@ -1570,14 +1577,21 @@ mod tests {
 		};
 		let plan = |holder, source| plan_issuance(event(holder, source), issuance_id.raw(), issuance_id.raw().as_u128());
 
-		let mint = plan(UnitHolder::Company, IssuanceSource::Mint).unwrap();
+		// The fee allocation's holding of a product is its fee class: the mint lands on
+		// `FeeShares`, the same account a clawback moves units into.
+		let mint = plan(fee.clone(), IssuanceSource::Mint).unwrap();
 		let LedgerAction::Post(leg) = &mint.action else { panic!("a mint is one posted leg") };
 		assert_eq!(
 			(leg.debit.clone(), leg.credit.clone()),
-			(LedgerAccountKey::CompanyShares(service.clone()), LedgerAccountKey::SharesOutstanding(service.clone()))
+			(LedgerAccountKey::FeeShares(service.clone()), LedgerAccountKey::SharesOutstanding(service.clone()))
 		);
 		assert_eq!(leg.code, TransferCode::UnitIssue);
 		assert_eq!(mint.transfer_id, tid(issuance_id.raw(), ISSUE_MINT));
+
+		// A historical company mint still replays onto the retired account.
+		let legacy = plan(UnitHolder::Company, IssuanceSource::Mint).unwrap();
+		let LedgerAction::Post(leg) = &legacy.action else { panic!("a mint is one posted leg") };
+		assert_eq!(leg.debit, LedgerAccountKey::CompanyShares(service.clone()));
 
 		let transfer = plan(UnitHolder::User(user), IssuanceSource::Company).unwrap();
 		let LedgerAction::Post(leg) = &transfer.action else {
@@ -1592,17 +1606,20 @@ mod tests {
 		assert_ne!(transfer.transfer_id, mint.transfer_id, "the two legs of one row must never alias");
 		assert_eq!(transfer.transfer_id, tid(issuance_id.raw(), ISSUE_TRANSFER));
 
-		// The company handing units to itself is not a leg the ledger should even see.
+		// The company handing units to itself is not a leg the ledger should even see —
+		// nor is a holder with no account in the product (the fund allocation, phase 1).
 		assert!(plan(UnitHolder::Company, IssuanceSource::Company).is_err());
+		assert!(plan(UnitHolder::Allocation(ServiceId::fund()), IssuanceSource::Mint).is_err());
+		assert!(plan(UnitHolder::Allocation(ServiceId::fund()), IssuanceSource::Retire).is_err());
 
 		// A retirement is the mint reversed — same two accounts, swapped sides — for either
 		// holder, under its own code and its own transfer id.
-		for holder in [UnitHolder::User(user), UnitHolder::Company] {
-			let retire = plan(holder, IssuanceSource::Retire).unwrap();
+		for holder in [UnitHolder::User(user), fee] {
+			let retire = plan(holder.clone(), IssuanceSource::Retire).unwrap();
 			let LedgerAction::Post(leg) = &retire.action else { panic!("a retirement is one posted leg") };
 			assert_eq!(
 				(leg.debit.clone(), leg.credit.clone()),
-				(LedgerAccountKey::SharesOutstanding(service.clone()), holder.shares_key(&service))
+				(LedgerAccountKey::SharesOutstanding(service.clone()), holder.shares_key(&service).unwrap())
 			);
 			assert_eq!(leg.code, TransferCode::UnitRetire);
 			assert_eq!(leg.amount, Shares::parse_decimal("13000").unwrap().base_units(), "the row's units are the magnitude");
