@@ -63,7 +63,20 @@ its env var is set, so local dev needs no configuration.
 
 - **Analytics** (`@evinvest/analytics`) — `PostHogProvider` in
   [`application/providers.tsx`](./application/providers.tsx); capture from client
-  components with `useCapture()`. Reads `NEXT_PUBLIC_POSTHOG_KEY` / `_HOST`.
+  components with `useCapture()` / `useAnalytics()`. The key and host come from
+  `config.public.posthogKey` / `posthogHost` (`NEXT_PUBLIC_POSTHOG_KEY` / `_HOST`
+  through `config.ts`) and are passed to the provider as props — its own env
+  fallback reads `process.env[name]` dynamically, which Next never inlines into
+  the browser bundle. Both are build-time literals in the root `flake.nix`
+  (`cabinetApp.env`); the host also feeds the CSP `connect-src`. What the shared
+  seam lacks lives in [`shared/analytics`](./shared/analytics): the activation
+  funnel's event names (`login_view`, `session_created`, `kyc_started`,
+  `kyc_completed`, `first_deposit`, `first_subscription` — a contract with the
+  site and the PostHog funnel), the `once`/`mark` idempotency marks
+  (sessionStorage per tab, localStorage per "first ever"), and `identity` — the
+  one hand-rolled vendor call, `posthog.identify(userId)` on the first
+  authenticated render, which waits for the provider's lazy `init` before it
+  fires. That exception ends when `@evinvest/analytics` grows `identify()`.
 - **Error monitoring** (`@evinvest/error-monitoring`) — `ErrorMonitoringProvider`
   (browser) in providers; server/runtime init + request-error capture in
   [`instrumentation.ts`](./instrumentation.ts); build integration via `withSentry`
