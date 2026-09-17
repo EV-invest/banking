@@ -347,25 +347,25 @@ impl BalanceService for BalanceSvc {
 		}))
 	}
 
+	/// The `fee` allocation, on the wire the retired payout view still has (#245): its
+	/// cash as `earned`, the reservations as `pending_payout`, and NO rails — nothing pays
+	/// this claim out on-chain any more. The supply, the price and the holders wait for
+	/// the contract step (C-7) to have a field.
 	async fn get_fund_revenue(&self, request: Request<pb::GetFundRevenueRequest>) -> Result<Response<pb::FundRevenue>, Status> {
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
-		let revenue = balance_app::fund_revenue(self.state.ledger.as_ref(), self.state.custody.as_ref(), &self.state.configured_networks)
-			.await
-			.map_err(map_err)?;
+		let fee = balance_app::fee_allocation(
+			self.state.allocations.as_ref(),
+			self.state.ledger.as_ref(),
+			self.state.nav.as_ref(),
+			self.state.issuances.as_ref(),
+		)
+		.await
+		.map_err(map_err)?;
 		Ok(Response::new(pb::FundRevenue {
-			earned: revenue.earned.to_decimal_string(),
-			available: revenue.available.to_decimal_string(),
-			pending_payout: revenue.pending_payout.to_decimal_string(),
-			rails: revenue
-				.rails
-				.into_iter()
-				.map(|rail| pb::RevenueRail {
-					network: rail.network.as_str().to_owned(),
-					payable: rail.payable.to_decimal_string(),
-					instant: rail.instant.to_decimal_string(),
-					minimum: rail.minimum.to_decimal_string(),
-				})
-				.collect(),
+			earned: fee.cash.to_decimal_string(),
+			available: fee.available.to_decimal_string(),
+			pending_payout: fee.reserved.to_decimal_string(),
+			rails: Vec::new(),
 		}))
 	}
 
