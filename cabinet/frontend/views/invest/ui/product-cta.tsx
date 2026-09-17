@@ -43,16 +43,7 @@ export function ProductCta({ cta, service, title }: { cta: CardCta; service: str
         </Button>
       );
     case "verify":
-      // The profile's identity card is where a start is offered — the same dialog the
-      // wallet opens, reached through its own surface rather than a fourth copy of it.
-      return (
-        <Button asChild className={className} variant="outline">
-          <Link href="/profile">
-            <ShieldCheck className="size-4" />
-            {t("invest.cta.verify")}
-          </Link>
-        </Button>
-      );
+      return <VerifyToInvestCta className={className} />;
     case "locked":
       // There is no self-serve request for access: an operator raises the grant by hand,
       // so "ask" means the operators' mailbox, with the product named for them.
@@ -65,4 +56,22 @@ export function ProductCta({ cta, service, title }: { cta: CardCta; service: str
         </Button>
       );
   }
+}
+
+/**
+ * The muted way to unlock investing for a tier-0 caller — the card's `verify` state and the
+ * product page's Subscribe slot (#395) say it in the same words and lead to the same place.
+ * The profile's identity card is where a start is offered — the same dialog the wallet opens,
+ * reached through its own surface rather than a fourth copy of it.
+ */
+export function VerifyToInvestCta({ className }: { className?: string }) {
+  const t = useT();
+  return (
+    <Button asChild className={className} variant="outline">
+      <Link href="/profile">
+        <ShieldCheck className="size-4" />
+        {t("invest.cta.verify")}
+      </Link>
+    </Button>
+  );
 }

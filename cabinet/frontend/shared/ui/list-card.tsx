@@ -77,6 +77,9 @@ const PILL_TONE = {
   positive: "bg-accent-debug/15 text-accent-debug",
   pending: "bg-accent-warn/15 text-accent-warn",
   neutral: "bg-ink/5 text-ink-soft",
+  // The gain/loss pair (AGENTS.md § design), for a state that is a verdict rather than a wait.
+  success: "bg-positive/15 text-positive",
+  error: "bg-accent-error/15 text-accent-error",
 } as const;
 
 export type PillTone = keyof typeof PILL_TONE;

@@ -11,12 +11,16 @@
  * exactly like no attempt, and the chip offers a start again rather than inventing a verdict
  * it cannot read.
  *
+ * `null` when nothing could be read: `useKycStatus` answers `loading: false, level: 0` once
+ * BOTH reads have failed, and a chip that took that for tier 0 would call a verified reader
+ * "Not verified" over a network blip — the same rule `../lib/money-gate` applies.
+ *
  * Pure, so `node --test` can run it: the cabinet has no component tests.
  */
 export type KycChipState = "notStarted" | "review" | "verified" | "attention";
 
-/** The colour family, resolved to classes by the chip itself; a test cares about which. */
-export type KycChipTone = "muted" | "neutral" | "positive" | "warn";
+/** A `PillTone` of `@/shared/ui/list-card` — named here so the test needs no React import. */
+export type KycChipTone = "neutral" | "pending" | "success" | "error";
 
 export interface KycChip {
   state: KycChipState;
@@ -28,14 +32,18 @@ export interface KycChip {
 export interface KycChipRead {
   level: number;
   runningCase: { status: string } | null;
+  /** Whether either source answered at all — `false` is "unknown", never "tier 0". */
+  settled: boolean;
 }
 
 /** The running statuses that wait on the READER rather than on a reviewer. */
 const ATTENTION_STATUSES: readonly string[] = ["resubmitted"];
 
-export function kycChipState({ level, runningCase }: KycChipRead): KycChip {
-  if (level > 0) return { state: "verified", tone: "positive", labelKey: "kyc.chip.verified" };
-  if (runningCase === null) return { state: "notStarted", tone: "muted", labelKey: "kyc.chip.notStarted" };
-  if (ATTENTION_STATUSES.includes(runningCase.status)) return { state: "attention", tone: "warn", labelKey: "kyc.chip.attention" };
-  return { state: "review", tone: "neutral", labelKey: "kyc.chip.review" };
+export function kycChipState({ level, runningCase, settled }: KycChipRead): KycChip | null {
+  if (!settled) return null;
+  if (level > 0) return { state: "verified", tone: "success", labelKey: "kyc.chip.verified" };
+  if (runningCase === null) return { state: "notStarted", tone: "neutral", labelKey: "kyc.chip.notStarted" };
+  if (ATTENTION_STATUSES.includes(runningCase.status)) return { state: "attention", tone: "error", labelKey: "kyc.chip.attention" };
+  // The same tone /profile gives the running case (`profile.kyc.casePill`).
+  return { state: "review", tone: "pending", labelKey: "kyc.chip.review" };
 }
