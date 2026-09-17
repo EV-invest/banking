@@ -49,14 +49,25 @@ export function formatDay(stamp: string | null | undefined, locale: Locale): str
 }
 
 /**
- * A calendar date ("2026-09-17") as a date alone, in the same form as {@link formatDay}.
+ * A calendar date ("2026-09-18") in prose: "18 September 2026" / "18 сентября 2026".
  * Parsed at UTC midnight so the day never shifts for a reader west of Greenwich; an
  * unparseable input comes back verbatim rather than as "Invalid Date".
+ *
+ * Built from parts so the locale's *interior* literals survive ("18. September 2026",
+ * "18 tháng 9, 2026") while a trailing era literal is dropped: Russian's "2026 г." is
+ * correct in a document but reads as a stray suffix in a one-line caption, and this is
+ * the form the site's hero prints beside the same figures.
  */
 export function formatCalendarDate(iso: string, locale: Locale): string {
   const at = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(at.getTime())) return iso;
-  return at.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const parts = new Intl.DateTimeFormat(intlLocale(locale), { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).formatToParts(at);
+  const lastField = parts.findLastIndex((part) => part.type !== "literal");
+  return parts
+    .slice(0, lastField + 1)
+    .map((part) => part.value)
+    .join("")
+    .trim();
 }
 
 /** Re-exported so a view needing "this stamp, else that one" has a single import. */

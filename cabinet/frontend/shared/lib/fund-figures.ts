@@ -9,7 +9,7 @@ import type { Locale } from "@evinvest/i18n";
 
 // Relative with extensions, like `views/invest/lib/subscribe-check.ts`: the node test
 // runner resolves no `@/` alias, and this is one of the modules it runs.
-import { FUND_FIGURES } from "../config/fund-figures.ts";
+import { FUND_FIGURES, type FundFigures } from "../config/fund-figures.ts";
 import { formatCalendarDate } from "./datetime.ts";
 import { formatPlainPct, formatWhole } from "./money.ts";
 
@@ -18,12 +18,14 @@ export interface FormattedFundFigures {
   targetIrr: string;
   /** "$100M" — the digits localised, the currency and unit not. */
   closingTarget: string;
-  /** The as-of date in prose ("17 Sept 2026"), or absent while the figures are unconfirmed. */
+  /** The as-of date in prose ("18 September 2026"), or absent while the figures are unconfirmed. */
   asOf?: string;
 }
 
-export function formatFundFigures(locale: Locale): FormattedFundFigures {
-  const { targetIrrPct, closingTargetUsdM, asOf } = FUND_FIGURES;
+// `figures` is a parameter only so the test can exercise the unconfirmed branch; every
+// surface passes nothing and reads the one real object.
+export function formatFundFigures(locale: Locale, figures: FundFigures = FUND_FIGURES): FormattedFundFigures {
+  const { targetIrrPct, closingTargetUsdM, asOf } = figures;
   return {
     targetIrr: `${formatPlainPct(targetIrrPct, locale)} +`,
     closingTarget: `$${formatWhole(closingTargetUsdM, locale)}M`,
