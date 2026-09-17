@@ -115,13 +115,15 @@ export function OrderFormPane({
         </Tabs>
       </TerminalPaneHeader>
       <TerminalPaneBody>
-        {/* Collapsed by default (see the catalog): the book vs. NAV subscription is the one
-            thing a newcomer to this screen has not been told, and the form is where they
-            find out they need it — but the form's controls must not move to make room. */}
-        <TipAnchor anchor="trade.book" className="mx-3 mt-3" />
         <OrderGate closed={closed} locked={locked} unbacked={policy?.allow_unbacked_trading === true} />
         <OrderFormFields draft={draft} context={context} position={position} disabled={disabled} busy={busy} onChange={setDraft} onSubmit={submit} />
         {outcome && <OrderOutcome outcome={outcome} />}
+        {/* Collapsed (see the catalog) and last in flow: the book vs. NAV subscription is the
+            one thing a newcomer to this screen has not been told, and the form is where they
+            find out they need it — but opening it must move none of the controls above.
+            TODO(lib): summary focus ring — the kit's `<summary>` has no focus-visible style of
+            its own, so the cabinet's tinted global ring would paint it; overridden here. */}
+        <TipAnchor anchor="trade.book" className="mx-3 mb-3 [&>summary]:rounded-sm [&>summary]:outline-none [&>summary]:focus-visible:ring-2 [&>summary]:focus-visible:ring-ring" />
       </TerminalPaneBody>
     </TerminalPane>
   );

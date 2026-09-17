@@ -25,20 +25,25 @@
 
 export type TipType = "input" | "section";
 
-export interface TipEntry {
-  /** Which primitive renders this tip: an inline ⓘ toggletip, or a section block. */
-  type: TipType;
+interface TipEntryBase {
   /**
    * Optional platform-role gate. When set, only sessions whose role is listed
    * see the tip. Cosmetic only — server-side authorization stays authoritative.
    */
   roles?: readonly string[];
-  /**
-   * A `section` tip that opens on demand rather than standing open. For a surface
-   * where the explanation must not push the controls it explains out of view.
-   */
-  collapsible?: boolean;
 }
+
+/** Which primitive renders this tip: an inline ⓘ toggletip, or a section block. */
+export type TipEntry =
+  | (TipEntryBase & { type: "input" })
+  | (TipEntryBase & {
+      type: "section";
+      /**
+       * Opens on demand rather than standing open. For a surface where the explanation
+       * must not push the controls it explains out of view.
+       */
+      collapsible?: boolean;
+    });
 
 export type TipCatalog = Record<string, TipEntry>;
 

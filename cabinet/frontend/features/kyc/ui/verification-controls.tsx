@@ -13,9 +13,9 @@ import type { ReactNode } from "react";
 import { Button, type ButtonSize } from "@evinvest/uikit";
 
 import type { StartState, StartVerification } from "@/features/kyc/model/use-start-verification";
-import { SUPPORT_EMAIL } from "@/shared/config/support";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
+import { SupportLink } from "@/shared/ui/support-link";
 
 export function StartVerificationButton({ start, label, size, className }: { start: StartVerification; label: string; size?: ButtonSize; className?: string }) {
   return (
@@ -44,8 +44,8 @@ function Outcome({ state, className }: { state: StartState; className?: string }
   const t = useT();
   // The vendor's actual trouble — no balance, no configuration, an outage — is ours to fix
   // and never reaches the browser, so this says only that it cannot run and hands over the
-  // one path that still works: an operator raising the tier by hand. The address is its own
-  // key rather than interpolated into the sentence: `Translate` returns a string, so a link
+  // one path that still works: support raising the tier by hand. The address is its own
+  // link rather than interpolated into the sentence: `Translate` returns a string, so a link
   // cannot be handed to it as a value.
   //
   // The link is unconditional. The plane's own contact is preferred, but it used to be the
@@ -54,20 +54,9 @@ function Outcome({ state, className }: { state: StartState; className?: string }
   // an edge case: verification is deployed unconfigured, so `unavailable` is the outcome
   // nearly every reader gets (see `@/shared/config/support`).
   if (state.kind === "unavailable") {
-    const contact = state.contact ?? SUPPORT_EMAIL;
     return (
       <Note className={className}>
-        {t("profile.kyc.unavailable")}{" "}
-        <a
-          // Encoded, not interpolated: the address is the plane's to send, and `?`/`&` in it
-          // would make the query half of a `mailto:` — a pre-filled letter to a third party
-          // behind a link the reader was told is support. `kyc-contract` refuses that shape
-          // on the way in; this is the second half of the same rule, at the point of use.
-          href={`mailto:${encodeURIComponent(contact)}`}
-          className="font-medium text-accent-debug underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {t("profile.kyc.contact", { contact })}
-        </a>
+        {t("profile.kyc.unavailable")} <SupportLink contact={state.contact ?? undefined} />
       </Note>
     );
   }
