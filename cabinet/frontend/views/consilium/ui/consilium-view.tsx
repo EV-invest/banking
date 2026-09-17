@@ -82,6 +82,7 @@ import {
 import { AdmissionList, ProposeAdmission } from "@/views/consilium/ui/admissions";
 import { FeePolicyTerms, feePolicyWords } from "@/views/consilium/ui/fee-policy-terms";
 import { PayoutSkeleton, RosterSkeleton } from "@/views/consilium/ui/loading";
+import { HolderGrantTermsBlock, OwnershipHeadline, SeedCapitalTermsBlock, holderGrantWords, seedCapitalWords } from "@/views/consilium/ui/ownership-terms";
 import { PaymentTerms, paymentWords } from "@/views/consilium/ui/payment-terms";
 import { ReadFailure } from "@/views/consilium/ui/read-failure";
 import { ProposeRemoval, RemovalList } from "@/views/consilium/ui/removals";
@@ -450,7 +451,11 @@ function PayoutSection({
                               ? `${formatExactUsdt(consilium.payment.amount, locale)} USDT · ${paymentWords(consilium.payment)}`
                               : consilium.fee_policy
                                 ? feePolicyWords(consilium.fee_policy)
-                              : `${formatExactUsdt(consilium.revenue_payout?.amount, locale)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
+                                : consilium.holder_grant
+                                  ? holderGrantWords(consilium.holder_grant, t, locale)
+                                  : consilium.seed_capital
+                                    ? seedCapitalWords(consilium.seed_capital, locale)
+                                    : `${formatExactUsdt(consilium.revenue_payout?.amount, locale)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
                         </ItemTitle>
                         <ItemDescription className="truncate text-xs tabular-nums">
                           {/* `??` cannot do this: an undecided consilium carries the STRING "0", which is truthy. */}
@@ -481,11 +486,14 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
 
   const payout = consilium.revenue_payout;
   // A payment consilium carries its terms in `payment`, a NAV mark past the move guard in
-  // `valuation_override`, a change of terms in `fee_policy`; the payout fields are empty
-  // in every one of those cases.
+  // `valuation_override`, a change of terms in `fee_policy`, a person seated on `fee` /
+  // `fund` in `holder_grant`, a seed of capital in `seed_capital`; the payout fields are
+  // empty in every one of those cases.
   const payment = consilium.payment ?? null;
   const valuation = consilium.valuation_override ?? null;
   const feePolicy = consilium.fee_policy ?? null;
+  const grant = consilium.holder_grant ?? null;
+  const seed = consilium.seed_capital ?? null;
   const kind = consiliumKind(consilium);
   const threshold = consilium.threshold ?? 0;
   const approvals = consilium.approvals ?? 0;
@@ -515,6 +523,8 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
           {feePolicy ? (
             // Not a money move: the product is the subject, so the product is the headline.
             <p className="text-2xl font-semibold leading-none text-ink">{feePolicy.allocation_name || feePolicy.service}</p>
+          ) : grant || seed ? (
+            <OwnershipHeadline grant={grant} seed={seed} />
           ) : (
             <p className="text-2xl font-semibold leading-none tabular-nums text-ink">
               {formatExactUsdt(valuation ? valuation.aum : payment ? payment.amount : payout?.amount, locale)}
@@ -533,6 +543,10 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
         <PaymentTerms terms={payment} />
       ) : feePolicy ? (
         <FeePolicyTerms terms={feePolicy} />
+      ) : grant ? (
+        <HolderGrantTermsBlock terms={grant} />
+      ) : seed ? (
+        <SeedCapitalTermsBlock terms={seed} />
       ) : (
         // Full, monospace, wrapped rather than truncated — the same rule as the approval
         // email and the approval page. An owner who checks the address here and approves it
