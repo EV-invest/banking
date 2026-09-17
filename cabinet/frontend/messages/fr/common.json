@@ -5879,6 +5879,14 @@
     "en": "Tax residence",
     "t": "Résidence fiscale"
   },
+  "tips.profile.kyc-level.title": {
+    "en": "What your KYC level means",
+    "t": "Ce que signifie votre niveau KYC"
+  },
+  "tips.profile.kyc-level.body": {
+    "en": "Level 0 is browse only: products, prices and your account. Level 1 means your identity is verified and opens a deposit address, withdrawals and subscribing.",
+    "t": "Le niveau 0 permet seulement de consulter : produits, prix et votre compte. Le niveau 1 signifie que votre identité est vérifiée et ouvre une adresse de dépôt, les retraits et la souscription."
+  },
   "tips.profile.personal.compliance.body": {
     "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
     "t": "Ces informations personnelles sont collectées pour satisfaire aux obligations de conformité du fonds et pour établir vos relevés de compte. Elles ne sont pas rendues publiques."
@@ -5886,6 +5894,14 @@
   "tips.profile.personal.compliance.title": {
     "en": "Why we collect this",
     "t": "Pourquoi nous collectons ces données"
+  },
+  "tips.trade.book.title": {
+    "en": "How the book works",
+    "t": "Comment fonctionne le carnet"
+  },
+  "tips.trade.book.body": {
+    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
+    "t": "Le carnet échange des parts existantes entre détenteurs — acheteur et vendeur se rencontrent à un prix bid ou ask qu’ils fixent eux-mêmes. Souscrire est différent : cela crée de nouvelles parts à la VL publiée, et le rachat les rend à la VL."
   },
   "tips.settings.security.google-signin.body": {
     "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
@@ -6246,6 +6262,18 @@
   "trade.form.tifLabel.ioc": {
     "en": "Immediate or cancel",
     "t": "Immédiat ou annulé"
+  },
+  "trade.form.tifHint.gtc": {
+    "en": "Rests on the book until it fills or you cancel it.",
+    "t": "Reste dans le carnet jusqu’à exécution ou jusqu’à ce que vous l’annuliez."
+  },
+  "trade.form.tifHint.ioc": {
+    "en": "Fills whatever it can right now; the rest is cancelled at once.",
+    "t": "Exécute ce qui peut l’être immédiatement ; le reste est annulé aussitôt."
+  },
+  "trade.form.tifHint.alo": {
+    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
+    "t": "Ne fait que reposer dans le carnet : elle est refusée plutôt qu’exécutée contre un ordre existant."
   },
   "trade.orders.col.avgFill": {
     "en": "Avg fill",

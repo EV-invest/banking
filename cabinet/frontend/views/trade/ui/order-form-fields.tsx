@@ -94,6 +94,9 @@ export function OrderFormFields({
               ))}
             </SelectContent>
           </Select>
+          {/* One line per choice, shown for the one selected — the labels alone are exchange
+              shorthand a first-time reader cannot decode. */}
+          <p className="text-xs text-ink-soft">{t(`trade.form.tifHint.${draft.tif}`)}</p>
         </div>
       )}
 

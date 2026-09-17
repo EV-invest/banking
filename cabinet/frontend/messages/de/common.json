@@ -5879,6 +5879,14 @@
     "en": "Tax residence",
     "t": "Steuerlicher Wohnsitz"
   },
+  "tips.profile.kyc-level.title": {
+    "en": "What your KYC level means",
+    "t": "Was Ihr KYC-Level bedeutet"
+  },
+  "tips.profile.kyc-level.body": {
+    "en": "Level 0 is browse only: products, prices and your account. Level 1 means your identity is verified and opens a deposit address, withdrawals and subscribing.",
+    "t": "Level 0 heißt nur ansehen: Produkte, Kurse und Ihr Konto. Level 1 bedeutet, Ihre Identität ist verifiziert, und öffnet eine Einzahlungsadresse, Auszahlungen und die Zeichnung."
+  },
   "tips.profile.personal.compliance.body": {
     "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
     "t": "Diese persönlichen Angaben werden erhoben, um die Compliance-Pflichten des Fonds zu erfüllen und Ihre Kontoabrechnungen zu erstellen. Sie werden nicht öffentlich gezeigt."
@@ -5886,6 +5894,14 @@
   "tips.profile.personal.compliance.title": {
     "en": "Why we collect this",
     "t": "Warum wir das erheben"
+  },
+  "tips.trade.book.title": {
+    "en": "How the book works",
+    "t": "So funktioniert das Buch"
+  },
+  "tips.trade.book.body": {
+    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
+    "t": "Im Buch handeln Halter bestehende Anteile untereinander — Käufer und Verkäufer treffen sich zu einem Geld- oder Briefkurs, den sie selbst setzen. Zeichnen ist etwas anderes: Es erzeugt neue Anteile zum veröffentlichten NAV, und die Rückgabe gibt sie zum NAV zurück."
   },
   "tips.settings.security.google-signin.body": {
     "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
@@ -6246,6 +6262,18 @@
   "trade.form.tifLabel.ioc": {
     "en": "Immediate or cancel",
     "t": "Sofort oder stornieren"
+  },
+  "trade.form.tifHint.gtc": {
+    "en": "Rests on the book until it fills or you cancel it.",
+    "t": "Bleibt im Buch, bis sie ausgeführt wird oder Sie sie stornieren."
+  },
+  "trade.form.tifHint.ioc": {
+    "en": "Fills whatever it can right now; the rest is cancelled at once.",
+    "t": "Führt sofort aus, was möglich ist; der Rest wird umgehend storniert."
+  },
+  "trade.form.tifHint.alo": {
+    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
+    "t": "Wird nur ins Buch gestellt: statt gegen eine bestehende Order ausgeführt zu werden, wird sie abgelehnt."
   },
   "trade.orders.col.avgFill": {
     "en": "Avg fill",

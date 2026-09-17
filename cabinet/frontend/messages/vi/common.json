@@ -5879,6 +5879,14 @@
     "en": "Tax residence",
     "t": "Nơi cư trú thuế"
   },
+  "tips.profile.kyc-level.title": {
+    "en": "What your KYC level means",
+    "t": "Cấp KYC của bạn nghĩa là gì"
+  },
+  "tips.profile.kyc-level.body": {
+    "en": "Level 0 is browse only: products, prices and your account. Level 1 means your identity is verified and opens a deposit address, withdrawals and subscribing.",
+    "t": "Cấp 0 chỉ để xem: sản phẩm, giá và tài khoản của bạn. Cấp 1 nghĩa là danh tính đã được xác minh, mở địa chỉ nạp, rút tiền và đăng ký mua."
+  },
   "tips.profile.personal.compliance.body": {
     "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
     "t": "Những thông tin cá nhân này được thu thập để đáp ứng nghĩa vụ tuân thủ của quỹ và để lập sao kê tài khoản cho bạn. Chúng không được hiển thị công khai."
@@ -5886,6 +5894,14 @@
   "tips.profile.personal.compliance.title": {
     "en": "Why we collect this",
     "t": "Vì sao chúng tôi thu thập"
+  },
+  "tips.trade.book.title": {
+    "en": "How the book works",
+    "t": "Sổ lệnh hoạt động thế nào"
+  },
+  "tips.trade.book.body": {
+    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
+    "t": "Sổ lệnh trao đổi các đơn vị đã có giữa những người nắm giữ — người mua và người bán gặp nhau ở giá bid hoặc ask do chính họ đặt. Đăng ký mua thì khác: nó phát hành đơn vị mới theo NAV đã công bố, và hoàn vốn trả lại đơn vị theo NAV."
   },
   "tips.settings.security.google-signin.body": {
     "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
@@ -6246,6 +6262,18 @@
   "trade.form.tifLabel.ioc": {
     "en": "Immediate or cancel",
     "t": "Khớp ngay hoặc hủy"
+  },
+  "trade.form.tifHint.gtc": {
+    "en": "Rests on the book until it fills or you cancel it.",
+    "t": "Nằm trong sổ lệnh cho tới khi khớp hoặc bạn hủy."
+  },
+  "trade.form.tifHint.ioc": {
+    "en": "Fills whatever it can right now; the rest is cancelled at once.",
+    "t": "Khớp phần có thể ngay lúc này; phần còn lại bị hủy ngay."
+  },
+  "trade.form.tifHint.alo": {
+    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
+    "t": "Chỉ nằm chờ trong sổ: bị từ chối thay vì khớp với lệnh đang có."
   },
   "trade.orders.col.avgFill": {
     "en": "Avg fill",

@@ -5879,6 +5879,14 @@
     "en": "Tax residence",
     "t": "Налоговое резидентство"
   },
+  "tips.profile.kyc-level.title": {
+    "en": "What your KYC level means",
+    "t": "Что значит ваш уровень KYC"
+  },
+  "tips.profile.kyc-level.body": {
+    "en": "Level 0 is browse only: products, prices and your account. Level 1 means your identity is verified and opens a deposit address, withdrawals and subscribing.",
+    "t": "Уровень 0 — только просмотр: продукты, цены и ваш счёт. Уровень 1 означает, что личность подтверждена, и открывает адрес для пополнения, вывод и подписку."
+  },
   "tips.profile.personal.compliance.body": {
     "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
     "t": "Эти личные данные собираются, чтобы выполнить комплаенс-обязательства фонда и подготовить ваши отчёты по счёту. Публично они не показываются."
@@ -5886,6 +5894,14 @@
   "tips.profile.personal.compliance.title": {
     "en": "Why we collect this",
     "t": "Зачем мы это собираем"
+  },
+  "tips.trade.book.title": {
+    "en": "How the book works",
+    "t": "Как работает книга"
+  },
+  "tips.trade.book.body": {
+    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
+    "t": "В книге держатели торгуют уже выпущенными паями — покупатель и продавец встречаются по цене bid или ask, которую задают сами. Подписка — другое: она выпускает новые паи по опубликованному NAV, а погашение возвращает их по NAV."
   },
   "tips.settings.security.google-signin.body": {
     "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
@@ -6246,6 +6262,18 @@
   "trade.form.tifLabel.ioc": {
     "en": "Immediate or cancel",
     "t": "Исполнить или отменить"
+  },
+  "trade.form.tifHint.gtc": {
+    "en": "Rests on the book until it fills or you cancel it.",
+    "t": "Остаётся в книге, пока не исполнится или вы её не отмените."
+  },
+  "trade.form.tifHint.ioc": {
+    "en": "Fills whatever it can right now; the rest is cancelled at once.",
+    "t": "Исполняется на то, что доступно сейчас; остаток сразу отменяется."
+  },
+  "trade.form.tifHint.alo": {
+    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
+    "t": "Только встаёт в книгу: если бы она исполнилась по существующей заявке, она отклоняется."
   },
   "trade.orders.col.avgFill": {
     "en": "Avg fill",

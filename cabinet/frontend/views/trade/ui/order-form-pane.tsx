@@ -18,6 +18,7 @@ import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import type { Position } from "@/shared/contracts";
 import type { BookPolicy, BookSnapshot, Order, OrderSide } from "@/shared/contracts/book";
 import { useResource } from "@/shared/lib/resource";
+import { TipAnchor } from "@/shared/tips";
 import { EMPTY_ORDER_DRAFT, orderSubmissionFor, placeOrderBody, type OrderContext, type OrderDraft, type OrderSubmission } from "@/views/trade/lib/order-form";
 import { OrderFormFields } from "@/views/trade/ui/order-form-fields";
 import { OrderGate, OrderOutcome, type Outcome } from "@/views/trade/ui/order-form-notes";
@@ -114,6 +115,10 @@ export function OrderFormPane({
         </Tabs>
       </TerminalPaneHeader>
       <TerminalPaneBody>
+        {/* Collapsed by default (see the catalog): the book vs. NAV subscription is the one
+            thing a newcomer to this screen has not been told, and the form is where they
+            find out they need it — but the form's controls must not move to make room. */}
+        <TipAnchor anchor="trade.book" className="mx-3 mt-3" />
         <OrderGate closed={closed} locked={locked} unbacked={policy?.allow_unbacked_trading === true} />
         <OrderFormFields draft={draft} context={context} position={position} disabled={disabled} busy={busy} onChange={setDraft} onSubmit={submit} />
         {outcome && <OrderOutcome outcome={outcome} />}

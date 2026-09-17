@@ -33,6 +33,11 @@ export interface TipEntry {
    * see the tip. Cosmetic only — server-side authorization stays authoritative.
    */
   roles?: readonly string[];
+  /**
+   * A `section` tip that opens on demand rather than standing open. For a surface
+   * where the explanation must not push the controls it explains out of view.
+   */
+  collapsible?: boolean;
 }
 
 export type TipCatalog = Record<string, TipEntry>;
@@ -72,6 +77,10 @@ export const tips = {
   "invest.activity.status": { type: "input" },
   "invest.activity.cancel": { type: "input" },
 
+  // ── trade ───────────────────────────────────────────────────────────────────
+  // Collapsed: it sits at the top of the order form, whose controls must stay in view.
+  "trade.book": { type: "section", collapsible: true },
+
   // ── dashboard ───────────────────────────────────────────────────────────────
   "dashboard.performance.portfolio-value": { type: "input" },
   "dashboard.performance.all-time-return": { type: "input" },
@@ -94,6 +103,7 @@ export const tips = {
   "profile.field.nationality": { type: "input" },
   "profile.field.tax-residence": { type: "input" },
   "profile.email.verified": { type: "input" },
+  "profile.kyc-level": { type: "input" },
 
   // ── admin · users ───────────────────────────────────────────────────────────
   "admin.users.access.role": { type: "input", roles: OPS },
