@@ -103,6 +103,16 @@ test("a value that is not a plain decimal is passed through, not coerced to zero
   assert.equal(formatExactUsdt(undefined), "\u2014");
 });
 
+test("signed summary money carries a sign only when there is something to sign", () => {
+  // "+$0.00" on a P&L tile claims a gain that did not happen; a zero is just a zero.
+  assert.equal(formatSignedUsd(84.83), "+$84.83");
+  assert.equal(formatSignedUsd(-84.83), "\u2212$84.83");
+  assert.equal(formatSignedUsd(0), "$0.00");
+  assert.equal(formatSignedUsd("0"), "$0.00");
+  assert.equal(formatSignedUsd(-0), "$0.00");
+  assert.equal(formatSignedUsd(undefined), "$0.00");
+});
+
 // ── Locale ───────────────────────────────────────────────────────────────────
 
 test("with no locale, every formatter still speaks the English it always did", () => {

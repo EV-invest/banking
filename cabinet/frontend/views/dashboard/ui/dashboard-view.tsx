@@ -26,6 +26,14 @@ import { amountTone, kindBadge, kindLabel, kindMeta, networkLabel, stateLabel } 
 // across all four kinds, not the newest six of whatever happened to be fetched. The count
 // lives with the resource because the shell's warm-up has to ask for the same one.
 
+// No performance series exists in `shared/contracts` yet (#383), so everything on the
+// hero that only means something over a series — the range control, the legend, the
+// plot's claim on the column height — hangs off this one flag rather than being cut out.
+// Wiring the chart flips it (or derives it from the series it fetches); nothing has to
+// come back from history. Declared `boolean` so the gates below read as conditions, not
+// as dead branches.
+const HAS_SERIES: boolean = false;
+
 // The four ranges. `1M`/`6M`/`1Y` are near-universal abbreviations but still travel as
 // keys — a locale that spells its months differently should be able to say so.
 // i18n-max: 4 — four equal columns of a grid segmented control on mobile.
@@ -143,7 +151,7 @@ export function DashboardView() {
 
         {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
         <StaggerItem as={Card} className={cn(STAT_STRIP, CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
-          <StatTile label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={signedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
+          <StatTile label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={signedUsd} tone={pnlSum < 0 ? "loss" : pnlSum > 0 ? "gain" : undefined} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
           <StatDivider />
           <StatTile label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
           <StatDivider />
@@ -215,6 +223,9 @@ export function DashboardView() {
 // Mobile (Figma `cabinet/mobile/home`) reads the hero as page content, not as a card: the
 // value sits flat on the background, the range switch spans the width below it, and only the
 // plot is boxed — with its legend above. From `lg` the whole block is the desktop card again.
+// Until `HAS_SERIES`, the hero is the value, its all-time badge and a compact placeholder
+// for the plot: no control over a chart that is not there, and no fixed plot height that
+// would make an empty box the largest element on the page.
 function PerfCard({ value, loading, allTimePct, className }: { value: string | undefined; loading: boolean; allTimePct: number | null; className?: string }) {
   const t = useT();
   const locale = useLocale();
@@ -223,14 +234,16 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
   const [range, setRange] = useState<(typeof RANGES)[number]>("all");
   const down = (allTimePct ?? 0) < 0;
   return (
-    // From `xl` the hero spans both rows of the side column, so it has to fill that
-    // area — otherwise the plot area keeps its natural height and leaves a gap under
-    // the card whenever the side column is the taller of the two.
+    // From `xl` the hero spans both rows of the side column. With a plot it has to fill
+    // that area — otherwise the plot keeps its natural height and leaves a gap under the
+    // card whenever the side column is the taller of the two. Without one it must not:
+    // stretched, the placeholder becomes a tall empty frame, and the gap is the lesser
+    // evil until #383 gives the space a chart.
     //
     // A `StaggerItem` rather than a wrapped `Card` because that `xl:h-full` — and the
     // row-span it fills — are the parent's business, and a wrapper would take them
     // from the card and keep them for itself.
-    <StaggerItem as={Card} className={cn("flex-1 gap-4 lg:gap-5 xl:h-full", CARD_FROM_LG, className)}>
+    <StaggerItem as={Card} className={cn("flex-1 gap-4 lg:gap-5", HAS_SERIES && "xl:h-full", CARD_FROM_LG, className)}>
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
         <div className="flex min-w-0 flex-col gap-2">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-primary-ink">
@@ -249,31 +262,36 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
           </div>
         </div>
         {/* Hand-written segmented control — uikit has no equivalent, so it carries its own focus ring. */}
-        <div className="grid shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-secondary p-1 lg:flex">
-          {RANGES.map((r) => (
-            <button
-              key={r}
-              type="button"
-              aria-pressed={r === range}
-              onClick={() => setRange(r)}
-              className={cn(
-                "rounded-md py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:px-3 lg:py-1.5 lg:text-xs",
-                r === range ? "bg-primary/15 font-semibold text-primary-ink" : "font-medium text-ink-soft hover:text-ink",
-              )}
-            >
-              {t(RANGE_LABEL_KEYS[r])}
-            </button>
-          ))}
-        </div>
+        {HAS_SERIES && (
+          <div className="grid shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-secondary p-1 lg:flex">
+            {RANGES.map((r) => (
+              <button
+                key={r}
+                type="button"
+                aria-pressed={r === range}
+                onClick={() => setRange(r)}
+                className={cn(
+                  "rounded-md py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:px-3 lg:py-1.5 lg:text-xs",
+                  r === range ? "bg-primary/15 font-semibold text-primary-ink" : "font-medium text-ink-soft hover:text-ink",
+                )}
+              >
+                {t(RANGE_LABEL_KEYS[r])}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      <CardContent className="flex flex-col gap-3 px-0 lg:gap-5 lg:px-6 xl:flex-1">
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 lg:order-2">
-          <Legend dot="bg-chart-3" label={t("dash.fundPerformance")} />
-          <Legend dot="bg-chart-2" label={t("dash.yourParticipation")} />
-        </div>
-        {/* No performance series exists in `shared/contracts` yet, so the plot area says so
-            rather than drawing a line that traces back to nothing. */}
-        <Empty className={cn(EMPTY_BOX, "min-h-40 lg:order-1 lg:min-h-56")}>
+      <CardContent className={cn("flex flex-col gap-3 px-0 lg:gap-5 lg:px-6", HAS_SERIES && "xl:flex-1")}>
+        {HAS_SERIES && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 lg:order-2">
+            <Legend dot="bg-chart-3" label={t("dash.fundPerformance")} />
+            <Legend dot="bg-chart-2" label={t("dash.yourParticipation")} />
+          </div>
+        )}
+        {/* The plot area says there is no series rather than drawing a line that traces
+            back to nothing. Its height is whatever the copy needs — a minimum sized for a
+            chart belongs to the chart. */}
+        <Empty className={cn(EMPTY_BOX, "lg:order-1")}>
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <LineChart />

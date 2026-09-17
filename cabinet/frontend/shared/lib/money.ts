@@ -79,11 +79,13 @@ export function formatAmount(value: string | undefined, locale: Locale = DEFAULT
   return numberFormat(locale, "amount", CENTS).format(n);
 }
 
-// Signed summary money: "+$84.83" / "−$540.00". The Unicode minus (U+2212) is the plus
-// sign's mirror — a hyphen is narrower and the sign column stops lining up.
+// Signed summary money: "+$84.83" / "−$540.00" / "$0.00". The Unicode minus (U+2212) is
+// the plus sign's mirror — a hyphen is narrower and the sign column stops lining up. Zero
+// carries no sign: "+$0.00" claims a gain that did not happen.
 export function formatSignedUsd(value: string | number | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const n = typeof value === "number" ? value : num(value);
-  return `${n < 0 ? "−" : "+"}${formatUsd(Math.abs(n), locale)}`;
+  const sign = n < 0 ? "−" : n > 0 ? "+" : "";
+  return `${sign}${formatUsd(Math.abs(n), locale)}`;
 }
 
 /** NAV per share: "$1.0423" (Figma `cabinet/invest`). */
