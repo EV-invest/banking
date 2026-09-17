@@ -6,12 +6,19 @@ import { ThemeProvider } from "next-themes";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { config } from "@/config";
 import { mayObserve } from "@/shared/config/public-routes";
 
-// Client observability providers wrap the tree. Both read their config from
-// NEXT_PUBLIC_* env at runtime and no-op when unset (no DSN / no key), so the
-// same tree renders unconfigured in local dev and CI. `nonce` is the per-request
-// CSP nonce (from the root layout) so next-themes' inline script stays allowed.
+// Client observability providers wrap the tree. Both no-op when unset (no DSN /
+// no key), so the same tree renders unconfigured in local dev and CI. `nonce` is
+// the per-request CSP nonce (from the root layout) so next-themes' inline script
+// stays allowed.
+//
+// The PostHog key and host are handed over explicitly rather than left to the
+// provider's own env fallback: the library reads `process.env[name]` through a
+// variable, and Next only inlines the literal `process.env.NEXT_PUBLIC_*` form into
+// the browser bundle — so the fallback resolves to `undefined` in every browser and
+// the provider was silently a no-op. `config.ts` spells the names out literally.
 //
 // Except on the token approval pages, where they are not mounted at all.
 //
@@ -37,7 +44,9 @@ export function Providers({ children, nonce }: { children: ReactNode; nonce?: st
 
   return (
     <ErrorMonitoringProvider>
-      <PostHogProvider>{themed}</PostHogProvider>
+      <PostHogProvider apiKey={config.public.posthogKey} host={config.public.posthogHost}>
+        {themed}
+      </PostHogProvider>
     </ErrorMonitoringProvider>
   );
 }
