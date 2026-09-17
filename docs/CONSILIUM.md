@@ -683,6 +683,42 @@ this section covers only how the kind sits in the consilium.
 
 ---
 
+## Holder grant and seed capital
+
+The fifth and sixth kinds (#245) seat a person as a holder of the platform's own money — the
+`fee` and `fund` allocations, hidden from the catalog and held by people through units.
+Neither is a cash move out of the fund, but both change who owns it, so both are the owners'
+quorum and never one administrator's write.
+
+- **Holder grant** (`ConsiliumKind::HolderGrant`, `HolderGrantTerms { allocation, user,
+  units }`, prefix `banking.v1.HolderGrantTerms\0`): mint `units` of a reserved allocation to
+  an active, mirrored user. Priced at the allocation's live NAV at execution. Effect:
+  `executed_issuance_id`, minted through `issuance::grant_units` under a key derived from
+  the consilium (idempotent on retry). The operator's `IssueUnits` refuses a reserved
+  allocation outright.
+- **Seed capital** (`ConsiliumKind::SeedCapital`, `SeedCapitalTerms { tx_ref, network,
+  amount, depositor }`, prefix `banking.v1.SeedCapitalTerms\0`): a chain-proven arrival on
+  the treasury, from outside every wallet we control, attributed to `depositor` as their
+  deposit and their subscription into `fund`. The AMOUNT is under the signature — the chain
+  is consulted at open with it as an assertion, so the owners vote over a transfer that
+  exists and is worth exactly that. Open also refuses a reference already booked, a
+  depositor who is missing or not active, a closed `fund`, a stale price. Effect:
+  `executed_subscription_id` — the subscription under `balance::seed_subscription_id(tx_ref)`,
+  written by the same `balance::seed_fund_capital` the RPC used to call directly; it is
+  idempotent by the reference, so the carrying vote and the sweeper cannot book twice, and a
+  re-execution repairs a first attempt that died between the deposit and the subscription.
+  `SeedCapital` (the RPC) now only OPENS this consilium, with the caller as depositor and
+  `expected_amount` required; until the contract step adds `depositor_user_id` and
+  `consilium_id` to the wire, the consilium id is in the log line.
+- **Source claim**, both: the allocation's own `service:<fee|fund>`, so one open grant per
+  reserved allocation, one open seed, serialized against a payment out of that claim.
+- **Mail.** Both borrow `PAYMENT_APPROVAL` for the invitation and `PAYOUT_OUTCOME` for the
+  verdict, as the valuation override does (EV-invest/concierge#94 tracks the dedicated
+  kinds): a grant spells its amount in units, a seed names the arrival by reference and the
+  depositor by masked mailbox.
+
+---
+
 ## Audit
 
 Every vote records who, when, from which IP and user agent, and against which

@@ -1,6 +1,7 @@
 //! Consilium use cases — open, cancel and read (owners); the emailed invitation and vote
 //! (no session); and the execution that carries an approved consilium into its effect: a
-//! payment's approval, a NAV mark, a scheduled change of fee terms, a holder grant's mint.
+//! payment's approval, a NAV mark, a scheduled change of fee terms, a holder grant's mint,
+//! a seed's deposit and `fund` subscription.
 //!
 //! The consilium is a **separate aggregate** from whatever it authorizes. It reserves
 //! nothing and refunds nothing; on approval it calls the ordinary path the subject already
@@ -11,8 +12,11 @@
 //! already open when it did.
 
 use domain::{
-	balance::{LedgerAccountKey, ValuationId},
-	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, HolderGrantTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
+	allocations::AllocationAccess,
+	balance::{LedgerAccountKey, ServiceId, ValuationId},
+	consilium::{
+		Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, HolderGrantTerms, RevenuePayoutTerms, SeedCapitalTerms, ValuationOverrideTerms, VoteDecision,
+	},
 	error::DomainError,
 	fees::FeePolicySubject,
 	issuance::{IdempotencyKey, UnitHolder},
@@ -27,6 +31,7 @@ use uuid::Uuid;
 use crate::{
 	application::{
 		allocations as allocations_app,
+		balance::{self as balance_app, Arrival, SeedPorts},
 		credentials::{self, token_digest},
 		funds::{self as funds_app, FundPorts},
 		issuance as issuance_app, payments as payments_app,
@@ -35,8 +40,9 @@ use crate::{
 	config::KycGate,
 	infrastructure::consilium::digest,
 	ports::{
-		AllocationRegistry, Custody, FeePolicyChanges, OutflowPolicy, PaymentRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository,
+		AllocationRegistry, Custody, Deposits, FeePolicyChanges, OutflowPolicy, PaymentRepository, SubscriptionRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository,
 		consilium::{ConsiliumRepository, ConsiliumView, ExecutionOutcome, InvitationView, SubmitOutcome, VoteAudit, VoterCredential},
+		deposit_addresses::DepositAddresses,
 		ledger::Ledger,
 		nav::NavMarks,
 	},
@@ -75,6 +81,14 @@ pub struct ConsiliumPorts<'a> {
 	/// The issuance records a `ConsiliumKind::HolderGrant` quorum mints through. Only the
 	/// execution step touches it.
 	pub issuances: &'a dyn UnitIssuanceRepository,
+	/// The deposit gate a `ConsiliumKind::SeedCapital` quorum books the arrival through —
+	/// read at open (has this reference been booked already?) and written at execution.
+	pub deposits: &'a dyn Deposits,
+	/// Who owns which deposit address — the seed's evidence that the transfer reached the
+	/// treasury from outside, read at open and again at execution.
+	pub addresses: &'a dyn DepositAddresses,
+	/// The `fund` subscriptions a seed opens. Only the execution step touches it.
+	pub subscriptions: &'a dyn SubscriptionRepository,
 	pub relay: &'a Notify,
 	pub configured: &'a [Network],
 	/// The deployment's verification gate, for the same chained execution.
@@ -109,6 +123,18 @@ impl ConsiliumPorts<'_> {
 			ledger: self.ledger,
 			nav: self.nav,
 			relay: self.relay,
+		}
+	}
+
+	/// The same handles, as the seed borrows them: the arrival's evidence, the deposit gate
+	/// and the dealing ports.
+	fn seed_ports(&self) -> SeedPorts<'_> {
+		SeedPorts {
+			deposits: self.deposits,
+			custody: self.custody,
+			addresses: self.addresses,
+			subscriptions: self.subscriptions,
+			funds: self.fund_ports(),
 		}
 	}
 
@@ -310,6 +336,65 @@ pub fn holder_grant_key(consilium: ConsiliumId) -> IdempotencyKey {
 	IdempotencyKey::parse(&format!("holder-grant:{consilium}")).expect("a uuid under a fixed prefix is a valid idempotency key")
 }
 
+/// Open a consilium over attributing a treasury arrival to a person as their seed of
+/// `fund` (#245): `terms.tx_ref` on `terms.network`, which the chain reports as
+/// `terms.amount` USDT, is `terms.depositor`'s.
+///
+/// The chain is consulted NOW, not only at execution, and with the amount as an assertion
+/// rather than a lookup: the owners must be voting over a transfer that exists, that
+/// reached the treasury from outside every wallet we control, and that is worth exactly
+/// what the terms say — a reference that names some other real transfer is refused here
+/// rather than seating the person with whatever that one was worth. Then the facts
+/// execution will need, checked so nobody spends 72 hours approving a seed that cannot
+/// be booked: the reference has not been booked already (under any name), the depositor is
+/// a mirrored, active user, `fund` takes new money, and its price is fresh.
+///
+/// Who may open: any owner, as for every kind — `Consilium::open` refuses an initiator
+/// without a seat. The `CapitalManage` permission the RPC gates on admits an administrator
+/// to the door and no further: the money the chain proved is nobody's until the owners say
+/// whose, which is the whole reason this is a consilium and not a write.
+pub async fn open_seed_capital(ports: &ConsiliumPorts<'_>, initiator: UserId, terms: SeedCapitalTerms, now: i64) -> Result<ConsiliumView, DomainError> {
+	require_governance_mail(ports.governance_mail_wired)?;
+	require_settled_roster(ports.consilia, ConsiliumKind::SeedCapital, now).await?;
+	let (arrival, transfer) = balance_app::verify_arrival(ports.custody, ports.addresses, terms.network, &terms.tx_ref, Some(terms.amount)).await?;
+	if let Arrival::User(_) = arrival {
+		return Err(DomainError::Validation(format!(
+			"{} is a user's deposit address, so this transfer is that user's deposit, not seed capital — record it with RecordDeposit",
+			transfer.to
+		)));
+	}
+	if ports.deposits.is_recorded(&terms.tx_ref).await? {
+		return Err(DomainError::Conflict(format!("{} has already been recorded as a deposit", terms.tx_ref.as_str())));
+	}
+	require_active_user(ports.users, terms.depositor).await?;
+	let fund = ServiceId::fund();
+	allocations_app::get(ports.allocations, &fund).await?.ensure_subscribable(AllocationAccess::Invest)?;
+	funds_app::dealing_nav(ports.nav, ports.ledger, &fund, now).await?;
+	let owners = ports.consilia.owner_roster().await?;
+	let terms = ConsiliumTerms::SeedCapital(terms);
+	let payload_hash = digest(&terms.canonical_bytes());
+	let mut consilium = Consilium::open(ConsiliumId::new(), terms, payload_hash, initiator, &owners, now)?;
+	let credentials = consilium.eligible().iter().map(|voter| mint_credential(*voter)).collect::<Result<Vec<_>, _>>()?;
+	ports.consilia.open(&mut consilium, &credentials, ports.approval_url_base).await?;
+	find(ports.consilia, consilium.id()).await
+}
+
+/// The person a consilium seats must exist as a mirrored user AND be active: units minted
+/// to a frozen account are units nobody can redeem, and a disabled principal is not one the
+/// owners should be asked to make a holder of their money.
+async fn require_active_user(users: &dyn UserRepository, user: UserId) -> Result<(), DomainError> {
+	let Some(row) = users.find_by_id(user).await? else {
+		return Err(DomainError::NotFound {
+			entity: "user",
+			id: user.to_string(),
+		});
+	};
+	if !row.is_active() {
+		return Err(DomainError::Precondition(format!("user {user} is not active, so they cannot be seated as a holder")));
+	}
+	Ok(())
+}
+
 /// Mint one seat's credentials. The plaintexts are returned to the caller (they have to
 /// reach the owner's mailbox); only their digests are ever stored.
 pub(crate) fn mint_credential(user_id: UserId) -> Result<VoterCredential, DomainError> {
@@ -433,8 +518,40 @@ pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> R
 		ConsiliumTerms::ValuationOverride(terms) => execute_valuation_override(ports, consilium, terms).await?,
 		ConsiliumTerms::FeePolicy(subject) => execute_fee_policy(ports, id, &subject, now).await?,
 		ConsiliumTerms::HolderGrant(terms) => execute_holder_grant(ports, id, terms, now).await?,
+		ConsiliumTerms::SeedCapital(terms) => execute_seed_capital(ports, terms, now).await?,
 	};
 	ports.consilia.record_execution(id, outcome, now).await
+}
+
+/// Book the seed an approved consilium authorizes — the depositor's deposit and their
+/// `fund` subscription — and say how it went.
+///
+/// Through the SAME writer the direct RPC used to call (`balance::seed_fund_capital`),
+/// with the terms' amount as the chain assertion, so a transfer that no longer matches
+/// what the owners signed fails rather than books. That writer is idempotent by the chain
+/// reference: the deposit gate admits it once and the subscription's id is derived from
+/// it, so the two callers that reach this (the carrying vote and the sweeper) cannot mint
+/// twice, and a repeat repairs a first attempt that died between the two commits. The
+/// effect is the subscription under that derived id, and a refusal is re-read against it
+/// before being believed — the loser of a two-caller race records the subscription that
+/// exists rather than a phantom failure. A genuine refusal (the transfer vanished, `fund`
+/// closed, its price stale, the reference booked under another name meanwhile) is the
+/// consilium's failure to record; an infrastructure error is retried by the sweeper.
+async fn execute_seed_capital(ports: &ConsiliumPorts<'_>, terms: SeedCapitalTerms, now: i64) -> Result<ExecutionOutcome, DomainError> {
+	let subscription = balance_app::seed_subscription_id(&terms.tx_ref);
+	if ports.subscriptions.find_by_id(subscription).await?.is_some() {
+		return Ok(ExecutionOutcome::Executed(ConsiliumEffect::Subscription(subscription)));
+	}
+	match balance_app::seed_fund_capital(&ports.seed_ports(), terms.depositor, terms.tx_ref, terms.network, Some(terms.amount), now).await {
+		Ok(_) => Ok(ExecutionOutcome::Executed(ConsiliumEffect::Subscription(subscription))),
+		Err(err) => match ports.subscriptions.find_by_id(subscription).await? {
+			Some(_) => Ok(ExecutionOutcome::Executed(ConsiliumEffect::Subscription(subscription))),
+			None => match err {
+				DomainError::Repository(_) => Err(err),
+				refused => Ok(ExecutionOutcome::Failed(failure_reason(&refused))),
+			},
+		},
+	}
 }
 
 /// Mint the units an approved holder grant authorizes, and say how it went.
@@ -646,7 +763,13 @@ mod tests {
 			"the owner roster changed less than 48h ago; a payout consilium cannot be opened until the cooling-off period lifts in 12h 30m"
 		);
 
-		for kind in [ConsiliumKind::Payment, ConsiliumKind::ValuationOverride, ConsiliumKind::FeePolicy, ConsiliumKind::HolderGrant] {
+		for kind in [
+			ConsiliumKind::Payment,
+			ConsiliumKind::ValuationOverride,
+			ConsiliumKind::FeePolicy,
+			ConsiliumKind::HolderGrant,
+			ConsiliumKind::SeedCapital,
+		] {
 			let got = message(cooling_off_refusal(kind, 12 * 3600 + 30 * 60));
 			assert_eq!(got, payout.replace("a payout consilium", &format!("a {} consilium", kind.noun())), "{kind:?}");
 			assert!(got.contains("cooling-off") && got.contains("lifts in 12h 30m"), "{kind:?}: {got}");

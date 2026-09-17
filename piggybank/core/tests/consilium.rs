@@ -34,8 +34,8 @@ use piggybank_core::{
 	application::{consilium as consilium_app, funds as funds_app, issuance as issuance_app, payments as payments_app},
 	config::KycGate,
 	infrastructure::{
-		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, fee_policy_changes::PgFeePolicyChanges, issuance::PgUnitIssuances, nav::PgNav, outflow::PgOutflowPolicy,
-		payments::PgPayments, redemptions::PgRedemptions, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
+		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, deposits::PgDeposits, fee_policy_changes::PgFeePolicyChanges, issuance::PgUnitIssuances, nav::PgNav,
+		outflow::PgOutflowPolicy, payments::PgPayments, redemptions::PgRedemptions, relay::Relay, subscriptions::PgSubscriptions, users::PgUsers, withdrawals::PgWithdrawals,
 	},
 	ports::{
 		AllocationRegistry, ConsiliumRepository, LedgerTransfer, NavMarks, PaymentRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository,
@@ -76,6 +76,8 @@ struct Harness {
 	nav: PgNav,
 	fee_changes: PgFeePolicyChanges,
 	issuances: PgUnitIssuances,
+	deposits: PgDeposits,
+	subscriptions: PgSubscriptions,
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -95,6 +97,8 @@ async fn harness() -> Option<Harness> {
 		nav: PgNav::new(pool.clone()),
 		fee_changes: PgFeePolicyChanges::new(pool.clone()),
 		issuances: PgUnitIssuances::new(pool.clone()),
+		deposits: PgDeposits::new(pool.clone()),
+		subscriptions: PgSubscriptions::new(pool.clone()),
 		relay: Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone()),
 		ledger,
 		notify,
@@ -115,6 +119,9 @@ fn ports(h: &Harness) -> consilium_app::ConsiliumPorts<'_> {
 		nav: &h.nav,
 		fee_changes: &h.fee_changes,
 		issuances: &h.issuances,
+		deposits: &h.deposits,
+		addresses: &common::NoAddresses,
+		subscriptions: &h.subscriptions,
 		relay: &h.notify,
 		configured: &CONFIGURED,
 		kyc: KycGate::LIFTED,
@@ -1617,8 +1624,10 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 	for _ in 0..2 {
 		match consilium_app::execute_payment(&ports(&h), &view.consilium, subject.clone(), now()).await.unwrap() {
 			ExecutionOutcome::Executed(ConsiliumEffect::Payment(id)) => assert_eq!(id, subject.payment_id),
-			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Issuance(_)) => {
-				panic!("a payment consilium produces neither a withdrawal, a mark nor a mint and schedules no change")
+			ExecutionOutcome::Executed(
+				ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Issuance(_) | ConsiliumEffect::Subscription(_),
+			) => {
+				panic!("a payment consilium produces neither a withdrawal, a mark, a mint nor a seed and schedules no change")
 			}
 			ExecutionOutcome::Failed(why) => panic!("an approved order must be believed: {why}"),
 		}

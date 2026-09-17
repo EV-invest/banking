@@ -942,7 +942,8 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 
 | RPC | Who | Boundary | In-tx invariant |
 | --- | --- | --- | --- |
-| `GetTreasury` / `SeedCapital` / `RecordDeposit` | operator | `require_permission` (RBAC matrix) | chain-proven arrival (amount + party read off the chain) ∧ `tx_ref` gate |
+| `GetTreasury` / `RecordDeposit` | operator | `require_permission` (RBAC matrix) | chain-proven arrival (amount + party read off the chain) ∧ `tx_ref` gate |
+| `SeedCapital` | an owner (`CapitalManage` admits to the door; `Consilium::open` refuses a non-owner) | `require_permission` + `expected_amount` required | opens a `seed_capital` consilium: chain-proven treasury arrival at exactly that amount, reference not yet booked, depositor active, `fund` open and fresh — the deposit + `fund` subscription are booked only when the quorum executes |
 | `Subscribe` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | available claim ≥ cash ∧ fresh NAV (TB flag backstop) |
 | `Redeem` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
 | `CancelRedemption` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
@@ -1148,7 +1149,11 @@ watchers could not see, and `SeedCapital` is the same verification with one extr
 — "this is the fund's own money": it refuses a transfer that landed on a user's deposit
 address instead of crediting that user, so an operator who meant capital and got a deposit
 finds out. Both are chain-proven and idempotent by the chain `tx_ref`; neither accepts an
-amount from the caller (the free-amount, no-dedup `SeedCapital` was removed in #234).
+amount from the caller (the free-amount, no-dedup `SeedCapital` was removed in #234). Since
+#245 `SeedCapital` books nothing itself: the chain proves a dollar reached the treasury and
+not whose it is, so the RPC opens a `seed_capital` consilium (`docs/CONSILIUM.md` § "Seed
+capital") and the deposit plus the depositor's `fund` subscription are written by its
+execution — never by the administrator who named the reference.
 
 The EVM deposit scan ([`deposit_watcher`](src/infrastructure/deposit_watcher.rs)) degrades
 rather than wedges when its `eth_getLogs` endpoint refuses it. A window refused for **width**

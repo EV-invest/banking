@@ -29,8 +29,8 @@ use crate::{
 	application::{consilium as consilium_app, payments as payments_app},
 	config::KycGate,
 	ports::{
-		AllocationRegistry, Custody, FeePolicyChanges, NavMarks, OutflowPolicy, PaymentRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository,
-		consilium::ConsiliumRepository, ledger::Ledger,
+		AllocationRegistry, Custody, Deposits, FeePolicyChanges, NavMarks, OutflowPolicy, PaymentRepository, SubscriptionRepository, UnitIssuanceRepository, UserRepository,
+		WithdrawalRepository, consilium::ConsiliumRepository, deposit_addresses::DepositAddresses, ledger::Ledger,
 	},
 };
 
@@ -67,6 +67,9 @@ pub struct ConsiliumSweeper {
 	pub allocations: Arc<dyn AllocationRegistry>,
 	pub fee_changes: Arc<dyn FeePolicyChanges>,
 	pub issuances: Arc<dyn UnitIssuanceRepository>,
+	pub deposits: Arc<dyn Deposits>,
+	pub addresses: Arc<dyn DepositAddresses>,
+	pub subscriptions: Arc<dyn SubscriptionRepository>,
 	pub nav: Arc<dyn NavMarks>,
 	pub notify: Arc<Notify>,
 	pub configured: Arc<[Network]>,
@@ -146,6 +149,9 @@ impl ConsiliumSweeper {
 			allocations: self.allocations.as_ref(),
 			fee_changes: self.fee_changes.as_ref(),
 			issuances: self.issuances.as_ref(),
+			deposits: self.deposits.as_ref(),
+			addresses: self.addresses.as_ref(),
+			subscriptions: self.subscriptions.as_ref(),
 			nav: self.nav.as_ref(),
 			relay: &self.notify,
 			configured: &self.configured,

@@ -14,7 +14,10 @@
 //! Nothing here credits a claim nobody holds (#245). USDT that reaches a treasury hot
 //! wallet from outside is *somebody's* — the person who sent it — and is booked as their
 //! deposit, followed by their subscription into the `fund` allocation
-//! ([`seed_fund_capital`]); the retired fund-owned party is never written again.
+//! ([`seed_fund_capital`]); the retired fund-owned party is never written again. WHOSE it
+//! is, the chain cannot say, so the attribution is the owners' quorum's
+//! (`consilium::open_seed_capital`), never one administrator's: the RPC opens the
+//! consilium, and only its execution reaches [`seed_fund_capital`].
 
 use domain::{
 	balance::{LedgerAccountKey, Party, ServiceId},
@@ -148,7 +151,8 @@ pub struct VerifiedArrival {
 ///
 /// A transfer that landed on the TREASURY is refused here: the chain proves the dollar
 /// arrived but not whose it is, and this path credits only whom the chain names. The
-/// operator who knows the sender attributes it with `SeedCapital` instead.
+/// owner who knows the sender proposes the attribution with `SeedCapital` instead, and
+/// the owners' quorum executes it.
 pub async fn record_verified_arrival(
 	deposits: &dyn Deposits,
 	custody: &dyn Custody,
@@ -230,7 +234,11 @@ pub struct SeededCapital {
 /// that is not dealing or a stale price refuses with nothing written. The one gate an
 /// investor's subscribe runs that this does not is the catalog's access level: `fund` is
 /// hidden from everyone by design, and the person who seeds it becomes its holder by the
-/// act itself — the operator's permission to seed is the admission.
+/// act itself — the owners' quorum that executes the seed is the admission.
+///
+/// No RPC reaches this directly: `SeedCapital` opens a `seed_capital` consilium over the
+/// same facts, and this is what its execution calls (`consilium::execute`). The one-off
+/// data migration that seeds the first holders is the other caller.
 pub async fn seed_fund_capital(
 	ports: &SeedPorts<'_>,
 	depositor: UserId,
@@ -282,16 +290,18 @@ pub async fn seed_fund_capital(
 }
 
 /// The seed subscription's id, a function of the chain reference: one transfer, one mint.
-fn seed_subscription_id(tx_ref: &TxRef) -> SubscriptionId {
+/// Public so a seed consilium can name its effect without re-reading the row it opened.
+pub fn seed_subscription_id(tx_ref: &TxRef) -> SubscriptionId {
 	SubscriptionId::from_raw(Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("seed:{}", tx_ref.as_str()).as_bytes()))
 }
 
 /// The chain's account of a reference: the transfer it names and whose money it is.
 ///
-/// One function for both operator write paths so they can never disagree about what counts
-/// as proven — the lookup, the optional assertion and the attribution are the whole of the
-/// evidence, and a path that skipped any of them would be the very hole this closes.
-async fn verify_arrival(
+/// One function for both operator write paths — and for the seed consilium's open gate —
+/// so they can never disagree about what counts as proven: the lookup, the optional
+/// assertion and the attribution are the whole of the evidence, and a path that skipped
+/// any of them would be the very hole this closes.
+pub(crate) async fn verify_arrival(
 	custody: &dyn Custody,
 	addresses: &dyn DepositAddresses,
 	network: Network,
