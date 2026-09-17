@@ -72,6 +72,7 @@ impl AppState {
 			allocations: self.allocations.as_ref(),
 			nav: self.nav.as_ref(),
 			fee_changes: self.fees.changes.as_ref(),
+			issuances: self.issuances.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
 			kyc: self.kyc_gate,
@@ -154,7 +155,7 @@ fn payout_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerm
 			amount: terms.amount.to_decimal_string(),
 			memo: terms.memo.clone(),
 		}),
-		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) => None,
+		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) => None,
 	}
 }
 
@@ -168,7 +169,7 @@ fn valuation_override_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::Valua
 			service: terms.service.to_string(),
 			aum: terms.aum.to_decimal_string(),
 		}),
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::FeePolicy(_) => None,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) => None,
 	}
 }
 
@@ -180,7 +181,7 @@ fn valuation_override_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::Valua
 /// disagree about what an owner approved.
 fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPaymentTerms> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) => None,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) => None,
 		ConsiliumTerms::Payment(subject) => Some(pb::ConsiliumPaymentTerms {
 			payment_id: subject.payment_id.to_string(),
 			tier: subject.terms.tier().as_str().to_owned(),
@@ -196,7 +197,9 @@ fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPayment
 /// presentation (product title, holder count) the repository reads beside it.
 fn fee_policy_terms_to_proto(terms: &ConsiliumTerms, detail: Option<&FeePolicyDetail>) -> Option<pb::ConsiliumFeePolicyTerms> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) => None,
+		// The holder grant has no wire field until the contract step (C-7 of #245): the row
+		// lists with its id, state and tally, and no terms.
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::HolderGrant(_) => None,
 		ConsiliumTerms::FeePolicy(subject) => {
 			let from = subject.from.unwrap_or(FeePolicy::NONE);
 			Some(pb::ConsiliumFeePolicyTerms {

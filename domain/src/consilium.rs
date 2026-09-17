@@ -1,11 +1,12 @@
-//! `consilium` bounded context — multi-owner authorization for the fund paying its OWN
-//! earned revenue out.
+//! `consilium` bounded context — multi-owner authorization over the platform's OWN money:
+//! a payment out of a reserved allocation, a NAV mark past the move guard, a change of fee
+//! terms, a new holder of the `fee`/`fund` allocations ([`ConsiliumTerms`]).
 //!
 //! A consilium is an **authorization artifact**, not a money move. It reserves nothing,
-//! queues nothing and refunds nothing; on approval it opens an ordinary revenue payout
-//! through the existing withdrawal path. That separation is deliberate — see
-//! `docs/CONSILIUM.md` — and it is why this aggregate adds no state to
-//! [`crate::withdrawals::WithdrawalState`] and touches no claim.
+//! queues nothing and refunds nothing; on approval it carries its subject through the
+//! ordinary path that subject already has (an order's approval, an issuance, a mark). That
+//! separation is deliberate — see `docs/CONSILIUM.md` — and it is why this aggregate adds
+//! no state to any money aggregate and touches no claim.
 //!
 //! **Quorum.** `threshold = floor(N / 2) + 1` where `N` is the owner count at open. The
 //! initiator is counted in the denominator but casts no vote: were opening a request to
@@ -28,7 +29,8 @@ use crate::{
 	error::DomainError,
 	fees::{FeePolicyChangeId, FeePolicySubject},
 	hex32,
-	money::{Network, Usdt, WalletAddress},
+	issuance::UnitIssuanceId,
+	money::{Network, Shares, Usdt, WalletAddress},
 	payments::{PaymentId, PaymentSubject},
 	push_field,
 	users::UserId,
@@ -79,6 +81,11 @@ pub enum ConsiliumKind {
 	/// (`docs/FEES.md` § "Changing the terms"). Not a money move: carrying it schedules the
 	/// change; the sweeper promotes it once the holders' notice period has run.
 	FeePolicy,
+	/// Units of a reserved allocation (`fee`, `fund`) minted to a person — the owners
+	/// seating a new holder of the platform's own money (#245). Not a cash move, but it
+	/// dilutes every existing holder pro rata, so it is theirs to decide.
+	/// `0045_consilium_holder_grant.sql` widens the CHECK in this same commit.
+	HolderGrant,
 }
 
 impl ConsiliumKind {
@@ -88,6 +95,7 @@ impl ConsiliumKind {
 			Self::Payment => "payment",
 			Self::ValuationOverride => "valuation_override",
 			Self::FeePolicy => "fee_policy",
+			Self::HolderGrant => "holder_grant",
 		}
 	}
 
@@ -100,6 +108,7 @@ impl ConsiliumKind {
 			Self::Payment => "payment",
 			Self::ValuationOverride => "valuation-override",
 			Self::FeePolicy => "fee-policy",
+			Self::HolderGrant => "holder-grant",
 		}
 	}
 
@@ -109,6 +118,7 @@ impl ConsiliumKind {
 			"payment" => Ok(Self::Payment),
 			"valuation_override" => Ok(Self::ValuationOverride),
 			"fee_policy" => Ok(Self::FeePolicy),
+			"holder_grant" => Ok(Self::HolderGrant),
 			other => Err(DomainError::Validation(format!("unknown consilium kind: {other}"))),
 		}
 	}
@@ -267,6 +277,49 @@ impl ValuationOverrideTerms {
 	}
 }
 
+/// The immutable subject of a holder-grant consilium: mint `units` of the reserved
+/// `allocation` to `user`. The units are frozen, not a cash figure — what they are worth
+/// is the allocation's NAV at execution, derived from what it holds over the live supply,
+/// exactly as a subscription is priced at its own moment.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct HolderGrantTerms {
+	pub allocation: ServiceId,
+	pub user: UserId,
+	pub units: Shares,
+}
+
+impl HolderGrantTerms {
+	/// The domain-separation prefix — see [`RevenuePayoutTerms::DOMAIN`]. FROZEN for the
+	/// same reason.
+	pub const DOMAIN: &'static [u8] = b"banking.v1.HolderGrantTerms\x00";
+
+	/// Only a reserved allocation is granted this way: a product's units are bought with
+	/// cash or issued by its operator, and the owners' quorum has no say over them. Zero
+	/// units is not a grant.
+	pub fn new(allocation: ServiceId, user: UserId, units: Shares) -> Result<Self, DomainError> {
+		if !allocation.is_reserved() {
+			return Err(DomainError::Validation(format!(
+				"'{allocation}' is not a reserved allocation: a holder grant seats holders of the fee and fund allocations only"
+			)));
+		}
+		if units.is_zero() {
+			return Err(DomainError::Validation("a holder grant must mint a positive number of units".into()));
+		}
+		Ok(Self { allocation, user, units })
+	}
+
+	/// The bytes the payload hash is taken over: the prefix, the length-prefixed
+	/// allocation and user, the units' base units big-endian.
+	pub fn canonical_bytes(&self) -> Vec<u8> {
+		let mut out = Vec::with_capacity(Self::DOMAIN.len() + 96);
+		out.extend_from_slice(Self::DOMAIN);
+		push_field(&mut out, self.allocation.as_str().as_bytes());
+		push_field(&mut out, self.user.to_string().as_bytes());
+		out.extend_from_slice(&self.units.base_units().to_be_bytes());
+		out
+	}
+}
+
 /// What a consilium is deciding, by value.
 ///
 /// It exists so a second governance subject is a variant here rather than a parallel
@@ -286,6 +339,8 @@ pub enum ConsiliumTerms {
 	/// The fee-policy change this quorum authorizes. The CHANGE'S id is inside the hashed
 	/// subject for the same reason the payment's is.
 	FeePolicy(FeePolicySubject),
+	/// Units of a reserved allocation for a person — see [`HolderGrantTerms`].
+	HolderGrant(HolderGrantTerms),
 }
 
 impl ConsiliumTerms {
@@ -295,6 +350,7 @@ impl ConsiliumTerms {
 			Self::Payment(_) => ConsiliumKind::Payment,
 			Self::ValuationOverride(_) => ConsiliumKind::ValuationOverride,
 			Self::FeePolicy(_) => ConsiliumKind::FeePolicy,
+			Self::HolderGrant(_) => ConsiliumKind::HolderGrant,
 		}
 	}
 
@@ -312,6 +368,7 @@ impl ConsiliumTerms {
 			Self::Payment(subject) => subject.canonical_bytes(),
 			Self::ValuationOverride(terms) => terms.canonical_bytes(),
 			Self::FeePolicy(subject) => subject.canonical_bytes(),
+			Self::HolderGrant(terms) => terms.canonical_bytes(),
 		}
 	}
 
@@ -338,6 +395,12 @@ impl ConsiliumTerms {
 			// "one open request" index on it yields exactly one open fee-policy consilium per
 			// product — without blocking a payout or a payment over some other claim.
 			Self::FeePolicy(subject) => LedgerAccountKey::FeeShares(subject.service.clone()),
+			// A grant moves no cash either, but it reprices the allocation's every unit — the
+			// same claim a payment out of `service:fee` spends and a redemption is paid from.
+			// Keying on it yields one open grant per reserved allocation, and it queues behind
+			// (or blocks) a payment out of that claim rather than racing it: the owners must
+			// not be voting on who holds the money and on a drain of it at once.
+			Self::HolderGrant(terms) => LedgerAccountKey::ServiceClaim(terms.allocation.clone()),
 		}
 	}
 }
@@ -366,6 +429,12 @@ impl From<FeePolicySubject> for ConsiliumTerms {
 	}
 }
 
+impl From<HolderGrantTerms> for ConsiliumTerms {
+	fn from(terms: HolderGrantTerms) -> Self {
+		Self::HolderGrant(terms)
+	}
+}
+
 /// What an executed consilium produced — an identity, never the machinery behind it.
 ///
 /// The aggregate records WHICH artifact its approval was spent on and nothing more; how one
@@ -383,6 +452,9 @@ pub enum ConsiliumEffect {
 	/// The fee-policy change this quorum scheduled. Promoting it into the live terms once
 	/// the notice period has run is the fee sweeper's business.
 	FeePolicy(FeePolicyChangeId),
+	/// The in-kind issuance a holder-grant quorum minted. The record, not the units: the
+	/// relay posts them, as it posts every issuance.
+	Issuance(UnitIssuanceId),
 }
 
 impl From<WithdrawalId> for ConsiliumEffect {
@@ -406,6 +478,12 @@ impl From<ValuationId> for ConsiliumEffect {
 impl From<FeePolicyChangeId> for ConsiliumEffect {
 	fn from(id: FeePolicyChangeId) -> Self {
 		Self::FeePolicy(id)
+	}
+}
+
+impl From<UnitIssuanceId> for ConsiliumEffect {
+	fn from(id: UnitIssuanceId) -> Self {
+		Self::Issuance(id)
 	}
 }
 
@@ -800,17 +878,17 @@ impl Consilium {
 		// leave the column blank on a row that did execute.
 		match effect {
 			ConsiliumEffect::Withdrawal(id) => Some(id),
-			ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) => None,
+			ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Issuance(_) => None,
 		}
 	}
 
 	/// The executed effect NARROWED to a payment order — the `executed_payment_id` column's
 	/// projection, and another leg of `consilium_execution_is_recorded`'s
-	/// `num_nonnulls(...) = 1`: exactly one of the four accessors answers on an executed row.
+	/// `num_nonnulls(...) = 1`: exactly one of the five accessors answers on an executed row.
 	pub fn executed_payment_id(&self) -> Option<PaymentId> {
 		match self.executed? {
 			ConsiliumEffect::Payment(id) => Some(id),
-			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) => None,
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Issuance(_) => None,
 		}
 	}
 
@@ -819,7 +897,7 @@ impl Consilium {
 	pub fn executed_valuation_id(&self) -> Option<ValuationId> {
 		match self.executed? {
 			ConsiliumEffect::Valuation(id) => Some(id),
-			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::FeePolicy(_) => None,
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Issuance(_) => None,
 		}
 	}
 
@@ -828,7 +906,16 @@ impl Consilium {
 	pub fn executed_fee_policy_change_id(&self) -> Option<FeePolicyChangeId> {
 		match self.executed? {
 			ConsiliumEffect::FeePolicy(id) => Some(id),
-			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) => None,
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::Issuance(_) => None,
+		}
+	}
+
+	/// The executed effect NARROWED to an in-kind issuance — the `executed_issuance_id`
+	/// column's projection, the fifth leg.
+	pub fn executed_issuance_id(&self) -> Option<UnitIssuanceId> {
+		match self.executed? {
+			ConsiliumEffect::Issuance(id) => Some(id),
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) => None,
 		}
 	}
 
@@ -1284,6 +1371,54 @@ mod tests {
 			ConsiliumTerms::ValuationOverride(mark).canonical_bytes(),
 			ConsiliumTerms::Payment(payment_subject()).canonical_bytes()
 		);
+		// And the fifth: a grant of units opens with its own frozen prefix too.
+		let grant = holder_grant("1000");
+		assert!(grant.canonical_bytes().starts_with(HolderGrantTerms::DOMAIN));
+		assert_eq!(HolderGrantTerms::DOMAIN, b"banking.v1.HolderGrantTerms\x00");
+		assert_ne!(ConsiliumTerms::HolderGrant(grant.clone()).canonical_bytes(), payout.canonical_bytes());
+		assert_ne!(
+			ConsiliumTerms::HolderGrant(grant).canonical_bytes(),
+			ConsiliumTerms::ValuationOverride(valuation_override("250")).canonical_bytes()
+		);
+	}
+
+	/// Units of the `fee` allocation for one person.
+	fn holder_grant(units: &str) -> HolderGrantTerms {
+		HolderGrantTerms::new(ServiceId::fee(), UserId::from_raw(uuid::Uuid::from_u128(7)), Shares::parse_decimal(units).unwrap()).unwrap()
+	}
+
+	#[test]
+	fn a_holder_grant_names_a_reserved_allocation_only_and_spends_its_claim() {
+		let terms = ConsiliumTerms::HolderGrant(holder_grant("1000"));
+		assert_eq!(terms.kind(), ConsiliumKind::HolderGrant);
+		assert_eq!(ConsiliumKind::HolderGrant.as_str(), "holder_grant");
+		assert_eq!(ConsiliumKind::parse("holder_grant").unwrap(), ConsiliumKind::HolderGrant);
+		// One open grant per reserved allocation, serialized against a payment out of it.
+		assert_eq!(terms.source_claim(), LedgerAccountKey::ServiceClaim(ServiceId::fee()));
+		// Every field is in the digest: a different grantee, allocation or size is a
+		// different signature.
+		let other_user = HolderGrantTerms::new(ServiceId::fee(), UserId::from_raw(uuid::Uuid::from_u128(8)), Shares::parse_decimal("1000").unwrap()).unwrap();
+		let other_allocation = HolderGrantTerms::new(ServiceId::fund(), UserId::from_raw(uuid::Uuid::from_u128(7)), Shares::parse_decimal("1000").unwrap()).unwrap();
+		assert_ne!(terms.canonical_bytes(), ConsiliumTerms::HolderGrant(other_user).canonical_bytes());
+		assert_ne!(terms.canonical_bytes(), ConsiliumTerms::HolderGrant(other_allocation).canonical_bytes());
+		assert_ne!(terms.canonical_bytes(), ConsiliumTerms::HolderGrant(holder_grant("1001")).canonical_bytes());
+		// A product is not granted; nor is nothing.
+		let user = UserId::from_raw(uuid::Uuid::from_u128(7));
+		assert!(HolderGrantTerms::new(ServiceId::parse("svc-arb").unwrap(), user, Shares::parse_decimal("1").unwrap()).is_err());
+		assert!(HolderGrantTerms::new(ServiceId::fee(), user, Shares::ZERO).is_err());
+
+		// Its effect is an issuance, and only the issuance column answers for it.
+		let roster = owners(3);
+		let mut c = Consilium::open(ConsiliumId::new(), terms, [9u8; 32], roster[0], &roster, NOW).unwrap();
+		c.record_vote(roster[1], VoteDecision::Approve, NOW + 1).unwrap();
+		c.record_vote(roster[2], VoteDecision::Approve, NOW + 2).unwrap();
+		let issuance = UnitIssuanceId::new();
+		c.mark_executed(ConsiliumEffect::Issuance(issuance), NOW + 3).unwrap();
+		assert_eq!(c.executed_issuance_id(), Some(issuance));
+		assert_eq!(c.executed_withdrawal_id(), None);
+		assert_eq!(c.executed_payment_id(), None);
+		assert_eq!(c.executed_valuation_id(), None);
+		assert_eq!(c.executed_fee_policy_change_id(), None);
 	}
 
 	/// A NAV mark past the move guard on one fund.

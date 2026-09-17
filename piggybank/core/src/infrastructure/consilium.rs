@@ -19,12 +19,15 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use domain::{
 	balance::{ServiceId, ValuationId},
-	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, ConsiliumVote, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
+	consilium::{
+		Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, ConsiliumVote, HolderGrantTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision,
+	},
 	error::DomainError,
 	fees::FeePolicyChangeId,
-	money::{Network, Usdt, WalletAddress},
+	issuance::UnitIssuanceId,
+	money::{Network, Shares, Usdt, WalletAddress},
 	payments::PaymentId,
-	users::UserId,
+	users::{UserId, mask_email},
 	withdrawals::WithdrawalId,
 };
 use serde::{Deserialize, Serialize};
@@ -55,7 +58,7 @@ macro_rules! consilium_columns {
 		"c.id, c.kind, c.state, c.terms::text AS terms, c.payload_hash, c.initiator_user_id, c.owner_count, c.threshold, \
 		 EXTRACT(EPOCH FROM c.created_at)::bigint AS created_at, EXTRACT(EPOCH FROM c.expires_at)::bigint AS expires_at, \
 		 EXTRACT(EPOCH FROM c.decided_at)::bigint AS decided_at, c.executed_withdrawal_id, c.executed_payment_id, c.executed_valuation_id, \
-		 c.executed_fee_policy_change_id, c.failure_reason, c.version"
+		 c.executed_fee_policy_change_id, c.executed_issuance_id, c.failure_reason, c.version"
 	};
 }
 
@@ -192,8 +195,9 @@ struct StoredTerms {
 /// The stored JSONB for the terms, per kind. A payout keeps the [`StoredTerms`] shape its rows
 /// predate the enum with; a payment stores the subject's OWN serde shape, the same bytes
 /// `PaymentEvent::Opened` carries into `event_log`; a valuation override stores
-/// [`StoredValuationOverride`], the money-plane convention of an exact base-unit string.
-/// `rehydrate` reads by `kind`, so the three must agree with it and with nothing else.
+/// [`StoredValuationOverride`], the money-plane convention of an exact base-unit string;
+/// a holder grant stores [`StoredHolderGrant`] by the same convention. `rehydrate` reads
+/// by `kind`, so the shapes must agree with it and with nothing else.
 fn stored_terms(terms: &ConsiliumTerms) -> Result<String, DomainError> {
 	match terms {
 		ConsiliumTerms::RevenuePayout(payout) => serde_json::to_string(&StoredTerms::of(payout)),
@@ -201,8 +205,36 @@ fn stored_terms(terms: &ConsiliumTerms) -> Result<String, DomainError> {
 		ConsiliumTerms::ValuationOverride(terms) => serde_json::to_string(&StoredValuationOverride::of(terms)),
 		// The subject's own serde shape, as a payment's is.
 		ConsiliumTerms::FeePolicy(subject) => serde_json::to_string(subject),
+		ConsiliumTerms::HolderGrant(terms) => serde_json::to_string(&StoredHolderGrant::of(terms)),
 	}
 	.map_err(|e| DomainError::Repository(e.to_string()))
+}
+
+/// The stored JSONB shape of a holder grant's terms — `units` as an exact base-unit
+/// string, like every other figure Postgres holds.
+#[derive(Deserialize, Serialize)]
+struct StoredHolderGrant {
+	allocation: String,
+	user: Uuid,
+	units: String,
+}
+
+impl StoredHolderGrant {
+	fn of(terms: &HolderGrantTerms) -> Self {
+		Self {
+			allocation: terms.allocation.as_str().to_owned(),
+			user: terms.user.raw(),
+			units: terms.units.base_units().to_string(),
+		}
+	}
+
+	fn into_domain(self) -> Result<HolderGrantTerms, DomainError> {
+		HolderGrantTerms::new(
+			ServiceId::parse(&self.allocation)?,
+			UserId::from_raw(self.user),
+			Shares::from_base_units(self.units.parse::<u128>().map_err(|_| DomainError::Repository("malformed consilium units".into()))?),
+		)
+	}
 }
 
 /// The stored JSONB shape of a valuation override's terms — `aum` as an exact base-unit
@@ -232,12 +264,13 @@ impl StoredValuationOverride {
 /// What a surface states beside the hashed subject, per kind: nothing for a payout (it
 /// names an address), the receiving end's recognisable detail for a payment, the product
 /// being marked for a valuation override, the product's title and holder count for a change
-/// of fee terms.
+/// of fee terms, the grantee's mailbox for a holder grant.
 enum SubjectDetail {
 	Payout,
 	Payment(Option<EndDetail>),
 	ValuationOverride(Option<EndDetail>),
 	FeePolicy(FeePolicyDetail),
+	HolderGrant(Option<EndDetail>),
 }
 
 impl SubjectDetail {
@@ -245,7 +278,7 @@ impl SubjectDetail {
 	/// and the console show.
 	fn end_detail(&self) -> Option<&EndDetail> {
 		match self {
-			Self::Payment(detail) | Self::ValuationOverride(detail) => detail.as_ref(),
+			Self::Payment(detail) | Self::ValuationOverride(detail) | Self::HolderGrant(detail) => detail.as_ref(),
 			Self::Payout | Self::FeePolicy(_) => None,
 		}
 	}
@@ -253,7 +286,7 @@ impl SubjectDetail {
 	fn fee_policy(&self) -> Option<FeePolicyDetail> {
 		match self {
 			Self::FeePolicy(detail) => Some(detail.clone()),
-			Self::Payout | Self::Payment(_) | Self::ValuationOverride(_) => None,
+			Self::Payout | Self::Payment(_) | Self::ValuationOverride(_) | Self::HolderGrant(_) => None,
 		}
 	}
 }
@@ -274,7 +307,34 @@ async fn subject_detail(conn: &mut PgConnection, consilium: &Consilium) -> Resul
 			allocation_name: fee_policy_changes::allocation_title(conn, &subject.service).await?.unwrap_or_default(),
 			holder_count: fee_policy_changes::holder_count(conn, &subject.service).await?,
 		}),
+		ConsiliumTerms::HolderGrant(terms) => SubjectDetail::HolderGrant(
+			sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = $1")
+				.bind(terms.user.raw())
+				.fetch_optional(&mut *conn)
+				.await
+				.map_err(repo_err)?
+				.map(EndDetail::Mailbox),
+		),
 	})
+}
+
+/// How a holder grant names its two ends in the borrowed payment template. The source is
+/// the allocation whose supply grows; the destination is the person, with their masked
+/// mailbox so an owner approving "investor 8f3e…" can tell who that is. The amount is
+/// spelled in UNITS, never as a cash figure the template would otherwise imply.
+fn holder_grant_mail_source(terms: &HolderGrantTerms) -> String {
+	format!("the {} allocation — new units", terms.allocation)
+}
+
+fn holder_grant_mail_destination(terms: &HolderGrantTerms, detail: Option<&EndDetail>) -> String {
+	match detail {
+		Some(EndDetail::Mailbox(email)) => format!("investor {} ({})", terms.user, mask_email(email)),
+		Some(EndDetail::ProductTitle(_)) | None => format!("investor {}", terms.user),
+	}
+}
+
+fn holder_grant_mail_amount(terms: &HolderGrantTerms) -> String {
+	format!("{} units of {}", terms.units.to_decimal_string(), terms.allocation)
 }
 
 /// The relay's bound on one mail line (`line(.., 160, ..)` in concierge's governance
@@ -329,7 +389,12 @@ pub(crate) fn clip_utf8(s: &str, max_bytes: usize) -> String {
 /// enough to get them to the approval page — and the page, which renders the real terms, is
 /// the truth. The consilium id stands in for `payment_id` (the field is required by shape
 /// and there is no order), and `tier` is `service`, the tier of the claim a mark reprices.
-// TODO(EV-invest/concierge#94): a dedicated `VALUATION_APPROVAL` mail kind in concierge.
+///
+/// THE HOLDER-GRANT KIND BORROWS IT THE SAME WAY, for the same reason: a grant moves no
+/// cash, and concierge has no kind for "units of the platform's own allocation for this
+/// person". The amount is spelled in units, the source is the allocation, the destination
+/// the person with their masked mailbox, and the fixed reason says what executing does.
+// TODO(EV-invest/concierge#94): dedicated `VALUATION_APPROVAL` / `HOLDER_GRANT_APPROVAL` mail kinds.
 fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &VoterCredential, approval_url_base: &str, detail: &SubjectDetail) -> GovernanceMail {
 	let approval_url = format!("{}/{}", approval_url_base.trim_end_matches('/'), credential.token);
 	match consilium.terms() {
@@ -397,6 +462,22 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 			approval_url,
 			code: credential.code.clone(),
 		}),
+		ConsiliumTerms::HolderGrant(terms) => GovernanceMail::PaymentApproval(PaymentApproval {
+			consilium_id: consilium.id().to_string(),
+			payment_id: consilium.id().to_string(),
+			initiator_email: initiator_email.to_owned(),
+			tier: VALUATION_MAIL_TIER.to_owned(),
+			source: holder_grant_mail_source(terms),
+			destination: holder_grant_mail_destination(terms, detail.end_detail()),
+			amount: holder_grant_mail_amount(terms),
+			reason: HOLDER_GRANT_MAIL_REASON.to_owned(),
+			payload_hash: consilium.payload_hash_hex(),
+			threshold: consilium.threshold(),
+			owner_count: consilium.owner_count(),
+			expires_at: consilium.expires_at(),
+			approval_url,
+			code: credential.code.clone(),
+		}),
 	}
 }
 
@@ -406,7 +487,7 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 /// whether its owners hear how it ended, and through which template.
 fn announces_by_mail(consilium: &Consilium) -> bool {
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) => true,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) => true,
 	}
 }
 
@@ -416,6 +497,9 @@ fn announces_by_mail(consilium: &Consilium) -> bool {
 const VALUATION_MAIL_REASON: &str = "Valuation beyond the NAV-move guard; executing records the mark regardless of the guard.";
 /// The tier the borrowed template is told: the claim a mark reprices is the product's.
 const VALUATION_MAIL_TIER: &str = "service";
+/// What the borrowed payment template says a holder grant is FOR. Fixed for the same reason
+/// the valuation's is: the digest binds the allocation, the person and the units, no memo.
+const HOLDER_GRANT_MAIL_REASON: &str = "Holder grant: executing mints these units to this person, diluting every current holder of the allocation pro rata. No cash moves.";
 
 /// The outcome shape for every mailed kind: the payout pair, the payment tuple, the NAV
 /// mark (`fund` + `mark`) for a valuation override, or the fee-terms description — the
@@ -476,6 +560,15 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, subject: &
 			current: change.from.as_ref().map(fee_policy_changes::mail_terms),
 			proposed: Some(fee_policy_changes::mail_terms(&change.to)),
 			reason: change.reason.clone(),
+			..base
+		},
+		// The same tuple the invitation borrowed, so the verdict reads as the request did.
+		ConsiliumTerms::HolderGrant(terms) => PayoutOutcome {
+			amount: holder_grant_mail_amount(terms),
+			tier: VALUATION_MAIL_TIER.to_owned(),
+			source: holder_grant_mail_source(terms),
+			destination: holder_grant_mail_destination(terms, subject.end_detail()),
+			reason: HOLDER_GRANT_MAIL_REASON.to_owned(),
 			..base
 		},
 	}
@@ -570,6 +663,10 @@ fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
 			ConsiliumTerms::ValuationOverride(stored.into_domain()?)
 		}
 		ConsiliumKind::FeePolicy => ConsiliumTerms::FeePolicy(serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?),
+		ConsiliumKind::HolderGrant => {
+			let stored: StoredHolderGrant = serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?;
+			ConsiliumTerms::HolderGrant(stored.into_domain()?)
+		}
 	};
 	let hash_bytes: Vec<u8> = row.try_get("payload_hash").map_err(repo_err)?;
 	let payload_hash: [u8; DIGEST_BYTES] = hash_bytes
@@ -607,7 +704,7 @@ fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
 	))
 }
 
-/// The one effect an executed row recorded, read off whichever of the three effect columns
+/// The one effect an executed row recorded, read off whichever of the five effect columns
 /// is set. `consilium_execution_is_recorded` promises at most one is, so the first match is
 /// the only match.
 fn executed_effect(row: &PgRow) -> Result<Option<ConsiliumEffect>, DomainError> {
@@ -620,10 +717,13 @@ fn executed_effect(row: &PgRow) -> Result<Option<ConsiliumEffect>, DomainError> 
 	if let Some(id) = row.try_get::<Option<Uuid>, _>("executed_valuation_id").map_err(repo_err)? {
 		return Ok(Some(ConsiliumEffect::Valuation(ValuationId::from_raw(id))));
 	}
+	if let Some(id) = row.try_get::<Option<Uuid>, _>("executed_fee_policy_change_id").map_err(repo_err)? {
+		return Ok(Some(ConsiliumEffect::FeePolicy(FeePolicyChangeId::from_raw(id))));
+	}
 	Ok(row
-		.try_get::<Option<Uuid>, _>("executed_fee_policy_change_id")
+		.try_get::<Option<Uuid>, _>("executed_issuance_id")
 		.map_err(repo_err)?
-		.map(|id| ConsiliumEffect::FeePolicy(FeePolicyChangeId::from_raw(id))))
+		.map(|id| ConsiliumEffect::Issuance(UnitIssuanceId::from_raw(id))))
 }
 
 /// The initiator's address. A missing row is an error, not an empty string: every consilium
@@ -675,7 +775,7 @@ async fn fee_policy_detail_of(conn: &mut PgConnection, consilium: &Consilium) ->
 async fn persist(conn: &mut PgConnection, consilium: &mut Consilium) -> Result<(), DomainError> {
 	let affected = sqlx::query(
 		"UPDATE consilium SET state = $2, decided_at = to_timestamp($3), executed_withdrawal_id = $4, executed_payment_id = $5, executed_valuation_id = $6, \
-		 executed_fee_policy_change_id = $7, failure_reason = $8, version = $9 WHERE id = $1",
+		 executed_fee_policy_change_id = $7, executed_issuance_id = $8, failure_reason = $9, version = $10 WHERE id = $1",
 	)
 	.bind(consilium.id().raw())
 	.bind(consilium.state().as_str())
@@ -688,6 +788,7 @@ async fn persist(conn: &mut PgConnection, consilium: &mut Consilium) -> Result<(
 	.bind(consilium.executed_payment_id().map(|id| id.raw()))
 	.bind(consilium.executed_valuation_id().map(|id| id.raw()))
 	.bind(consilium.executed_fee_policy_change_id().map(|id| id.raw()))
+	.bind(consilium.executed_issuance_id().map(|id| id.raw()))
 	.bind(consilium.failure_reason())
 	.bind(consilium.version() as i64)
 		.execute(&mut *conn)
@@ -707,12 +808,12 @@ fn audience(consilium: &Consilium) -> impl Iterator<Item = UserId> + '_ {
 }
 
 /// Close the SUBJECT a consilium decided against — the cascade for every verdict that is not
-/// an approval, in the verdict's own transaction. Nothing to do for a payout or a valuation
-/// override, whose consilium IS the request; a payment order is rejected, a fee-policy change
-/// is closed as rejected.
+/// an approval, in the verdict's own transaction. Nothing to do for a payout, a valuation
+/// override or a holder grant, whose consilium IS the request; a payment order is rejected,
+/// a fee-policy change is closed as rejected.
 async fn close_decided_subject(conn: &mut PgConnection, consilium: &Consilium, at: i64) -> Result<(), DomainError> {
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) => Ok(()),
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::HolderGrant(_) => Ok(()),
 		ConsiliumTerms::Payment(subject) => payments::reject_on(conn, subject.payment_id, at).await.map(|_| ()),
 		ConsiliumTerms::FeePolicy(subject) => {
 			let reason = format!("the owners' consilium ended {}", consilium.state().as_str());
@@ -1298,6 +1399,7 @@ impl ConsiliumRepository for PgConsilia {
 					ConsiliumEffect::Payment(payment) => format!("payment {payment} approved"),
 					ConsiliumEffect::Valuation(valuation) => format!("valuation {valuation} recorded"),
 					ConsiliumEffect::FeePolicy(change) => format!("fee-policy change {change} scheduled"),
+					ConsiliumEffect::Issuance(issuance) => format!("issuance {issuance} minted"),
 				}
 			}
 			ExecutionOutcome::Failed(reason) => {

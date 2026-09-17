@@ -476,6 +476,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		policy: outflow.clone(),
 		allocations: allocations.clone(),
 		fee_changes: fees.changes.clone(),
+		issuances: issuances.clone(),
 		nav: nav.clone(),
 		notify: relay_notify.clone(),
 		configured: Arc::from(rails.configured_networks()),
