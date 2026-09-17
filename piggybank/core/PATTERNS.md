@@ -733,7 +733,14 @@ always-on **fee budget** on every signed transaction from every
 wallet (`SIGNER_MAX_GAS_LIMIT`, `SIGNER_MAX_GAS_PRICE_GWEI_{BEP20,POLYGON}`,
 `SIGNER_MAX_TRON_FEE_LIMIT_SUN`, `SIGNER_MAX_TON_{MSG_VALUE,FORWARD}_NANO`), so a forged
 1 USDT transfer cannot burn the native balance as gas. Tron signing is off until
-`SIGNER_TRON_SIGNING_ENABLED=true` (the rail is frozen on the hub side, #31).
+`SIGNER_TRON_SIGNING_ENABLED=true` (the rail is frozen on the hub side, #31). The
+environment is the unliftable ceiling; the operator's **spend brake** — one `spend_brake`
+row in the signer's own database (`piggybank/signer/migrations/0009_spend_brake.sql`),
+read before every signature, no RPC to it by design — can tighten the per-transfer cap,
+the USDT window and the native windows to `min(env, brake)` or halt every signature
+without a restart, and a halt parks the withdrawal exactly like a window refusal
+(operator SQL in [`docs/RUNBOOK-withdrawals.md`](../../docs/RUNBOOK-withdrawals.md)
+§Spend brake).
 
 ### Revenue payout — the same saga, sourced from the fund
 
