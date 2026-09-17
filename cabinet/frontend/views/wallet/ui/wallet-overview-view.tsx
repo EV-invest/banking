@@ -7,8 +7,7 @@ import { Link } from "@/shared/ui/cabinet-link";
 import { Alert, AlertDescription, AlertTitle, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
 
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
-import { VerificationRequired } from "@/features/kyc";
-import { useKycGate } from "@/features/kyc/model/use-kyc-gate";
+import { useKycGate, VerificationRequired } from "@/features/kyc";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";

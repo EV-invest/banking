@@ -11,9 +11,12 @@
 // dialog), and a public export with no caller is a contract kept for nobody. The client and
 // the start hook stay internal for the older reason — a second caller of `startVerification`
 // would be a second place deciding what a 503 looks like, which is exactly what these
-// presentations exist to share instead. `useKycStatus` is a read, not a start, and is the
-// one hook that leaves.
+// presentations exist to share instead. Two reads leave: `useKycStatus` (the checklist's
+// "what may this screen offer?") and `useKycGate` (the money screens' half of the same
+// read — whether a surface stands closed; the subscribe form asks the wallet's question).
+// One export beats a fourth view reaching into `model/`.
 export { useKycStatus, type KycGate } from "@/features/kyc/model/use-kyc-status";
+export { useKycGate } from "@/features/kyc/model/use-kyc-gate";
 export { StartVerificationRow } from "@/features/kyc/ui/start-verification-row";
 export { VerificationRequired } from "@/features/kyc/ui/verification-required";
 export { VerifyButton } from "@/features/kyc/ui/verify-button";
