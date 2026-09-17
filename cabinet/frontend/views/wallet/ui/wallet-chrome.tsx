@@ -59,7 +59,18 @@ export const WALLET_CTA =
 export const WALLET_CTA_GHOST =
   "flex items-center justify-center rounded-lg border border-border font-medium text-ink outline-none transition-colors hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
 
-// The all-caps field/section label used across the wallet cards.
-export function FieldLabel({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn("flex items-center gap-1.5 text-xs font-medium text-ink-soft", className)}>{children}</span>;
+// The all-caps field/section label used across the wallet cards. With `htmlFor` it is a
+// real label pinned to one control; a `<label>` wrapped around the label text, a tip button
+// and the input binds to the FIRST labelable element — the tip — and leaves the input
+// with no accessible name (the placeholder gets read instead).
+export function FieldLabel({ children, className, htmlFor }: { children: ReactNode; className?: string; htmlFor?: string }) {
+  const cls = cn("flex items-center gap-1.5 text-xs font-medium text-ink-soft", className);
+  if (htmlFor) {
+    return (
+      <label htmlFor={htmlFor} className={cls}>
+        {children}
+      </label>
+    );
+  }
+  return <span className={cls}>{children}</span>;
 }

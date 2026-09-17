@@ -6739,6 +6739,10 @@
     "en": "Verified",
     "t": "Bestätigt"
   },
+  "ui.walletHistory": {
+    "en": "History",
+    "t": "Verlauf"
+  },
   "ui.viewAll": {
     "en": "View all",
     "t": "Alle anzeigen"

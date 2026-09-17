@@ -32,6 +32,7 @@ import { AboutProduct, RiskNote } from "@/views/invest/ui/about-product";
 import { Note } from "@/views/invest/ui/atoms";
 import { InKindNote } from "@/views/invest/ui/backing-badge";
 import { QueuedList, RedeemPanel } from "@/views/invest/ui/deal-panels";
+import { DealSlot } from "@/views/invest/ui/deal-slot";
 import { FeeCard, SupplyCard } from "@/views/invest/ui/product-cards";
 import { type Panel, ProductHeader } from "@/views/invest/ui/product-header";
 import { BackLink, HoldingStats, PriceOnly, ProductLoading, ProductMissing } from "@/views/invest/ui/product-stats";
@@ -131,10 +132,18 @@ export function ProductView({ service }: { service: string }) {
           {unmarked && !closed && <Note tone="muted">{t("invest.unmarkedNote")}</Note>}
           {inKind && <InKindNote />}
 
-          {panel === "subscribe" && !blocked && <SubscribePanel service={product.service} nav={nav} />}
+          {panel === "subscribe" && !blocked && (
+            <DealSlot key="subscribe">
+              <SubscribePanel service={product.service} nav={nav} />
+            </DealSlot>
+          )}
           {/* An in-kind product still opens the panel: the refusal is explained on the
               form, with the way out beside it, rather than met as a 412 after the click. */}
-          {panel === "redeem" && held && <RedeemPanel service={product.service} position={held} nav={nav} inKind={inKind} />}
+          {panel === "redeem" && held && (
+            <DealSlot key="redeem">
+              <RedeemPanel service={product.service} position={held} nav={nav} inKind={inKind} />
+            </DealSlot>
+          )}
 
           {queued.length > 0 && <QueuedList items={queued} />}
         </div>

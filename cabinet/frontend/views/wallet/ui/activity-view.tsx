@@ -85,7 +85,7 @@ export function ActivityView() {
   const entries: Entry[] = loading ? [] : buildEntries(rows, credits, t, locale);
 
   return (
-    <WalletScreen title={t("ui.activity")} subtitle={t("wallet.activitySub")} back="/wallet">
+    <WalletScreen title={t("ui.walletHistory")} subtitle={t("wallet.activitySub")} back="/wallet">
       {error && (
         <StaggerItem as="p" className="text-sm text-accent-error">
           {error}

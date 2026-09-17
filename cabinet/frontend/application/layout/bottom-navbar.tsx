@@ -58,7 +58,7 @@ export function BottomNavbar() {
   const onTab = activeAt >= 0;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-[var(--cabinet-bottom-nav-h,64px)] items-center border-t border-border bg-secondary px-2 pb-[env(safe-area-inset-bottom,0px)] lg:hidden">
+    <nav aria-label={t("nav.a11y.primary")} className="fixed bottom-0 left-0 right-0 z-50 flex h-[var(--cabinet-bottom-nav-h,64px)] items-center border-t border-border bg-secondary px-2 pb-[env(safe-area-inset-bottom,0px)] lg:hidden">
       {/* One marker for the whole bar, mounted once and translated — not a node
           per tab that mounts and unmounts.
 

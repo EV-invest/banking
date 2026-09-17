@@ -6739,6 +6739,10 @@
     "en": "Verified",
     "t": "Đã xác minh"
   },
+  "ui.walletHistory": {
+    "en": "History",
+    "t": "Lịch sử"
+  },
   "ui.viewAll": {
     "en": "View all",
     "t": "Xem tất cả"

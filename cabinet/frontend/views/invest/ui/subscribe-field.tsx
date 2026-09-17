@@ -46,7 +46,9 @@ export function SubscribeField({
 
   return (
     <Field className="gap-2" data-invalid={invalid || undefined}>
-      <span className="flex items-center justify-between gap-2">
+      {/* `flex-wrap`: at 390px the label and the balance do not share a row, and without it
+          each broke mid-phrase instead of the balance dropping to its own line. */}
+      <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <span className="flex items-center gap-1.5 text-sm">
           <FieldLabel htmlFor={id}>{t("invest.amountUsdt")}</FieldLabel>
           <TipAnchor anchor="invest.subscribe.amount" />
