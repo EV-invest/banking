@@ -30,10 +30,11 @@ import { blockedReasonKey, isClosed, isInKind, selectProduct } from "@/views/inv
 import { AboutProduct, RiskNote } from "@/views/invest/ui/about-product";
 import { Note } from "@/views/invest/ui/atoms";
 import { InKindNote } from "@/views/invest/ui/backing-badge";
-import { QueuedList, RedeemPanel, SubscribePanel } from "@/views/invest/ui/deal-panels";
+import { QueuedList, RedeemPanel } from "@/views/invest/ui/deal-panels";
 import { FeeCard, SupplyCard } from "@/views/invest/ui/product-cards";
 import { type Panel, ProductHeader } from "@/views/invest/ui/product-header";
 import { BackLink, HoldingStats, PriceOnly, ProductLoading, ProductMissing } from "@/views/invest/ui/product-stats";
+import { SubscribePanel } from "@/views/invest/ui/subscribe-panel";
 
 export function ProductView({ service }: { service: string }) {
   const t = useT();

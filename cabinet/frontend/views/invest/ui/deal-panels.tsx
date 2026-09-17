@@ -1,135 +1,30 @@
 "use client";
 
-// The two deal forms and the queue that follows a redemption. Extracted from the invest
-// list when the product page arrived: a subscription has to behave identically wherever
-// it is initiated from, and the surest way to guarantee that is one implementation.
+// The redeem form and the queue that follows a redemption. Extracted from the invest list
+// when the product page arrived: a deal has to behave identically wherever it is initiated
+// from, and the surest way to guarantee that is one implementation. The subscribe form is
+// `./subscribe-panel` — it grew a balance, a tier gate and a top-up of its own (#396).
 //
-// None of the three takes an `onDone`. The mutations they call name what they moved (see
+// Neither takes an `onDone`. The mutations they call name what they moved (see
 // `entities/fund/model/fund-resource.ts`), so the page around them — and Home, and Wallet,
 // and anything else showing a figure a deal touched — refreshes itself. A callback per
 // panel was the same job done once per call site, which is the version that goes stale.
 
-import { useAnalytics } from "@evinvest/analytics/react";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { ArrowDownToLine, Clock, Loader2, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ArrowDownToLine, Clock, Loader2, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Button, Input } from "@evinvest/uikit";
 
-import { hasHoldings } from "@/entities/fund/lib/holdings";
-import { cancelRedemption, positionsResource, submitRedeem, submitSubscribe } from "@/entities/fund/model/fund-resource";
-import { ACTIVATION, once } from "@/shared/analytics";
+import { cancelRedemption, submitRedeem } from "@/entities/fund/model/fund-resource";
 import type { FundNav, Position, Redemption } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
-import { cachedSession } from "@/shared/lib/session";
 import { TipAnchor } from "@/shared/tips";
 import { Panel, PanelPresence } from "@/shared/ui/motion";
 import { formatUnits, formatUsdt, fromBaseUnits, toBaseUnits } from "@/views/invest/lib/format";
-import { cashForUnits, unitsForCash } from "@/views/invest/lib/product";
-import { TEAL_CTA } from "@/views/invest/ui/atoms";
+import { cashForUnits } from "@/views/invest/lib/product";
 import { TradeLink } from "@/views/invest/ui/trade-link";
-
-export function SubscribePanel({ service, nav }: { service: string; nav: FundNav | null }) {
-  const t = useT();
-  const locale = useLocale();
-  const [amount, setAmount] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [done, setDone] = useState<{ units?: string; nav?: string } | null>(null);
-  const capture = useAnalytics();
-
-  // Exact preview, floored the same way the hub floors it — so "0 units" is visible here
-  // instead of arriving as a rejection.
-  const preview = unitsForCash(amount, nav?.nav);
-  const dust = toBaseUnits(amount) > 0n && preview === 0n;
-  // The supply cap, checked before the submit rather than after it. `remaining_capacity`
-  // already counts in-flight mints, so this is the same figure the hub will gate on.
-  const headroom = nav ? toBaseUnits(nav.remaining_capacity) : null;
-  const overCap = preview !== null && headroom !== null && preview > headroom;
-
-  // `first_subscription`: an accepted subscription by an account that held no units. The
-  // positions are what `/invest/<service>` warms on the way in, so "unread" is rare and is
-  // counted as "none" — flagged, rather than losing the step. Keyed by user per browser so
-  // a retry, or a second tab, does not repeat it.
-  const recordFirstSubscription = (held: boolean | null) => {
-    if (held === true) return;
-    const userId = cachedSession()?.user?.userId ?? "anon";
-    if (once(`${ACTIVATION.firstSubscription}:${userId}`, "browser")) capture(ACTIVATION.firstSubscription, { service, holdings_known: held !== null });
-  };
-
-  const submit = async () => {
-    setSubmitting(true);
-    setError(null);
-    setDone(null);
-    // Read BEFORE the submit: the mutation refreshes the positions, and afterwards the
-    // holding this subscription just opened would be the "previous" one.
-    const held = hasHoldings(positionsResource.peek());
-    try {
-      const receipt = await submitSubscribe({ service, amount });
-      setDone({ units: receipt.units, nav: receipt.nav });
-      setAmount("");
-      recordFirstSubscription(held);
-    } catch (e) {
-      // The error itself: `errorMessage` resolves its `code` in the reader's locale.
-      setError(e);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="space-y-3 rounded-lg border border-border bg-secondary p-4">
-      {/* The receipt and the failure occupy the same slot and replace one another, so
-          they share a presence boundary: retrying after an error swaps the panel in
-          place instead of collapsing the form and re-expanding it. */}
-      <PanelPresence>
-        {done && (
-          <Panel key="receipt" from="bottom">
-            <Alert>
-              <Sparkles className="size-4 text-positive" />
-              <AlertTitle>{t("invest.subscribeReceived")}</AlertTitle>
-              <AlertDescription>{t("invest.subscribeReceiptBody", { n: Number(done.units ?? 0), units: formatUnits(done.units, locale), nav: formatUsdt(done.nav, locale) })}</AlertDescription>
-            </Alert>
-          </Panel>
-        )}
-        {!!error && (
-          <Panel key="error" from="bottom">
-            <Alert variant="destructive">
-              <TriangleAlert className="size-4" />
-              <AlertTitle>{t("invest.subscribeFailed")}</AlertTitle>
-              <AlertDescription>{errorMessage(error, t)}</AlertDescription>
-            </Alert>
-          </Panel>
-        )}
-      </PanelPresence>
-
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex min-w-48 flex-1 flex-col gap-1.5">
-          <span className="flex items-center gap-1.5 text-sm">
-            {t("admin.revenue.amountUsdt")}
-            <TipAnchor anchor="invest.subscribe.amount" />
-          </span>
-          <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
-        </label>
-        <Button type="button" className={cn(TEAL_CTA)} disabled={submitting || preview === null || preview === 0n || overCap} onClick={submit}>
-          {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-          {t("invest.subscribe")}
-        </Button>
-      </div>
-
-      <p className={cn("text-xs", dust || overCap ? "text-accent-error" : "text-ink-soft")}>
-        {dust
-          ? t("invest.dustHint", { nav: formatUsdt(nav?.nav, locale) })
-          : overCap
-            ? t("invest.overCapHint", { n: Number(fromBaseUnits(headroom ?? 0n)), units: formatUnits(fromBaseUnits(headroom ?? 0n), locale) })
-            : preview !== null
-              ? t("invest.buysUnits", { n: Number(fromBaseUnits(preview)), units: formatUnits(fromBaseUnits(preview), locale), nav: formatUsdt(nav?.nav, locale) })
-              : t("invest.subscribeIdleHint")}
-      </p>
-    </div>
-  );
-}
 
 /** `inKind`: the units are not backed by fund cash, so the hub refuses the redeem (412) —
  *  the form says so before the click, and offers the book instead. */

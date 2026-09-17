@@ -3779,9 +3779,17 @@
     "en": "All products",
     "t": "Tất cả sản phẩm"
   },
+  "invest.amountUsdt": {
+    "en": "Amount (USDT)",
+    "t": "Số tiền (USDT)"
+  },
   "invest.availableToInvest": {
     "en": "Available to invest",
     "t": "Khả dụng để đầu tư"
+  },
+  "invest.availableUsdt": {
+    "en": "Available: {amount} USDT",
+    "t": "Khả dụng: {amount} USDT"
   },
   "invest.awaitingSettlement": {
     "en": "Awaiting settlement",
@@ -3959,6 +3967,14 @@
     "en": "{pct} p.a. first",
     "t": "{pct}/năm đầu tiên"
   },
+  "invest.insufficientHint": {
+    "en": "That is more than your available balance.",
+    "t": "Số tiền này vượt quá số dư khả dụng của bạn."
+  },
+  "invest.investAmount": {
+    "en": "Invest {amount} USDT",
+    "t": "Đầu tư {amount} USDT"
+  },
   "invest.investedValue": {
     "en": "Invested value",
     "t": "Giá trị đã đầu tư"
@@ -4094,6 +4110,14 @@
   "invest.subscribeReceived": {
     "en": "Subscription received",
     "t": "Đã nhận lệnh đăng ký"
+  },
+  "invest.subscribeVerifyBody": {
+    "en": "Subscriptions open once your identity is verified. Your balance is untouched in the meantime.",
+    "t": "Đăng ký sẽ mở sau khi danh tính của bạn được xác minh. Số dư của bạn không bị ảnh hưởng trong thời gian đó."
+  },
+  "invest.subscribeVerifyTitle": {
+    "en": "Verify your identity to invest",
+    "t": "Xác minh danh tính để đầu tư"
   },
   "invest.supplyNote": {
     "en": "Subscriptions mint units at the current NAV. Once the cap is reached the fund stops accepting new money; redemptions are unaffected.",
