@@ -3779,9 +3779,17 @@
     "en": "All products",
     "t": "Alle Produkte"
   },
+  "invest.amountUsdt": {
+    "en": "Amount (USDT)",
+    "t": "Betrag (USDT)"
+  },
   "invest.availableToInvest": {
     "en": "Available to invest",
     "t": "Verfügbar zum Anlegen"
+  },
+  "invest.availableUsdt": {
+    "en": "Available: {amount} USDT",
+    "t": "Verfügbar: {amount} USDT"
   },
   "invest.awaitingSettlement": {
     "en": "Awaiting settlement",
@@ -3959,6 +3967,14 @@
     "en": "{pct} p.a. first",
     "t": "zuerst {pct} p. a."
   },
+  "invest.insufficientHint": {
+    "en": "That is more than your available balance.",
+    "t": "Das ist mehr als Ihr verfügbares Guthaben."
+  },
+  "invest.investAmount": {
+    "en": "Invest {amount} USDT",
+    "t": "{amount} USDT investieren"
+  },
   "invest.investedValue": {
     "en": "Invested value",
     "t": "Investierter Wert"
@@ -4094,6 +4110,14 @@
   "invest.subscribeReceived": {
     "en": "Subscription received",
     "t": "Zeichnung eingegangen"
+  },
+  "invest.subscribeVerifyBody": {
+    "en": "Subscriptions open once your identity is verified. Your balance is untouched in the meantime.",
+    "t": "Zeichnungen sind möglich, sobald Ihre Identität verifiziert ist. Ihr Guthaben bleibt in der Zwischenzeit unberührt."
+  },
+  "invest.subscribeVerifyTitle": {
+    "en": "Verify your identity to invest",
+    "t": "Identität verifizieren, um zu investieren"
   },
   "invest.supplyNote": {
     "en": "Subscriptions mint units at the current NAV. Once the cap is reached the fund stops accepting new money; redemptions are unaffected.",

@@ -3779,9 +3779,17 @@
     "en": "All products",
     "t": "Все продукты"
   },
+  "invest.amountUsdt": {
+    "en": "Amount (USDT)",
+    "t": "Сумма (USDT)"
+  },
   "invest.availableToInvest": {
     "en": "Available to invest",
     "t": "Доступно для инвестирования"
+  },
+  "invest.availableUsdt": {
+    "en": "Available: {amount} USDT",
+    "t": "Доступно: {amount} USDT"
   },
   "invest.awaitingSettlement": {
     "en": "Awaiting settlement",
@@ -3959,6 +3967,14 @@
     "en": "{pct} p.a. first",
     "t": "сначала {pct} годовых"
   },
+  "invest.insufficientHint": {
+    "en": "That is more than your available balance.",
+    "t": "Это больше вашего доступного баланса."
+  },
+  "invest.investAmount": {
+    "en": "Invest {amount} USDT",
+    "t": "Инвестировать {amount} USDT"
+  },
   "invest.investedValue": {
     "en": "Invested value",
     "t": "Стоимость вложений"
@@ -4094,6 +4110,14 @@
   "invest.subscribeReceived": {
     "en": "Subscription received",
     "t": "Подписка принята"
+  },
+  "invest.subscribeVerifyBody": {
+    "en": "Subscriptions open once your identity is verified. Your balance is untouched in the meantime.",
+    "t": "Подписка откроется после подтверждения личности. Ваш баланс при этом не затрагивается."
+  },
+  "invest.subscribeVerifyTitle": {
+    "en": "Verify your identity to invest",
+    "t": "Подтвердите личность, чтобы инвестировать"
   },
   "invest.supplyNote": {
     "en": "Subscriptions mint units at the current NAV. Once the cap is reached the fund stops accepting new money; redemptions are unaffected.",
