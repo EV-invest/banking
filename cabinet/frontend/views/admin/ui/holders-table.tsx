@@ -1,25 +1,25 @@
 "use client";
 
-// One product's cap table: the settled supply and every holder of it, largest first, each
-// with its share of the outstanding figure. A holder is a person or the reserved `fee`
-// allocation (which holds the product's fee class, #245) — the line says which, because
-// the operator's next question differs: "who is this?" for a person, "how much has the
-// platform accrued?" for the allocation.
+// One allocation's cap table: the settled supply and every holder of it, largest first,
+// each with its share of the outstanding figure. A holder is a person or the reserved
+// `fee` allocation (which holds a product's fee class, #245) — the line says which,
+// because the operator's next question differs: "who is this?" for a person, "how much
+// has the platform accrued?" for the allocation. Rendered for a product by the issuance
+// panel and for the `fee` allocation by the Revenue screen, which has no queued mints.
 
 import { Layers, PieChart, User } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Progress } from "@evinvest/uikit";
 
-import type { UnitHolders, UnitHolding } from "@/shared/contracts/admin";
+import type { UnitHolding } from "@/shared/contracts/admin";
 import { formatUnits, isZero, shareBps } from "@/shared/lib/money";
 import { pct } from "@/shared/lib/rate";
 import { holderLabel } from "@/views/admin/lib/format";
 
-export function HoldersTable({ holders }: { holders: UnitHolders }) {
+export function HoldersTable({ holders, outstanding, queued = "0" }: { holders: UnitHolding[]; outstanding: string; queued?: string }) {
   const t = useT();
   const locale = useLocale();
-  const outstanding = holders.units_outstanding;
 
   if (shareBps(outstanding, outstanding) === 0) {
     return (
@@ -31,12 +31,12 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
           <EmptyTitle>{t("admin.alloc.holders.empty")}</EmptyTitle>
           <EmptyDescription>{t("admin.alloc.holders.emptyHint")}</EmptyDescription>
         </EmptyHeader>
-        {!isZero(holders.queued_units) && (
+        {!isZero(queued) && (
           // The one fact the zero state can report: a mint is recorded and waiting on the
           // relay — the same figure that keeps "Pin cap" disabled next door.
           <EmptyContent>
             <p className="text-sm tabular-nums">
-              {t("admin.alloc.holders.queued")} · {formatUnits(holders.queued_units, locale)}
+              {t("admin.alloc.holders.queued")} · {formatUnits(queued, locale)}
             </p>
           </EmptyContent>
         )}
@@ -50,15 +50,15 @@ export function HoldersTable({ holders }: { holders: UnitHolders }) {
         <dt className="text-ink-soft">{t("admin.alloc.holders.outstanding")}</dt>
         <dd className="font-semibold tabular-nums">{formatUnits(outstanding, locale)}</dd>
       </div>
-      {holders.holders.map((line) => (
+      {holders.map((line) => (
         <HolderLine key={`${line.holder.kind}:${line.holder.id}`} line={line} outstanding={outstanding} />
       ))}
-      {!isZero(holders.queued_units) && (
+      {!isZero(queued) && (
         // No share bar: a queued mint is not part of the outstanding figure it would be
         // measured against, so a percentage here would be a lie either way.
         <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2">
           <dt className="text-ink-soft">{t("admin.alloc.holders.queued")}</dt>
-          <dd className="tabular-nums text-ink-soft">{formatUnits(holders.queued_units, locale)}</dd>
+          <dd className="tabular-nums text-ink-soft">{formatUnits(queued, locale)}</dd>
         </div>
       )}
     </dl>

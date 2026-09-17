@@ -22,7 +22,7 @@ import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { BackingAction } from "@/views/admin/allocations/ui/backing-action";
-import { HoldersTable } from "@/views/admin/allocations/ui/holders-table";
+import { HoldersTable } from "@/views/admin/ui/holders-table";
 import { IssuanceResult, type IssuanceOutcome } from "@/views/admin/allocations/ui/issuance-result";
 import { IssueForm } from "@/views/admin/allocations/ui/issue-form";
 import { PanelHeader } from "@/views/admin/allocations/ui/panel-header";
@@ -86,7 +86,7 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
           <Settled loading={!read.data} skeleton={<Skeleton className="h-24 w-full" />}>
             {read.data && (
               <>
-                <HoldersTable holders={read.data} />
+                <HoldersTable holders={read.data.holders} outstanding={read.data.units_outstanding} queued={read.data.queued_units} />
                 <PinCapAction allocation={allocation} holders={read.data} />
                 <RetireAction allocation={allocation} />
               </>
