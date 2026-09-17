@@ -35,8 +35,8 @@ use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
 	config::KycGate,
 	infrastructure::{
-		custody::StubCustody, deposits::PgDeposits, outbox, outflow::PgOutflowPolicy, reaper::Reaper, reconciliation::Reconciliation, redemptions::PgRedemptions, relay::Relay,
-		users::PgUsers, withdrawals::PgWithdrawals,
+		allocations::PgAllocations, custody::StubCustody, deposits::PgDeposits, outbox, outflow::PgOutflowPolicy, reaper::Reaper, reconciliation::Reconciliation, redemptions::PgRedemptions,
+		relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
 	},
 	ports::{
 		BroadcastRequest, Custody, CustodyError, RedemptionRepository, UserRepository, WithdrawalRepository,
@@ -168,7 +168,10 @@ async fn a_parked_event_is_not_dispatched_and_reconciliation_surfaces_it() {
 	assert!(last_error.is_some_and(|e| e.contains("unplannable")), "the park reason is recorded for forensics");
 
 	// Reconciliation's parked-row scan surfaces it.
-	let report = Reconciliation::new(h.pool.clone(), h.ledger.clone()).scan().await.expect("reconciliation scan");
+	let report = Reconciliation::new(h.pool.clone(), h.ledger.clone(), Arc::new(PgAllocations::new(h.pool.clone())))
+		.scan()
+		.await
+		.expect("reconciliation scan");
 	assert!(report.parked_rows >= 1, "reconciliation must surface the parked row");
 	assert!(report.uncompensated_parked >= 1, "an un-compensated park is reported for intervention");
 }

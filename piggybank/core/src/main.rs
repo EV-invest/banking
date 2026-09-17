@@ -347,7 +347,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// parked outbox row (TB wins, alert-only); the reaper owns the timeout for abandoned
 	// sagas (alert on stuck `processing` withdrawals; auto-resolve the safe `queued` ones);
 	// the dispatcher drains the accept-and-queue backlog once a rail is topped up.
-	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
+	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone(), allocations.clone());
 	let reaper = Reaper::new(relay_pool.clone(), withdrawals.clone(), redemptions.clone(), relay_notify.clone());
 	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), relay_notify.clone(), kyc_gate);
 	// The fee sweeper is the only job that *charges* rather than repairs: management fees
