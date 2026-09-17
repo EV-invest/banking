@@ -17,6 +17,7 @@ use piggybank_signer::{
 	policy::SignerPolicy,
 	secrets::WalletSecrets,
 	service::Signer,
+	spend_brake::SpendBrakeStore,
 	turnkey::TurnkeyBackend,
 };
 use sqlx::postgres::PgPoolOptions;
@@ -48,7 +49,9 @@ async fn run() -> color_eyre::Result<()> {
 		.context("failed to connect to the signer database")?;
 	sqlx::migrate!().run(&pool).await.context("failed to apply signer migrations")?;
 
-	let secrets = WalletSecrets::new(pool);
+	// The pool is shared: the secrets store owns one handle, the boot-time brake read below
+	// takes the other (`Signer` builds its own stores over the secrets' pool).
+	let secrets = WalletSecrets::new(pool.clone());
 	// KEK-epoch guard BEFORE any RPC can be served: a wrong-KEK boot dies here (loudly)
 	// instead of minting keys whose funds could never move. Per-row casualties are
 	// reported inside (ERROR) and via the GetKeyHealth diagnostics.
@@ -75,6 +78,30 @@ async fn run() -> color_eyre::Result<()> {
 	);
 	if !policy.treasury_jetton_wallet_pinned() {
 		tracing::warn!("treasury jetton wallet will be pinned on first use — set SIGNER_TON_TREASURY_JETTON_WALLET");
+	}
+	// The operator's brake as it stands at boot — read again on every signing request, but
+	// a signer that cannot read it now would refuse everything, so say so before listening.
+	let brake = SpendBrakeStore::new(pool).read().await.context("failed to read the signer's spend brake")?;
+	if brake.halted() {
+		tracing::warn!(
+			halted = brake.halted(),
+			max_transfer_usdt = ?brake.max_transfer_usdt(),
+			max_treasury_usdt_per_hour = ?brake.max_treasury_usdt_per_hour(),
+			native_spend = ?brake.native_spend(),
+			reason = ?brake.reason(),
+			updated_at = %brake.updated_at(),
+			"signer spend brake state: HALTED — every signature is refused until an operator releases it"
+		);
+	} else {
+		tracing::info!(
+			halted = brake.halted(),
+			max_transfer_usdt = ?brake.max_transfer_usdt(),
+			max_treasury_usdt_per_hour = ?brake.max_treasury_usdt_per_hour(),
+			native_spend = ?brake.native_spend(),
+			reason = ?brake.reason(),
+			updated_at = %brake.updated_at(),
+			"signer spend brake state"
+		);
 	}
 
 	// Where NEW keys are minted and existing ones signed. `local` is the default and the
