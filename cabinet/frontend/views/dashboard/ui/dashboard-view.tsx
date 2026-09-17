@@ -6,7 +6,7 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type CSSProperties, Fragment, useCallback, useState } from "react";
 
-import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle, Progress, Skeleton, Switch } from "@evinvest/uikit";
+import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle, Progress, Skeleton } from "@evinvest/uikit";
 
 import { allocationsResource, positionsResource } from "@/entities/fund/model/fund-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
@@ -296,35 +296,22 @@ function Legend({ dot, label }: { dot: string; label: string }) {
   );
 }
 
+// Two actions and nothing else: the "auto-deploy idle cash" switch that used to sit
+// below them had no feature behind it (#397) and is gone until one exists.
 function MoveMoney({ className }: { className?: string }) {
   const t = useT();
-  const [auto, setAuto] = useState(true);
   return (
     <StaggerItem as={Card} className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
         <CardTitle>{t("dash.moveMoney")}</CardTitle>
       </CardHeader>
-      <CardContent className={cn("flex flex-col gap-3.5 lg:gap-4", CARD_PAD)}>
-        <div className="flex gap-2.5">
-          <Button asChild className="flex-1">
-            <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
-          </Button>
-          <Button asChild variant="outline" className="flex-1">
-            <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
-          </Button>
-        </div>
-        <Item variant="outline" size="sm" className="rounded-lg bg-secondary">
-          <ItemContent className="gap-0.5">
-            <ItemTitle id="auto-deploy-label" className="gap-1.5">
-              {t("dash.autoDeploy")}
-              <TipAnchor anchor="dashboard.move-money.auto-deploy" />
-            </ItemTitle>
-            <ItemDescription className="text-xs">{t("dash.autoDeployHint")}</ItemDescription>
-          </ItemContent>
-          <ItemActions>
-            <Switch checked={auto} onCheckedChange={setAuto} aria-labelledby="auto-deploy-label" />
-          </ItemActions>
-        </Item>
+      <CardContent className={cn("flex gap-2.5", CARD_PAD)}>
+        <Button asChild className="flex-1">
+          <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
+        </Button>
+        <Button asChild variant="outline" className="flex-1">
+          <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
+        </Button>
       </CardContent>
     </StaggerItem>
   );

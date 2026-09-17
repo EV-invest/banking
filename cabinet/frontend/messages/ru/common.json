@@ -3467,14 +3467,6 @@
     "en": "{pct} all-time",
     "t": "{pct} за всё время"
   },
-  "dash.autoDeploy": {
-    "en": "Auto-deploy idle cash",
-    "t": "Автоматически размещать свободные средства"
-  },
-  "dash.autoDeployHint": {
-    "en": "Available balance commits at end of day",
-    "t": "Доступный остаток размещается в конце дня"
-  },
   "dash.available": {
     "en": "Available",
     "t": "Доступно"
@@ -5546,14 +5538,6 @@
   "tips.dashboard.invested.allocation.title": {
     "en": "Invested — what I own",
     "t": "Инвестировано — что мне принадлежит"
-  },
-  "tips.dashboard.move-money.auto-deploy.body": {
-    "en": "When on, your available cash is automatically committed into strategies at end of day.",
-    "t": "Когда включено, ваши свободные средства автоматически размещаются в стратегии в конце дня."
-  },
-  "tips.dashboard.move-money.auto-deploy.title": {
-    "en": "Auto-deploy idle cash",
-    "t": "Автоматическое размещение свободных средств"
   },
   "tips.dashboard.performance.all-time-return.body": {
     "en": "Total unrealized P&L divided by what you put in at cost basis, across every position. A paper figure, not realized cash.",
