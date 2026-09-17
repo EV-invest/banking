@@ -89,10 +89,10 @@ export function DashboardView() {
   const walletLoading = wallet.isLoading;
   const posLoading = positions.isLoading;
 
-  const allocations = pos.map((p, i) => ({ name: p.service ?? t("dash.fundFallback"), value: num(p.value), accent: ACCENTS[i % ACCENTS.length]! }));
+  const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : t("dash.fundFallback"));
+  const allocations = pos.map((p, i) => ({ name: titleOf(p.service), value: num(p.value), accent: ACCENTS[i % ACCENTS.length]! }));
   const allocTotal = allocations.reduce((s, a) => s + a.value, 0) || 1;
 
-  const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : t("dash.fundFallback"));
   // The hub honours `limit`, so the slice is only a shape guarantee for the card.
   const ops = (operations.data?.operations ?? []).slice(0, RECENT_OPS).map((operation, i) => toOp(operation, i, titleOf, t, locale));
 
@@ -421,6 +421,7 @@ function toOp(operation: Operation, index: number, titleOf: (service: string | u
 function opTitle(operation: Operation, titleOf: (service: string | undefined) => string, t: Translate): string {
   if (operation.kind === "subscription") return t("dash.op.subscribed", { fund: titleOf(operation.service) });
   if (operation.kind === "redemption") return t("dash.op.redeemed", { fund: titleOf(operation.service) });
+  if (operation.kind === "fee") return t("ops.op.feeCharged", { fund: titleOf(operation.service) });
   if (operation.kind === "withdrawal") return t("dash.op.withdrawal", { network: networkLabel(operation.network) });
   if (operation.kind === "deposit") return t("dash.op.deposit", { network: networkLabel(operation.network) });
   return kindLabel(operation.kind, t);

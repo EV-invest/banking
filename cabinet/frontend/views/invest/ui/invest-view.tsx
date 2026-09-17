@@ -218,7 +218,6 @@ function ProductCard({ product }: { product: Product }) {
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold">{product.title}</p>
-            <p className="truncate font-mono-tech text-xs text-ink-soft">{product.service}</p>
           </div>
           {/* A non-shrinking sibling of the `min-w-0 flex-1` title column, so a long badge
               is taken straight out of the fund's name. i18n-max: 12. */}
