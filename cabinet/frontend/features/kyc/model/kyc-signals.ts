@@ -23,7 +23,7 @@ export function useKycCompletedSignal(level: number, loading: boolean): void {
     seen.current = level;
     if (!completesVerification(before, level, marked(KYC_PENDING_MARK))) return;
     unmark(KYC_PENDING_MARK);
-    // Several screens mount this at once (banner + profile row); the mark makes it one event.
+    // Several screens mount this at once (Home's checklist + profile row); the mark makes it one event.
     if (once(ACTIVATION.kycCompleted)) capture(ACTIVATION.kycCompleted, { level });
   }, [level, loading, capture]);
 }

@@ -11,7 +11,6 @@ import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Em
 import { allocationsResource, positionsResource } from "@/entities/fund/model/fund-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
-import { VerificationBanner } from "@/features/kyc";
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
@@ -19,6 +18,7 @@ import { AnimatedNumber, SECTION_STAGGER, Settled, Stagger, StaggerItem } from "
 import { TipAnchor } from "@/shared/tips";
 import { formatCount, STAT_STRIP, StatDivider, StatTile } from "@/shared/ui/stat-tile";
 import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
+import { GetStartedSection } from "@/views/dashboard/ui/get-started-section";
 import { amountTone, kindBadge, kindLabel, kindMeta, networkLabel, stateLabel } from "@/views/operations/lib/format";
 
 // The card is a preview, not the record — `/operations` holds the full timeline. Asked
@@ -118,10 +118,11 @@ export function DashboardView() {
   return (
     <>
       {/* Above the grid rather than inside it: from `xl` the grid places its children on
-          explicitly numbered rows, and an onboarding notice that renumbered them would move
-          the whole desktop composition for one temporary state. It renders nothing at all
-          for a caller past tier 0, which is everyone the day after they verify. */}
-      <VerificationBanner className="mx-4 mt-5 lg:mx-8 lg:mt-6" />
+          explicitly numbered rows, and an onboarding block that renumbered them would move
+          the whole desktop composition for one temporary state. Above is also the point: for
+          an account with a step still to do, the path takes the top slot and the hero — a
+          zero over an empty plot — reads second. Once the path is done it is one quiet line. */}
+      <GetStartedSection className="mx-4 mt-5 lg:mx-8 lg:mt-6" />
       <Stagger
         step={SECTION_STAGGER}
         className="grid grid-cols-1 gap-4 px-4 pb-6 pt-5 lg:gap-6 lg:px-8 lg:pb-7 lg:pt-6 xl:grid-cols-(--dash-columns) xl:items-start"

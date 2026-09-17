@@ -24,8 +24,8 @@ import { cn } from "@/shared/lib/cn";
  *
  * Title and description are the caller's because what is closed differs between the screens;
  * the way out is identical, so it lives here — and it is the SAME dialog the profile card and
- * the home banner open (#213/#215), so the account of what verification involves is written
- * once rather than three times.
+ * Home's checklist open (#213/#215/#382), so the account of what verification involves is
+ * written once rather than three times.
  *
  * Parity with those two is not only the dialog, though: it is also the question of whether a
  * start may be offered AT ALL. A caller with a running case that cannot be resumed holds the
@@ -55,8 +55,9 @@ export function VerificationRequired({ title, description, className }: { title:
           <Skeleton className="h-9 w-32 rounded-md" />
         ) : canStart ? (
           <>
-            {/* i18n-max: 14 — the uikit Button is shrink-0. The number is the banner's, which
-                is the tighter of the two frames this key renders in; one string, one budget. */}
+            {/* i18n-max: 14 — the uikit Button is shrink-0. The number is the checklist row's
+                (`features/kyc/ui/verify-button`), the tighter of the two frames this key
+                renders in; one string, one budget. */}
             <Button type="button" onClick={() => setOpen(true)}>
               {t("kyc.verifyNow")}
             </Button>
