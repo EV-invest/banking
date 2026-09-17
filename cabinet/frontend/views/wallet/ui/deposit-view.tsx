@@ -11,7 +11,7 @@ import { Skeleton } from "@evinvest/uikit";
 import { isUnverified } from "@/entities/user/lib/kyc";
 import { profileResource } from "@/entities/user/model/profile-resource";
 import { depositAddressResource, walletResource } from "@/entities/wallet/model/wallet-resource";
-import { VerificationRequired } from "@/features/kyc";
+import { CustodyNote, VerificationRequired } from "@/features/kyc";
 import { errorMessage, isVerificationRequired } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
@@ -172,6 +172,8 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                   <p className="text-center text-sm text-ink-soft">{t("wallet.depositAddressUnavailable", { network: label })}</p>
                 )}
               </div>
+
+              <CustodyNote className="px-1" />
 
               <div className="flex gap-2.5 rounded-xl border border-accent-warn bg-accent-warn/5 px-4 py-3.5 lg:gap-3 lg:px-4.5 lg:py-4">
                 <TriangleAlert className="mt-px size-4 shrink-0 text-accent-warn" />

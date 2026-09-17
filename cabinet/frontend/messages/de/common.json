@@ -4255,6 +4255,10 @@
     "en": "Verified",
     "t": "Bestätigt"
   },
+  "kyc.custodyNote": {
+    "en": "Deposits are held in custody under your verified identity; nothing moves without it.",
+    "t": "Einzahlungen werden unter Ihrer verifizierten Identität verwahrt; ohne sie bewegt sich nichts."
+  },
   "kyc.verifyNow": {
     "en": "Verify now",
     "t": "Verifizieren"

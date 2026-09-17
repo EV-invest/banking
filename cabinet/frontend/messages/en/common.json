@@ -1063,6 +1063,7 @@
   "kyc.chip.review": "In review",
   "kyc.chip.reviewEta": "Most checks are decided within the hour.",
   "kyc.chip.verified": "Verified",
+  "kyc.custodyNote": "Deposits are held in custody under your verified identity; nothing moves without it.",
   "kyc.dialog.action": "Start verification",
   "kyc.dialog.afterBody": "We'll email you the result. You can close the tab — the check keeps running without it.",
   "kyc.dialog.afterTitle": "What happens next",

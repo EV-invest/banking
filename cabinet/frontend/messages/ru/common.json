@@ -4255,6 +4255,10 @@
     "en": "Verified",
     "t": "Проверен"
   },
+  "kyc.custodyNote": {
+    "en": "Deposits are held in custody under your verified identity; nothing moves without it.",
+    "t": "Депозиты хранятся в кастодиальном кошельке под вашей проверенной личностью; без неё ничего не перемещается."
+  },
   "kyc.verifyNow": {
     "en": "Verify now",
     "t": "Подтвердить"

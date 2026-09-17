@@ -13,6 +13,7 @@ import { type ReactNode, useId } from "react";
 
 import { Field, FieldDescription, FieldError, FieldLabel, Input } from "@evinvest/uikit";
 
+import { CustodyNote } from "@/features/kyc";
 import type { FundNav } from "@/shared/contracts";
 import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
@@ -73,6 +74,8 @@ export function SubscribeField({
         {action}
       </span>
       <SubscribeHint id={hintId} check={check} nav={nav} />
+      {/* Next to the money input, not in a footer: that is where a trust line is read. */}
+      <CustodyNote />
     </Field>
   );
 }

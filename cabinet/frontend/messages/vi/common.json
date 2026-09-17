@@ -4255,6 +4255,10 @@
     "en": "Verified",
     "t": "Đã xác minh"
   },
+  "kyc.custodyNote": {
+    "en": "Deposits are held in custody under your verified identity; nothing moves without it.",
+    "t": "Tiền nạp được lưu ký dưới danh tính đã xác minh của bạn; không có nó, không gì được chuyển đi."
+  },
   "kyc.verifyNow": {
     "en": "Verify now",
     "t": "Xác minh ngay"

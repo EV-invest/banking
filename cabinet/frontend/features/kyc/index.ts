@@ -25,4 +25,7 @@ export { Step } from "@/features/kyc/ui/step";
 export { StartVerificationRow } from "@/features/kyc/ui/start-verification-row";
 export { KycStatusChip, KycStatusDot } from "@/features/kyc/ui/status-chip";
 export { VerificationRequired } from "@/features/kyc/ui/verification-required";
+// The trust line beside a money input (#385): what verification protects, said next to the
+// figure it protects rather than in a footer the cabinet does not have.
+export { CustodyNote } from "@/features/kyc/ui/custody-note";
 export { VerifyButton } from "@/features/kyc/ui/verify-button";
