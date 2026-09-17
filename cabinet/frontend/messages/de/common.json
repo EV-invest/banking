@@ -4219,6 +4219,26 @@
     "en": "Your units",
     "t": "Ihre Anteile"
   },
+  "kyc.chip.attention": {
+    "en": "Needs attention",
+    "t": "Handlung nötig"
+  },
+  "kyc.chip.notStarted": {
+    "en": "Not verified",
+    "t": "Unbestätigt"
+  },
+  "kyc.chip.review": {
+    "en": "In review",
+    "t": "In Prüfung"
+  },
+  "kyc.chip.reviewEta": {
+    "en": "Most checks are decided within the hour.",
+    "t": "Die meisten Prüfungen sind innerhalb einer Stunde entschieden."
+  },
+  "kyc.chip.verified": {
+    "en": "Verified",
+    "t": "Bestätigt"
+  },
   "kyc.verifyNow": {
     "en": "Verify now",
     "t": "Verifizieren"

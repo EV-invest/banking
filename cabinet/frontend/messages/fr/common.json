@@ -4219,6 +4219,26 @@
     "en": "Your units",
     "t": "Vos parts"
   },
+  "kyc.chip.attention": {
+    "en": "Needs attention",
+    "t": "Action requise"
+  },
+  "kyc.chip.notStarted": {
+    "en": "Not verified",
+    "t": "Non vérifié"
+  },
+  "kyc.chip.review": {
+    "en": "In review",
+    "t": "En examen"
+  },
+  "kyc.chip.reviewEta": {
+    "en": "Most checks are decided within the hour.",
+    "t": "La plupart des vérifications sont tranchées en moins d'une heure."
+  },
+  "kyc.chip.verified": {
+    "en": "Verified",
+    "t": "Vérifié"
+  },
   "kyc.verifyNow": {
     "en": "Verify now",
     "t": "Vérifier"

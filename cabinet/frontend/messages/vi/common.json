@@ -4219,6 +4219,26 @@
     "en": "Your units",
     "t": "Đơn vị của bạn"
   },
+  "kyc.chip.attention": {
+    "en": "Needs attention",
+    "t": "Cần thao tác"
+  },
+  "kyc.chip.notStarted": {
+    "en": "Not verified",
+    "t": "Chưa xác minh"
+  },
+  "kyc.chip.review": {
+    "en": "In review",
+    "t": "Đang duyệt"
+  },
+  "kyc.chip.reviewEta": {
+    "en": "Most checks are decided within the hour.",
+    "t": "Hầu hết kiểm tra được quyết định trong vòng một giờ."
+  },
+  "kyc.chip.verified": {
+    "en": "Verified",
+    "t": "Đã xác minh"
+  },
   "kyc.verifyNow": {
     "en": "Verify now",
     "t": "Xác minh ngay"
