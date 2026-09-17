@@ -10,7 +10,8 @@ import type { Locale } from "@evinvest/i18n";
 // Relative with extensions, like `views/invest/lib/subscribe-check.ts`: the node test
 // runner resolves no `@/` alias, and this is one of the modules it runs.
 import { FUND_FIGURES } from "../config/fund-figures.ts";
-import { intlLocale } from "./intl-locale.ts";
+import { formatCalendarDate } from "./datetime.ts";
+import { formatPlainPct, formatWhole } from "./money.ts";
 
 export interface FormattedFundFigures {
   /** "16.4% +" / "16,4 % +" — the locale's percent, then the floor marker. */
@@ -23,23 +24,9 @@ export interface FormattedFundFigures {
 
 export function formatFundFigures(locale: Locale): FormattedFundFigures {
   const { targetIrrPct, closingTargetUsdM, asOf } = FUND_FIGURES;
-  const tag = intlLocale(locale);
-  const percent = new Intl.NumberFormat(tag, { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  const decimal = new Intl.NumberFormat(tag, { maximumFractionDigits: 0 });
   return {
-    targetIrr: `${percent.format(targetIrrPct / 100)} +`,
-    closingTarget: `$${decimal.format(closingTargetUsdM)}M`,
-    ...(asOf !== undefined && { asOf: formatCalendarDate(asOf, tag) }),
+    targetIrr: `${formatPlainPct(targetIrrPct, locale)} +`,
+    closingTarget: `$${formatWhole(closingTargetUsdM, locale)}M`,
+    ...(asOf !== undefined && { asOf: formatCalendarDate(asOf, locale) }),
   };
-}
-
-/**
- * A calendar date ("2026-09-17") in the locale's form. Parsed at UTC midnight so the day
- * never shifts for a reader west of Greenwich; an unparseable input comes back verbatim
- * rather than as "Invalid Date".
- */
-function formatCalendarDate(iso: string, tag: string): string {
-  const at = new Date(`${iso}T00:00:00Z`);
-  if (Number.isNaN(at.getTime())) return iso;
-  return new Intl.DateTimeFormat(tag, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(at);
 }

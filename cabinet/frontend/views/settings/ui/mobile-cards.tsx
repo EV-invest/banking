@@ -18,15 +18,12 @@ import { cabinetPath } from "@/shared/config/base-path";
 import type { Session } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
-import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
+import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, ROW_INTERACTIVE, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
 import { formatEmail } from "@/views/settings/lib/contact";
 import { CURRENCIES, type Form, labelOf, LANGUAGES, optionsOf, TIMEZONES } from "@/views/settings/lib/form";
 import { initialsOfName } from "@/views/settings/lib/format";
 import { FieldHint, ThemedSelect } from "@/views/settings/ui/fields";
 
-// The tappable rows are hand-written buttons (uikit has no list-row control), so each
-// carries its own focus ring.
-const ROW_BUTTON = "flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** `card-ProfileSummary` — the tap target into the full profile. */
 export function ProfileSummaryCard({ loading, name, email, verified }: { loading: boolean; name: string; email: string | null; verified: boolean }) {
@@ -102,7 +99,7 @@ export function PersonalDetailsCard({ onOpen }: { onOpen: () => void }) {
   const t = useT();
   return (
     <ListCard>
-      <button type="button" onClick={onOpen} className={ROW_BUTTON}>
+      <button type="button" onClick={onOpen} className={ROW_INTERACTIVE}>
         <RowLabel title={t("settings.nav.personal")} sub={t("settings.personalRowSub")} />
         <Chevron />
       </button>
@@ -130,7 +127,7 @@ function ExpandableRow({
 }) {
   return (
     <div className="flex min-w-0 flex-col">
-      <button type="button" onClick={onToggle} disabled={loading} aria-expanded={open} className={ROW_BUTTON}>
+      <button type="button" onClick={onToggle} disabled={loading} aria-expanded={open} className={ROW_INTERACTIVE}>
         <span className="shrink-0 text-sm font-medium text-ink">{label}</span>
         <span className="flex min-w-0 items-center gap-2">
           {loading ? <Skeleton className="h-3.5 w-28" /> : !open && <RowValue>{value || "—"}</RowValue>}
@@ -173,7 +170,7 @@ export function MobileSecurityCard({
       <button
         type="button"
         onClick={onOpenSessions}
-        className={ROW_BUTTON}
+        className={ROW_INTERACTIVE}
       >
         <RowLabel title={t("ui.trustedSessions")} sub={t("settings.trustedSessionsSub")} />
         <span className="flex shrink-0 items-center gap-2">
@@ -198,7 +195,7 @@ export function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
       <button
         type="button"
         onClick={onOpen}
-        className={ROW_BUTTON}
+        className={ROW_INTERACTIVE}
       >
         <RowLabel title={t("ui.deliveryTopics")} sub={t("settings.deliveryTopicsSub")} />
         <Chevron />

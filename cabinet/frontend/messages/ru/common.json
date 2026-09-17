@@ -5139,6 +5139,10 @@
     "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
     "t": "Депозиты хранятся в кастодиальных кошельках фонда в той сети, по которой вы их отправили, и записываются на вашу проверенную личность. Без неё ничего не перемещается, а выводы идут только на адрес, который вы указали."
   },
+  "settings.documents.published": {
+    "en": "Published documents",
+    "t": "Опубликованные документы"
+  },
   "settings.documents.risk": {
     "en": "Risk",
     "t": "Риск"

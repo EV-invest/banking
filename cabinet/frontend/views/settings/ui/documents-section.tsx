@@ -8,18 +8,17 @@
 // facts, nothing about reconciliation (#245's phase 1 is what would let it say more). The
 // terms, privacy and risk-disclosure pages the issue lists are `undefined` in
 // `SITE_DOCUMENTS` and so absent here, rather than links to `#` (#385).
+//
+// Built from the cabinet's `list-card` vocabulary rather than uikit's `Item*`, so the
+// cards read as one system with the Settings and Profile screens beside them.
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { ExternalLink, LifeBuoy } from "lucide-react";
+import { ExternalLink, Mail } from "lucide-react";
 
 import { SITE_DOCUMENTS, siteDocumentHref } from "@/shared/config/documents";
 import { SUPPORT_EMAIL } from "@/shared/config/support";
 import { cn } from "@/shared/lib/cn";
-import { Chevron, Hairline, ListCard, ListCardTitle, Row, RowLabel } from "@/shared/ui/list-card";
-
-// The tappable rows are hand-written anchors (uikit has no list-row control), so each
-// carries its own focus ring — the same string the mobile settings cards use.
-const ROW_LINK = "flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring";
+import { Chevron, Hairline, ListCard, ListCardTitle, ROW_INTERACTIVE, Row, RowLabel } from "@/shared/ui/list-card";
 
 export function DocumentsSection() {
   const t = useT();
@@ -27,23 +26,22 @@ export function DocumentsSection() {
   const { whitepaper } = SITE_DOCUMENTS;
   return (
     <div className="flex flex-col gap-4 lg:gap-4.5">
+      {whitepaper !== undefined && (
+        <ListCard className="lg:px-5.5">
+          <ListCardTitle>{t("settings.documents.published")}</ListCardTitle>
+          <Hairline />
+          {/* The site's page, in the reader's locale. A plain anchor, not the cabinet Link:
+              the destination is the conductor's, outside the zone — the same origin, so no
+              new tab; the caption says where it leads. */}
+          <a href={siteDocumentHref(locale, whitepaper)} className={ROW_INTERACTIVE}>
+            <RowLabel title={t("settings.documents.whitepaper")} sub={t("settings.documents.whitepaperSub")} />
+            <ExternalLink className="size-4 shrink-0 text-ink-soft" aria-hidden />
+          </a>
+        </ListCard>
+      )}
+
       <ListCard className="lg:px-5.5">
-        <ListCardTitle sub={t("settings.documents.sub")}>{t("settings.documents.title")}</ListCardTitle>
-        <Hairline />
-        {whitepaper !== undefined && (
-          <>
-            {/* The site's page, in the reader's locale. A plain anchor, not the cabinet
-                Link: the destination is the conductor's, outside the zone. */}
-            <a href={siteDocumentHref(locale, whitepaper)} target="_blank" rel="noopener" className={ROW_LINK}>
-              <RowLabel title={t("settings.documents.whitepaper")} sub={t("settings.documents.whitepaperSub")} />
-              <ExternalLink className="size-4 shrink-0 text-ink-soft" aria-hidden />
-            </a>
-            <Hairline />
-          </>
-        )}
-        <Row>
-          <RowLabel title={t("settings.documents.custody")} sub={t("settings.documents.custodySub")} />
-        </Row>
+        <ListCardTitle sub={t("settings.documents.custodySub")}>{t("settings.documents.custody")}</ListCardTitle>
         <Hairline />
         <Row>
           <RowLabel title={t("settings.documents.risk")} sub={t("auth.stat.risk")} />
@@ -54,10 +52,9 @@ export function DocumentsSection() {
         <ListCardTitle sub={t("settings.support.sub")}>{t("nav.support")}</ListCardTitle>
         <Hairline />
         {/* The same mailbox every KYC dead end offers — one address, one place it is set. */}
-        <a href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}`} className={cn(ROW_LINK, "gap-3")}>
-          <LifeBuoy className="size-4.5 shrink-0 text-primary-ink" aria-hidden />
+        <a href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}`} className={ROW_INTERACTIVE}>
           <RowLabel title={t("settings.support.email")} sub={SUPPORT_EMAIL} />
-          <Chevron />
+          <Mail className="size-4 shrink-0 text-ink-soft" aria-hidden />
         </a>
       </ListCard>
     </div>
@@ -70,14 +67,14 @@ export function MobileHelpCard({ onOpen }: { onOpen: () => void }) {
   const t = useT();
   return (
     <ListCard>
-      <button type="button" onClick={onOpen} className={cn(ROW_LINK, "w-full")}>
+      <button type="button" onClick={onOpen} className={cn(ROW_INTERACTIVE, "w-full")}>
         <RowLabel title={t("settings.documents.title")} sub={t("settings.documents.rowSub")} />
         <Chevron />
       </button>
       <Hairline />
-      <a href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}`} className={ROW_LINK}>
+      <a href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}`} className={ROW_INTERACTIVE}>
         <RowLabel title={t("nav.support")} sub={SUPPORT_EMAIL} />
-        <Chevron />
+        <Mail className="size-4 shrink-0 text-ink-soft" aria-hidden />
       </a>
     </ListCard>
   );

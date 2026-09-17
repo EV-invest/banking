@@ -23,8 +23,10 @@
 
 import type { Locale, Translate } from "@evinvest/i18n";
 
-import { intlLocale } from "@/shared/lib/intl-locale";
-import { hasUnixStamp, unixStampToDate } from "@/shared/lib/unix-stamp";
+// Relative with extensions, like `money.ts`: `fund-figures.test.ts` pulls this module
+// through the node runner, which resolves no `@/` alias.
+import { intlLocale } from "./intl-locale.ts";
+import { hasUnixStamp, unixStampToDate } from "./unix-stamp.ts";
 
 /** A unix-seconds stamp as an absolute local moment: "12 Mar 2026, 14:03". */
 export function formatMoment(stamp: string | null | undefined, locale: Locale): string {
@@ -44,6 +46,17 @@ export function formatDay(stamp: string | null | undefined, locale: Locale): str
   const at = toDate(stamp);
   if (!at) return "—";
   return at.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric" });
+}
+
+/**
+ * A calendar date ("2026-09-17") as a date alone, in the same form as {@link formatDay}.
+ * Parsed at UTC midnight so the day never shifts for a reader west of Greenwich; an
+ * unparseable input comes back verbatim rather than as "Invalid Date".
+ */
+export function formatCalendarDate(iso: string, locale: Locale): string {
+  const at = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(at.getTime())) return iso;
+  return at.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 /** Re-exported so a view needing "this stamp, else that one" has a single import. */

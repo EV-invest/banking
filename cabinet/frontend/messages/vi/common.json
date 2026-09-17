@@ -5139,6 +5139,10 @@
     "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
     "t": "Tiền nạp được giữ trong ví lưu ký của quỹ trên mạng bạn đã gửi, và ghi nhận dưới danh tính đã xác minh của bạn. Không gì được chuyển đi nếu thiếu danh tính đó, và tiền rút chỉ đi đến địa chỉ bạn yêu cầu."
   },
+  "settings.documents.published": {
+    "en": "Published documents",
+    "t": "Tài liệu đã công bố"
+  },
   "settings.documents.risk": {
     "en": "Risk",
     "t": "Rủi ro"

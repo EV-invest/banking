@@ -5139,6 +5139,10 @@
     "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
     "t": "Einzahlungen liegen in den Verwahr-Wallets des Fonds in dem Netzwerk, über das Sie sie gesendet haben, und werden Ihrer verifizierten Identität zugeordnet. Ohne diese Identität wird nichts bewegt, und Auszahlungen gehen nur an eine von Ihnen angegebene Adresse."
   },
+  "settings.documents.published": {
+    "en": "Published documents",
+    "t": "Veröffentlichte Dokumente"
+  },
   "settings.documents.risk": {
     "en": "Risk",
     "t": "Risiko"

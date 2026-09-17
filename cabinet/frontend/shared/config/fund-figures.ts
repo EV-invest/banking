@@ -2,7 +2,8 @@
 // typed.
 //
 // MIRROR of the public site's `frontend/shared/config/fund-figures.ts` (site_conductor),
-// field for field. The landing's hero and the cabinet's sign-in panel quote the same fund,
+// field for field — less its `kycTiming`, which is an English sentence and lives in the
+// catalogue here as `kyc.dialog.timeBody`. The landing's hero and the cabinet's sign-in panel quote the same fund,
 // and a visitor who clicks through from one to the other must not watch it contradict
 // itself (site_conductor #204, banking #385). The two repos share no code yet; until this
 // object moves into an `@evinvest/*` package, a change on either side is a change on both.
@@ -28,13 +29,6 @@ export interface FundFigures {
    * omit the sentence — never render a placeholder amount.
    */
   readonly minSubscriptionUsd: number | undefined;
-  /**
-   * The one owner-approved wording about KYC duration — the catalogue's
-   * `kyc.dialog.timeBody`. Kept here so no surface paraphrases it into a claim
-   * ("~10 minutes") nobody signed off. Not a figure: copy that quotes it still goes
-   * through `t()` with the catalogue key so the other locales exist.
-   */
-  readonly kycTiming: string;
 }
 
 export const FUND_FIGURES: FundFigures = {
@@ -42,5 +36,4 @@ export const FUND_FIGURES: FundFigures = {
   closingTargetUsdM: 100,
   asOf: undefined,
   minSubscriptionUsd: undefined,
-  kycTiming: "A few minutes to submit. Most checks are decided within the hour.",
 };

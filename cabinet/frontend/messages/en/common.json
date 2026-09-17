@@ -1302,6 +1302,7 @@
   "settings.devicesSignedIn": "{n, plural, one {# device currently signed in} other {# devices currently signed in}}",
   "settings.documents.custody": "How funds are held",
   "settings.documents.custodySub": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
+  "settings.documents.published": "Published documents",
   "settings.documents.risk": "Risk",
   "settings.documents.rowSub": "Whitepaper, how funds are held, risk",
   "settings.documents.sub": "What the fund has published, and how your money is held",

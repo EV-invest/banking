@@ -5139,6 +5139,10 @@
     "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
     "t": "Les dépôts sont conservés dans les portefeuilles de garde du fonds, sur le réseau par lequel vous les avez envoyés, et inscrits sous votre identité vérifiée. Rien n'est déplacé sans cette identité, et les retraits ne vont qu'à une adresse que vous demandez."
   },
+  "settings.documents.published": {
+    "en": "Published documents",
+    "t": "Documents publiés"
+  },
   "settings.documents.risk": {
     "en": "Risk",
     "t": "Risque"
