@@ -4375,6 +4375,10 @@
     "en": "Settings",
     "t": "Cài đặt"
   },
+  "nav.support": {
+    "en": "Support",
+    "t": "Hỗ trợ"
+  },
   "nav.treasury": {
     "en": "Treasury",
     "t": "Ngân quỹ"
@@ -5123,6 +5127,38 @@
     "en": "{n, plural, one {# device currently signed in} other {# devices currently signed in}}",
     "t": "{n, plural, other {# thiết bị đang đăng nhập}}"
   },
+  "settings.documents.custody": {
+    "en": "How funds are held",
+    "t": "Tiền được giữ như thế nào"
+  },
+  "settings.documents.custodySub": {
+    "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
+    "t": "Tiền nạp được giữ trong ví lưu ký của quỹ trên mạng bạn đã gửi, và ghi nhận dưới danh tính đã xác minh của bạn. Không gì được chuyển đi nếu thiếu danh tính đó, và tiền rút chỉ đi đến địa chỉ bạn yêu cầu."
+  },
+  "settings.documents.risk": {
+    "en": "Risk",
+    "t": "Rủi ro"
+  },
+  "settings.documents.rowSub": {
+    "en": "Whitepaper, how funds are held, risk",
+    "t": "Sách trắng, lưu ký tiền, rủi ro"
+  },
+  "settings.documents.sub": {
+    "en": "What the fund has published, and how your money is held",
+    "t": "Quỹ đã công bố gì và tiền của bạn được giữ ra sao"
+  },
+  "settings.documents.title": {
+    "en": "Documents and disclosures",
+    "t": "Tài liệu và công bố"
+  },
+  "settings.documents.whitepaper": {
+    "en": "Whitepaper",
+    "t": "Sách trắng"
+  },
+  "settings.documents.whitepaperSub": {
+    "en": "The fund's thesis and structure, on the public site",
+    "t": "Luận điểm và cấu trúc của quỹ, trên trang công khai"
+  },
   "settings.fixHighlighted": {
     "en": "Please fix the highlighted fields",
     "t": "Vui lòng sửa các trường được đánh dấu"
@@ -5142,6 +5178,14 @@
   "settings.group.cabinetSub": {
     "en": "How the cabinet looks and how it reaches you",
     "t": "Cabinet trông thế nào và liên hệ với bạn ra sao"
+  },
+  "settings.group.help": {
+    "en": "Help",
+    "t": "Trợ giúp"
+  },
+  "settings.group.helpSub": {
+    "en": "What the fund has published, and how to reach a person",
+    "t": "Quỹ đã công bố gì và cách liên hệ với một người thật"
   },
   "settings.group.profileSub": {
     "en": "Who you are and how your account is protected",
@@ -5178,6 +5222,10 @@
   "settings.hint.timeZone": {
     "en": "Saved to your account. The cabinet itself shows times in your device's time zone.",
     "t": "Lưu vào tài khoản của bạn. Cabinet hiển thị thời gian theo múi giờ của thiết bị bạn dùng."
+  },
+  "settings.nav.documents": {
+    "en": "Documents",
+    "t": "Tài liệu"
   },
   "settings.nav.personal": {
     "en": "Personal details",
@@ -5270,6 +5318,14 @@
   "settings.subtitle": {
     "en": "Manage your account, security and access",
     "t": "Quản lý tài khoản, bảo mật và quyền truy cập của bạn"
+  },
+  "settings.support.email": {
+    "en": "Email support",
+    "t": "Gửi email cho hỗ trợ"
+  },
+  "settings.support.sub": {
+    "en": "A person reads every message",
+    "t": "Mỗi tin nhắn đều có người đọc"
   },
   "settings.thisDevice": {
     "en": "This device",

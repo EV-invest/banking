@@ -4375,6 +4375,10 @@
     "en": "Settings",
     "t": "Optionen"
   },
+  "nav.support": {
+    "en": "Support",
+    "t": "Hilfe"
+  },
   "nav.treasury": {
     "en": "Treasury",
     "t": "Treasury"
@@ -5123,6 +5127,38 @@
     "en": "{n, plural, one {# device currently signed in} other {# devices currently signed in}}",
     "t": "{n, plural, one {# Gerät derzeit angemeldet} other {# Geräte derzeit angemeldet}}"
   },
+  "settings.documents.custody": {
+    "en": "How funds are held",
+    "t": "So werden Mittel verwahrt"
+  },
+  "settings.documents.custodySub": {
+    "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
+    "t": "Einzahlungen liegen in den Verwahr-Wallets des Fonds in dem Netzwerk, über das Sie sie gesendet haben, und werden Ihrer verifizierten Identität zugeordnet. Ohne diese Identität wird nichts bewegt, und Auszahlungen gehen nur an eine von Ihnen angegebene Adresse."
+  },
+  "settings.documents.risk": {
+    "en": "Risk",
+    "t": "Risiko"
+  },
+  "settings.documents.rowSub": {
+    "en": "Whitepaper, how funds are held, risk",
+    "t": "Whitepaper, Verwahrung, Risiko"
+  },
+  "settings.documents.sub": {
+    "en": "What the fund has published, and how your money is held",
+    "t": "Was der Fonds veröffentlicht hat und wie Ihr Geld verwahrt wird"
+  },
+  "settings.documents.title": {
+    "en": "Documents and disclosures",
+    "t": "Dokumente und Hinweise"
+  },
+  "settings.documents.whitepaper": {
+    "en": "Whitepaper",
+    "t": "Whitepaper"
+  },
+  "settings.documents.whitepaperSub": {
+    "en": "The fund's thesis and structure, on the public site",
+    "t": "These und Struktur des Fonds auf der öffentlichen Website"
+  },
   "settings.fixHighlighted": {
     "en": "Please fix the highlighted fields",
     "t": "Bitte korrigieren Sie die markierten Felder"
@@ -5142,6 +5178,14 @@
   "settings.group.cabinetSub": {
     "en": "How the cabinet looks and how it reaches you",
     "t": "Wie das Cabinet aussieht und wie es Sie erreicht"
+  },
+  "settings.group.help": {
+    "en": "Help",
+    "t": "Hilfe"
+  },
+  "settings.group.helpSub": {
+    "en": "What the fund has published, and how to reach a person",
+    "t": "Was der Fonds veröffentlicht hat und wie Sie einen Menschen erreichen"
   },
   "settings.group.profileSub": {
     "en": "Who you are and how your account is protected",
@@ -5178,6 +5222,10 @@
   "settings.hint.timeZone": {
     "en": "Saved to your account. The cabinet itself shows times in your device's time zone.",
     "t": "Im Konto gespeichert. Das Cabinet selbst zeigt Zeiten in der Zeitzone Ihres Geräts."
+  },
+  "settings.nav.documents": {
+    "en": "Documents",
+    "t": "Dokumente"
   },
   "settings.nav.personal": {
     "en": "Personal details",
@@ -5270,6 +5318,14 @@
   "settings.subtitle": {
     "en": "Manage your account, security and access",
     "t": "Verwalten Sie Konto, Sicherheit und Zugriff"
+  },
+  "settings.support.email": {
+    "en": "Email support",
+    "t": "Support per E-Mail"
+  },
+  "settings.support.sub": {
+    "en": "A person reads every message",
+    "t": "Jede Nachricht liest ein Mensch"
   },
   "settings.thisDevice": {
     "en": "This device",

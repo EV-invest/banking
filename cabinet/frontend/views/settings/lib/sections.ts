@@ -7,18 +7,20 @@ import type { TipKey } from "@/shared/tips";
 import type { Form } from "@/views/settings/lib/form";
 
 /**
- * Two groups. "Cabinet" is how the cabinet behaves for the reader — what it displays and
+ * Three groups. "Cabinet" is how the cabinet behaves for the reader — what it displays and
  * how it reaches them; "Profile" is who the reader is and how their account is protected.
  * The split exists because the two used to share one "General" pane and nobody could say
- * where a given thing was changed.
+ * where a given thing was changed. "Help" is neither: what the fund has published and how
+ * to reach a person (#385) — the cabinet has no footer to carry those, so they live here.
  */
-export const SECTIONS = ["preferences", "notifications", "personal", "security", "sessions"] as const;
+export const SECTIONS = ["preferences", "notifications", "personal", "security", "sessions", "documents"] as const;
 export type Section = (typeof SECTIONS)[number];
 export const DEFAULT_SECTION: Section = "preferences";
 
-export const GROUPS: ReadonlyArray<{ id: "cabinet" | "profile"; sections: readonly Section[] }> = [
+export const GROUPS: ReadonlyArray<{ id: "cabinet" | "profile" | "help"; sections: readonly Section[] }> = [
   { id: "cabinet", sections: ["preferences", "notifications"] },
   { id: "profile", sections: ["personal", "security", "sessions"] },
+  { id: "help", sections: ["documents"] },
 ];
 
 /** A `?section=` value as a section, or the default for anything that is not one. */
@@ -30,7 +32,7 @@ export function sectionFrom(raw: string | undefined): Section {
  * The sections the mobile stack pushes as their own screen. Preferences and Security are
  * root-screen cards there, so a deep link to either lands on the root.
  */
-export const PUSHABLE = ["personal", "notifications", "sessions"] as const;
+export const PUSHABLE = ["personal", "notifications", "sessions", "documents"] as const;
 export type Pushable = (typeof PUSHABLE)[number];
 export function pushableOf(section: Section): Pushable | null {
   return (PUSHABLE as readonly string[]).includes(section) ? (section as Pushable) : null;

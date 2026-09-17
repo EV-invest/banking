@@ -4375,6 +4375,10 @@
     "en": "Settings",
     "t": "Paramètres"
   },
+  "nav.support": {
+    "en": "Support",
+    "t": "Assistance"
+  },
   "nav.treasury": {
     "en": "Treasury",
     "t": "Trésorerie"
@@ -5123,6 +5127,38 @@
     "en": "{n, plural, one {# device currently signed in} other {# devices currently signed in}}",
     "t": "{n, plural, one {# appareil actuellement connecté} many {# appareils actuellement connectés} other {# appareils actuellement connectés}}"
   },
+  "settings.documents.custody": {
+    "en": "How funds are held",
+    "t": "Comment les fonds sont détenus"
+  },
+  "settings.documents.custodySub": {
+    "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
+    "t": "Les dépôts sont conservés dans les portefeuilles de garde du fonds, sur le réseau par lequel vous les avez envoyés, et inscrits sous votre identité vérifiée. Rien n'est déplacé sans cette identité, et les retraits ne vont qu'à une adresse que vous demandez."
+  },
+  "settings.documents.risk": {
+    "en": "Risk",
+    "t": "Risque"
+  },
+  "settings.documents.rowSub": {
+    "en": "Whitepaper, how funds are held, risk",
+    "t": "Livre blanc, garde des fonds, risque"
+  },
+  "settings.documents.sub": {
+    "en": "What the fund has published, and how your money is held",
+    "t": "Ce que le fonds a publié et comment votre argent est détenu"
+  },
+  "settings.documents.title": {
+    "en": "Documents and disclosures",
+    "t": "Documents et informations"
+  },
+  "settings.documents.whitepaper": {
+    "en": "Whitepaper",
+    "t": "Livre blanc"
+  },
+  "settings.documents.whitepaperSub": {
+    "en": "The fund's thesis and structure, on the public site",
+    "t": "La thèse et la structure du fonds, sur le site public"
+  },
   "settings.fixHighlighted": {
     "en": "Please fix the highlighted fields",
     "t": "Veuillez corriger les champs signalés"
@@ -5142,6 +5178,14 @@
   "settings.group.cabinetSub": {
     "en": "How the cabinet looks and how it reaches you",
     "t": "L’apparence de votre espace et la façon dont il vous contacte"
+  },
+  "settings.group.help": {
+    "en": "Help",
+    "t": "Aide"
+  },
+  "settings.group.helpSub": {
+    "en": "What the fund has published, and how to reach a person",
+    "t": "Ce que le fonds a publié et comment joindre une personne"
   },
   "settings.group.profileSub": {
     "en": "Who you are and how your account is protected",
@@ -5178,6 +5222,10 @@
   "settings.hint.timeZone": {
     "en": "Saved to your account. The cabinet itself shows times in your device's time zone.",
     "t": "Enregistré sur votre compte. Votre espace affiche les heures dans le fuseau horaire de votre appareil."
+  },
+  "settings.nav.documents": {
+    "en": "Documents",
+    "t": "Documents"
   },
   "settings.nav.personal": {
     "en": "Personal details",
@@ -5270,6 +5318,14 @@
   "settings.subtitle": {
     "en": "Manage your account, security and access",
     "t": "Gérez votre compte, votre sécurité et vos accès"
+  },
+  "settings.support.email": {
+    "en": "Email support",
+    "t": "Écrire à l'assistance"
+  },
+  "settings.support.sub": {
+    "en": "A person reads every message",
+    "t": "Une personne lit chaque message"
   },
   "settings.thisDevice": {
     "en": "This device",
