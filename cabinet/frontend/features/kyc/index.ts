@@ -17,6 +17,9 @@
 // One export beats a fourth view reaching into `model/`.
 export { useKycStatus, type KycGate } from "@/features/kyc/model/use-kyc-status";
 export { useKycGate } from "@/features/kyc/model/use-kyc-gate";
+// `Step` is the one presentational exception: the login page tells a newcomer the same
+// three-step story before they sign in (#391), and two copies of the row would drift.
+export { Step } from "@/features/kyc/ui/step";
 export { StartVerificationRow } from "@/features/kyc/ui/start-verification-row";
 export { VerificationRequired } from "@/features/kyc/ui/verification-required";
 export { VerifyButton } from "@/features/kyc/ui/verify-button";

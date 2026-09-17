@@ -49,7 +49,7 @@ export function SignInPanel({
           {signup ? t("auth.switch.haveAccount") : t("auth.switch.newHere")}{" "}
           <Link
             href={switchHref}
-            className="rounded-sm font-medium text-primary-ink underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-sm font-medium text-primary-ink underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {signup ? t("auth.switch.signIn") : t("auth.switch.openAccount")}
           </Link>
