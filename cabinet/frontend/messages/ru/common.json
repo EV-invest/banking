@@ -3755,6 +3755,18 @@
     "en": "Couldn't load your wallet",
     "t": "Не удалось загрузить ваш кошелёк"
   },
+  "invest.about.risk": {
+    "en": "Units can fall in value as well as rise. The NAV is set by the operator's valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.",
+    "t": "Паи могут как расти, так и падать в цене. NAV задаётся оценкой оператора, а не рыночной ценой, и прошлые отметки ничего не говорят о будущих. Деньги возвращаются только после расчёта по погашению или когда покупатель заберёт ваши паи в книге. Инвестируйте только то, что можете оставить надолго."
+  },
+  "invest.about.riskTitle": {
+    "en": "Risk.",
+    "t": "Риск."
+  },
+  "invest.about.title": {
+    "en": "About this product",
+    "t": "О продукте"
+  },
   "invest.accruedOnHolding": {
     "en": "Accrued on your holding",
     "t": "Начислено на вашу позицию"
@@ -3774,6 +3786,10 @@
   "invest.awaitingSettlement": {
     "en": "Awaiting settlement",
     "t": "Ожидает исполнения"
+  },
+  "invest.backing.cash": {
+    "en": "Cash-backed",
+    "t": "Обеспечен кэшем"
   },
   "invest.backing.inKind": {
     "en": "In kind",
@@ -3835,9 +3851,81 @@
     "en": "Cost basis",
     "t": "Цена приобретения"
   },
+  "invest.cta.locked": {
+    "en": "Locked: ask for access",
+    "t": "Закрыто: запросить доступ"
+  },
+  "invest.cta.lockedSubject": {
+    "en": "Access to {title}",
+    "t": "Доступ к {title}"
+  },
+  "invest.cta.trade": {
+    "en": "Trade on the book",
+    "t": "Торговать в книге"
+  },
+  "invest.cta.verify": {
+    "en": "Verify to invest",
+    "t": "Пройти проверку"
+  },
   "invest.dustHint": {
     "en": "Too small to buy a whole unit at {nav} — increase the amount.",
     "t": "Слишком мало, чтобы купить целый пай по {nav} — увеличьте сумму."
+  },
+  "invest.facts.backing": {
+    "en": "Backing",
+    "t": "Обеспечение"
+  },
+  "invest.facts.backingCash": {
+    "en": "Cash held by the fund",
+    "t": "Кэш на балансе фонда"
+  },
+  "invest.facts.backingInKind": {
+    "en": "Asset held off-platform",
+    "t": "Актив вне платформы"
+  },
+  "invest.facts.capacity": {
+    "en": "Capacity left",
+    "t": "Свободный лимит"
+  },
+  "invest.facts.feeHeadline": {
+    "en": "{management} p.a. + {performance} of the gain",
+    "t": "{management} годовых + {performance} от прироста"
+  },
+  "invest.facts.feeHeadlineHurdle": {
+    "en": "{management} p.a. + {performance} of the gain above {hurdle} p.a.",
+    "t": "{management} годовых + {performance} от прироста сверх {hurdle} годовых"
+  },
+  "invest.facts.feeUnset": {
+    "en": "Not published yet",
+    "t": "Ещё не опубликованы"
+  },
+  "invest.facts.fees": {
+    "en": "Fees",
+    "t": "Комиссии"
+  },
+  "invest.facts.lastValuation": {
+    "en": "Last valuation",
+    "t": "Последняя оценка"
+  },
+  "invest.facts.liquidity": {
+    "en": "Liquidity",
+    "t": "Ликвидность"
+  },
+  "invest.facts.liquidityBook": {
+    "en": "Sold on the book",
+    "t": "Продажа в книге"
+  },
+  "invest.facts.liquidityNav": {
+    "en": "Redeem at NAV, queued",
+    "t": "Погашение по NAV, в очереди"
+  },
+  "invest.facts.liquidityNavOrBook": {
+    "en": "Redeem at NAV (queued) or trade on the book",
+    "t": "Погашение по NAV (в очереди) или торговля в книге"
+  },
+  "invest.facts.markedOn": {
+    "en": "Marked {date}",
+    "t": "Оценка от {date}"
   },
   "invest.feeChangeProposed": {
     "en": "A change is proposed and awaits the owners: {terms}.",
@@ -4012,8 +4100,8 @@
     "t": "Подписки выпускают паи по текущему NAV. Как только достигнут лимит, фонд перестаёт принимать новые средства; погашения это не затрагивает."
   },
   "invest.title": {
-    "en": "Your fund shares",
-    "t": "Ваши паи фондов"
+    "en": "Invest",
+    "t": "Инвестировать"
   },
   "invest.topUp": {
     "en": "Top up",

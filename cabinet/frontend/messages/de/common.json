@@ -3755,6 +3755,18 @@
     "en": "Couldn't load your wallet",
     "t": "Ihr Wallet konnte nicht geladen werden"
   },
+  "invest.about.risk": {
+    "en": "Units can fall in value as well as rise. The NAV is set by the operator's valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.",
+    "t": "Anteile können sowohl an Wert verlieren als auch gewinnen. Der NAV ergibt sich aus der Bewertung des Betreibers, nicht aus einem Marktpreis, und frühere Bewertungen sagen nichts über künftige aus. Geld fließt erst zurück, wenn eine Rücknahme abgerechnet ist oder ein Käufer Ihre Anteile im Orderbuch übernimmt. Investieren Sie nur, was Sie langfristig entbehren können."
+  },
+  "invest.about.riskTitle": {
+    "en": "Risk.",
+    "t": "Risiko."
+  },
+  "invest.about.title": {
+    "en": "About this product",
+    "t": "Über dieses Produkt"
+  },
   "invest.accruedOnHolding": {
     "en": "Accrued on your holding",
     "t": "Auf Ihre Position abgegrenzt"
@@ -3774,6 +3786,10 @@
   "invest.awaitingSettlement": {
     "en": "Awaiting settlement",
     "t": "Wartet auf Abrechnung"
+  },
+  "invest.backing.cash": {
+    "en": "Cash-backed",
+    "t": "Bargedeckt"
   },
   "invest.backing.inKind": {
     "en": "In kind",
@@ -3835,9 +3851,81 @@
     "en": "Cost basis",
     "t": "Anschaffungskosten"
   },
+  "invest.cta.locked": {
+    "en": "Locked: ask for access",
+    "t": "Gesperrt: Zugang anfragen"
+  },
+  "invest.cta.lockedSubject": {
+    "en": "Access to {title}",
+    "t": "Zugang zu {title}"
+  },
+  "invest.cta.trade": {
+    "en": "Trade on the book",
+    "t": "Im Orderbuch handeln"
+  },
+  "invest.cta.verify": {
+    "en": "Verify to invest",
+    "t": "Verifizieren, um zu investieren"
+  },
   "invest.dustHint": {
     "en": "Too small to buy a whole unit at {nav} — increase the amount.",
     "t": "Zu klein für einen ganzen Anteil zu {nav} — erhöhen Sie den Betrag."
+  },
+  "invest.facts.backing": {
+    "en": "Backing",
+    "t": "Deckung"
+  },
+  "invest.facts.backingCash": {
+    "en": "Cash held by the fund",
+    "t": "Bargeld im Fonds"
+  },
+  "invest.facts.backingInKind": {
+    "en": "Asset held off-platform",
+    "t": "Vermögenswert außerhalb der Plattform"
+  },
+  "invest.facts.capacity": {
+    "en": "Capacity left",
+    "t": "Freie Kapazität"
+  },
+  "invest.facts.feeHeadline": {
+    "en": "{management} p.a. + {performance} of the gain",
+    "t": "{management} p. a. + {performance} vom Gewinn"
+  },
+  "invest.facts.feeHeadlineHurdle": {
+    "en": "{management} p.a. + {performance} of the gain above {hurdle} p.a.",
+    "t": "{management} p. a. + {performance} vom Gewinn über {hurdle} p. a."
+  },
+  "invest.facts.feeUnset": {
+    "en": "Not published yet",
+    "t": "Noch nicht veröffentlicht"
+  },
+  "invest.facts.fees": {
+    "en": "Fees",
+    "t": "Gebühren"
+  },
+  "invest.facts.lastValuation": {
+    "en": "Last valuation",
+    "t": "Letzte Bewertung"
+  },
+  "invest.facts.liquidity": {
+    "en": "Liquidity",
+    "t": "Liquidität"
+  },
+  "invest.facts.liquidityBook": {
+    "en": "Sold on the book",
+    "t": "Verkauf im Orderbuch"
+  },
+  "invest.facts.liquidityNav": {
+    "en": "Redeem at NAV, queued",
+    "t": "Rücknahme zum NAV, in der Warteschlange"
+  },
+  "invest.facts.liquidityNavOrBook": {
+    "en": "Redeem at NAV (queued) or trade on the book",
+    "t": "Rücknahme zum NAV (Warteschlange) oder Handel im Orderbuch"
+  },
+  "invest.facts.markedOn": {
+    "en": "Marked {date}",
+    "t": "Bewertet am {date}"
   },
   "invest.feeChangeProposed": {
     "en": "A change is proposed and awaits the owners: {terms}.",
@@ -4012,8 +4100,8 @@
     "t": "Zeichnungen geben Anteile zum aktuellen NAV aus. Ist das Limit erreicht, nimmt der Fonds kein neues Geld mehr an; Rückgaben sind davon nicht betroffen."
   },
   "invest.title": {
-    "en": "Your fund shares",
-    "t": "Ihre Fondsanteile"
+    "en": "Invest",
+    "t": "Investieren"
   },
   "invest.topUp": {
     "en": "Top up",

@@ -3755,6 +3755,18 @@
     "en": "Couldn't load your wallet",
     "t": "Không tải được ví của bạn"
   },
+  "invest.about.risk": {
+    "en": "Units can fall in value as well as rise. The NAV is set by the operator's valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.",
+    "t": "Đơn vị có thể giảm giá cũng như tăng giá. NAV do định giá của nhà điều hành quyết định, không phải giá thị trường, và các mốc định giá trước không nói lên gì về tương lai. Tiền chỉ quay lại khi lệnh rút được tất toán hoặc có người mua nhận đơn vị của bạn trên sổ lệnh. Chỉ đầu tư số tiền bạn có thể để lại lâu dài."
+  },
+  "invest.about.riskTitle": {
+    "en": "Risk.",
+    "t": "Rủi ro."
+  },
+  "invest.about.title": {
+    "en": "About this product",
+    "t": "Về sản phẩm này"
+  },
   "invest.accruedOnHolding": {
     "en": "Accrued on your holding",
     "t": "Tích lũy trên khoản nắm giữ của bạn"
@@ -3774,6 +3786,10 @@
   "invest.awaitingSettlement": {
     "en": "Awaiting settlement",
     "t": "Chờ tất toán"
+  },
+  "invest.backing.cash": {
+    "en": "Cash-backed",
+    "t": "Bảo đảm bằng tiền mặt"
   },
   "invest.backing.inKind": {
     "en": "In kind",
@@ -3835,9 +3851,81 @@
     "en": "Cost basis",
     "t": "Giá gốc"
   },
+  "invest.cta.locked": {
+    "en": "Locked: ask for access",
+    "t": "Đã khóa: yêu cầu truy cập"
+  },
+  "invest.cta.lockedSubject": {
+    "en": "Access to {title}",
+    "t": "Truy cập {title}"
+  },
+  "invest.cta.trade": {
+    "en": "Trade on the book",
+    "t": "Giao dịch trên sổ lệnh"
+  },
+  "invest.cta.verify": {
+    "en": "Verify to invest",
+    "t": "Xác minh để đầu tư"
+  },
   "invest.dustHint": {
     "en": "Too small to buy a whole unit at {nav} — increase the amount.",
     "t": "Quá nhỏ để mua trọn một đơn vị quỹ ở mức {nav} — hãy tăng số tiền."
+  },
+  "invest.facts.backing": {
+    "en": "Backing",
+    "t": "Tài sản bảo đảm"
+  },
+  "invest.facts.backingCash": {
+    "en": "Cash held by the fund",
+    "t": "Tiền mặt do quỹ nắm giữ"
+  },
+  "invest.facts.backingInKind": {
+    "en": "Asset held off-platform",
+    "t": "Tài sản nắm giữ ngoài nền tảng"
+  },
+  "invest.facts.capacity": {
+    "en": "Capacity left",
+    "t": "Hạn mức còn lại"
+  },
+  "invest.facts.feeHeadline": {
+    "en": "{management} p.a. + {performance} of the gain",
+    "t": "{management}/năm + {performance} lợi nhuận"
+  },
+  "invest.facts.feeHeadlineHurdle": {
+    "en": "{management} p.a. + {performance} of the gain above {hurdle} p.a.",
+    "t": "{management}/năm + {performance} lợi nhuận vượt {hurdle}/năm"
+  },
+  "invest.facts.feeUnset": {
+    "en": "Not published yet",
+    "t": "Chưa công bố"
+  },
+  "invest.facts.fees": {
+    "en": "Fees",
+    "t": "Phí"
+  },
+  "invest.facts.lastValuation": {
+    "en": "Last valuation",
+    "t": "Định giá gần nhất"
+  },
+  "invest.facts.liquidity": {
+    "en": "Liquidity",
+    "t": "Thanh khoản"
+  },
+  "invest.facts.liquidityBook": {
+    "en": "Sold on the book",
+    "t": "Bán trên sổ lệnh"
+  },
+  "invest.facts.liquidityNav": {
+    "en": "Redeem at NAV, queued",
+    "t": "Rút theo NAV, theo hàng đợi"
+  },
+  "invest.facts.liquidityNavOrBook": {
+    "en": "Redeem at NAV (queued) or trade on the book",
+    "t": "Rút theo NAV (hàng đợi) hoặc giao dịch trên sổ lệnh"
+  },
+  "invest.facts.markedOn": {
+    "en": "Marked {date}",
+    "t": "Định giá ngày {date}"
   },
   "invest.feeChangeProposed": {
     "en": "A change is proposed and awaits the owners: {terms}.",
@@ -4012,8 +4100,8 @@
     "t": "Lệnh đăng ký phát hành đơn vị quỹ theo NAV hiện tại. Khi chạm trần, quỹ ngừng nhận tiền mới; các lệnh hoàn vốn không bị ảnh hưởng."
   },
   "invest.title": {
-    "en": "Your fund shares",
-    "t": "Phần quỹ bạn sở hữu"
+    "en": "Invest",
+    "t": "Đầu tư"
   },
   "invest.topUp": {
     "en": "Top up",
