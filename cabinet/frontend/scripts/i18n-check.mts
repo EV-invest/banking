@@ -106,6 +106,8 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Live",
     "Max",
     "Onboarding",
+    // Duden lists it as a German noun; "quelloffen" is the adjective nobody uses as a label.
+    "Open Source",
     "Operator",
     "ORDERS",
     "{n, plural, one {# Order} other {# Orders}}",

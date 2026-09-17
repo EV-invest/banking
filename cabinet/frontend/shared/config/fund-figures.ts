@@ -8,10 +8,10 @@
 // itself (site_conductor #204, banking #385). The two repos share no code yet; until this
 // object moves into an `@evinvest/*` package, a change on either side is a change on both.
 //
-// TODO(#385): owner to confirm figures and as-of date. The values below are what the site
-// already showed before they were centralised, not sourced facts; `asOf` stays `undefined`
-// — and the "as of" line stays off the page — until the owner names the date the figures
-// were confirmed on.
+// Confirmed by the owner on 2026-09-18 (#204, #385): the values are the ones the site
+// showed before they were centralised, and `asOf` is the confirmation date. Set `asOf`
+// back to `undefined` to take the "as of" line off the page while a new figure is pending
+// — a placeholder date must never render as a fact.
 
 export interface FundFigures {
   /** Target IRR, percent per annum. Rendered as a floor: "16.4% +". */
@@ -34,6 +34,6 @@ export interface FundFigures {
 export const FUND_FIGURES: FundFigures = {
   targetIrrPct: 16.4,
   closingTargetUsdM: 100,
-  asOf: undefined,
+  asOf: "2026-09-18",
   minSubscriptionUsd: undefined,
 };
