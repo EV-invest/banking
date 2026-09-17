@@ -4,10 +4,16 @@
 //!
 //! Two pieces of shared state force these tests to run one at a time, and both are
 //! deliberate features of the design rather than test friction:
-//!   - **at most one consilium may be OPEN across the whole database** (the partial unique
-//!     index that removes the concurrent-approval race), and
+//!   - **at most one consilium may be OPEN per source claim** (the partial unique index
+//!     that removes the concurrent-approval race), and every generic test here opens a
+//!     holder grant over the one `fee` allocation, and
 //!   - **the owner roster is global** — `users.role = 'owner'` has no per-test scope, since
 //!     the fund has exactly one set of owners.
+//!
+//! The generic mechanics — quorum, tokens, votes, expiry, the roster rules — are driven
+//! through the HOLDER GRANT (#245): units of the `fee` allocation for a person, the one
+//! kind whose effect is self-contained (an issuance row, no order, no rail). The revenue
+//! payout those mechanics were first written against is retired and pinned as such.
 //!
 //! So every test takes [`exclusive_governance`] and starts from [`reset_governance`], which
 //! closes any lingering open consilium and clears the roster. That setup is self-healing: a
@@ -18,20 +24,21 @@ use std::sync::Arc;
 use domain::{
 	auth::AuthSubject,
 	balance::{LedgerAccountKey, ServiceId, TransferCode, ValuationId},
-	consilium::{ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
+	consilium::{ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, HolderGrantTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
+	issuance::{IdempotencyKey, UnitHolder},
 	money::{Nav, Network, Shares, Usdt, WalletAddress},
 	users::{Email, UserId},
 };
 use piggybank_core::{
-	application::{consilium as consilium_app, funds as funds_app, payments as payments_app},
+	application::{consilium as consilium_app, funds as funds_app, issuance as issuance_app, payments as payments_app},
 	config::KycGate,
 	infrastructure::{
 		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, fee_policy_changes::PgFeePolicyChanges, issuance::PgUnitIssuances, nav::PgNav, outflow::PgOutflowPolicy,
 		payments::PgPayments, redemptions::PgRedemptions, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
 	},
 	ports::{
-		AllocationRegistry, ConsiliumRepository, LedgerTransfer, NavMarks, PaymentRepository, UserRepository, WithdrawalRepository,
+		AllocationRegistry, ConsiliumRepository, LedgerTransfer, NavMarks, PaymentRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository,
 		consilium::{ConsiliumView, MAX_CODE_ATTEMPTS, VoteAudit},
 		ledger::Ledger,
 	},
@@ -42,11 +49,10 @@ use uuid::Uuid;
 
 mod common;
 
-/// A valid BEP20 destination — the payout's on-chain target in every test here.
+/// A valid BEP20 destination — the retired payout's on-chain target.
 const PAYOUT_ADDRESS: &str = "0x52908400098527886E0F7030069857D2E4169EE7";
 
-/// The one rail these tests configure. `check_revenue_payout` refuses an unconfigured one,
-/// which is a behaviour of its own (asserted in `an_impossible_payout_is_refused_at_open`).
+/// The one rail these tests configure.
 const CONFIGURED: [Network; 1] = [Network::Bep20];
 
 const APPROVAL_URL_BASE: &str = "https://example.test/consilium";
@@ -128,7 +134,8 @@ fn now() -> i64 {
 	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
 }
 
-fn terms(amount: &str) -> RevenuePayoutTerms {
+/// The retired payout's terms — only the refusal of the kind is asserted over them now.
+fn payout_terms(amount: &str) -> RevenuePayoutTerms {
 	RevenuePayoutTerms::new(
 		Network::Bep20,
 		WalletAddress::parse(Network::Bep20, PAYOUT_ADDRESS).unwrap(),
@@ -138,14 +145,31 @@ fn terms(amount: &str) -> RevenuePayoutTerms {
 	.unwrap()
 }
 
-/// Clear the governance state this suite shares and guarantee the fund has revenue to
-/// propose paying out: close any open consilium (the unique index allows only one), empty
-/// the owner roster, and top the `fee` claim up.
+fn shares(decimal: &str) -> Shares {
+	Shares::parse_decimal(decimal).unwrap()
+}
+
+/// A fresh investor to seat as a holder of the `fee` allocation.
+async fn grantee(h: &Harness) -> UserId {
+	let subject = AuthSubject::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
+	let email = Email::parse(&format!("g{}@example.com", Uuid::new_v4().simple())).unwrap();
+	h.users.provision(subject, email, true).await.unwrap().id()
+}
+
+/// `units` of the `fee` allocation for a fresh person — the terms every generic test opens.
+async fn grant_terms(h: &Harness, units: &str) -> HolderGrantTerms {
+	HolderGrantTerms::new(ServiceId::fee(), grantee(h).await, shares(units)).unwrap()
+}
+
+/// Clear the governance state this suite shares and guarantee the `fee` allocation prices:
+/// close any open consilium (the unique index allows one per source claim), empty the
+/// owner roster, and top the `service:fee` claim up.
 ///
 /// Run at the START of every test rather than the end, so a panicking test cannot wedge the
-/// ones after it. The top-up is what makes the tests order-independent: opening a consilium
-/// runs the real solvency pre-check against the `fee` claim, so a sibling test that spends
-/// the fund's revenue would otherwise decide whether this one can open at all.
+/// ones after it. The top-up is what makes the tests order-independent: a holder grant
+/// prices at the allocation's NAV, cash over units, and every executed grant here mints
+/// units — without fresh cash behind them a sibling test would leave the price at zero and
+/// the next mint refused.
 async fn reset_governance(h: &Harness) {
 	sqlx::query("UPDATE consilium SET state = 'cancelled', decided_at = now() WHERE state = 'open'")
 		.execute(&h.pool)
@@ -185,7 +209,7 @@ async fn reset_governance(h: &Harness) {
 	// The cooling-off clock is global, so a test that exercises it would otherwise freeze
 	// every test after it for 48 simulated hours.
 	sqlx::query("DELETE FROM governance_roster_change").execute(&h.pool).await.unwrap();
-	fund_revenue(h, "100000").await;
+	fund_fee_allocation(h, "100000").await;
 }
 
 /// Provision a fresh user and seat them as a fund owner. `concierge_user_id` is set because
@@ -217,35 +241,15 @@ async fn demote(h: &Harness, user: UserId) {
 	sqlx::query("UPDATE users SET role = 'investor' WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
 }
 
-/// Credit the fund's earned revenue directly, the deposit shape (`Dr wallet / Cr fee`).
-/// `fee` is a global singleton, so every assertion about it here is a DELTA.
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
-async fn fund_revenue(h: &Harness, amount: &str) {
+/// Credit the `fee` allocation's cash directly, the deposit shape (`Dr wallet / Cr
+/// service:fee`). The claim is one per database, so every assertion about it is a DELTA.
+async fn fund_fee_allocation(h: &Harness, amount: &str) {
 	h.ledger
 		.post(&LedgerTransfer {
 			id: Uuid::new_v4().as_u128(),
 			debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
-			credit: LedgerAccountKey::FeeRevenue,
+			credit: LedgerAccountKey::ServiceClaim(ServiceId::fee()),
 			amount: usdt(amount).base_units(),
-			code: TransferCode::WithdrawFee,
-			reference: 0,
-		})
-		.await
-		.unwrap();
-}
-
-/// Move earned revenue back out of the `fee` claim — how a competing spend leaves a payout
-/// with nothing behind it by the time it executes.
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
-async fn drain_revenue(h: &Harness, base_units: u128) {
-	h.ledger
-		.post(&LedgerTransfer {
-			id: Uuid::new_v4().as_u128(),
-			debit: LedgerAccountKey::FeeRevenue,
-			credit: LedgerAccountKey::CryptoWallet(Network::Bep20),
-			amount: base_units,
 			code: TransferCode::WithdrawFee,
 			reference: 0,
 		})
@@ -284,8 +288,17 @@ async fn state_of(h: &Harness, id: ConsiliumId) -> ConsiliumState {
 	consilium_app::find(h.consilia.as_ref(), id).await.unwrap().consilium.state()
 }
 
-async fn open_payout(h: &Harness, initiator: UserId, amount: &str) -> ConsiliumView {
-	consilium_app::open_revenue_payout(&ports(h), initiator, terms(amount), now()).await.unwrap()
+/// Open a holder grant of `units` of `fee` to a fresh person.
+async fn open_grant(h: &Harness, initiator: UserId, units: &str) -> ConsiliumView {
+	consilium_app::open_holder_grant(&ports(h), initiator, grant_terms(h, units).await, now()).await.unwrap()
+}
+
+/// The person a grant consilium names.
+fn grantee_of(view: &ConsiliumView) -> UserId {
+	match view.consilium.terms() {
+		ConsiliumTerms::HolderGrant(terms) => terms.user,
+		other => panic!("not a holder grant: {other:?}"),
+	}
 }
 
 /// Push a consilium and its tokens past their deadline, standing in for 72h passing.
@@ -334,8 +347,9 @@ async fn record_roster_change(h: &Harness, user: UserId, from_role: &str, to_rol
 		.unwrap();
 }
 
-async fn revenue_payout_count(h: &Harness) -> usize {
-	h.withdrawals.list_revenue_payouts().await.unwrap().len()
+/// How many issuance rows stand for the `fee` allocation — a grant's effect, counted.
+async fn grant_count(h: &Harness) -> i64 {
+	sqlx::query_scalar("SELECT count(*) FROM unit_issuances WHERE service = 'fee'").fetch_one(&h.pool).await.unwrap()
 }
 
 #[tokio::test]
@@ -346,7 +360,7 @@ async fn the_threshold_is_more_than_half_of_all_owners_end_to_end() {
 	// N=3 — threshold 2 over 2 voters: both peers must agree.
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	assert_eq!(c.consilium.owner_count(), 3);
 	assert_eq!(c.consilium.threshold(), 2);
 	assert_eq!(c.voters.len(), 2, "the initiator holds no seat");
@@ -358,7 +372,7 @@ async fn the_threshold_is_more_than_half_of_all_owners_end_to_end() {
 	// N=4 — threshold 3 over 3 voters: unanimity among the peers.
 	reset_governance(&h).await;
 	let roster = owners(&h, 4).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	assert_eq!(c.consilium.threshold(), 3);
 	assert_eq!(c.voters.len(), 3);
 	vote(&h, c.consilium.id(), roster[1], VoteDecision::Approve).await.unwrap();
@@ -370,7 +384,7 @@ async fn the_threshold_is_more_than_half_of_all_owners_end_to_end() {
 	// N=5 — threshold 3 over 4 voters: 3 of 4, so one owner need not answer at all.
 	reset_governance(&h).await;
 	let roster = owners(&h, 5).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	assert_eq!(c.consilium.threshold(), 3);
 	assert_eq!(c.voters.len(), 4);
 	vote(&h, c.consilium.id(), roster[1], VoteDecision::Approve).await.unwrap();
@@ -388,7 +402,7 @@ async fn the_threshold_is_more_than_half_of_all_owners_end_to_end() {
 }
 
 #[tokio::test]
-async fn a_fund_below_three_owners_cannot_open_a_payout_at_all() {
+async fn a_fund_below_three_owners_cannot_open_a_consilium_at_all() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
@@ -396,7 +410,7 @@ async fn a_fund_below_three_owners_cannot_open_a_payout_at_all() {
 	// Two owners: threshold 2, one eligible voter — arithmetically unreachable, so the
 	// request is refused rather than stored as one that could never pass.
 	let roster = owners(&h, 2).await;
-	let err = consilium_app::open_revenue_payout(&ports(&h), roster[0], terms("500"), now()).await.unwrap_err();
+	let err = consilium_app::open_holder_grant(&ports(&h), roster[0], grant_terms(&h, "500").await, now()).await.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(_)), "expected an explicit refusal, got {err:?}");
 	let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium WHERE state = 'open'").fetch_one(&h.pool).await.unwrap();
 	assert_eq!(stored, 0, "nothing may be persisted for a quorum that can never be reached");
@@ -408,7 +422,7 @@ async fn the_initiator_gets_no_token_and_cannot_vote_by_any_path() {
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 
 	// No seat row exists for them — the composite FK plus CHECK in `0025` make one
@@ -454,17 +468,17 @@ async fn only_one_consilium_may_be_open_at_a_time() {
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let first = open_payout(&h, roster[0], "500").await;
+	let first = open_grant(&h, roster[0], "500").await;
 
-	// This is the whole of the concurrent-approval overdraw defence: two approved payouts
-	// can never exist to race each other over the same revenue.
-	let err = consilium_app::open_revenue_payout(&ports(&h), roster[0], terms("100"), now()).await.unwrap_err();
+	// This is the whole of the concurrent-approval overdraw defence: two approved requests
+	// can never exist to race each other over the same claim.
+	let err = consilium_app::open_holder_grant(&ports(&h), roster[0], grant_terms(&h, "100").await, now()).await.unwrap_err();
 	assert!(matches!(err, DomainError::Conflict(_)), "expected a conflict, got {err:?}");
 
 	// Closing the first frees the slot again.
 	consilium_app::cancel(h.consilia.as_ref(), first.consilium.id(), roster[0], now()).await.unwrap();
 	assert_eq!(state_of(&h, first.consilium.id()).await, ConsiliumState::Cancelled);
-	let second = open_payout(&h, roster[0], "100").await;
+	let second = open_grant(&h, roster[0], "100").await;
 	assert_eq!(second.consilium.state(), ConsiliumState::Open);
 	// Votes are not carried over: the reopened request has its own hash and its own seats.
 	assert_ne!(second.consilium.payload_hash_hex(), first.consilium.payload_hash_hex());
@@ -476,7 +490,7 @@ async fn only_the_initiator_may_withdraw_their_own_consilium() {
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let err = consilium_app::cancel(h.consilia.as_ref(), c.consilium.id(), roster[1], now()).await.unwrap_err();
 	assert!(matches!(err, DomainError::Forbidden(_)));
 	assert_eq!(state_of(&h, c.consilium.id()).await, ConsiliumState::Open);
@@ -493,25 +507,26 @@ async fn mail_states(h: &Harness, consilium: ConsiliumId, kind: &str) -> Vec<(bo
 		.unwrap()
 }
 
-/// A payout consilium withdrawn by its initiator while nothing has left the queue — no
-/// worker runs here, which is a relay outage from the queue's side (#342): the seats'
-/// `payout_approval` invitations are withdrawn with their secrets blanked, and the
-/// `payout_outcome` verdict the withdrawal queues for the initiator and every seat is not.
+/// A consilium withdrawn by its initiator while nothing has left the queue — no worker
+/// runs here, which is a relay outage from the queue's side (#342): the seats'
+/// invitations (a grant rides the `payment_approval` template) are withdrawn with their
+/// secrets blanked, and the `payout_outcome` verdict the withdrawal queues for the
+/// initiator and every seat is not.
 #[tokio::test]
-async fn withdrawing_a_payout_consilium_withdraws_its_undelivered_invitations() {
+async fn withdrawing_a_consilium_withdraws_its_undelivered_invitations() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
-	let invitations = mail_states(&h, id, "payout_approval").await;
+	let invitations = mail_states(&h, id, "payment_approval").await;
 	assert_eq!(invitations.len(), 2);
 	assert!(invitations.iter().all(|(sent, withdrawn, code)| !sent && !withdrawn && !code.is_empty()), "{invitations:?}");
 
 	consilium_app::cancel(h.consilia.as_ref(), id, roster[0], now()).await.unwrap();
 	assert_eq!(state_of(&h, id).await, ConsiliumState::Cancelled);
-	let invitations = mail_states(&h, id, "payout_approval").await;
+	let invitations = mail_states(&h, id, "payment_approval").await;
 	assert_eq!(invitations.len(), 2);
 	assert!(invitations.iter().all(|(sent, withdrawn, code)| !sent && *withdrawn && code.is_empty()), "{invitations:?}");
 	let outcomes = mail_states(&h, id, "payout_outcome").await;
@@ -525,7 +540,7 @@ async fn five_wrong_codes_burn_the_token_and_a_burned_one_looks_unknown() {
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	let (token, code) = credentials(&h, id, roster[1]).await;
 	let audit = VoteAudit {
@@ -585,7 +600,7 @@ async fn reading_an_invitation_never_costs_an_attempt() {
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let (token, _) = credentials(&h, c.consilium.id(), roster[1]).await;
 
 	// A corporate mail scanner fetches every URL in a message, often several times. If the
@@ -611,7 +626,7 @@ async fn the_same_decision_twice_is_idempotent_and_a_different_one_is_refused() 
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 5).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 
 	assert!(!vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap());
@@ -637,7 +652,7 @@ async fn rejections_close_the_consilium_the_moment_the_threshold_is_unreachable(
 	// N=5: 4 voters, threshold 3 — the tally can afford exactly one refusal.
 	reset_governance(&h).await;
 	let roster = owners(&h, 5).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	assert!(!vote(&h, id, roster[1], VoteDecision::Reject).await.unwrap());
 	assert_eq!(state_of(&h, id).await, ConsiliumState::Open, "three of the remaining four could still carry it");
@@ -652,7 +667,7 @@ async fn rejections_close_the_consilium_the_moment_the_threshold_is_unreachable(
 	// N=3 needs both peers, so one refusal ends it at once.
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	assert!(vote(&h, c.consilium.id(), roster[1], VoteDecision::Reject).await.unwrap());
 	assert_eq!(state_of(&h, c.consilium.id()).await, ConsiliumState::Rejected);
 }
@@ -664,7 +679,7 @@ async fn a_voter_who_lost_ownership_stops_counting_toward_quorum() {
 	reset_governance(&h).await;
 	// N=5: 4 voters, threshold 3, frozen at open and never recomputed.
 	let roster = owners(&h, 5).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 
 	vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap();
@@ -693,79 +708,94 @@ async fn a_voter_who_lost_ownership_stops_counting_toward_quorum() {
 }
 
 #[tokio::test]
-async fn reaching_quorum_creates_exactly_one_payout_and_executing_twice_creates_no_second() {
+async fn reaching_quorum_mints_exactly_one_grant_and_executing_twice_mints_no_second() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
-	fund_revenue(&h, "1000").await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
-	let before = revenue_payout_count(&h).await;
+	let person = grantee_of(&c);
+	let before = grant_count(&h).await;
+	h.relay.drain().await;
+	let held_before = h.ledger.balance(&LedgerAccountKey::UserShares(ServiceId::fee(), person)).await.unwrap().posted;
+	let supply_before = h.ledger.balance(&LedgerAccountKey::SharesOutstanding(ServiceId::fee())).await.unwrap().posted;
 
 	vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap();
 	assert!(vote(&h, id, roster[2], VoteDecision::Approve).await.unwrap());
-	// Approval alone moves no money — the payout is a separate, explicit step.
+	// Approval alone mints nothing — the effect is a separate, explicit step.
 	assert_eq!(state_of(&h, id).await, ConsiliumState::Approved);
-	assert_eq!(revenue_payout_count(&h).await, before, "quorum by itself must not create a payout");
+	assert_eq!(grant_count(&h).await, before, "quorum by itself must not mint");
 
 	let executed = consilium_app::execute(&ports(&h), id, now()).await.unwrap();
 	assert_eq!(executed.consilium.state(), ConsiliumState::Executed);
-	assert_eq!(revenue_payout_count(&h).await, before + 1);
+	assert_eq!(grant_count(&h).await, before + 1);
 
-	// The payout id is derived from the consilium, so it is checkable rather than incidental.
-	let expected = consilium_app::payout_id(id);
-	assert_eq!(executed.consilium.executed_withdrawal_id(), Some(expected));
-	let payout = h.withdrawals.find_by_id(expected).await.unwrap().expect("the payout exists under the derived id");
-	assert!(payout.source().is_revenue());
-	assert_eq!(payout.amount(), usdt("500"));
-	assert_eq!(payout.address().as_str(), PAYOUT_ADDRESS);
+	// The issuance is keyed by the consilium, so it is checkable rather than incidental.
+	let issuance = executed.consilium.executed_issuance_id().expect("a grant's effect is an issuance");
+	let record = h.issuances.find_by_id(issuance).await.unwrap().expect("the issuance exists");
+	assert_eq!(record.issuance.holder(), &UnitHolder::User(person));
+	assert_eq!(record.issuance.service(), &ServiceId::fee());
+	assert_eq!(record.issuance.units(), shares("500"));
+	let key: String = sqlx::query_scalar("SELECT idempotency_key FROM unit_issuances WHERE id = $1")
+		.bind(issuance.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(IdempotencyKey::parse(&key).unwrap(), consilium_app::holder_grant_key(id));
 
 	// Re-executing — the sweeper's retry, or a redelivered call — must be a no-op. This is
-	// the difference between an at-least-once execution path and a double payout.
+	// the difference between an at-least-once execution path and a double mint.
 	for _ in 0..3 {
 		let again = consilium_app::execute(&ports(&h), id, now()).await.unwrap();
-		assert_eq!(again.consilium.executed_withdrawal_id(), Some(expected));
+		assert_eq!(again.consilium.executed_issuance_id(), Some(issuance));
 	}
-	assert_eq!(revenue_payout_count(&h).await, before + 1, "a retried execution must never open a second payout");
-	h.relay.drain().await;
+	assert_eq!(grant_count(&h).await, before + 1, "a retried execution must never mint a second time");
+
+	// The relay posts the units to the person, and the supply grows by exactly that.
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
+	let held = h.ledger.balance(&LedgerAccountKey::UserShares(ServiceId::fee(), person)).await.unwrap().posted;
+	let supply = h.ledger.balance(&LedgerAccountKey::SharesOutstanding(ServiceId::fee())).await.unwrap().posted;
+	assert_eq!(held - held_before, shares("500").base_units());
+	assert_eq!(supply - supply_before, shares("500").base_units());
 }
 
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
-async fn a_payout_the_revenue_no_longer_covers_lands_in_execution_failed() {
+async fn a_grant_the_allocation_no_longer_admits_lands_in_execution_failed() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
 
-	// Open against revenue that exists...
-	let available = h.ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().available();
-	let c = open_payout(&h, roster[0], "500").await;
+	// Open while the allocation has room...
+	let cap: String = sqlx::query_scalar("SELECT unit_cap FROM allocations WHERE service = 'fee'").fetch_one(&h.pool).await.unwrap();
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap();
 	vote(&h, id, roster[2], VoteDecision::Approve).await.unwrap();
 	assert_eq!(state_of(&h, id).await, ConsiliumState::Approved);
 
-	// ...then drain it away before execution, exactly as a competing spend would.
-	drain_revenue(&h, available).await;
+	// ...then pin its cap under the grant before execution, as an operator sizing it would.
+	sqlx::query("UPDATE allocations SET unit_cap = '1' WHERE service = 'fee'").execute(&h.pool).await.unwrap();
 
 	let failed = consilium_app::execute(&ports(&h), id, now()).await.unwrap();
 	assert_eq!(failed.consilium.state(), ConsiliumState::ExecutionFailed);
 	assert!(
-		failed.consilium.failure_reason().unwrap_or_default().contains("revenue"),
+		failed.consilium.failure_reason().unwrap_or_default().contains("cap"),
 		"the owners must be able to read WHY: {:?}",
 		failed.consilium.failure_reason()
 	);
+	assert_eq!(failed.consilium.executed_issuance_id(), None);
 	// Terminal — nothing retries silently, so the sweeper will not pick it up again.
 	assert!(!h.consilia.awaiting_execution().await.unwrap().contains(&id));
 	assert!(consilium_app::execute(&ports(&h), id, now()).await.is_err());
 
-	// Put the fund's revenue back. `fee` is a global singleton shared with the other
-	// suites, so a test that empties it restores it rather than leaving every sibling
-	// looking at a fund that has never earned anything.
-	fund_revenue(&h, &Usdt::from_base_units(available).to_decimal_string()).await;
+	// Put the cap back: the registry row is one per database, shared with every sibling.
+	sqlx::query("UPDATE allocations SET unit_cap = $1 WHERE service = 'fee'")
+		.bind(cap)
+		.execute(&h.pool)
+		.await
+		.unwrap();
 }
 
 #[tokio::test]
@@ -773,12 +803,11 @@ async fn an_expired_consilium_can_never_execute_however_late_a_vote_arrives() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
-	fund_revenue(&h, "1000").await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap();
-	let before = revenue_payout_count(&h).await;
+	let before = grant_count(&h).await;
 
 	expire_the_window(&h, id).await;
 
@@ -794,7 +823,7 @@ async fn an_expired_consilium_can_never_execute_however_late_a_vote_arrives() {
 	// Execution is reachable only from `approved`; expiry only from `open`. No ordering of
 	// the two can produce a payout from a dead request.
 	assert!(consilium_app::execute(&ports(&h), id, now()).await.is_err());
-	assert_eq!(revenue_payout_count(&h).await, before, "an expired consilium must move no money");
+	assert_eq!(grant_count(&h).await, before, "an expired consilium must move no money");
 	assert!(consilium_app::sweep_expired(h.consilia.as_ref(), now()).await.unwrap() == 0, "the sweep is idempotent");
 }
 
@@ -803,20 +832,19 @@ async fn editing_the_terms_after_approval_cannot_spend_the_approval() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
-	fund_revenue(&h, "5000").await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap();
 	vote(&h, id, roster[2], VoteDecision::Approve).await.unwrap();
 	assert_eq!(state_of(&h, id).await, ConsiliumState::Approved);
-	let before = revenue_payout_count(&h).await;
+	let before = grant_count(&h).await;
 
 	// There is no edit RPC, so this is a direct tamper with the stored row — the threat the
 	// payload hash exists for. An approval is a signature over those exact terms.
-	sqlx::query("UPDATE consilium SET terms = jsonb_set(terms, '{amount}', to_jsonb($2::text)) WHERE id = $1")
+	sqlx::query("UPDATE consilium SET terms = jsonb_set(terms, '{units}', to_jsonb($2::text)) WHERE id = $1")
 		.bind(id.raw())
-		.bind(usdt("4000").base_units().to_string())
+		.bind(shares("4000").base_units().to_string())
 		.execute(&h.pool)
 		.await
 		.unwrap();
@@ -824,29 +852,32 @@ async fn editing_the_terms_after_approval_cannot_spend_the_approval() {
 	let result = consilium_app::execute(&ports(&h), id, now()).await.unwrap();
 	assert_eq!(result.consilium.state(), ConsiliumState::ExecutionFailed);
 	assert!(result.consilium.failure_reason().unwrap_or_default().contains("payload hash"));
-	assert_eq!(revenue_payout_count(&h).await, before, "tampered terms must never reach the money plane");
+	assert_eq!(grant_count(&h).await, before, "tampered terms must never reach the money plane");
 }
 
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
-async fn an_impossible_payout_is_refused_at_open_not_after_a_72h_vote() {
+async fn an_impossible_grant_is_refused_at_open_not_after_a_72h_vote() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let revenue = Usdt::from_base_units(h.ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().available());
 
-	// More than the fund has ever earned: refused now, rather than after three owners have
-	// spent three days approving something that could never have shipped.
-	let beyond = revenue.checked_add(usdt("1000000")).unwrap();
-	let too_much = RevenuePayoutTerms::new(Network::Bep20, WalletAddress::parse(Network::Bep20, PAYOUT_ADDRESS).unwrap(), beyond, String::new()).unwrap();
-	let err = consilium_app::open_revenue_payout(&ports(&h), roster[0], too_much, now()).await.unwrap_err();
-	assert!(matches!(err, DomainError::Validation(_)), "got {err:?}");
+	// A person nobody can sign in as: refused now, rather than after three owners have
+	// spent three days approving units nobody could redeem.
+	let nobody = HolderGrantTerms::new(ServiceId::fee(), UserId::new(), shares("1")).unwrap();
+	let err = consilium_app::open_holder_grant(&ports(&h), roster[0], nobody, now()).await.unwrap_err();
+	assert!(matches!(err, DomainError::NotFound { .. }), "got {err:?}");
 
-	// Below the per-network minimum — the same shape gate the payout itself applies.
-	let dust = RevenuePayoutTerms::new(Network::Bep20, WalletAddress::parse(Network::Bep20, PAYOUT_ADDRESS).unwrap(), usdt("1"), String::new()).unwrap();
-	assert!(consilium_app::open_revenue_payout(&ports(&h), roster[0], dust, now()).await.is_err());
+	// A product is not granted, and nothing is not a grant — the terms themselves refuse.
+	let product = ServiceId::parse("svc-arb").unwrap();
+	assert!(matches!(HolderGrantTerms::new(product, roster[1], shares("1")), Err(DomainError::Validation(_))));
+	assert!(matches!(HolderGrantTerms::new(ServiceId::fee(), roster[1], Shares::ZERO), Err(DomainError::Validation(_))));
+
+	// THE RETIRED KIND. The fund's earnings are the `fee` allocation's, and a holder is paid
+	// by redeeming: a payout of the retired claim is refused for every owner, however
+	// well-formed.
+	let err = consilium_app::open_revenue_payout(&ports(&h), roster[0], payout_terms("500"), now()).await.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(ref why) if why.contains("retired")), "got {err:?}");
 
 	let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium").fetch_one(&h.pool).await.unwrap();
 	let open: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium WHERE state = 'open'").fetch_one(&h.pool).await.unwrap();
@@ -859,7 +890,7 @@ async fn every_eligible_seat_is_mailed_a_distinct_token_and_code() {
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 4).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 
 	let mut tokens = Vec::new();
@@ -923,7 +954,7 @@ async fn a_wrong_code_and_an_unknown_token_are_told_apart_while_the_dead_token_s
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	let (token, code) = credentials(&h, id, roster[1]).await;
 	let audit = VoteAudit {
@@ -975,7 +1006,7 @@ async fn a_seat_that_already_answered_spends_no_further_attempts() {
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 5).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	let (token, code) = credentials(&h, id, roster[1]).await;
 	let audit = VoteAudit {
@@ -1033,7 +1064,7 @@ async fn opening_without_a_governance_mailer_is_refused() {
 		governance_mail_wired: false,
 		..ports(&h)
 	};
-	let err = consilium_app::open_revenue_payout(&unwired, roster[0], terms("500"), now()).await.unwrap_err();
+	let err = consilium_app::open_holder_grant(&unwired, roster[0], grant_terms(&h, "500").await, now()).await.unwrap_err();
 	assert!(matches!(err, DomainError::Conflict(_)), "got {err:?}");
 	assert!(err.to_string().contains("governance mail is not configured"), "the refusal must name the cause: {err}");
 }
@@ -1044,7 +1075,7 @@ async fn opening_without_a_governance_mailer_is_refused() {
 /// roster by definition. It stops the seizure and the payout from being one uninterrupted
 /// motion, which is the part an auditor or a remaining honest owner can actually act on.
 #[tokio::test]
-async fn a_recent_owner_roster_change_freezes_new_payout_proposals() {
+async fn a_recent_owner_roster_change_freezes_new_proposals() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
@@ -1052,7 +1083,7 @@ async fn a_recent_owner_roster_change_freezes_new_payout_proposals() {
 
 	// A seat changed hands an hour ago.
 	record_roster_change(&h, roster[3], "investor", "owner", 3600).await;
-	let err = consilium_app::open_revenue_payout(&ports(&h), roster[0], terms("500"), now()).await.unwrap_err();
+	let err = consilium_app::open_holder_grant(&ports(&h), roster[0], grant_terms(&h, "500").await, now()).await.unwrap_err();
 	assert!(matches!(err, DomainError::Conflict(_)), "got {err:?}");
 	assert!(err.to_string().contains("cooling-off"), "the refusal must name the cooling-off period: {err}");
 	assert!(err.to_string().contains("lifts in"), "and say when it lifts: {err}");
@@ -1061,8 +1092,8 @@ async fn a_recent_owner_roster_change_freezes_new_payout_proposals() {
 	sqlx::query("DELETE FROM governance_roster_change").execute(&h.pool).await.unwrap();
 	record_roster_change(&h, roster[3], "investor", "owner", consilium_app::ROSTER_COOLING_OFF_SECS + 60).await;
 	assert!(
-		consilium_app::open_revenue_payout(&ports(&h), roster[0], terms("500"), now()).await.is_ok(),
-		"a settled roster does not block a payout forever"
+		consilium_app::open_holder_grant(&ports(&h), roster[0], grant_terms(&h, "500").await, now()).await.is_ok(),
+		"a settled roster does not block a proposal forever"
 	);
 }
 
@@ -1070,12 +1101,12 @@ async fn a_recent_owner_roster_change_freezes_new_payout_proposals() {
 /// it. Without this the window is trivially straddled — open the request first, seize the
 /// roster after, and the freeze on new proposals never applies.
 #[tokio::test]
-async fn an_owner_roster_change_voids_a_payout_request_that_was_already_open() {
+async fn an_owner_roster_change_voids_a_request_that_was_already_open() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 5).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap();
 	assert_eq!(state_of(&h, id).await, ConsiliumState::Open);
@@ -1110,62 +1141,72 @@ async fn an_approval_invalidated_by_a_roster_change_is_refused_at_execution() {
 	// N=3: threshold 2, two eligible voters — so both must approve, and losing either one
 	// drops the live tally below the frozen bar.
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap();
 	assert!(vote(&h, id, roster[2], VoteDecision::Approve).await.unwrap());
 	assert_eq!(state_of(&h, id).await, ConsiliumState::Approved);
 
 	// Simulate the crash-before-execution window, then remove a seat that had approved.
-	sqlx::query("UPDATE consilium SET state = 'approved', executed_withdrawal_id = NULL WHERE id = $1")
+	sqlx::query("UPDATE consilium SET state = 'approved', executed_issuance_id = NULL WHERE id = $1")
 		.bind(id.raw())
 		.execute(&h.pool)
 		.await
 		.unwrap();
 	demote(&h, roster[2]).await;
 
-	let before = revenue_payout_count(&h).await;
+	let before = grant_count(&h).await;
 	let view = consilium_app::execute(&ports(&h), id, now()).await.unwrap();
-	assert_eq!(view.consilium.state(), ConsiliumState::ExecutionFailed, "a stale quorum must not spend money");
+	assert_eq!(view.consilium.state(), ConsiliumState::ExecutionFailed, "a stale quorum must not mint");
 	assert!(
 		view.consilium.failure_reason().unwrap_or_default().contains("still held by current owners"),
 		"the reason must name the roster change: {:?}",
 		view.consilium.failure_reason()
 	);
-	assert_eq!(revenue_payout_count(&h).await, before, "no payout was created");
+	assert_eq!(grant_count(&h).await, before, "nothing was minted");
 }
 
 /// THE TWO-CALLER RACE. The inline execute after the carrying vote and the sweeper both see
-/// "no payout under this id" and both try to create one. One wins on the `withdrawals`
-/// primary key; the loser must record the payout that ACTUALLY EXISTS, not a phantom
+/// "no issuance under this key" and both try to mint. One wins on the `(service, key)`
+/// unique index; the loser must record the issuance that ACTUALLY EXISTS, not a phantom
 /// failure. Recording `Failed` there is a lie that sticks: the owners are mailed a failure,
-/// `awaiting_execution` never returns the consilium again, and the payout is broadcast
-/// anyway.
+/// `awaiting_execution` never returns the consilium again, and the units are posted anyway.
 #[tokio::test]
-async fn two_concurrent_executions_agree_on_one_payout_and_neither_records_a_phantom_failure() {
+async fn two_concurrent_executions_agree_on_one_grant_and_neither_records_a_phantom_failure() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap();
 	assert!(vote(&h, id, roster[2], VoteDecision::Approve).await.unwrap());
 
-	// Put it back to `approved` with no payout recorded, the state a crash between the
-	// verdict and the money leaves behind — then drive BOTH callers at once.
-	sqlx::query("UPDATE consilium SET state = 'approved', executed_withdrawal_id = NULL WHERE id = $1")
+	// Put it back to `approved` with no issuance recorded, the state a crash between the
+	// verdict and the mint leaves behind — then drive BOTH callers at once. The carrying
+	// vote's inline execution already minted; its row and the events it drained (the relay
+	// has not run) are removed so the race is over a genuinely absent row.
+	let minted: Option<Uuid> = sqlx::query_scalar("SELECT executed_issuance_id FROM consilium WHERE id = $1")
+		.bind(id.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	sqlx::query("UPDATE consilium SET state = 'approved', executed_issuance_id = NULL WHERE id = $1")
 		.bind(id.raw())
 		.execute(&h.pool)
 		.await
 		.unwrap();
-	sqlx::query("DELETE FROM withdrawals WHERE id = $1")
-		.bind(consilium_app::payout_id(id).raw())
-		.execute(&h.pool)
-		.await
-		.unwrap();
+	if let Some(minted) = minted {
+		for statement in [
+			"DELETE FROM outbox WHERE aggregate_id = $1",
+			"DELETE FROM event_log WHERE aggregate_id = $1",
+			"DELETE FROM unit_issuances WHERE id = $1",
+		] {
+			sqlx::query(statement).bind(minted).execute(&h.pool).await.unwrap();
+		}
+	}
 
-	let before = revenue_payout_count(&h).await;
+	let before = grant_count(&h).await;
 	let (a, b) = (ports(&h), ports(&h));
 	let (first, second) = tokio::join!(consilium_app::execute(&a, id, now()), consilium_app::execute(&b, id, now()));
 	let first = first.expect("the first execution must not error");
@@ -1179,7 +1220,8 @@ async fn two_concurrent_executions_agree_on_one_payout_and_neither_records_a_pha
 			view.consilium.failure_reason()
 		);
 	}
-	assert_eq!(revenue_payout_count(&h).await, before + 1, "exactly one payout, however many callers raced");
+	assert_eq!(grant_count(&h).await, before + 1, "exactly one issuance, however many callers raced");
+	assert_eq!(first.consilium.executed_issuance_id(), second.consilium.executed_issuance_id());
 	assert_eq!(state_of(&h, id).await, ConsiliumState::Executed);
 }
 
@@ -1192,7 +1234,7 @@ async fn the_shared_token_specification_holds_on_this_side() {
 	let Some(h) = harness().await else { return };
 	reset_governance(&h).await;
 	let roster = owners(&h, 5).await;
-	let c = open_payout(&h, roster[0], "500").await;
+	let c = open_grant(&h, roster[0], "500").await;
 	let id = c.consilium.id();
 	let (token, code) = credentials(&h, id, roster[1]).await;
 	let audit = VoteAudit {
@@ -1246,8 +1288,6 @@ async fn the_shared_token_specification_holds_on_this_side() {
 /// relay has applied the reservation — and the governance history still reads with a payout
 /// sitting beside it.
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_readable() {
 	use domain::{
 		balance::Party,
@@ -1261,14 +1301,16 @@ async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_rea
 	};
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	// A payout in the same table, so the assertion below is "the history still reads".
-	let payout = consilium_app::open_revenue_payout(&ports(&h), roster[0], terms("500"), now()).await.unwrap();
-	// The fund's pooled capital, credited the deposit way, so the solvency pre-check passes.
+	// Another kind in the same table (a grant over `fee`), so the assertion below is "the
+	// history still reads" — and the payment below spends `fund`, so the two do not queue.
+	let grant = open_grant(&h, roster[0], "500").await;
+	// The fund allocation's capital, credited the deposit way, so the solvency pre-check
+	// passes.
 	h.ledger
 		.post(&LedgerTransfer {
 			id: Uuid::new_v4().as_u128(),
 			debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
-			credit: LedgerAccountKey::Fund,
+			credit: LedgerAccountKey::ServiceClaim(ServiceId::fund()),
 			amount: usdt("1000").base_units(),
 			code: TransferCode::Deposit,
 			reference: 0,
@@ -1278,12 +1320,12 @@ async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_rea
 	// Apply whatever an earlier test left in the outbox BEFORE the snapshots, so the deltas
 	// below measure this order's two legs and nothing else.
 	h.relay.drain().await;
-	let revenue_before = h.ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted;
-	let fund_locked_before = h.ledger.balance(&LedgerAccountKey::Fund).await.unwrap().locked;
+	let fee_before = h.ledger.balance(&LedgerAccountKey::ServiceClaim(ServiceId::fee())).await.unwrap().posted;
+	let fund_locked_before = h.ledger.balance(&LedgerAccountKey::ServiceClaim(ServiceId::fund())).await.unwrap().locked;
 
 	let payment_terms = PaymentTerms::new(
-		Party::Piggybank,
-		PaymentDestination::Internal(Party::Revenue),
+		Party::Service(ServiceId::fund()),
+		PaymentDestination::Internal(Party::Service(ServiceId::fee())),
 		usdt("250"),
 		PaymentReason::new("settle the quarterly management fee").unwrap(),
 	)
@@ -1297,8 +1339,8 @@ async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_rea
 	assert_eq!(loaded.consilium.kind(), domain::consilium::ConsiliumKind::Payment);
 	assert_eq!(
 		loaded.consilium.source_claim(),
-		LedgerAccountKey::Fund,
-		"NOT `fee`: the per-source index keys on the order's claim"
+		LedgerAccountKey::ServiceClaim(ServiceId::fund()),
+		"NOT `service:fee`: the per-source index keys on the order's claim"
 	);
 	assert_eq!(loaded.voters.len(), 2, "the initiator holds no seat");
 	let kinds: Vec<String> = sqlx::query_scalar("SELECT kind FROM consilium_mail WHERE consilium_id = $1 ORDER BY kind")
@@ -1314,13 +1356,19 @@ async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_rea
 		.unwrap();
 	let mail: serde_json::Value = serde_json::from_str(&payload).unwrap();
 	assert_eq!(mail["payment_id"], payment_id.to_string());
-	assert_eq!(mail["tier"], "internal");
-	assert_eq!(mail["source"], "the fund's pooled capital");
+	assert_eq!(mail["tier"], "service");
+	assert_eq!(mail["source"], "the fund allocation");
 
 	// A second order against the same source is refused — and the consilium it would have
 	// opened is withdrawn with it rather than left collecting votes over nothing.
 	let open_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium WHERE state = 'open'").fetch_one(&h.pool).await.unwrap();
-	let duplicate = PaymentTerms::new(Party::Piggybank, PaymentDestination::Internal(Party::Revenue), usdt("1"), PaymentReason::new("again").unwrap()).unwrap();
+	let duplicate = PaymentTerms::new(
+		Party::Service(ServiceId::fund()),
+		PaymentDestination::Internal(Party::Service(ServiceId::fee())),
+		usdt("1"),
+		PaymentReason::new("again").unwrap(),
+	)
+	.unwrap();
 	assert!(matches!(
 		payments_app::open(&ports(&h).payment_ports(), roster[0], duplicate, now()).await,
 		Err(DomainError::Conflict(_))
@@ -1338,27 +1386,31 @@ async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_rea
 	let order = h.payments.find(payment_id).await.unwrap().unwrap();
 	assert_eq!(order.order.state(), PaymentState::Approved, "reserved, not yet settled: the relay has not run");
 	h.relay.drain().await;
-	// `fund` is a global singleton shared with every other suite, so this is a DELTA.
-	assert_eq!(h.ledger.balance(&LedgerAccountKey::Fund).await.unwrap().locked - fund_locked_before, usdt("250").base_units());
+	// `service:fund` is one claim per database, shared with every sibling, so this is a DELTA.
+	assert_eq!(
+		h.ledger.balance(&LedgerAccountKey::ServiceClaim(ServiceId::fund())).await.unwrap().locked - fund_locked_before,
+		usdt("250").base_units()
+	);
 
 	let report = payments_app::sweep(&ports(&h).payment_ports(), now()).await.unwrap();
 	assert_eq!(report.executed, 1);
 	assert_eq!(h.payments.find(payment_id).await.unwrap().unwrap().order.state(), PaymentState::Executed);
 	h.relay.drain().await;
-	assert_eq!(h.ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted - revenue_before, usdt("250").base_units());
+	assert_eq!(
+		h.ledger.balance(&LedgerAccountKey::ServiceClaim(ServiceId::fee())).await.unwrap().posted - fee_before,
+		usdt("250").base_units()
+	);
 
 	// The history read — the one 0029 said a second kind would break if the vocabularies
 	// ever differed in size.
 	let history = consilium_app::list(h.consilia.as_ref(), 50).await.expect("a second kind must not break the history read");
 	assert!(history.iter().any(|view| view.consilium.id() == consilium));
-	assert!(history.iter().any(|view| view.consilium.id() == payout.consilium.id()));
+	assert!(history.iter().any(|view| view.consilium.id() == grant.consilium.id()));
 }
 
 /// The owners' mails name the RECIPIENT, a duplicate order is refused before a quorum is
 /// seated, and a quorum's refusal closes the order it was over in the same transaction.
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn a_refused_payment_consilium_closes_its_order_and_its_mails_name_the_recipient() {
 	use domain::{
 		balance::Party,
@@ -1373,7 +1425,6 @@ async fn a_refused_payment_consilium_closes_its_order_and_its_mails_name_the_rec
 	};
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	fund_revenue(&h, "100").await;
 	h.relay.drain().await;
 	// The receiving investor, whose masked mailbox is what the owners must be shown.
 	let mailbox = format!("recipient-{}@example.com", Uuid::new_v4().simple());
@@ -1384,7 +1435,7 @@ async fn a_refused_payment_consilium_closes_its_order_and_its_mails_name_the_rec
 		.unwrap()
 		.id();
 	let payment_terms = PaymentTerms::new(
-		Party::Revenue,
+		Party::Service(ServiceId::fee()),
 		PaymentDestination::Internal(Party::User(recipient)),
 		usdt("10"),
 		PaymentReason::new("a referral bonus").unwrap(),
@@ -1456,8 +1507,6 @@ async fn a_refused_payment_consilium_closes_its_order_and_its_mails_name_the_rec
 /// Driven directly rather than through `execute` so each closer's outcome can be read off
 /// the returned value rather than off the consilium row it would be recorded on.
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() {
 	use domain::{
 		balance::{Party, ServiceId},
@@ -1522,9 +1571,13 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 	// One order per closer, each over its own fund-owned source so none queues behind
 	// another on the single-open-per-source index.
 	let closers: [(&str, Party, PaymentDestination); 3] = [
-		("rejected", Party::Piggybank, PaymentDestination::Internal(Party::Revenue)),
-		("cancelled", Party::Revenue, PaymentDestination::Internal(Party::Piggybank)),
-		("expired", Party::Service(ServiceId::parse("alpha").unwrap()), PaymentDestination::Internal(Party::Revenue)),
+		("rejected", Party::Service(ServiceId::fund()), PaymentDestination::Internal(Party::Service(ServiceId::fee()))),
+		("cancelled", Party::Service(ServiceId::fee()), PaymentDestination::Internal(Party::Service(ServiceId::fund()))),
+		(
+			"expired",
+			Party::Service(ServiceId::parse("alpha").unwrap()),
+			PaymentDestination::Internal(Party::Service(ServiceId::fee())),
+		),
 	];
 	for (closer, from, to) in closers {
 		let (subject, consilium) = a_linked_order(&h, initiator, from, to).await;
@@ -1558,7 +1611,7 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 	// THE POSITIVE CONTROL: an approval that did land — recorded by the other caller before
 	// this one got the row lock — is believed, and so is a repeat, because `record_approval`
 	// is idempotent on an approved order.
-	let (subject, consilium) = a_linked_order(&h, initiator, Party::Piggybank, PaymentDestination::Internal(Party::Revenue)).await;
+	let (subject, consilium) = a_linked_order(&h, initiator, Party::Service(ServiceId::fund()), PaymentDestination::Internal(Party::Service(ServiceId::fee()))).await;
 	h.payments.record_approval(subject.payment_id, consilium, now()).await.unwrap();
 	let view = h.consilia.find(consilium).await.unwrap().unwrap();
 	for _ in 0..2 {
@@ -1571,6 +1624,154 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 		}
 	}
 	remove(&h, &subject, consilium).await;
+}
+
+/// ONE ADMINISTRATOR CANNOT MOVE THE FEE ALLOCATION'S MONEY WITHOUT A QUORUM (#245).
+///
+/// Every door into `service:fee` is walked: a payment out of it opens only with the owners'
+/// consilium seated and executes on nothing short of the threshold — one approval, however
+/// senior, leaves it pending; the operator's `IssueUnits` and `RetireUnits` refuse the
+/// reserved allocation outright; and a holder is seated only by an executed holder grant,
+/// after which the units are theirs, the supply grew by exactly them, and nobody else's
+/// units moved. Cash reaches the chain from `fee` only through a holder's redemption onto
+/// their own claim (`ownership_fee`), never through a payment to an address.
+#[tokio::test]
+async fn one_admin_cannot_move_the_fee_allocation_without_a_quorum() {
+	use domain::{
+		balance::Party,
+		payments::{PaymentDestination, PaymentReason, PaymentState, PaymentTerms},
+	};
+
+	let _lock = exclusive_governance().await;
+	let Some(h) = harness().await else { return };
+	reset_governance(&h).await;
+	let roster = owners(&h, 3).await;
+	let admin = roster[0];
+	let person = grantee(&h).await;
+	h.relay.drain().await;
+	let fee = ServiceId::fee();
+
+	// (1) A payment out of `fee` is the owners' to release: one approval is not a quorum.
+	let terms = PaymentTerms::new(
+		Party::Service(fee.clone()),
+		PaymentDestination::Internal(Party::User(person)),
+		usdt("10"),
+		PaymentReason::new("a bonus").unwrap(),
+	)
+	.unwrap();
+	let order = payments_app::open(&ports(&h).payment_ports(), admin, terms, now()).await.expect("open the payment");
+	let consilium = order.consilium_id.expect("fund-owned money is decided by the quorum");
+	assert!(order.consent.is_none());
+	assert!(!vote(&h, consilium, roster[1], VoteDecision::Approve).await.unwrap(), "one approval must not carry it");
+	assert_eq!(state_of(&h, consilium).await, ConsiliumState::Open);
+	assert!(
+		matches!(consilium_app::execute(&ports(&h), consilium, now()).await, Err(DomainError::Conflict(_))),
+		"an open consilium is not executable"
+	);
+	assert_eq!(h.payments.find(order.order.id()).await.unwrap().unwrap().order.state(), PaymentState::Pending);
+	assert!(h.payments.awaiting_execution().await.unwrap().is_empty(), "nothing is executable on one approval");
+	// The initiator's own vote is not a path either: they hold no seat and were mailed no token.
+	let seats: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium_voter WHERE consilium_id = $1 AND user_id = $2")
+		.bind(consilium.raw())
+		.bind(admin.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(seats, 0, "the initiator must have no seat");
+	consilium_app::cancel(h.consilia.as_ref(), consilium, admin, now()).await.unwrap();
+
+	// (2) Nor is a payment to an address: an allocation's cash never leaves by an order.
+	let external = PaymentDestination::External {
+		network: Network::Bep20,
+		address: WalletAddress::parse(Network::Bep20, PAYOUT_ADDRESS).unwrap(),
+	};
+	let terms = PaymentTerms::new(Party::Service(fee.clone()), external, usdt("10"), PaymentReason::new("a draw").unwrap()).unwrap();
+	let err = payments_app::open(&ports(&h).payment_ports(), admin, terms, now()).await.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(ref why) if why.contains("redemption")), "got {err:?}");
+
+	// (3) The operator's mint and burn refuse the reserved allocation by name.
+	let fund_ports = funds_app::FundPorts {
+		allocations: &h.allocations,
+		ledger: h.ledger.as_ref(),
+		nav: &h.nav,
+		relay: &h.notify,
+	};
+	let request = |key: &str| issuance_app::IssueUnitsRequest {
+		service: fee.clone(),
+		holder: UnitHolder::User(person),
+		units: shares("500"),
+		cost_basis: None,
+		idempotency_key: IdempotencyKey::parse(key).unwrap(),
+	};
+	let err = issuance_app::issue_units(&fund_ports, &h.issuances, h.users.as_ref(), request("admin-mints"), now())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(ref why) if why.contains("holder grant")), "got {err:?}");
+	let retire = issuance_app::RetireUnitsRequest {
+		service: fee.clone(),
+		holder: UnitHolder::User(person),
+		units: shares("1"),
+		cost_basis: None,
+		idempotency_key: IdempotencyKey::parse("admin-burns").unwrap(),
+		force: true,
+	};
+	let err = issuance_app::retire_units(&fund_ports, &h.issuances, h.users.as_ref(), retire, now()).await.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(_)), "got {err:?}");
+	assert_eq!(
+		h.ledger.balance(&LedgerAccountKey::UserShares(fee.clone(), person)).await.unwrap().posted,
+		0,
+		"nothing was minted by hand"
+	);
+
+	// (4) After the quorum, the grant mints to the person and to nobody else: the supply
+	// grows by exactly the grant, so every other holder is diluted and nothing more.
+	let other = grantee(&h).await;
+	let quote_before = funds_app::nav_of(&h.nav, h.ledger.as_ref(), &fee).await.unwrap();
+	let supply_before = h.ledger.balance(&LedgerAccountKey::SharesOutstanding(fee.clone())).await.unwrap().posted;
+	let cash_before = h.ledger.balance(&LedgerAccountKey::ServiceClaim(fee.clone())).await.unwrap().posted;
+	let grant = HolderGrantTerms::new(fee.clone(), person, shares("500")).unwrap();
+	let c = consilium_app::open_holder_grant(&ports(&h), admin, grant, now()).await.unwrap();
+	let id = c.consilium.id();
+	assert!(!vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap());
+	assert!(
+		matches!(consilium_app::execute(&ports(&h), id, now()).await, Err(DomainError::Conflict(_))),
+		"one approval mints nothing"
+	);
+	assert_eq!(h.ledger.balance(&LedgerAccountKey::UserShares(fee.clone(), person)).await.unwrap().posted, 0);
+	assert!(vote(&h, id, roster[2], VoteDecision::Approve).await.unwrap());
+	assert_eq!(state_of(&h, id).await, ConsiliumState::Approved);
+	let executed = consilium_app::execute(&ports(&h), id, now()).await.unwrap();
+	assert_eq!(executed.consilium.state(), ConsiliumState::Executed);
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
+	assert_eq!(
+		h.ledger.balance(&LedgerAccountKey::UserShares(fee.clone(), person)).await.unwrap().posted,
+		shares("500").base_units()
+	);
+	assert_eq!(
+		h.ledger.balance(&LedgerAccountKey::UserShares(fee.clone(), other)).await.unwrap().posted,
+		0,
+		"nobody else was seated"
+	);
+	assert_eq!(
+		h.ledger.balance(&LedgerAccountKey::SharesOutstanding(fee.clone())).await.unwrap().posted - supply_before,
+		shares("500").base_units(),
+		"the supply grew by the grant alone"
+	);
+	assert_eq!(
+		h.ledger.balance(&LedgerAccountKey::ServiceClaim(fee.clone())).await.unwrap().posted,
+		cash_before,
+		"a grant moves no cash"
+	);
+	// The price is the same value over more units — the dilution and nothing else. (An
+	// empty allocation quotes the seed price, so the direction is only meaningful once
+	// somebody already held units.)
+	let quote_after = funds_app::nav_of(&h.nav, h.ledger.as_ref(), &fee).await.unwrap();
+	assert_eq!(quote_after.aum, quote_before.aum, "the allocation is worth what it was");
+	let supply_after = Shares::from_base_units(supply_before + shares("500").base_units());
+	assert_eq!(quote_after.nav, Nav::from_aum(quote_after.aum.unwrap(), supply_after).unwrap());
+	if supply_before > 0 {
+		assert!(quote_after.nav <= quote_before.nav, "dilution never raises the price");
+	}
 }
 
 /// A registered, open fund with `units` outstanding held by `holder`, marked once at
