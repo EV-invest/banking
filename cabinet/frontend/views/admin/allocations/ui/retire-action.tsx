@@ -1,10 +1,10 @@
 "use client";
 
-// The Holders section's destructive write: burn units out of one holder, so the supply
-// shrinks. The mirror of "Issue units" above, and it sits with the other stake moves for
-// the same reason the transfer does — the operator judges it against the split it will
-// change. Two clicks, like the transfer: the form REVIEWS, and the confirmation shows the
-// exact burn ("250.00 units from ann@… — the supply shrinks") before it sends.
+// The Holders section's destructive write: burn units out of one person, so the supply
+// shrinks. The mirror of "Issue units" above, and it sits under the cap table because
+// the operator judges it against the split it will change. Two clicks: the form REVIEWS,
+// and the confirmation shows the exact burn ("250.00 units from ann@… — the supply
+// shrinks") before it sends.
 //
 // The draft, the retry key and the result live here rather than in the form, because the
 // confirmation step sits between the two and must see the same draft the form built.
@@ -16,7 +16,7 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Spinner } from "@evinvest/uikit";
 
 import { retireUnits } from "@/entities/admin/api/admin-client";
-import type { Allocation, UnitHolders } from "@/shared/contracts/admin";
+import type { Allocation } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { formatUnits } from "@/shared/lib/money";
@@ -29,7 +29,7 @@ import { RetireGate } from "@/views/admin/allocations/ui/retire-gate";
 
 type Step = "closed" | "editing" | "confirming";
 
-export function RetireAction({ allocation, holders }: { allocation: Allocation; holders: UnitHolders }) {
+export function RetireAction({ allocation }: { allocation: Allocation }) {
   const t = useT();
   const locale = useLocale();
   const [step, setStep] = useState<Step>("closed");
@@ -42,12 +42,12 @@ export function RetireAction({ allocation, holders }: { allocation: Allocation; 
   const submission = useRef<SubmissionKey | null>(null);
 
   const live = allocation.state !== "closed";
-  const holderLabel = draft.holder?.kind === "company" ? t("admin.alloc.issue.holder.company") : (draft.holder?.label ?? "");
+  const holderLabel = draft.holder?.label ?? "";
 
   const send = async () => {
     const key = retireKeyFor(submission.current, allocation.service, draft);
     submission.current = key;
-    const body = retireUnitsBody(allocation.service, allocation.state, draft, holders.company_units, key.key);
+    const body = retireUnitsBody(allocation.service, allocation.state, draft, key.key);
     // Unreachable through the buttons, which disable on the same rules — unless the row
     // went live under an open form. Then the reason is the gate's, not a silent no-op.
     if (!body) {
@@ -89,7 +89,7 @@ export function RetireAction({ allocation, holders }: { allocation: Allocation; 
           {live && <RetireGate force={draft.force} onForce={(force) => setDraft((d) => ({ ...d, force }))} />}
         </>
       )}
-      {step === "editing" && <RetireForm draft={draft} companyUnits={holders.company_units} onChange={setDraft} onReview={() => setStep("confirming")} onCancel={() => { setStep("closed"); setError(null); }} />}
+      {step === "editing" && <RetireForm draft={draft} onChange={setDraft} onReview={() => setStep("confirming")} onCancel={() => { setStep("closed"); setError(null); }} />}
       {step === "confirming" && draft.holder && (
         <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
           <p className="text-xs tabular-nums">{t("admin.alloc.retire.confirm", { units: formatUnits(draft.units.trim(), locale), holder: holderLabel })}</p>

@@ -28,7 +28,6 @@ import { IssueForm } from "@/views/admin/allocations/ui/issue-form";
 import { PanelHeader } from "@/views/admin/allocations/ui/panel-header";
 import { PinCapAction } from "@/views/admin/allocations/ui/pin-cap-action";
 import { RetireAction } from "@/views/admin/allocations/ui/retire-action";
-import { TransferStakeAction } from "@/views/admin/allocations/ui/transfer-stake-action";
 
 export function IssuancePanel({ allocation, onClose, className }: { allocation: Allocation; onClose: () => void; className?: string }) {
   const t = useT();
@@ -45,9 +44,8 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
     try {
       const issuance = await issueUnits(body);
       setLast({ issuance, holderLabel });
-      // A mint moves the supply and, through it, the mark's `units_outstanding` and
-      // `company_units` — the product page and the fund cards read the latter. Both are
-      // named even for a `queued` row: the refresh shows the split as it stands, and the
+      // A mint moves the supply and, through it, the mark's `units_outstanding`. Both are
+      // named even for a `queued` row: the refresh shows the table as it stands, and the
       // resource's own cadence picks the posted mint up when the relay lands it.
       revalidateTag(TAG.adminUnitHolders, TAG.nav);
       await read.refresh();
@@ -90,8 +88,7 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
               <>
                 <HoldersTable holders={read.data} />
                 <PinCapAction allocation={allocation} holders={read.data} />
-                <TransferStakeAction allocation={allocation} holders={read.data} />
-                <RetireAction allocation={allocation} holders={read.data} />
+                <RetireAction allocation={allocation} />
               </>
             )}
           </Settled>
