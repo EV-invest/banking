@@ -126,7 +126,6 @@ export function ProductView({ service }: { service: string }) {
             <ProductBadges closed={closed} locked={locked} stale={stale} />
             {inKind && <InKindBadge />}
           </div>
-          <p className="font-mono-tech text-xs text-ink-soft">{product.service}</p>
           {product.summary && <p className="max-w-xl pt-1 text-sm text-ink-soft">{product.summary}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
