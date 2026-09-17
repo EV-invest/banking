@@ -4276,8 +4276,8 @@
     "t": "Проверен"
   },
   "kyc.custodyNote": {
-    "en": "Deposits are held in custody under your verified identity; nothing moves without it.",
-    "t": "Депозиты хранятся в кастодиальном кошельке под вашей проверенной личностью; без неё ничего не перемещается."
+    "en": "Deposits are held in Turnkey custody under your identity verified by Didit; nothing moves without it.",
+    "t": "Депозиты хранятся в кастодиальном кошельке Turnkey под вашей личностью, проверенной через Didit; без неё ничего не перемещается."
   },
   "kyc.verifyNow": {
     "en": "Verify now",
@@ -5160,8 +5160,12 @@
     "t": "Как хранятся средства"
   },
   "settings.documents.custodySub": {
-    "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
-    "t": "Депозиты хранятся в кастодиальных кошельках фонда в той сети, по которой вы их отправили, и записываются на вашу проверенную личность. Без неё ничего не перемещается, а выводы идут только на адрес, который вы указали."
+    "en": "Deposits are held in the fund's custody wallets at Turnkey on the network you sent them over, and booked to your identity as verified by Didit. Nothing is moved without that identity, and withdrawals go only to an address you request. You sign in with your Google account.",
+    "t": "Депозиты хранятся в кастодиальных кошельках фонда в Turnkey в той сети, по которой вы их отправили, и записываются на вашу личность, проверенную через Didit. Без неё ничего не перемещается, а выводы идут только на адрес, который вы указали. Вход — через ваш аккаунт Google."
+  },
+  "settings.documents.newTab": {
+    "en": "opens in a new tab",
+    "t": "откроется в новой вкладке"
   },
   "settings.documents.published": {
     "en": "Published documents",
@@ -5172,8 +5176,12 @@
     "t": "Риск"
   },
   "settings.documents.rowSub": {
-    "en": "Whitepaper, how funds are held, risk",
-    "t": "Уайтпейпер, хранение средств, риск"
+    "en": "Whitepaper, open source, how funds are held, risk",
+    "t": "Уайтпейпер, открытый код, хранение средств, риск"
+  },
+  "settings.documents.sourceCode": {
+    "en": "Open source",
+    "t": "Открытый код"
   },
   "settings.documents.sub": {
     "en": "What the fund has published, and how your money is held",

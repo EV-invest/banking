@@ -4276,8 +4276,8 @@
     "t": "Bestätigt"
   },
   "kyc.custodyNote": {
-    "en": "Deposits are held in custody under your verified identity; nothing moves without it.",
-    "t": "Einzahlungen werden unter Ihrer verifizierten Identität verwahrt; ohne sie bewegt sich nichts."
+    "en": "Deposits are held in Turnkey custody under your identity verified by Didit; nothing moves without it.",
+    "t": "Einzahlungen werden in Turnkey-Verwahrung unter Ihrer von Didit verifizierten Identität gehalten; ohne sie bewegt sich nichts."
   },
   "kyc.verifyNow": {
     "en": "Verify now",
@@ -5160,8 +5160,12 @@
     "t": "So werden Mittel verwahrt"
   },
   "settings.documents.custodySub": {
-    "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
-    "t": "Einzahlungen liegen in den Verwahr-Wallets des Fonds in dem Netzwerk, über das Sie sie gesendet haben, und werden Ihrer verifizierten Identität zugeordnet. Ohne diese Identität wird nichts bewegt, und Auszahlungen gehen nur an eine von Ihnen angegebene Adresse."
+    "en": "Deposits are held in the fund's custody wallets at Turnkey on the network you sent them over, and booked to your identity as verified by Didit. Nothing is moved without that identity, and withdrawals go only to an address you request. You sign in with your Google account.",
+    "t": "Einzahlungen liegen in den Verwahr-Wallets des Fonds bei Turnkey in dem Netzwerk, über das Sie sie gesendet haben, und werden Ihrer von Didit verifizierten Identität zugeordnet. Ohne diese Identität wird nichts bewegt, und Auszahlungen gehen nur an eine von Ihnen angegebene Adresse. Die Anmeldung erfolgt über Ihr Google-Konto."
+  },
+  "settings.documents.newTab": {
+    "en": "opens in a new tab",
+    "t": "öffnet sich in einem neuen Tab"
   },
   "settings.documents.published": {
     "en": "Published documents",
@@ -5172,8 +5176,12 @@
     "t": "Risiko"
   },
   "settings.documents.rowSub": {
-    "en": "Whitepaper, how funds are held, risk",
-    "t": "Whitepaper, Verwahrung, Risiko"
+    "en": "Whitepaper, open source, how funds are held, risk",
+    "t": "Whitepaper, Open Source, Verwahrung, Risiko"
+  },
+  "settings.documents.sourceCode": {
+    "en": "Open source",
+    "t": "Open Source"
   },
   "settings.documents.sub": {
     "en": "What the fund has published, and how your money is held",

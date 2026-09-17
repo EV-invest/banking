@@ -3,11 +3,13 @@
 // Documents and disclosures, and the way to a person: one section for both breakpoints —
 // the desktop rail renders it in place, the mobile stack pushes it as its own screen.
 //
-// Only what exists. The whitepaper is a page the site publishes; "how funds are held" and
-// the risk line are statements the cabinet can stand behind today — custody and identity
-// facts, nothing about reconciliation (#245's phase 1 is what would let it say more). The
-// terms, privacy and risk-disclosure pages the issue lists are `undefined` in
-// `SITE_DOCUMENTS` and so absent here, rather than links to `#` (#385).
+// Only what exists. The whitepaper is a page the site publishes, the source is on GitHub;
+// "how funds are held" and the risk line are statements the cabinet can stand behind today
+// — custody and identity facts, with the vendors named (Turnkey, Didit, Google: the owner
+// allows naming client-facing services), nothing about reconciliation (#245's phase 1 is
+// what would let it say more). The terms, privacy and risk-disclosure pages the issue
+// lists are `undefined` in `SITE_DOCUMENTS` and so absent here, rather than links to `#`
+// (#385).
 //
 // Built from the cabinet's `list-card` vocabulary rather than uikit's `Item*`, so the
 // cards read as one system with the Settings and Profile screens beside them.
@@ -23,22 +25,32 @@ import { Chevron, Hairline, ListCard, ListCardTitle, ROW_INTERACTIVE, Row, RowLa
 export function DocumentsSection() {
   const t = useT();
   const locale = useLocale();
-  const { whitepaper } = SITE_DOCUMENTS;
+  const { whitepaper, sourceCode } = SITE_DOCUMENTS;
   return (
     <div className="flex flex-col gap-4 lg:gap-4.5">
-      {whitepaper !== undefined && (
-        <ListCard className="lg:px-5.5">
-          <ListCardTitle>{t("settings.documents.published")}</ListCardTitle>
-          <Hairline />
-          {/* The site's page, in the reader's locale. A plain anchor, not the cabinet Link:
-              the destination is the conductor's, outside the zone — the same origin, so no
-              new tab; the caption says where it leads. */}
-          <a href={siteDocumentHref(locale, whitepaper)} className={ROW_INTERACTIVE}>
-            <RowLabel title={t("settings.documents.whitepaper")} sub={t("settings.documents.whitepaperSub")} />
-            <ExternalLink className="size-4 shrink-0 text-ink-soft" aria-hidden />
-          </a>
-        </ListCard>
-      )}
+      <ListCard className="lg:px-5.5">
+        <ListCardTitle>{t("settings.documents.published")}</ListCardTitle>
+        <Hairline />
+        {whitepaper !== undefined && (
+          <>
+            {/* The site's page, in the reader's locale. A plain anchor, not the cabinet Link:
+                the destination is the conductor's, outside the zone — the same origin, so no
+                new tab; the caption says where it leads. */}
+            <a href={siteDocumentHref(locale, whitepaper)} className={ROW_INTERACTIVE}>
+              <RowLabel title={t("settings.documents.whitepaper")} sub={t("settings.documents.whitepaperSub")} />
+              <ExternalLink className="size-4 shrink-0 text-ink-soft" aria-hidden />
+            </a>
+            <Hairline />
+          </>
+        )}
+        {/* Another origin, so a new tab is acceptable here — and announced, since the icon
+            alone says nothing to a screen reader. */}
+        <a href={sourceCode} target="_blank" rel="noopener" className={ROW_INTERACTIVE}>
+          <RowLabel title={t("settings.documents.sourceCode")} sub={t("settings.documents.sourceCodeSub")} />
+          <span className="sr-only">{t("settings.documents.newTab")}</span>
+          <ExternalLink className="size-4 shrink-0 text-ink-soft" aria-hidden />
+        </a>
+      </ListCard>
 
       <ListCard className="lg:px-5.5">
         <ListCardTitle sub={t("settings.documents.custodySub")}>{t("settings.documents.custody")}</ListCardTitle>

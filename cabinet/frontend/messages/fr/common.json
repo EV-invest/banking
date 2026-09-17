@@ -4276,8 +4276,8 @@
     "t": "Vérifié"
   },
   "kyc.custodyNote": {
-    "en": "Deposits are held in custody under your verified identity; nothing moves without it.",
-    "t": "Les dépôts sont conservés sous votre identité vérifiée ; sans elle, rien ne bouge."
+    "en": "Deposits are held in Turnkey custody under your identity verified by Didit; nothing moves without it.",
+    "t": "Les dépôts sont conservés en garde chez Turnkey sous votre identité vérifiée par Didit ; sans elle, rien ne bouge."
   },
   "kyc.verifyNow": {
     "en": "Verify now",
@@ -5160,8 +5160,12 @@
     "t": "Comment les fonds sont détenus"
   },
   "settings.documents.custodySub": {
-    "en": "Deposits are held in the fund's custody wallets on the network you sent them over, and booked to your verified identity. Nothing is moved without that identity, and withdrawals go only to an address you request.",
-    "t": "Les dépôts sont conservés dans les portefeuilles de garde du fonds, sur le réseau par lequel vous les avez envoyés, et inscrits sous votre identité vérifiée. Rien n'est déplacé sans cette identité, et les retraits ne vont qu'à une adresse que vous demandez."
+    "en": "Deposits are held in the fund's custody wallets at Turnkey on the network you sent them over, and booked to your identity as verified by Didit. Nothing is moved without that identity, and withdrawals go only to an address you request. You sign in with your Google account.",
+    "t": "Les dépôts sont conservés dans les portefeuilles de garde du fonds chez Turnkey, sur le réseau par lequel vous les avez envoyés, et inscrits sous votre identité vérifiée par Didit. Rien n'est déplacé sans cette identité, et les retraits ne vont qu'à une adresse que vous demandez. La connexion se fait avec votre compte Google."
+  },
+  "settings.documents.newTab": {
+    "en": "opens in a new tab",
+    "t": "s'ouvre dans un nouvel onglet"
   },
   "settings.documents.published": {
     "en": "Published documents",
@@ -5172,8 +5176,12 @@
     "t": "Risque"
   },
   "settings.documents.rowSub": {
-    "en": "Whitepaper, how funds are held, risk",
-    "t": "Livre blanc, garde des fonds, risque"
+    "en": "Whitepaper, open source, how funds are held, risk",
+    "t": "Livre blanc, code ouvert, garde des fonds, risque"
+  },
+  "settings.documents.sourceCode": {
+    "en": "Open source",
+    "t": "Code ouvert"
   },
   "settings.documents.sub": {
     "en": "What the fund has published, and how your money is held",
