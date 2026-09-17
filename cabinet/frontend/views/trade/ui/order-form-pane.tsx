@@ -6,7 +6,7 @@
 //
 // A closed book and a caller locked below `invest` are stated before the action rather
 // than after a failed submit; a 412 that still comes back (the gate moved under us) is
-// shown the same way, as "ask an operator" rather than as an error code.
+// shown the same way, as "contact support" with the address, rather than as an error code.
 
 import { useRef, useState } from "react";
 

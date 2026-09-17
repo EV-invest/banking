@@ -3808,8 +3808,8 @@
     "t": "Не удалось загрузить ваш кошелёк"
   },
   "invest.about.risk": {
-    "en": "Units can fall in value as well as rise. The NAV is set by the operator's valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.",
-    "t": "Паи могут как расти, так и падать в цене. NAV задаётся оценкой оператора, а не рыночной ценой, и прошлые отметки ничего не говорят о будущих. Деньги возвращаются только после расчёта по погашению или когда покупатель заберёт ваши паи в книге. Инвестируйте только то, что можете оставить надолго."
+    "en": "Units can fall in value as well as rise. The NAV is set by a posted valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.",
+    "t": "Паи могут как расти, так и падать в цене. NAV задаётся опубликованной оценкой, а не рыночной ценой, и прошлые отметки ничего не говорят о будущих. Деньги возвращаются только после расчёта по погашению или когда покупатель заберёт ваши паи в книге. Инвестируйте только то, что можете оставить надолго."
   },
   "invest.about.riskTitle": {
     "en": "Risk.",
@@ -3884,12 +3884,12 @@
     "t": "Фонд закрыт для новых подписок. Ваши паи это не затрагивает — вы можете погасить их полностью."
   },
   "invest.blocked.locked": {
-    "en": "This fund isn't open to you yet. You can see it, but subscribing is locked until an operator raises your access.",
-    "t": "Этот фонд пока не открыт для вас. Вы можете его видеть, но подписка заблокирована, пока оператор не повысит ваш доступ."
+    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised — contact support if you think you should have it.",
+    "t": "Этот фонд пока не открыт для вас. Вы можете его видеть, но подписка заблокирована, пока ваш доступ не повысят — напишите в поддержку, если считаете, что доступ должен быть."
   },
   "invest.blocked.staleNav": {
-    "en": "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.",
-    "t": "Оценка фонда устарела, поэтому операции приостановлены, пока оператор не опубликует новую."
+    "en": "The fund's valuation is out of date, so dealing is paused until a fresh one is posted.",
+    "t": "Оценка фонда устарела, поэтому операции приостановлены, пока не будет опубликована новая."
   },
   "invest.buysUnits": {
     "en": "Buys {n, plural, one {{units} unit} other {{units} units}} at {nav} USDT per unit.",
@@ -4048,12 +4048,12 @@
     "t": "Сейчас нет фондов, открытых для подписки."
   },
   "invest.noFundsHint": {
-    "en": "A fund appears here once an operator registers and opens it. Nothing you hold is affected.",
-    "t": "Фонд появится здесь, как только оператор зарегистрирует и откроет его. На ваши активы это не влияет."
+    "en": "A fund appears here once it is registered and opened for subscription. Nothing you hold is affected.",
+    "t": "Фонд появится здесь, как только его зарегистрируют и откроют для подписки. На ваши активы это не влияет."
   },
   "invest.noUnitsHeld": {
-    "en": "You hold no fund units yet.",
-    "t": "У вас пока нет паёв фондов."
+    "en": "You hold no units yet.",
+    "t": "У вас пока нет паёв."
   },
   "invest.noUnitsInFund": {
     "en": "You hold no units in this fund yet.",
@@ -4068,8 +4068,8 @@
     "t": "Фонд с идентификатором «{service}» не зарегистрирован."
   },
   "invest.notRegisteredHint": {
-    "en": "A fund exists only once an operator registers it. If you followed a link here, the product may never have been opened.",
-    "t": "Фонд существует только после того, как оператор его зарегистрирует. Если вы перешли сюда по ссылке, продукт мог так и не быть открыт."
+    "en": "Nothing is registered under this name. If you followed a link here, the product may never have been opened.",
+    "t": "Под этим именем ничего не зарегистрировано. Если вы перешли сюда по ссылке, продукт мог так и не быть открыт."
   },
   "invest.notYetValued": {
     "en": "Not yet valued",
@@ -4328,8 +4328,8 @@
     "t": "Комиссии"
   },
   "nav.group.fund": {
-    "en": "Fund",
-    "t": "Фонд"
+    "en": "Your account",
+    "t": "Ваш счёт"
   },
   "nav.home": {
     "en": "Home",
@@ -4724,12 +4724,12 @@
     "t": "цена по NAV на момент исполнения"
   },
   "ops.step.awaitingRail": {
-    "en": "Awaiting a liquid rail",
-    "t": "Ожидание ликвидности канала"
+    "en": "Awaiting network liquidity",
+    "t": "Ожидание ликвидности сети"
   },
   "ops.step.awaitingRailMeta": {
-    "en": "ships as soon as the rail is topped up",
-    "t": "уйдёт, как только канал пополнят"
+    "en": "sent as soon as the network is topped up",
+    "t": "уйдёт, как только сеть пополнят"
   },
   "ops.step.broadcast": {
     "en": "Broadcast to the network",
@@ -5728,8 +5728,8 @@
     "t": "Стоимость портфеля"
   },
   "tips.dashboard.performance.series.body": {
-    "en": "'Fund performance' is the fund's return since the first valuation in the range, from the marks the operator posted; 'Your participation' is what your units were worth at each of them, which differs by when you contributed.",
-    "t": "«Доходность фонда» — результат фонда с первой оценки в диапазоне, по отметкам, которые опубликовал оператор; «Ваша доля» — сколько стоили ваши юниты в каждой из них, что зависит от того, когда вы вносили средства."
+    "en": "'Fund performance' is the fund's return since the first valuation in the range, from the posted marks; 'Your participation' is what your units were worth at each of them, which differs by when you contributed.",
+    "t": "«Доходность фонда» — результат фонда с первой оценки в диапазоне, по опубликованным отметкам; «Ваша доля» — сколько стоили ваши юниты в каждой из них, что зависит от того, когда вы вносили средства."
   },
   "tips.dashboard.performance.series.title": {
     "en": "Performance chart",
@@ -5780,8 +5780,8 @@
     "t": "Подписывайтесь на паи за USDT — стоимость вашей позиции следует за NAV фонда, а не за количеством паёв."
   },
   "tips.invest.overview.title": {
-    "en": "Fund shares",
-    "t": "Паи фондов"
+    "en": "How investing works",
+    "t": "Как устроены инвестиции"
   },
   "tips.invest.position.nav.body": {
     "en": "Net asset value per unit — the current price at which units are bought on subscribe and priced on redeem.",
@@ -5808,8 +5808,8 @@
     "t": "Устаревший NAV"
   },
   "tips.invest.position.units.body": {
-    "en": "Your share count in the fund's pool — a fixed quantity you own until you subscribe or redeem more.",
-    "t": "Количество ваших паёв в пуле фонда — фиксированная величина, пока вы не подпишетесь или не погасите ещё."
+    "en": "The units you hold in this fund — a fixed quantity until you subscribe or redeem more.",
+    "t": "Ваши паи в этом фонде — фиксированная величина, пока вы не подпишетесь или не погасите ещё."
   },
   "tips.invest.position.units.title": {
     "en": "Units",
@@ -5956,8 +5956,8 @@
     "t": "У вас единый баланс USDT — сети лишь способ пополнения и вывода. Эта карточка раскладывает его так: всего = доступно + в заявках + инвестировано + в ожидании вывода."
   },
   "tips.wallet.balance.model.title": {
-    "en": "One balance, many rails",
-    "t": "Один баланс, много каналов"
+    "en": "One balance, many networks",
+    "t": "Один баланс, много сетей"
   },
   "tips.wallet.balance.pending-withdrawal.body": {
     "en": "USDT reserved for withdrawals still in flight (queued or processing). It is no longer part of your available balance.",
@@ -5968,8 +5968,8 @@
     "t": "В ожидании вывода"
   },
   "tips.wallet.deposit.address.body": {
-    "en": "A personal, reusable address for this rail. On TON it is shown in the wallet-friendly UQ… form so an uninitialised wallet doesn't bounce the transfer.",
-    "t": "Персональный адрес этого канала, который можно использовать многократно. В TON он показан в удобном для кошельков формате UQ…, чтобы неинициализированный кошелёк не отклонил перевод."
+    "en": "A personal, reusable address on this network. On TON it is shown in the wallet-friendly UQ… form so an uninitialised wallet doesn't bounce the transfer.",
+    "t": "Персональный адрес в этой сети, который можно использовать многократно. В TON он показан в удобном для кошельков формате UQ…, чтобы неинициализированный кошелёк не отклонил перевод."
   },
   "tips.wallet.deposit.address.title": {
     "en": "Your deposit address",
@@ -5984,24 +5984,24 @@
     "t": "Подтверждения сети"
   },
   "tips.wallet.deposit.network.body": {
-    "en": "Pick the chain you'll send USDT on. Each rail shows its own deposit address below — that address only works on that one chain.",
-    "t": "Выберите сеть, в которой отправите USDT. У каждого канала свой адрес пополнения ниже — он работает только в этой сети."
+    "en": "Pick the chain you'll send USDT on. Each network shows its own deposit address below — that address only works on that one chain.",
+    "t": "Выберите сеть, в которой отправите USDT. У каждой сети свой адрес пополнения ниже — он работает только в этой сети."
   },
   "tips.wallet.deposit.network.title": {
-    "en": "Network / rail",
-    "t": "Сеть / канал"
+    "en": "Network",
+    "t": "Сеть"
   },
   "tips.wallet.deposit.rail-hazard.body": {
-    "en": "Sending any other asset, or using a different network, loses the funds permanently. This 0x address is NOT your address on the sibling EVM chain — even though both start with 0x, USDT sent on the wrong EVM rail will not be credited.",
-    "t": "Отправка любого другого актива или использование другой сети приведёт к безвозвратной потере средств. Этот адрес 0x НЕ является вашим адресом в соседней EVM-сети: хотя оба начинаются с 0x, USDT, отправленные не по тому EVM-каналу, зачислены не будут."
+    "en": "Sending any other asset, or using a different network, loses the funds permanently. This 0x address is NOT your address on the sibling EVM chain — even though both start with 0x, USDT sent on the wrong EVM network will not be credited.",
+    "t": "Отправка любого другого актива или использование другой сети приведёт к безвозвратной потере средств. Этот адрес 0x НЕ является вашим адресом в соседней EVM-сети: хотя оба начинаются с 0x, USDT, отправленные не в ту EVM-сеть, зачислены не будут."
   },
   "tips.wallet.deposit.rail-hazard.title": {
-    "en": "Send only USDT on this rail",
-    "t": "Отправляйте только USDT по этому каналу"
+    "en": "Send only USDT on this network",
+    "t": "Отправляйте только USDT в этой сети"
   },
   "tips.wallet.withdraw.available.body": {
-    "en": "The most you can withdraw on this rail right now. Tap Max to fill the amount.",
-    "t": "Максимум, который вы можете вывести по этому каналу прямо сейчас. Нажмите «Макс.», чтобы подставить сумму."
+    "en": "The most you can withdraw on this network right now. Tap Max to fill the amount.",
+    "t": "Максимум, который вы можете вывести в этой сети прямо сейчас. Нажмите «Макс.», чтобы подставить сумму."
   },
   "tips.wallet.withdraw.available.title": {
     "en": "Available to withdraw",
@@ -6016,8 +6016,8 @@
     "t": "Адрес получателя"
   },
   "tips.wallet.withdraw.network-fee.body": {
-    "en": "A flat on-chain fee for this rail, deducted from your amount before it is sent.",
-    "t": "Фиксированная сетевая комиссия этого канала; удерживается из вашей суммы до отправки."
+    "en": "A flat on-chain fee for this network, deducted from your amount before it is sent.",
+    "t": "Фиксированная сетевая комиссия этой сети; удерживается из вашей суммы до отправки."
   },
   "tips.wallet.withdraw.network-fee.title": {
     "en": "Network fee",
@@ -6028,20 +6028,20 @@
     "t": "Сеть, по которой уходит ваш вывод. Адрес получателя должен быть корректным именно в этой сети, иначе средства будут потеряны."
   },
   "tips.wallet.withdraw.network.title": {
-    "en": "Network / rail",
-    "t": "Сеть / канал"
+    "en": "Network",
+    "t": "Сеть"
   },
   "tips.wallet.withdraw.queueing.body": {
-    "en": "Up to your instant limit pays out immediately on this rail; anything above it is queued until the rail is topped up. A minimum applies per withdrawal.",
-    "t": "В пределах мгновенного лимита выплата по этому каналу происходит сразу; всё сверх него ставится в очередь до пополнения канала. Для каждого вывода действует минимальная сумма."
+    "en": "Up to your instant limit pays out immediately on this network; anything above it is queued until the network is topped up. A minimum applies per withdrawal.",
+    "t": "В пределах мгновенного лимита выплата в этой сети происходит сразу; всё сверх него ставится в очередь до пополнения сети. Для каждого вывода действует минимальная сумма."
   },
   "tips.wallet.withdraw.queueing.title": {
     "en": "How withdrawals work",
     "t": "Как работают выводы"
   },
   "tips.wallet.withdraw.review.body": {
-    "en": "Review freezes exactly what you'll send. Confirm submits that snapshot — if the rail list changes underneath, the open review is voided and you re-review.",
-    "t": "Проверка фиксирует ровно то, что будет отправлено. Подтверждение отправляет этот снимок — если список каналов изменится, открытая проверка аннулируется и её нужно пройти заново."
+    "en": "Review freezes exactly what you'll send. Confirm submits that snapshot — if the network list changes underneath, the open review is voided and you re-review.",
+    "t": "Проверка фиксирует ровно то, что будет отправлено. Подтверждение отправляет этот снимок — если список сетей изменится, открытая проверка аннулируется и её нужно пройти заново."
   },
   "tips.wallet.withdraw.review.title": {
     "en": "Review, then confirm",
@@ -6116,8 +6116,8 @@
     "t": "Купить"
   },
   "trade.form.closed": {
-    "en": "The book is closed. Orders are refused until an operator opens it.",
-    "t": "Книга закрыта. Заявки не принимаются, пока оператор её не откроет."
+    "en": "The book is closed. Orders are not accepted until it opens again.",
+    "t": "Книга закрыта. Заявки не принимаются, пока она не откроется снова."
   },
   "trade.form.duplicateTitle": {
     "en": "Already submitted",
@@ -6144,8 +6144,8 @@
     "t": "Лимит"
   },
   "trade.form.locked": {
-    "en": "Trading isn't open to you on this product. Ask an operator if you should have access.",
-    "t": "Торговля этим продуктом вам не открыта. Обратитесь к оператору, если доступ должен быть."
+    "en": "Trading isn't open to you on this product. Contact support if you think you should have access.",
+    "t": "Торговля этим продуктом вам не открыта. Напишите в поддержку, если считаете, что доступ должен быть."
   },
   "trade.form.market": {
     "en": "Market",
@@ -6172,8 +6172,8 @@
     "t": "Исполнено {filled} из {size} по {avg} USDT; остаток отменён."
   },
   "trade.form.placed.rejected": {
-    "en": "The ledger refused the order: {reason}",
-    "t": "Леджер отклонил заявку: {reason}"
+    "en": "The order was not accepted: {reason}",
+    "t": "Заявка не принята: {reason}"
   },
   "trade.form.placed.resting": {
     "en": "Resting on the book: {filled} of {size} filled so far.",
@@ -6208,8 +6208,8 @@
     "t": "Цена должна быть кратна {tick}"
   },
   "trade.form.refusedBody": {
-    "en": "{detail} If you think you should be able to trade this product, ask an operator.",
-    "t": "{detail} Если вы считаете, что должны торговать этим продуктом, обратитесь к оператору."
+    "en": "{detail} If you think you should be able to trade this product, contact support.",
+    "t": "{detail} Если вы считаете, что должны торговать этим продуктом, напишите в поддержку."
   },
   "trade.form.refusedTitle": {
     "en": "Order refused",
@@ -6628,8 +6628,8 @@
     "t": "Вывести USDT"
   },
   "wallet.acceptedInstantly": {
-    "en": "Accepted instantly; if the {network} rail is short it queues until funded — you'll be notified.",
-    "t": "Заявка принимается сразу; если на канале {network} не хватает средств, она встанет в очередь до пополнения — мы вас уведомим."
+    "en": "Accepted; if {network} liquidity is short right now, it queues until topped up — you'll be notified.",
+    "t": "Заявка принята; если в сети {network} сейчас не хватает ликвидности, она встанет в очередь до пополнения — мы вас уведомим."
   },
   "wallet.activitySub": {
     "en": "Deposits and withdrawals — queued, processing, completed",
@@ -6708,8 +6708,8 @@
     "t": "Средства зачисляются на ваш единый баланс после {n, plural, one {# подтверждения} few {# подтверждений} many {# подтверждений} other {# подтверждений}} в сети."
   },
   "wallet.depositAddressUnavailable": {
-    "en": "A {network} deposit address isn't available yet — this rail is still being provisioned. Check back soon.",
-    "t": "Адрес для пополнения в сети {network} пока недоступен — канал ещё настраивается. Загляните позже."
+    "en": "A {network} deposit address isn't available yet — this network is still being set up. Check back soon.",
+    "t": "Адрес для пополнения в сети {network} пока недоступен — эта сеть ещё настраивается. Загляните позже."
   },
   "wallet.depositNetwork": {
     "en": "Deposit network",
@@ -6736,8 +6736,8 @@
     "t": "Этот адрес в сети {network} не является вашим адресом в {siblings}, хотя оба начинаются с 0x. USDT, отправленные через {siblingsOr}, зачислены не будут."
   },
   "wallet.exceedsInstant": {
-    "en": "~{amount} USDT exceeds instant {network} liquidity and will be queued until the rail is topped up.",
-    "t": "~{amount} USDT превышают мгновенную ликвидность сети {network}, поэтому заявка встанет в очередь до пополнения канала."
+    "en": "~{amount} USDT exceeds instant {network} liquidity and will be queued until the network is topped up.",
+    "t": "~{amount} USDT превышают мгновенную ликвидность сети {network}, поэтому заявка встанет в очередь до пополнения сети."
   },
   "wallet.minInstantQueued": {
     "en": "Min {min} USDT · instant {network} {instant} · rest queued",
@@ -6768,12 +6768,12 @@
     "t": "Ваши пополнения и выводы появятся здесь после первого перевода."
   },
   "wallet.noDepositRails": {
-    "en": "No deposit rails are available right now — check back soon.",
-    "t": "Каналы пополнения сейчас недоступны — загляните позже."
+    "en": "No deposit networks are available right now — check back soon.",
+    "t": "Сети для пополнения сейчас недоступны — загляните позже."
   },
   "wallet.noRails": {
-    "en": "No deposit or withdrawal rails are available right now — check back soon.",
-    "t": "Каналы пополнения и вывода сейчас недоступны — загляните позже."
+    "en": "No deposit or withdrawal networks are available right now — check back soon.",
+    "t": "Сети для пополнения и вывода сейчас недоступны — загляните позже."
   },
   "wallet.noRailsTitle": {
     "en": "No networks available yet",
@@ -6788,16 +6788,16 @@
     "t": "Адреса для пополнения выдаём и вывод открываем после подтверждения личности. Баланс выше при этом не меняется."
   },
   "wallet.noWithdrawRails": {
-    "en": "No withdrawal rails are available right now — check back soon.",
-    "t": "Каналы вывода сейчас недоступны — загляните позже."
+    "en": "No withdrawal networks are available right now — check back soon.",
+    "t": "Сети для вывода сейчас недоступны — загляните позже."
   },
   "wallet.oneFungibleBalance": {
     "en": "≈ ${amount} · one fungible balance",
     "t": "≈ ${amount} · единый баланс"
   },
   "wallet.overviewSub": {
-    "en": "One USDT balance · networks are deposit / withdrawal rails",
-    "t": "Единый баланс USDT · сети — это каналы пополнения и вывода"
+    "en": "One USDT balance · networks are how you deposit and withdraw",
+    "t": "Единый баланс USDT · сети — это способ пополнения и вывода"
   },
   "wallet.pendWd": {
     "en": "PEND WD",
@@ -6808,8 +6808,8 @@
     "t": "Адрес в сети {network}"
   },
   "wallet.railActionUnavailable": {
-    "en": "{action} is not available on this rail yet",
-    "t": "{action} пока недоступно на этом канале"
+    "en": "{action} is not available on this network yet",
+    "t": "{action} пока недоступно в этой сети"
   },
   "wallet.railHazard": {
     "en": "Only send USDT on the {network} network to this address. Funds sent on any other network will be lost permanently.",
@@ -6820,12 +6820,12 @@
     "t": "{network} · USDT"
   },
   "wallet.railsCaption": {
-    "en": "deposit & withdrawal rails",
-    "t": "каналы пополнения и вывода"
+    "en": "deposit & withdrawal networks",
+    "t": "сети пополнения и вывода"
   },
   "wallet.receiptQueued": {
-    "en": "{amount} USDT to {address} is queued — it ships once the {network} rail is topped up.",
-    "t": "{amount} USDT на адрес {address} поставлены в очередь — отправка произойдёт после пополнения канала {network}."
+    "en": "{amount} USDT to {address} is queued — it is sent once {network} liquidity is topped up.",
+    "t": "{amount} USDT на адрес {address} поставлены в очередь — отправка произойдёт после пополнения ликвидности сети {network}."
   },
   "wallet.receiptSubmitted": {
     "en": "{amount} USDT is on its way to {address} — pending on-chain confirmation.",
@@ -6856,8 +6856,8 @@
     "t": "tx {ref}"
   },
   "wallet.withdrawSub": {
-    "en": "Send funds to an external address — one balance, any rail",
-    "t": "Отправка средств на внешний адрес — единый баланс, любой канал"
+    "en": "Send funds to an external address — one balance, any network",
+    "t": "Отправка средств на внешний адрес — единый баланс, любая сеть"
   },
   "wallet.withdrawVerifyBody": {
     "en": "Withdrawals open once your identity is verified. Your balance is untouched in the meantime.",

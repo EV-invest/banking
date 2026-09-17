@@ -3808,8 +3808,8 @@
     "t": "Không tải được ví của bạn"
   },
   "invest.about.risk": {
-    "en": "Units can fall in value as well as rise. The NAV is set by the operator's valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.",
-    "t": "Đơn vị có thể giảm giá cũng như tăng giá. NAV do định giá của nhà điều hành quyết định, không phải giá thị trường, và các mốc định giá trước không nói lên gì về tương lai. Tiền chỉ quay lại khi lệnh rút được tất toán hoặc có người mua nhận đơn vị của bạn trên sổ lệnh. Chỉ đầu tư số tiền bạn có thể để lại lâu dài."
+    "en": "Units can fall in value as well as rise. The NAV is set by a posted valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.",
+    "t": "Đơn vị có thể giảm giá cũng như tăng giá. NAV được xác định bởi mức định giá đã công bố, không phải giá thị trường, và các mốc định giá trước không nói lên gì về tương lai. Tiền chỉ quay lại khi lệnh rút được tất toán hoặc có người mua nhận đơn vị của bạn trên sổ lệnh. Chỉ đầu tư số tiền bạn có thể để lại lâu dài."
   },
   "invest.about.riskTitle": {
     "en": "Risk.",
@@ -3884,12 +3884,12 @@
     "t": "Quỹ này đã đóng với các lệnh đăng ký mới. Đơn vị quỹ của bạn không bị ảnh hưởng — bạn vẫn có thể hoàn vốn toàn bộ."
   },
   "invest.blocked.locked": {
-    "en": "This fund isn't open to you yet. You can see it, but subscribing is locked until an operator raises your access.",
-    "t": "Quỹ này chưa mở cho bạn. Bạn có thể xem, nhưng việc đăng ký bị khóa cho đến khi người vận hành nâng quyền truy cập của bạn."
+    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised — contact support if you think you should have it.",
+    "t": "Quỹ này chưa mở cho bạn. Bạn có thể xem, nhưng việc đăng ký vẫn bị khóa cho đến khi quyền truy cập của bạn được nâng — hãy liên hệ hỗ trợ nếu bạn cho rằng mình nên có quyền."
   },
   "invest.blocked.staleNav": {
-    "en": "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.",
-    "t": "Định giá của quỹ đã cũ, nên việc giao dịch tạm dừng cho tới khi nhân sự vận hành đăng mức định giá mới."
+    "en": "The fund's valuation is out of date, so dealing is paused until a fresh one is posted.",
+    "t": "Định giá của quỹ đã cũ, nên việc giao dịch tạm dừng cho tới khi mức định giá mới được công bố."
   },
   "invest.buysUnits": {
     "en": "Buys {n, plural, one {{units} unit} other {{units} units}} at {nav} USDT per unit.",
@@ -4048,12 +4048,12 @@
     "t": "Hiện không có quỹ nào mở nhận đăng ký."
   },
   "invest.noFundsHint": {
-    "en": "A fund appears here once an operator registers and opens it. Nothing you hold is affected.",
-    "t": "Một quỹ sẽ xuất hiện ở đây khi nhân sự vận hành đăng ký và mở nó. Những gì bạn đang nắm giữ không bị ảnh hưởng."
+    "en": "A fund appears here once it is registered and opened for subscription. Nothing you hold is affected.",
+    "t": "Một quỹ sẽ xuất hiện ở đây khi được đăng ký và mở cho đăng ký mua. Những gì bạn đang nắm giữ không bị ảnh hưởng."
   },
   "invest.noUnitsHeld": {
-    "en": "You hold no fund units yet.",
-    "t": "Bạn chưa nắm giữ đơn vị quỹ nào."
+    "en": "You hold no units yet.",
+    "t": "Bạn chưa nắm giữ đơn vị nào."
   },
   "invest.noUnitsInFund": {
     "en": "You hold no units in this fund yet.",
@@ -4068,8 +4068,8 @@
     "t": "Không có quỹ nào được đăng ký với mã “{service}”."
   },
   "invest.notRegisteredHint": {
-    "en": "A fund exists only once an operator registers it. If you followed a link here, the product may never have been opened.",
-    "t": "Một quỹ chỉ tồn tại khi nhân sự vận hành đăng ký nó. Nếu bạn đến đây từ một đường dẫn, có thể sản phẩm này chưa từng được mở."
+    "en": "Nothing is registered under this name. If you followed a link here, the product may never have been opened.",
+    "t": "Không có gì được đăng ký dưới tên này. Nếu bạn đến đây từ một đường dẫn, có thể sản phẩm này chưa từng được mở."
   },
   "invest.notYetValued": {
     "en": "Not yet valued",
@@ -4328,8 +4328,8 @@
     "t": "Phí"
   },
   "nav.group.fund": {
-    "en": "Fund",
-    "t": "Quỹ"
+    "en": "Your account",
+    "t": "Tài khoản của bạn"
   },
   "nav.home": {
     "en": "Home",
@@ -4724,12 +4724,12 @@
     "t": "định giá theo NAV lúc tất toán"
   },
   "ops.step.awaitingRail": {
-    "en": "Awaiting a liquid rail",
-    "t": "Chờ một kênh có thanh khoản"
+    "en": "Awaiting network liquidity",
+    "t": "Chờ thanh khoản trên mạng"
   },
   "ops.step.awaitingRailMeta": {
-    "en": "ships as soon as the rail is topped up",
-    "t": "sẽ chuyển đi ngay khi kênh được nạp thêm"
+    "en": "sent as soon as the network is topped up",
+    "t": "sẽ chuyển đi ngay khi mạng được nạp thêm"
   },
   "ops.step.broadcast": {
     "en": "Broadcast to the network",
@@ -5728,8 +5728,8 @@
     "t": "Giá trị danh mục"
   },
   "tips.dashboard.performance.series.body": {
-    "en": "'Fund performance' is the fund's return since the first valuation in the range, from the marks the operator posted; 'Your participation' is what your units were worth at each of them, which differs by when you contributed.",
-    "t": "“Hiệu suất quỹ” là lợi nhuận của quỹ kể từ lần định giá đầu tiên trong khoảng, theo các mốc mà vận hành viên đã đăng; “Phần tham gia của bạn” là giá trị đơn vị của bạn tại mỗi mốc đó, khác nhau tùy thời điểm bạn góp vốn."
+    "en": "'Fund performance' is the fund's return since the first valuation in the range, from the posted marks; 'Your participation' is what your units were worth at each of them, which differs by when you contributed.",
+    "t": "“Hiệu suất quỹ” là lợi nhuận của quỹ kể từ lần định giá đầu tiên trong khoảng, theo các mốc đã công bố; “Phần tham gia của bạn” là giá trị đơn vị của bạn tại mỗi mốc đó, khác nhau tùy thời điểm bạn góp vốn."
   },
   "tips.dashboard.performance.series.title": {
     "en": "Performance chart",
@@ -5780,8 +5780,8 @@
     "t": "Đăng ký mua bằng USDT để nhận đơn vị quỹ — giá trị của bạn bám theo NAV của quỹ, không theo số lượng đơn vị."
   },
   "tips.invest.overview.title": {
-    "en": "Fund shares",
-    "t": "Phần quỹ sở hữu"
+    "en": "How investing works",
+    "t": "Đầu tư hoạt động thế nào"
   },
   "tips.invest.position.nav.body": {
     "en": "Net asset value per unit — the current price at which units are bought on subscribe and priced on redeem.",
@@ -5808,8 +5808,8 @@
     "t": "NAV cũ"
   },
   "tips.invest.position.units.body": {
-    "en": "Your share count in the fund's pool — a fixed quantity you own until you subscribe or redeem more.",
-    "t": "Số phần bạn sở hữu trong quỹ — một lượng cố định thuộc về bạn cho tới khi bạn đăng ký mua thêm hoặc hoàn vốn."
+    "en": "The units you hold in this fund — a fixed quantity until you subscribe or redeem more.",
+    "t": "Số đơn vị bạn nắm giữ trong quỹ này — một lượng cố định cho tới khi bạn đăng ký mua thêm hoặc hoàn vốn."
   },
   "tips.invest.position.units.title": {
     "en": "Units",
@@ -5956,8 +5956,8 @@
     "t": "Bạn chỉ có một số dư USDT duy nhất — các mạng chỉ là cách bạn nạp và rút. Thẻ này chia số dư đó thành Tổng = Khả dụng + Trong lệnh + Đã đầu tư + Đang chờ rút."
   },
   "tips.wallet.balance.model.title": {
-    "en": "One balance, many rails",
-    "t": "Một số dư, nhiều kênh"
+    "en": "One balance, many networks",
+    "t": "Một số dư, nhiều mạng"
   },
   "tips.wallet.balance.pending-withdrawal.body": {
     "en": "USDT reserved for withdrawals still in flight (queued or processing). It is no longer part of your available balance.",
@@ -5968,8 +5968,8 @@
     "t": "Đang chờ rút"
   },
   "tips.wallet.deposit.address.body": {
-    "en": "A personal, reusable address for this rail. On TON it is shown in the wallet-friendly UQ… form so an uninitialised wallet doesn't bounce the transfer.",
-    "t": "Một địa chỉ riêng, dùng lại được cho kênh này. Trên TON, địa chỉ hiển thị ở dạng UQ… thân thiện với ví để một ví chưa khởi tạo không làm giao dịch bị trả lại."
+    "en": "A personal, reusable address on this network. On TON it is shown in the wallet-friendly UQ… form so an uninitialised wallet doesn't bounce the transfer.",
+    "t": "Một địa chỉ riêng, dùng lại được trên mạng này. Trên TON, địa chỉ hiển thị ở dạng UQ… thân thiện với ví để một ví chưa khởi tạo không làm giao dịch bị trả lại."
   },
   "tips.wallet.deposit.address.title": {
     "en": "Your deposit address",
@@ -5984,24 +5984,24 @@
     "t": "Số lần xác nhận mạng"
   },
   "tips.wallet.deposit.network.body": {
-    "en": "Pick the chain you'll send USDT on. Each rail shows its own deposit address below — that address only works on that one chain.",
-    "t": "Chọn chuỗi bạn sẽ gửi USDT. Mỗi kênh hiển thị địa chỉ nạp riêng bên dưới — địa chỉ đó chỉ dùng được trên đúng chuỗi ấy."
+    "en": "Pick the chain you'll send USDT on. Each network shows its own deposit address below — that address only works on that one chain.",
+    "t": "Chọn chuỗi bạn sẽ gửi USDT. Mỗi mạng hiển thị địa chỉ nạp riêng bên dưới — địa chỉ đó chỉ dùng được trên đúng chuỗi ấy."
   },
   "tips.wallet.deposit.network.title": {
-    "en": "Network / rail",
-    "t": "Mạng / kênh"
+    "en": "Network",
+    "t": "Mạng"
   },
   "tips.wallet.deposit.rail-hazard.body": {
-    "en": "Sending any other asset, or using a different network, loses the funds permanently. This 0x address is NOT your address on the sibling EVM chain — even though both start with 0x, USDT sent on the wrong EVM rail will not be credited.",
-    "t": "Gửi bất kỳ tài sản nào khác, hoặc dùng một mạng khác, sẽ mất tiền vĩnh viễn. Địa chỉ 0x này KHÔNG phải địa chỉ của bạn trên chuỗi EVM anh em — dù cả hai đều bắt đầu bằng 0x, USDT gửi trên kênh EVM sai sẽ không được ghi có."
+    "en": "Sending any other asset, or using a different network, loses the funds permanently. This 0x address is NOT your address on the sibling EVM chain — even though both start with 0x, USDT sent on the wrong EVM network will not be credited.",
+    "t": "Gửi bất kỳ tài sản nào khác, hoặc dùng một mạng khác, sẽ mất tiền vĩnh viễn. Địa chỉ 0x này KHÔNG phải địa chỉ của bạn trên chuỗi EVM anh em — dù cả hai đều bắt đầu bằng 0x, USDT gửi trên mạng EVM sai sẽ không được ghi có."
   },
   "tips.wallet.deposit.rail-hazard.title": {
-    "en": "Send only USDT on this rail",
-    "t": "Chỉ gửi USDT trên kênh này"
+    "en": "Send only USDT on this network",
+    "t": "Chỉ gửi USDT trên mạng này"
   },
   "tips.wallet.withdraw.available.body": {
-    "en": "The most you can withdraw on this rail right now. Tap Max to fill the amount.",
-    "t": "Số tối đa bạn có thể rút trên kênh này ngay bây giờ. Chạm Tối đa để điền đủ số tiền."
+    "en": "The most you can withdraw on this network right now. Tap Max to fill the amount.",
+    "t": "Số tối đa bạn có thể rút trên mạng này ngay bây giờ. Chạm Tối đa để điền đủ số tiền."
   },
   "tips.wallet.withdraw.available.title": {
     "en": "Available to withdraw",
@@ -6016,8 +6016,8 @@
     "t": "Địa chỉ nhận"
   },
   "tips.wallet.withdraw.network-fee.body": {
-    "en": "A flat on-chain fee for this rail, deducted from your amount before it is sent.",
-    "t": "Một khoản phí on-chain cố định cho kênh này, được trừ vào số tiền của bạn trước khi gửi đi."
+    "en": "A flat on-chain fee for this network, deducted from your amount before it is sent.",
+    "t": "Một khoản phí on-chain cố định cho mạng này, được trừ vào số tiền của bạn trước khi gửi đi."
   },
   "tips.wallet.withdraw.network-fee.title": {
     "en": "Network fee",
@@ -6028,20 +6028,20 @@
     "t": "Chuỗi mà lệnh rút của bạn đi qua. Địa chỉ nhận phải là một địa chỉ hợp lệ trên đúng mạng này, nếu không tiền sẽ mất."
   },
   "tips.wallet.withdraw.network.title": {
-    "en": "Network / rail",
-    "t": "Mạng / kênh"
+    "en": "Network",
+    "t": "Mạng"
   },
   "tips.wallet.withdraw.queueing.body": {
-    "en": "Up to your instant limit pays out immediately on this rail; anything above it is queued until the rail is topped up. A minimum applies per withdrawal.",
-    "t": "Phần trong hạn mức tức thì được chi trả ngay trên kênh này; phần vượt sẽ xếp hàng cho tới khi kênh được nạp thêm. Mỗi lệnh rút đều có mức tối thiểu."
+    "en": "Up to your instant limit pays out immediately on this network; anything above it is queued until the network is topped up. A minimum applies per withdrawal.",
+    "t": "Phần trong hạn mức tức thì được chi trả ngay trên mạng này; phần vượt sẽ xếp hàng cho tới khi mạng được nạp thêm. Mỗi lệnh rút đều có mức tối thiểu."
   },
   "tips.wallet.withdraw.queueing.title": {
     "en": "How withdrawals work",
     "t": "Cách lệnh rút hoạt động"
   },
   "tips.wallet.withdraw.review.body": {
-    "en": "Review freezes exactly what you'll send. Confirm submits that snapshot — if the rail list changes underneath, the open review is voided and you re-review.",
-    "t": "Bước xem lại đóng băng chính xác những gì bạn sẽ gửi. Xác nhận sẽ gửi đi bản chụp đó — nếu danh sách kênh thay đổi bên dưới, bản xem lại đang mở sẽ bị hủy và bạn phải xem lại từ đầu."
+    "en": "Review freezes exactly what you'll send. Confirm submits that snapshot — if the network list changes underneath, the open review is voided and you re-review.",
+    "t": "Bước xem lại đóng băng chính xác những gì bạn sẽ gửi. Xác nhận sẽ gửi đi bản chụp đó — nếu danh sách mạng thay đổi bên dưới, bản xem lại đang mở sẽ bị hủy và bạn phải xem lại từ đầu."
   },
   "tips.wallet.withdraw.review.title": {
     "en": "Review, then confirm",
@@ -6116,8 +6116,8 @@
     "t": "Mua"
   },
   "trade.form.closed": {
-    "en": "The book is closed. Orders are refused until an operator opens it.",
-    "t": "Sổ lệnh đang đóng. Lệnh bị từ chối cho đến khi người vận hành mở lại."
+    "en": "The book is closed. Orders are not accepted until it opens again.",
+    "t": "Sổ lệnh đang đóng. Lệnh không được nhận cho đến khi sổ mở lại."
   },
   "trade.form.duplicateTitle": {
     "en": "Already submitted",
@@ -6144,8 +6144,8 @@
     "t": "Giới hạn"
   },
   "trade.form.locked": {
-    "en": "Trading isn't open to you on this product. Ask an operator if you should have access.",
-    "t": "Bạn chưa được mở giao dịch sản phẩm này. Hãy hỏi người vận hành nếu bạn nên có quyền."
+    "en": "Trading isn't open to you on this product. Contact support if you think you should have access.",
+    "t": "Bạn chưa được mở giao dịch sản phẩm này. Hãy liên hệ hỗ trợ nếu bạn cho rằng mình nên có quyền."
   },
   "trade.form.market": {
     "en": "Market",
@@ -6172,8 +6172,8 @@
     "t": "Đã khớp {filled} trên {size} ở {avg} USDT; phần còn lại đã hủy."
   },
   "trade.form.placed.rejected": {
-    "en": "The ledger refused the order: {reason}",
-    "t": "Sổ cái từ chối lệnh: {reason}"
+    "en": "The order was not accepted: {reason}",
+    "t": "Lệnh không được nhận: {reason}"
   },
   "trade.form.placed.resting": {
     "en": "Resting on the book: {filled} of {size} filled so far.",
@@ -6208,8 +6208,8 @@
     "t": "Giá phải là bội số của {tick}"
   },
   "trade.form.refusedBody": {
-    "en": "{detail} If you think you should be able to trade this product, ask an operator.",
-    "t": "{detail} Nếu bạn cho rằng mình được giao dịch sản phẩm này, hãy hỏi người vận hành."
+    "en": "{detail} If you think you should be able to trade this product, contact support.",
+    "t": "{detail} Nếu bạn cho rằng mình được giao dịch sản phẩm này, hãy liên hệ hỗ trợ."
   },
   "trade.form.refusedTitle": {
     "en": "Order refused",
@@ -6628,8 +6628,8 @@
     "t": "Rút USDT"
   },
   "wallet.acceptedInstantly": {
-    "en": "Accepted instantly; if the {network} rail is short it queues until funded — you'll be notified.",
-    "t": "Được tiếp nhận ngay; nếu kênh {network} thiếu thanh khoản, lệnh sẽ xếp hàng cho tới khi được nạp đủ — bạn sẽ nhận được thông báo."
+    "en": "Accepted; if {network} liquidity is short right now, it queues until topped up — you'll be notified.",
+    "t": "Đã tiếp nhận; nếu thanh khoản {network} đang thiếu, lệnh sẽ xếp hàng cho tới khi được nạp đủ — bạn sẽ nhận được thông báo."
   },
   "wallet.activitySub": {
     "en": "Deposits and withdrawals — queued, processing, completed",
@@ -6708,8 +6708,8 @@
     "t": "Được ghi có vào số dư duy nhất của bạn sau {n, plural, other {# lần xác nhận mạng}}."
   },
   "wallet.depositAddressUnavailable": {
-    "en": "A {network} deposit address isn't available yet — this rail is still being provisioned. Check back soon.",
-    "t": "Địa chỉ nạp {network} chưa sẵn sàng — kênh này vẫn đang được thiết lập. Vui lòng quay lại sau."
+    "en": "A {network} deposit address isn't available yet — this network is still being set up. Check back soon.",
+    "t": "Địa chỉ nạp {network} chưa sẵn sàng — mạng này vẫn đang được thiết lập. Vui lòng quay lại sau."
   },
   "wallet.depositNetwork": {
     "en": "Deposit network",
@@ -6736,8 +6736,8 @@
     "t": "Địa chỉ {network} này không phải địa chỉ {siblings} của bạn — dù cả hai đều bắt đầu bằng 0x. USDT gửi trên {siblingsOr} sẽ không được ghi có."
   },
   "wallet.exceedsInstant": {
-    "en": "~{amount} USDT exceeds instant {network} liquidity and will be queued until the rail is topped up.",
-    "t": "~{amount} USDT vượt quá thanh khoản tức thì của {network} và sẽ được xếp hàng cho tới khi kênh được nạp thêm."
+    "en": "~{amount} USDT exceeds instant {network} liquidity and will be queued until the network is topped up.",
+    "t": "~{amount} USDT vượt quá thanh khoản tức thì của {network} và sẽ được xếp hàng cho tới khi mạng được nạp thêm."
   },
   "wallet.minInstantQueued": {
     "en": "Min {min} USDT · instant {network} {instant} · rest queued",
@@ -6768,12 +6768,12 @@
     "t": "Các khoản nạp và rút của bạn sẽ hiện ở đây sau lần chuyển đầu tiên."
   },
   "wallet.noDepositRails": {
-    "en": "No deposit rails are available right now — check back soon.",
-    "t": "Hiện không có kênh nạp tiền nào khả dụng — vui lòng quay lại sau."
+    "en": "No deposit networks are available right now — check back soon.",
+    "t": "Hiện không có mạng nạp tiền nào khả dụng — vui lòng quay lại sau."
   },
   "wallet.noRails": {
-    "en": "No deposit or withdrawal rails are available right now — check back soon.",
-    "t": "Hiện không có kênh nạp hoặc rút tiền nào khả dụng — vui lòng quay lại sau."
+    "en": "No deposit or withdrawal networks are available right now — check back soon.",
+    "t": "Hiện không có mạng nạp hoặc rút tiền nào khả dụng — vui lòng quay lại sau."
   },
   "wallet.noRailsTitle": {
     "en": "No networks available yet",
@@ -6788,16 +6788,16 @@
     "t": "Địa chỉ nạp tiền được cấp và rút tiền được mở sau khi danh tính của bạn được xác minh. Số dư ở trên không thay đổi."
   },
   "wallet.noWithdrawRails": {
-    "en": "No withdrawal rails are available right now — check back soon.",
-    "t": "Hiện không có kênh rút tiền nào khả dụng — vui lòng quay lại sau."
+    "en": "No withdrawal networks are available right now — check back soon.",
+    "t": "Hiện không có mạng rút tiền nào khả dụng — vui lòng quay lại sau."
   },
   "wallet.oneFungibleBalance": {
     "en": "≈ ${amount} · one fungible balance",
     "t": "≈ ${amount} · một số dư duy nhất"
   },
   "wallet.overviewSub": {
-    "en": "One USDT balance · networks are deposit / withdrawal rails",
-    "t": "Một số dư USDT duy nhất · các mạng là kênh nạp / rút"
+    "en": "One USDT balance · networks are how you deposit and withdraw",
+    "t": "Một số dư USDT duy nhất · mạng là cách bạn nạp và rút"
   },
   "wallet.pendWd": {
     "en": "PEND WD",
@@ -6808,8 +6808,8 @@
     "t": "Địa chỉ {network}"
   },
   "wallet.railActionUnavailable": {
-    "en": "{action} is not available on this rail yet",
-    "t": "{action} chưa khả dụng trên kênh này"
+    "en": "{action} is not available on this network yet",
+    "t": "{action} chưa khả dụng trên mạng này"
   },
   "wallet.railHazard": {
     "en": "Only send USDT on the {network} network to this address. Funds sent on any other network will be lost permanently.",
@@ -6820,12 +6820,12 @@
     "t": "{network} · USDT"
   },
   "wallet.railsCaption": {
-    "en": "deposit & withdrawal rails",
-    "t": "kênh nạp & rút tiền"
+    "en": "deposit & withdrawal networks",
+    "t": "mạng nạp & rút tiền"
   },
   "wallet.receiptQueued": {
-    "en": "{amount} USDT to {address} is queued — it ships once the {network} rail is topped up.",
-    "t": "{amount} USDT tới {address} đang xếp hàng — sẽ được chuyển đi khi kênh {network} được nạp thêm."
+    "en": "{amount} USDT to {address} is queued — it is sent once {network} liquidity is topped up.",
+    "t": "{amount} USDT tới {address} đang xếp hàng — sẽ được chuyển đi khi thanh khoản {network} được nạp thêm."
   },
   "wallet.receiptSubmitted": {
     "en": "{amount} USDT is on its way to {address} — pending on-chain confirmation.",
@@ -6856,8 +6856,8 @@
     "t": "tx {ref}"
   },
   "wallet.withdrawSub": {
-    "en": "Send funds to an external address — one balance, any rail",
-    "t": "Gửi tiền tới địa chỉ bên ngoài — một số dư, mọi kênh"
+    "en": "Send funds to an external address — one balance, any network",
+    "t": "Gửi tiền tới địa chỉ bên ngoài — một số dư, mọi mạng"
   },
   "wallet.withdrawVerifyBody": {
     "en": "Withdrawals open once your identity is verified. Your balance is untouched in the meantime.",
