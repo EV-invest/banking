@@ -171,24 +171,6 @@ impl Party {
 		}
 	}
 
-	pub fn is_piggybank(&self) -> bool {
-		matches!(self, Self::Piggybank)
-	}
-
-	/// Whether this party is the FUND's own money — its capital, its earnings, or a
-	/// product's pooled funds — as opposed to one investor's claim.
-	///
-	/// This is the predicate the payment authorization policy turns on
-	/// ([`crate::payments::PaymentTerms::requirement`]): fund-owned money leaving needs the
-	/// owner consilium, an investor's own money needs that investor's consent. It lives
-	/// here, on the party, so the two can never be classified differently in two places.
-	pub fn is_fund_owned(&self) -> bool {
-		match self {
-			Self::Piggybank | Self::Service(_) | Self::Revenue => true,
-			Self::User(_) => false,
-		}
-	}
-
 	/// The network-agnostic, credit-normal claim account that holds this party's value
 	/// (the fund's own capital for `Piggybank`). The relay credits/debits this when
 	/// moving the party's money; network rides on the custody side of the transfer.
@@ -564,17 +546,12 @@ mod tests {
 	}
 
 	#[test]
-	fn revenue_is_the_fee_claim_and_is_fund_owned() {
+	fn revenue_is_the_fee_claim() {
 		// The whole reason `Revenue` is a party and not a second type: it maps to a claim
 		// like every other end of a money move.
 		assert_eq!(Party::Revenue.claim_key(), LedgerAccountKey::FeeRevenue);
 		assert_eq!(Party::Revenue.kind_str(), "revenue");
 		assert_eq!(Party::Revenue.id_str(), None);
-		// The §3 split the payment policy turns on: three fund-owned parties, one investor.
-		assert!(Party::Piggybank.is_fund_owned());
-		assert!(Party::Revenue.is_fund_owned());
-		assert!(Party::Service(ServiceId::parse("trading").unwrap()).is_fund_owned());
-		assert!(!Party::User(UserId::new()).is_fund_owned());
 	}
 
 	#[test]
