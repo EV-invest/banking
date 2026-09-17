@@ -14,7 +14,6 @@ import { basisLabel, crystallizationLabel } from "@/shared/lib/fee-terms";
 import { pct } from "@/shared/lib/rate";
 import { SectionLabel } from "@/shared/ui/page-frame";
 import { compactUnits, formatUsdt, isZero } from "@/views/invest/lib/format";
-import { companyStakeBps } from "@/views/invest/lib/product";
 import { SupplyBar } from "@/views/invest/ui/atoms";
 import { FeePendingNote } from "@/views/invest/ui/fee-pending-note";
 
@@ -37,7 +36,6 @@ export function SupplyCard({ nav }: { nav: FundNav | null }) {
       </Card>
     );
   }
-  const stake = companyStakeBps(nav);
   return (
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
@@ -48,10 +46,6 @@ export function SupplyCard({ nav }: { nav: FundNav | null }) {
             label={t("invest.remainingCapacity")}
             value={t("dash.unitsAmount", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity, locale) })}
           />
-          {/* The share of the issued supply that is neither this holder's nor the market's —
-              stated here, beside the figures it is a share OF, and only when there is one:
-              a "0%" row would read as a fact about most funds that is really an absence. */}
-          {stake !== null && <Row label={t("invest.companyStake")} value={t("invest.companyStakeValue", { pct: pct(stake), units: compactUnits(nav.company_units, locale) })} />}
           <Row label={t("invest.navPerUnit")} value={`${formatUsdt(nav.nav, locale)} USDT`} />
           <Row label={t("invest.fundAum")} value={nav.aum ? `${formatUsdt(nav.aum, locale)} USDT` : t("invest.notYetValued")} />
         </dl>
