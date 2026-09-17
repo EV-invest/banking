@@ -216,12 +216,16 @@ function chipHref(): string {
 
 // Signed-out (or BFF-unavailable) state — the sign-in CTA, labelled "Cabinet" (#399).
 //
-// Styled as a primary-ink outline pill by hand rather than as the uikit `Button`, and not
-// only to keep the Button (and the tailwind-merge behind its `cn`, ~37 KB) out of a bundle
-// the conductor injects on every public page: the kit's class strings live in
-// node_modules, which the Tailwind scan behind `mfe.css` never reads, so a uikit variant
-// would arrive here with its utilities missing from the sibling stylesheet. Neither system
-// variant is this pill anyway — `outline` is the neutral border, `link` is bare text.
+// Styled as a primary-ink outline pill by hand rather than as the uikit `Button`. The JS
+// is not the reason — `buttonVariants` costs +7.4 KB min on top of a `cn` this bundle
+// already carries. The stylesheet is: the kit's class strings live in node_modules, which
+// the Tailwind scan behind `mfe.css` never reads, so a uikit variant would arrive with its
+// utilities missing, and `@source`-ing the kit's dist to fix that doubles the chip CSS
+// (59 → 118 KB min) on every public page. And neither system variant is this pill anyway —
+// `outline` is the neutral border, `link` is bare text; the missing outline-primary Button
+// variant is tracked in EV-invest/lib. Until it ships, every class here must be a core
+// utility or a token from `tokens.css` — nothing that only the host's own layer defines
+// (see the note in `mfe.css`), or the pill's look would change with the page it sits on.
 //
 // Not instrumented on purpose. The `cta_clicked` event for this link is captured by the
 // HOST — site_conductor's `CabinetEntryTracker`, a capture-phase listener over the slot —
@@ -239,7 +243,7 @@ function SignInCta({ className, intent, returnTo }: AccountChipProps) {
       href={signInHref(documentLocale(), { intent, returnTo })}
       data-cta="cabinet"
       className={cn(
-        "inline-flex h-9 items-center justify-center rounded-md border border-primary-ink bg-transparent px-4 font-mono-tech text-xs tracking-wider text-primary-ink transition-all duration-300 hover:bg-primary hover:text-on-primary",
+        "inline-flex h-9 items-center justify-center rounded-md border border-primary-ink bg-transparent px-4 font-mono text-xs tracking-wider text-primary-ink tabular-nums transition-all hover:border-primary hover:bg-primary hover:text-on-primary",
         CHIP_FOCUS,
         className,
       )}
