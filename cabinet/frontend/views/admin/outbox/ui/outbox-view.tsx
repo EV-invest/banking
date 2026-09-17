@@ -1,10 +1,10 @@
 "use client";
 
-import { Inbox, KeyRound, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import { Inbox, KeyRound, RefreshCw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { unparkEvent } from "@/entities/admin/api/admin-client";
 import { parkedEventsResource } from "@/entities/admin/model/admin-resource";
@@ -224,7 +224,7 @@ function ParkedActions({
             disabled={event.compensated || unparked || unparking !== null}
             onClick={onUnpark}
           >
-            {unparking === event.seq ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {unparking === event.seq ? <Spinner className="size-3.5" aria-hidden /> : null}
             {t("admin.outbox.unpark")}
           </Button>
           <TipAnchor anchor="admin.outbox.parked.unpark" />

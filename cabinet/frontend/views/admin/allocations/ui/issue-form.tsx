@@ -4,11 +4,10 @@
 // of the two the body names; the picker only appears for an investor, so "company" can
 // never be sent alongside a stale `user_id` that was picked and forgotten.
 
-import { Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Input, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
+import { Button, Input, Spinner, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
 
 import type { IssueUnitsBody } from "@/entities/admin/api/admin-client";
 import { cn } from "@/shared/lib/cn";
@@ -83,7 +82,7 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
         </label>
       </div>
       <Button type="button" className={cn("w-full", TEAL_CTA)} disabled={busy || problem !== null} onClick={submit}>
-        {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+        {busy ? <Spinner aria-hidden /> : null}
         {t("admin.alloc.issue.submit")}
       </Button>
       {/* The kit dims a disabled button to half opacity, which on a teal fill over navy

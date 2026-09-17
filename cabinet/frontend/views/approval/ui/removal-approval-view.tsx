@@ -17,11 +17,11 @@
 // dressed up as the "safe" choice — the copy says plainly that refusing does not end the
 // matter, because the peers can still decide it without them (docs/CONSILIUM.md, path (b)).
 
-import { CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Separator } from "@evinvest/uikit";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Separator, Spinner } from "@evinvest/uikit";
 
 import { ApprovalUnavailableError } from "@/entities/approval/api/approval-client";
 import { decideRemoval, removalApprovalResource } from "@/entities/approval/model/approval-resource";
@@ -207,7 +207,7 @@ export function RemovalApprovalView({ token }: { token: string }) {
                 </div>
                 <div className="flex flex-col gap-2.5 sm:flex-row">
                   <Button variant="destructive" className="sm:flex-1" disabled={pending !== null} onClick={() => void decide("remove")}>
-                    {pending === "remove" && <Loader2 className="size-4 animate-spin" />}
+                    {pending === "remove" && <Spinner aria-hidden />}
                     {t("approval.removal.confirmAction")}
                   </Button>
                   <Button variant="ghost" disabled={pending !== null} onClick={() => setConfirming(false)}>
@@ -230,7 +230,7 @@ export function RemovalApprovalView({ token }: { token: string }) {
                     disabled={code.trim().length === 0 || pending !== null}
                     onClick={() => void decide("keep")}
                   >
-                    {pending === "keep" && <Loader2 className="size-4 animate-spin" />}
+                    {pending === "keep" && <Spinner aria-hidden />}
                     {t("approval.removal.refuse")}
                   </Button>
                   <Button

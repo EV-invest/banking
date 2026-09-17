@@ -18,11 +18,11 @@
 // As everywhere in this room: nothing is optimistic. A vote posts, the tags are named, and
 // the tally that comes back is the server's, counted under a row lock.
 
-import { Loader2, UserCog } from "lucide-react";
+import { UserCog } from "lucide-react";
 import { Fragment, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Badge, Button, Item, ItemContent, ItemGroup, ItemSeparator, ItemTitle, Progress, Separator } from "@evinvest/uikit";
+import { Badge, Button, Item, ItemContent, ItemGroup, ItemSeparator, ItemTitle, Progress, Separator, Spinner } from "@evinvest/uikit";
 
 import { cancelUserProposal, voteOnUserProposal } from "@/entities/governance/model/governance-resource";
 import type { ProposalVote, UserProposal } from "@/shared/contracts/governance";
@@ -188,11 +188,11 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
                   disabled={busy !== null}
                   onClick={() => void act("for")}
                 >
-                  {busy === "for" && <Loader2 className="size-4 animate-spin" />}
+                  {busy === "for" && <Spinner aria-hidden />}
                   {proposalVoteLabel(kind, "for", t)}
                 </Button>
                 <Button variant="outline" className="sm:flex-1" disabled={busy !== null} onClick={() => void act("against")}>
-                  {busy === "against" && <Loader2 className="size-4 animate-spin" />}
+                  {busy === "against" && <Spinner aria-hidden />}
                   {proposalVoteLabel(kind, "against", t)}
                 </Button>
               </div>
@@ -204,7 +204,7 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
 
             {standing.role === "initiator" && (
               <Button variant="ghost" size="sm" className="self-start" disabled={busy !== null} onClick={() => void act("cancel")}>
-                {busy === "cancel" && <Loader2 className="size-4 animate-spin" />}
+                {busy === "cancel" && <Spinner aria-hidden />}
                 {t("consilium.proposals.withdraw")}
               </Button>
             )}

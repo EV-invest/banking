@@ -1,10 +1,10 @@
 "use client";
 
-import { KeyRound, Loader2, SearchX, TriangleAlert, X } from "lucide-react";
+import { KeyRound, SearchX, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Badge, Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, FieldDescription, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Badge, Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, FieldDescription, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { revokeSessions, setKycLevel, type UserFilters } from "@/entities/admin/api/admin-client";
 import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
@@ -379,7 +379,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
             onSave={(next) => run("kyc", () => setKycLevel(summary.user_id, next))}
           />
           <Button type="button" variant="outline" size="sm" className="mt-2 w-full border-accent-error/40 text-accent-error hover:bg-accent-error/10" disabled={busy === "revoke"} onClick={() => run("revoke", () => revokeSessions(summary.user_id))}>
-            {busy === "revoke" ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {busy === "revoke" ? <Spinner className="size-3.5" aria-hidden /> : null}
             {t("admin.users.revokeAllSessions")}
           </Button>
           <p className="flex items-center gap-1.5 pt-1 text-xs text-ink-soft">
@@ -515,7 +515,7 @@ function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolea
           onSave(picked);
         }}
       >
-        {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+        {busy ? <Spinner className="size-3.5" aria-hidden /> : null}
         {t("ui.save")}
       </Button>
       {/* Below the control rather than instead of it, the way the owner seat's sentence sits

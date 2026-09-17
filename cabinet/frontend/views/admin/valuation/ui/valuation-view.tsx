@@ -1,11 +1,11 @@
 "use client";
 
-import { Inbox, Loader2, TriangleAlert } from "lucide-react";
+import { Inbox, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { failRedemption, setAllocationUnitCap, settleRedemption } from "@/entities/admin/api/admin-client";
 import { adminAllocationsResource, redemptionQueueResource } from "@/entities/admin/model/admin-resource";
@@ -407,7 +407,7 @@ function SupplyCapCard({
             <Input value={value} onChange={(e) => setDraft(e.target.value)} inputMode="decimal" placeholder="100000000" className="w-full" />
           </label>
           <Button type="button" className={cn(TEAL_CTA)} disabled={saving || invalid || !changed} onClick={save}>
-            {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+            {saving ? <Spinner aria-hidden /> : null}
             {t("admin.valuation.saveCap")}
           </Button>
           {/* i18n-max: 12 per verb — both Buttons are `shrink-0` in a wrapping row. */}

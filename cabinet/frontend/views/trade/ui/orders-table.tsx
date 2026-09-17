@@ -4,10 +4,10 @@
 // the cancel control differs, and it is offered exactly when an order can still be
 // cancelled — never on a filled, cancelled or rejected row.
 
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Button, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import type { Order } from "@/shared/contracts/book";
 import { useLocale } from "@/shared/lib/cabinet-route";
@@ -63,7 +63,7 @@ export function OrdersTable({ orders, busyId, onCancel }: { orders: Order[]; bus
                 <TableCell className={cn(CELL, "text-right")}>
                   {isResting(order) && (
                     <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" disabled={busyId === id} onClick={() => onCancel(id)}>
-                      {busyId === id ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+                      {busyId === id ? <Spinner className="size-3" aria-hidden /> : <X className="size-3" />}
                       {t("ui.cancel")}
                     </Button>
                   )}

@@ -2,10 +2,10 @@
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 
-import { Clock, Loader2, TriangleAlert } from "lucide-react";
+import { Clock, TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { Skeleton } from "@evinvest/uikit";
+import { Skeleton, Spinner } from "@evinvest/uikit";
 
 import { isUnverified } from "@/entities/user/lib/kyc";
 import { profileResource } from "@/entities/user/model/profile-resource";
@@ -274,7 +274,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                       i18n-max: 20 on the confirm label, 11 on the back one. */}
                   <div className="flex gap-2">
                     <button type="button" disabled={submitting} onClick={submit} className={cn(WALLET_CTA, "min-w-0 flex-1 gap-2 py-3 text-sm font-semibold")}>
-                      {submitting && <Loader2 className="size-4 animate-spin" />}
+                      {submitting && <Spinner aria-hidden />}
                       <span className="truncate">{t("wallet.confirmWithdrawal")}</span>
                     </button>
                     <button type="button" disabled={submitting} onClick={() => setConfirming(null)} className={cn(WALLET_CTA_GHOST, "shrink-0 px-4 py-3 text-sm")}>

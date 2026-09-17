@@ -15,11 +15,11 @@
 // covers exactly the holders it was given over, so the later ones need an act of their
 // own — one that extends the list and puts the extender's name on all of it.
 
-import { Loader2, MailWarning } from "lucide-react";
+import { MailWarning } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Alert, AlertDescription, AlertTitle, Button } from "@evinvest/uikit";
+import { Alert, AlertDescription, AlertTitle, Button, Spinner } from "@evinvest/uikit";
 
 import { acknowledgeUndeliveredNotices } from "@/entities/admin/api/admin-client";
 import type { FeePolicyChange } from "@/shared/contracts/admin";
@@ -125,7 +125,7 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
             </p>
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <Button variant="destructive" size="sm" disabled={busy} onClick={() => void acknowledge()}>
-                {busy && <Loader2 className="size-4 animate-spin" />}
+                {busy && <Spinner aria-hidden />}
                 {t("admin.fees.notices.acknowledgeConfirm")}
               </Button>
               <Button ref={keepRef} variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming(false)}>

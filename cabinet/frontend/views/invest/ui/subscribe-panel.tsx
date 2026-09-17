@@ -13,10 +13,10 @@
 
 import { useAnalytics } from "@evinvest/analytics/react";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Loader2, Sparkles, TriangleAlert } from "lucide-react";
+import { Sparkles, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
-import { Alert, AlertDescription, AlertTitle, Button, Skeleton } from "@evinvest/uikit";
+import { Alert, AlertDescription, AlertTitle, Button, Skeleton, Spinner } from "@evinvest/uikit";
 
 import { hasHoldings } from "@/entities/fund/lib/holdings";
 import { positionsResource, submitSubscribe } from "@/entities/fund/model/fund-resource";
@@ -108,7 +108,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
         onChange={setAmount}
         action={
           <Button type="button" className={cn(TEAL_CTA, "tabular-nums")} disabled={submitting || !canSubmit(check)} onClick={submit}>
-            {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {submitting ? <Spinner aria-hidden /> : <Sparkles className="size-4" />}
             {/* Names the outcome once there is one to name, and names it EXACTLY: the check
                 runs at 18 dp, so a rounding formatter could read "0.00" over an amount
                 that still buys a fraction of a unit and submits. */}

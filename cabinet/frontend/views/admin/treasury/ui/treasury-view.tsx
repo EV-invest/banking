@@ -1,11 +1,11 @@
 "use client";
 
-import { Check, Copy, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import { Check, Copy, RefreshCw, TriangleAlert } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Spinner } from "@evinvest/uikit";
 
 import { recordTreasuryDeposit, type RecordedArrival } from "@/entities/admin/api/admin-client";
 import { treasuryResource } from "@/entities/admin/model/admin-resource";
@@ -208,7 +208,7 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
           {state.result && !state.result.recorded && <p className="text-sm text-accent-warn">{t("admin.treasury.alreadyRecorded")}</p>}
 
           <Button type="button" className={cn("ml-auto flex", TEAL_CTA)} disabled={state.busy || !network || !txRef.trim()} onClick={submit}>
-            {state.busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            {state.busy ? <Spinner aria-hidden /> : null}
             {t("admin.treasury.recordArrivalSubmit")}
           </Button>
         </CardContent>

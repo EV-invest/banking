@@ -11,7 +11,7 @@
 // what the rule is and why it exists, because every one of those rules is there to stop a
 // particular abuse, and a reader who is told the reason is not being told off.
 
-import { Loader2, ScrollText, UserMinus } from "lucide-react";
+import { ScrollText, UserMinus } from "lucide-react";
 import { Fragment, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
@@ -40,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
   Separator,
+  Spinner,
   Textarea,
 } from "@evinvest/uikit";
 
@@ -209,7 +210,7 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
               // would be the design taking a side in someone's removal.
               <div className="flex flex-col gap-2.5 sm:flex-row">
                 <Button variant="outline" className="sm:flex-1" disabled={busy !== null} onClick={() => void act("keep")}>
-                  {busy === "keep" && <Loader2 className="size-4 animate-spin" />}
+                  {busy === "keep" && <Spinner aria-hidden />}
                   {t("consilium.removal.voteKeep")}
                 </Button>
                 <Button
@@ -218,7 +219,7 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
                   disabled={busy !== null}
                   onClick={() => void act("remove")}
                 >
-                  {busy === "remove" && <Loader2 className="size-4 animate-spin" />}
+                  {busy === "remove" && <Spinner aria-hidden />}
                   {t("consilium.removal.voteRemove")}
                 </Button>
               </div>
@@ -230,7 +231,7 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
 
             {standing.role === "initiator" && (
               <Button variant="ghost" size="sm" className="self-start" disabled={busy !== null} onClick={() => void act("cancel")}>
-                {busy === "cancel" && <Loader2 className="size-4 animate-spin" />}
+                {busy === "cancel" && <Spinner aria-hidden />}
                 {t("consilium.removal.cancel")}
               </Button>
             )}
@@ -420,7 +421,7 @@ export function ProposeRemoval({
                 disabled={busy || !target || reason.trim().length === 0}
                 onClick={() => void submit()}
               >
-                {busy && <Loader2 className="size-4 animate-spin" />}
+                {busy && <Spinner aria-hidden />}
                 {t("consilium.propose.submit")}
               </Button>
             </>

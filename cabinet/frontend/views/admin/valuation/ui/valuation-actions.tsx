@@ -6,11 +6,11 @@
 // guard and drain pooled cash (banking#232). Both routes are gated alike, so the operator
 // chooses where the figure goes, never whether the guard applies.
 
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Alert, AlertDescription, AlertTitle, Button } from "@evinvest/uikit";
+import { Alert, AlertDescription, AlertTitle, Button, Spinner } from "@evinvest/uikit";
 
 import { postValuation, proposeValuationOverride } from "@/entities/admin/api/admin-client";
 import type { FundNav } from "@/shared/contracts/admin";
@@ -103,13 +103,13 @@ export function ValuationActions({
         {/* i18n-max: 24 per verb — both Buttons are `shrink-0` in a wrapping row. */}
         <span className="inline-flex shrink-0 items-center gap-1.5">
           <Button type="button" variant="outline" disabled={disabled || busy !== null} onClick={() => void run("propose")}>
-            {busy === "propose" ? <Loader2 className="size-4 animate-spin" /> : null}
+            {busy === "propose" ? <Spinner aria-hidden /> : null}
             {t("admin.valuation.propose")}
           </Button>
           <TipAnchor anchor="admin.valuation.post.propose" />
         </span>
         <Button type="button" className={TEAL_CTA} disabled={disabled || busy !== null} onClick={() => void run("post")}>
-          {busy === "post" ? <Loader2 className="size-4 animate-spin" /> : null}
+          {busy === "post" ? <Spinner aria-hidden /> : null}
           {t("admin.valuation.postValuation")}
         </Button>
       </div>

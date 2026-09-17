@@ -1,9 +1,9 @@
 "use client";
 
-import { Loader2, Users } from "lucide-react";
+import { Users } from "lucide-react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Button, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import type { AllocationAccessGrant } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
@@ -64,7 +64,7 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
               <div className="flex items-center justify-end gap-2">
                 <span className="text-xs text-ink-soft">{ago(g.granted_at, t)}</span>
                 <Button type="button" variant="outline" size="sm" disabled={busyUserId === g.user_id} onClick={() => onRevoke(g.user_id)}>
-                  {busyUserId === g.user_id ? <Loader2 className="size-3.5 animate-spin" /> : t("admin.alloc.grants.revoke")}
+                  {busyUserId === g.user_id ? <Spinner className="size-3.5" aria-hidden /> : t("admin.alloc.grants.revoke")}
                 </Button>
               </div>
             </TableCell>

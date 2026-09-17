@@ -25,11 +25,11 @@
 // counted in the same transaction as the comparison (policy 7), so a number this component
 // worked out for itself would at best duplicate the server's and at worst contradict it.
 
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Progress, Separator } from "@evinvest/uikit";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Progress, Separator, Spinner } from "@evinvest/uikit";
 
 import { ApprovalUnavailableError } from "@/entities/approval/api/approval-client";
 import { decidePayout, payoutApprovalResource } from "@/entities/approval/model/approval-resource";
@@ -279,7 +279,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
                 disabled={code.trim().length === 0 || pending !== null}
                 onClick={() => void decide("approve")}
               >
-                {pending === "approve" && <Loader2 className="size-4 animate-spin" />}
+                {pending === "approve" && <Spinner aria-hidden />}
                 {t(`${words}.approve`)}
               </Button>
               <Button
@@ -289,7 +289,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
                 disabled={code.trim().length === 0 || pending !== null}
                 onClick={() => void decide("reject")}
               >
-                {pending === "reject" && <Loader2 className="size-4 animate-spin" />}
+                {pending === "reject" && <Spinner aria-hidden />}
                 {t("approval.reject")}
               </Button>
             </div>

@@ -1,10 +1,10 @@
 "use client";
 
-import { Inbox, Loader2, TriangleAlert } from "lucide-react";
+import { Inbox, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Input, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Input, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { dispatchWithdrawal, failWithdrawal, settleWithdrawal } from "@/entities/admin/api/admin-client";
 import { withdrawalQueueResource } from "@/entities/admin/model/admin-resource";
@@ -231,7 +231,7 @@ function WithdrawalRow({
           <div className="flex justify-end gap-2">
             {queued ? (
               <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onDispatch}>
-                {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                {busy ? <Spinner aria-hidden /> : null}
                 {t("admin.dispatch")}
               </Button>
             ) : (
@@ -268,7 +268,7 @@ function WithdrawalRow({
                 />
                 <TipAnchor anchor="admin.withdrawals.settle.tx-hash" />
                 <Button type="button" size="sm" disabled={busy || !txRef.trim()} onClick={onSettle}>
-                  {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {busy ? <Spinner aria-hidden /> : null}
                   {t("admin.withdrawals.confirmSettle")}
                 </Button>
               </div>
@@ -287,7 +287,7 @@ function WithdrawalRow({
                     disabled={busy}
                     onClick={onFail}
                   >
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {busy ? <Spinner aria-hidden /> : null}
                     {t("admin.withdrawals.confirmFail")}
                   </Button>
 

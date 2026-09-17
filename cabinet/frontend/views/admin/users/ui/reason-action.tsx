@@ -8,11 +8,10 @@
 // one uses or what it then calls: this takes a label, a hint and an `onSubmit`, and knows
 // nothing about holds, suspensions or roles.
 
-import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Field, FieldDescription, FieldLabel, Textarea } from "@evinvest/uikit";
+import { Button, Field, FieldDescription, FieldLabel, Spinner, Textarea } from "@evinvest/uikit";
 
 export interface ReasonActionProps {
   open: boolean;
@@ -88,7 +87,7 @@ export function ReasonAction({
       <FieldDescription>{t("admin.users.reasonHint")}</FieldDescription>
       <div className="flex gap-2">
         <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy || reason.trim().length === 0} onClick={onSubmit}>
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : icon}
+          {busy ? <Spinner className="size-3.5" aria-hidden /> : icon}
           {label}
         </Button>
         <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onCancel}>

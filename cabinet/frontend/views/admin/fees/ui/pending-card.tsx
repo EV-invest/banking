@@ -7,11 +7,10 @@
 // approval collected so far. So the button opens a second step in place — no
 // `window.confirm`, whose text no catalogue can translate.
 
-import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Alert, AlertDescription, Badge, Button, Card, CardContent } from "@evinvest/uikit";
+import { Alert, AlertDescription, Badge, Button, Card, CardContent, Spinner } from "@evinvest/uikit";
 
 import { cancelFeePolicyChange } from "@/entities/admin/api/admin-client";
 import type { FeePolicyChange } from "@/shared/contracts/admin";
@@ -98,7 +97,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
               <p className="text-sm leading-relaxed">{t(awaiting ? "admin.fees.cancelWarningAwaiting" : "admin.fees.cancelWarning")}</p>
               <div className="flex flex-col gap-2.5 sm:flex-row">
                 <Button variant="destructive" size="sm" disabled={busy} onClick={() => void cancel()}>
-                  {busy && <Loader2 className="size-4 animate-spin" />}
+                  {busy && <Spinner aria-hidden />}
                   {t("admin.fees.cancelConfirm")}
                 </Button>
                 {/* Not "Cancel": beside "Cancel the change" that word answers both ways. */}
