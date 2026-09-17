@@ -64,7 +64,7 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
             {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={usd} /></p>}
             {allTimePct !== null && (
-              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", trend === "down" ? "border-accent-error/40 text-accent-error" : trend === "up" ? "border-accent-warn/40 text-accent-warn" : "border-border text-ink-soft")}>
+              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", trend === "down" ? "border-accent-error/40 text-accent-error" : trend === "up" ? "border-positive/40 text-positive" : "border-border text-ink-soft")}>
                 {trend === "down" ? <TrendingDown /> : trend === "up" ? <TrendingUp /> : <Minus />}
                 {t("dash.allTimeSuffix", { pct: formatPct(allTimePct, locale) })}
                 <TipAnchor anchor="dashboard.performance.all-time-return" />
@@ -73,7 +73,7 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
           </div>
         </div>
         {/* Hand-written segmented control — uikit has no equivalent, so it carries its own focus ring. */}
-        <div className="grid shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-secondary p-1 lg:flex">
+        <div role="group" aria-label={t("dash.rangeLabel")} className="grid shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-secondary p-1 lg:flex">
           {HISTORY_RANGES.map((r) => (
             <button
               key={r}

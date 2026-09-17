@@ -3500,8 +3500,8 @@
     "t": "positions en fonds"
   },
   "dash.historyTruncated": {
-    "en": "Only the most recent marks in this range are shown; the oldest are left out.",
-    "t": "Seules les valorisations les plus récentes de cette période sont affichées ; les plus anciennes sont omises."
+    "en": "Only the most recent marks in this range are shown; the fund curve starts from the oldest one shown, not from the start of the range.",
+    "t": "Seules les valorisations les plus récentes de cette période sont affichées ; la courbe du fonds part de la plus ancienne affichée, pas du début de la période."
   },
   "dash.investedWhatIOwn": {
     "en": "Invested · what I own",
@@ -3582,6 +3582,10 @@
   "dash.range.all": {
     "en": "All",
     "t": "Tout"
+  },
+  "dash.rangeLabel": {
+    "en": "Chart range",
+    "t": "Période du graphique"
   },
   "dash.recentOperations": {
     "en": "Recent operations",

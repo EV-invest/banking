@@ -31,6 +31,30 @@ export interface PixelProbe {
 // matter. Not a colour any token resolves to.
 const SENTINEL = "#010203";
 
+/**
+ * What a chart wears where a token could not be resolved — no document yet, a canvas that
+ * refuses to paint. The one place a hex is justified in the cabinet: the engine paints
+ * bytes, and a fallback is by definition what is used when no token is readable.
+ *
+ * `text` and `grid` are deliberately dull, so a missing token reads as "not themed"
+ * rather than as a design choice; the named tints are the values `tokens.css` ships for
+ * `--chart-2` / `--positive`, `--chart-3` and `--accent-error`, so a series that fell
+ * back is the same colour as its legend dot, never a third tint.
+ */
+export const ENGINE_FALLBACK = {
+  transparent: "transparent",
+  text: "#9a9a9a",
+  grid: "#2a2a2a",
+  /** `--color-secondary`: the solid plate a crosshair label sits on. */
+  plate: "#0d1526",
+  /** `--chart-2`, also `--positive`. */
+  green: "#2e9e5b",
+  /** `--chart-3`. */
+  yellow: "#f2c94c",
+  /** `--accent-error`. */
+  red: "#ef5b52",
+} as const;
+
 // Normalises a computed colour into the `rgba(r, g, b, a)` the engine accepts, by way of
 // one painted pixel. Alpha keeps three decimals — the byte's full resolution (1/255) — so
 // nothing is lost past what the canvas itself quantised. Anything the probe cannot do

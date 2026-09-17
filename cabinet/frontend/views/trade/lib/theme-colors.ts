@@ -5,7 +5,7 @@
 // this file only says which tokens the terminal's chart is made of: `positive` for a
 // rising bar, `accent-error` for a falling one, `card` for the pane it sits in.
 
-import { readTokenColors } from "../../../shared/lib/chart-palette.ts";
+import { ENGINE_FALLBACK, readTokenColors } from "../../../shared/lib/chart-palette.ts";
 
 export interface ChartPalette {
   background: string;
@@ -15,10 +15,7 @@ export interface ChartPalette {
   down: string;
 }
 
-// Fallbacks for a probe that cannot run (no document yet, a canvas that refuses to paint):
-// the engine's own defaults on a dark surface, deliberately dull so a missing token reads
-// as "not themed" rather than as a design choice.
-const FALLBACK: ChartPalette = { background: "transparent", text: "#9a9a9a", grid: "#2a2a2a", up: "#2e9e5b", down: "#ef5b52" };
+const FALLBACK: ChartPalette = { background: ENGINE_FALLBACK.transparent, text: ENGINE_FALLBACK.text, grid: ENGINE_FALLBACK.grid, up: ENGINE_FALLBACK.green, down: ENGINE_FALLBACK.red };
 
 const TOKENS: Record<keyof ChartPalette, string> = {
   background: "--color-card",

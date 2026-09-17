@@ -3500,8 +3500,8 @@
     "t": "позиций в фондах"
   },
   "dash.historyTruncated": {
-    "en": "Only the most recent marks in this range are shown; the oldest are left out.",
-    "t": "Показаны только последние отметки в этом диапазоне; самые старые опущены."
+    "en": "Only the most recent marks in this range are shown; the fund curve starts from the oldest one shown, not from the start of the range.",
+    "t": "Показаны только последние отметки в этом диапазоне; кривая фонда начинается с самой старой из показанных, а не с начала диапазона."
   },
   "dash.investedWhatIOwn": {
     "en": "Invested · what I own",
@@ -3582,6 +3582,10 @@
   "dash.range.all": {
     "en": "All",
     "t": "Всё"
+  },
+  "dash.rangeLabel": {
+    "en": "Chart range",
+    "t": "Диапазон графика"
   },
   "dash.recentOperations": {
     "en": "Recent operations",

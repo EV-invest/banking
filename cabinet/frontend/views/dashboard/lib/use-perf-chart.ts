@@ -10,7 +10,7 @@ import { ColorType, createChart, type IChartApi, type ISeriesApi, LineSeries, ty
 import { type RefObject, useEffect, useRef } from "react";
 
 import type { NavSeries, SeriesPoint } from "@/entities/fund/lib/nav-series";
-import { readTokenColors } from "@/shared/lib/chart-palette";
+import { ENGINE_FALLBACK, readTokenColors } from "@/shared/lib/chart-palette";
 
 /** Axis labels, in the reader's locale. One per unit of measure, as `shared/lib/money.ts` has it. */
 export interface PerfFormat {
@@ -18,11 +18,11 @@ export interface PerfFormat {
   participation: (usdt: number) => string;
 }
 
-// The legend's dots and these lines are the same two tokens (`chart-3`, `chart-2`);
-// text and grid are the card's. Fallbacks are deliberately dull, so a token the probe
-// could not resolve reads as "not themed" rather than as a design choice.
-const TOKENS = { text: "--color-ink-soft", grid: "--color-border", performance: "--color-chart-3", participation: "--color-chart-2" };
-const FALLBACK = { text: "#9a9a9a", grid: "#2a2a2a", performance: "#c9a227", participation: "#2e9e5b" };
+// The legend's dots and these lines are the same two tokens (`chart-3`, `chart-2`); text
+// and grid are the card's. The crosshair's labels sit on a SOLID plate: `--color-border`
+// is ink at 14 % alpha, and over the dark page the engine would pick dark text for it.
+const TOKENS = { text: "--color-ink-soft", grid: "--color-border", plate: "--color-secondary", performance: "--color-chart-3", participation: "--color-chart-2" };
+const FALLBACK = { text: ENGINE_FALLBACK.text, grid: ENGINE_FALLBACK.grid, plate: ENGINE_FALLBACK.plate, performance: ENGINE_FALLBACK.yellow, participation: ENGINE_FALLBACK.green };
 
 const toPoint = (p: SeriesPoint) => ({ time: p.time as UTCTimestamp, value: p.value });
 
@@ -47,7 +47,7 @@ export function usePerfChart(host: RefObject<HTMLDivElement | null>, series: Nav
       leftPriceScale: { visible: true, borderColor: palette.grid },
       rightPriceScale: { borderColor: palette.grid },
       timeScale: { borderColor: palette.grid, fixLeftEdge: true, fixRightEdge: true },
-      crosshair: { horzLine: { labelBackgroundColor: palette.grid }, vertLine: { labelBackgroundColor: palette.grid } },
+      crosshair: { horzLine: { labelBackgroundColor: palette.plate }, vertLine: { labelBackgroundColor: palette.plate } },
       handleScroll: false,
       handleScale: false,
     });

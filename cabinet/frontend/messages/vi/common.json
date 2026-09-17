@@ -3500,8 +3500,8 @@
     "t": "vị thế trong quỹ"
   },
   "dash.historyTruncated": {
-    "en": "Only the most recent marks in this range are shown; the oldest are left out.",
-    "t": "Chỉ hiển thị các mốc định giá gần nhất trong khoảng này; các mốc cũ nhất bị lược bỏ."
+    "en": "Only the most recent marks in this range are shown; the fund curve starts from the oldest one shown, not from the start of the range.",
+    "t": "Chỉ hiển thị các mốc định giá gần nhất trong khoảng này; đường cong của quỹ bắt đầu từ mốc cũ nhất được hiển thị, không phải từ đầu khoảng."
   },
   "dash.investedWhatIOwn": {
     "en": "Invested · what I own",
@@ -3582,6 +3582,10 @@
   "dash.range.all": {
     "en": "All",
     "t": "Tất cả"
+  },
+  "dash.rangeLabel": {
+    "en": "Chart range",
+    "t": "Khoảng thời gian biểu đồ"
   },
   "dash.recentOperations": {
     "en": "Recent operations",

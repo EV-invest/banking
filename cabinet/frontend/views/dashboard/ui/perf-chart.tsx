@@ -75,5 +75,5 @@ function PerfPlot({ series, format }: { series: NavSeries; format: PerfFormat })
   const host = useRef<HTMLDivElement>(null);
   usePerfChart(host, series, format);
   // The engine owns the host's children — nothing is ever drawn inside it.
-  return <div ref={host} className={cn(PLOT_BOX, "rounded-lg border border-border")} />;
+  return <div ref={host} className={cn(PLOT_BOX, "overflow-hidden rounded-lg border border-border")} />;
 }

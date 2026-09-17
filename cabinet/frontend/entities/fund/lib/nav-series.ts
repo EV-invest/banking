@@ -77,7 +77,13 @@ function tidy(points: SeriesPoint[]): SeriesPoint[] {
   return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
 }
 
-/** The two plotted series of one history, or empty series where the wire has nothing. */
+/**
+ * The two plotted series of one history, or empty series where the wire has nothing.
+ *
+ * The performance line is rebased on the OLDEST mark received — which, for a `truncated`
+ * history, is the oldest mark the hub kept rather than the oldest in the window. The note
+ * the chart shows for `truncated` (`dash.historyTruncated`) says so.
+ */
 export function toNavSeries(history: FundNavHistory | undefined): NavSeries {
   const marks: SeriesPoint[] = [];
   for (const mark of history?.marks ?? []) {
