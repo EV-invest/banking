@@ -9,6 +9,7 @@ import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } fr
 import { prefetchOn } from "@/application/prefetch";
 import { allocationsResource } from "@/entities/fund/model/fund-resource";
 import { useUnreadCount, useUnreadCountPolling } from "@/entities/notification/model/notification-store";
+import { KycStatusChip } from "@/features/kyc";
 import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
@@ -210,15 +211,11 @@ export function Sidebar() {
         <Section at={SECONDARY.some((i) => i.active(marked)) ? marked : null}>
           {SECONDARY.map((item) => {
             const active = item.active(marked);
-            return (
-              <NavLink
-                key={item.label}
-                item={item}
-                active={active}
-                onClick={onRailClick(item.href, mark)}
-                trailing={item.href === "/notifications" && unread ? <UnreadPill count={unread} active={active} /> : undefined}
-              />
-            );
+            // The two rows about the account carry its two live facts: the verification
+            // state on Profile, where the row that changes it lives (#395), and the unread
+            // count on Notifications.
+            const trailing = item.href === "/profile" ? <KycStatusChip active={active} /> : item.href === "/notifications" && unread ? <UnreadPill count={unread} active={active} /> : undefined;
+            return <NavLink key={item.label} item={item} active={active} onClick={onRailClick(item.href, mark)} trailing={trailing} />;
           })}
         </Section>
       </nav>

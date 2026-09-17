@@ -14,9 +14,12 @@
 // presentations exist to share instead. Two reads leave: `useKycStatus` (the checklist's
 // "what may this screen offer?") and `useKycGate` (the money screens' half of the same
 // read — whether a surface stands closed; the subscribe form asks the wallet's question).
-// One export beats a fourth view reaching into `model/`.
+// One export beats a fourth view reaching into `model/`. The shell's standing status —
+// a chip in the rail and a dot on the mobile tab (#395) — is a presentation of the same
+// read, so it lives here too rather than the rail composing a tier and a case for itself.
 export { useKycStatus, type KycGate } from "@/features/kyc/model/use-kyc-status";
 export { useKycGate } from "@/features/kyc/model/use-kyc-gate";
 export { StartVerificationRow } from "@/features/kyc/ui/start-verification-row";
+export { KycStatusChip, KycStatusDot } from "@/features/kyc/ui/status-chip";
 export { VerificationRequired } from "@/features/kyc/ui/verification-required";
 export { VerifyButton } from "@/features/kyc/ui/verify-button";

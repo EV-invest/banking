@@ -4175,6 +4175,26 @@
     "en": "Your units",
     "t": "Ваши паи"
   },
+  "kyc.chip.attention": {
+    "en": "Needs attention",
+    "t": "Нужно действие"
+  },
+  "kyc.chip.notStarted": {
+    "en": "Not verified",
+    "t": "Не проверен"
+  },
+  "kyc.chip.review": {
+    "en": "In review",
+    "t": "На проверке"
+  },
+  "kyc.chip.reviewEta": {
+    "en": "Most checks are decided within the hour.",
+    "t": "Большинство проверок решается в течение часа."
+  },
+  "kyc.chip.verified": {
+    "en": "Verified",
+    "t": "Проверен"
+  },
   "kyc.verifyNow": {
     "en": "Verify now",
     "t": "Подтвердить"

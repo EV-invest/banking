@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { Link } from "@/shared/ui/cabinet-link";
 
 import { prefetchOn } from "@/application/prefetch";
+import { KycStatusDot } from "@/features/kyc";
 import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
 import { DUR, EASE } from "@/shared/ui/motion";
@@ -101,7 +102,12 @@ export function BottomNavbar() {
               isActive ? "text-accent-debug" : "text-ink-soft hover:text-ink",
             )}
           >
-            <Icon className="size-5 shrink-0" />
+            {/* Below `lg` the profile is reached through Settings, so that is the tab
+                the verification state marks (#395); the rail's chip sits on Profile. */}
+            <span className="relative shrink-0">
+              <Icon className="size-5" />
+              {tab.href === "/settings" && <KycStatusDot className="absolute -right-1 -top-0.5" />}
+            </span>
             {/* `truncate` is the net, not the plan. Five tabs on a 390px phone give each
                 label a 75px box, measured; every `nav.*` value is authored to fit it.
                 For the record, at 12px/500 Inter: "Operations" 63.1px, "Инвестиции"
