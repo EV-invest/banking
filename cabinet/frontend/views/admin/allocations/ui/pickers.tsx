@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@evinvest/uiki
 import type { AllocationAccessLevel, AllocationIcon } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { ALLOCATION_ICONS, ProductIcon } from "@/shared/ui/icons/products";
-import { ACCESS_LEVELS, accessLabel } from "@/views/admin/allocations/lib/access";
+import { ACCESS_LEVELS, accessLabel } from "@/views/admin/lib/access";
 
 export function IconSelect({ value, onChange, className }: { value: AllocationIcon; onChange: (icon: AllocationIcon) => void; className?: string }) {
   const t = useT();

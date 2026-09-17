@@ -5,6 +5,9 @@
 
 import type { IssueUnitsBody } from "@/entities/admin/api/admin-client";
 
+// Relative and with the extension: the node test runner resolves no `@/` alias.
+import { isPositiveWireDecimal, isWireDecimal } from "../../../../shared/lib/money.ts";
+
 /** Who the units land on — always a person (#245): the company is not a holder, and the
  *  reserved `fee` / `fund` allocations are seated by the owners' consilium, never by an
  *  operator's mint. Carries the label the operator picked them by (their email, usually)
@@ -38,13 +41,11 @@ export function afterIssued(draft: IssueDraft): IssueDraft {
  *  that need only be well-formed. `null` means send it. */
 export type IssueDraftProblem = "holder" | "units" | "costBasis";
 
-// A decimal amount as the wire carries it. No sign, no exponent, no grouping — the hub
-// parses this with the same strictness, so admitting less here only moves the refusal.
-const DECIMAL = /^\d+(\.\d+)?$/;
+// The wire's decimal rule lives with the money policies; these are the form's short names
+// for it, kept so the retirement's model reads the same as this one.
+export const isDecimal = isWireDecimal;
 
-export const isDecimal = (raw: string): boolean => DECIMAL.test(raw.trim());
-
-export const isPositive = (raw: string): boolean => isDecimal(raw) && /[1-9]/.test(raw);
+export const isPositive = isPositiveWireDecimal;
 
 export function issueDraftProblem(draft: IssueDraft): IssueDraftProblem | null {
   if (draft.holder === null) return "holder";

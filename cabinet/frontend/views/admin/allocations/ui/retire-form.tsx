@@ -10,7 +10,7 @@ import { Button, Input } from "@evinvest/uikit";
 
 import { cn } from "@/shared/lib/cn";
 import { retireDraftProblem, type RetireDraft } from "@/views/admin/allocations/lib/retire";
-import { UserPicker, type PickedUser } from "@/views/admin/allocations/ui/user-picker";
+import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
 
 export function RetireForm({ draft, onChange, onReview, onCancel }: { draft: RetireDraft; onChange: (next: RetireDraft) => void; onReview: () => void; onCancel: () => void }) {
   const t = useT();

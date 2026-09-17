@@ -1,6 +1,7 @@
 "use client";
 
-// A searchable investor picker for the grant form. The candidate list is the live
+// A searchable investor picker for the console's forms — grants, mints, holder grants and
+// seed proposals name a person the same way. The candidate list is the live
 // `/api/admin/users` directory (the same read the Users screen searches), not a fixed
 // roster — an operator granting access is very often reaching for someone they have never
 // opened a row for before.

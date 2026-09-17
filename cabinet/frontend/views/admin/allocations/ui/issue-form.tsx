@@ -12,7 +12,7 @@ import { Button, Input, Spinner } from "@evinvest/uikit";
 import type { IssueUnitsBody } from "@/entities/admin/api/admin-client";
 import { cn } from "@/shared/lib/cn";
 import { EMPTY_ISSUE_DRAFT, afterIssued, issueDraftProblem, issueUnitsBody, submissionKeyFor, type IssueDraft, type SubmissionKey } from "@/views/admin/allocations/lib/issuance";
-import { UserPicker, type PickedUser } from "@/views/admin/allocations/ui/user-picker";
+import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
 
 const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
