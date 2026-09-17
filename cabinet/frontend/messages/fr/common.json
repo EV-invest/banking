@@ -2595,10 +2595,6 @@
     "en": "That sign-in attempt expired. Please try again.",
     "t": "Cette tentative de connexion a expiré. Veuillez réessayer."
   },
-  "auth.newToEv": {
-    "en": "New to EV Invest? Continuing with Google sets up your cabinet.",
-    "t": "Nouveau chez EV Invest ? Continuer avec Google crée votre espace."
-  },
   "auth.notSignedIn": {
     "en": "Not signed in",
     "t": "Non connecté"
@@ -2623,6 +2619,38 @@
     "en": "You've been signed out of your cabinet.",
     "t": "Vous avez été déconnecté de votre espace."
   },
+  "auth.signup.next": {
+    "en": "What happens next",
+    "t": "Les prochaines étapes"
+  },
+  "auth.signup.step.fund.body": {
+    "en": "Fund your wallet — a deposit is credited once the network confirms it — and subscribe to an allocation.",
+    "t": "Alimentez votre portefeuille — le dépôt est crédité dès que le réseau le confirme — puis souscrivez à une allocation."
+  },
+  "auth.signup.step.fund.title": {
+    "en": "Deposit and subscribe",
+    "t": "Déposez et souscrivez"
+  },
+  "auth.signup.step.signIn.body": {
+    "en": "Your cabinet is created on the first sign-in.",
+    "t": "Votre espace est créé à la première connexion."
+  },
+  "auth.signup.step.signIn.title": {
+    "en": "Sign in with Google",
+    "t": "Connectez-vous avec Google"
+  },
+  "auth.signup.step.verify.title": {
+    "en": "Verify your identity",
+    "t": "Vérifiez votre identité"
+  },
+  "auth.signup.sub": {
+    "en": "One Google sign-in sets up your cabinet — no forms, no password.",
+    "t": "Une connexion Google suffit pour créer votre espace — ni formulaire, ni mot de passe."
+  },
+  "auth.signup.title": {
+    "en": "Open your investor account",
+    "t": "Ouvrez votre compte investisseur"
+  },
   "auth.stat.aum": {
     "en": "Assets under mgmt",
     "t": "Actifs sous gestion"
@@ -2630,6 +2658,22 @@
   "auth.stat.targetIrr": {
     "en": "Avg. target IRR",
     "t": "TRI cible moyen"
+  },
+  "auth.switch.haveAccount": {
+    "en": "Already have an account?",
+    "t": "Vous avez déjà un compte ?"
+  },
+  "auth.switch.newHere": {
+    "en": "New to EV Invest?",
+    "t": "Nouveau sur EV Invest ?"
+  },
+  "auth.switch.openAccount": {
+    "en": "Open an account",
+    "t": "Ouvrir un compte"
+  },
+  "auth.switch.signIn": {
+    "en": "Sign in",
+    "t": "Se connecter"
   },
   "auth.welcomeBack": {
     "en": "Welcome back",
