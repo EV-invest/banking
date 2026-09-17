@@ -8,9 +8,9 @@ import { Button, Skeleton } from "@evinvest/uikit";
 
 import { useKycStatus } from "@/features/kyc/model/use-kyc-status";
 import { VerificationDialog } from "@/features/kyc/ui/verification-dialog";
-import { SUPPORT_EMAIL } from "@/shared/config/support";
 import { Hairline, Pill, RowLabel } from "@/shared/ui/list-card";
 import { Settled } from "@/shared/ui/motion";
+import { SupportLink } from "@/shared/ui/support-link";
 
 // Where a user begins — or picks up — identity verification from their profile. It sits inside
 // `card-Verification`, below the rows that state what the hub currently holds, so the card
@@ -97,15 +97,9 @@ function RowSkeleton() {
  * dialog's `unavailable` outcome offers, so a reader who is stuck reaches one place either way.
  */
 function ReviewContact() {
-  const t = useT();
   return (
     <p className="mt-2 text-xs leading-snug text-ink-soft">
-      <a
-        href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}`}
-        className="font-medium text-accent-debug underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {t("profile.kyc.contact", { contact: SUPPORT_EMAIL })}
-      </a>
+      <SupportLink />
     </p>
   );
 }

@@ -3640,8 +3640,8 @@
     "t": "Période du graphique"
   },
   "dash.recentOperations": {
-    "en": "Recent operations",
-    "t": "Opérations récentes"
+    "en": "Recent activity",
+    "t": "Activité récente"
   },
   "dash.strategyCount": {
     "en": "{n, plural, one {# strategy} other {# strategies}}",
@@ -3760,8 +3760,8 @@
     "t": "Introuvable."
   },
   "err.opsLoad": {
-    "en": "Couldn't load your operations",
-    "t": "Impossible de charger vos opérations"
+    "en": "Couldn't load your activity",
+    "t": "Impossible de charger votre activité"
   },
   "err.phone.invalid": {
     "en": "Enter a valid phone number starting with + or country code",
@@ -3816,8 +3816,8 @@
     "t": "Impossible de charger votre wallet"
   },
   "invest.about.risk": {
-    "en": "Units can fall in value as well as rise. The NAV is set by the operator's valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.",
-    "t": "Les parts peuvent baisser comme monter. La VL est fixée par l'évaluation de l'opérateur, pas par un prix de marché, et les valorisations passées ne préjugent pas des suivantes. L'argent ne revient qu'au règlement d'un rachat ou lorsqu'un acheteur reprend vos parts dans le carnet. N'investissez que ce que vous pouvez laisser immobilisé."
+    "en": "Units can fall in value as well as rise. The NAV is set by a posted valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.",
+    "t": "Les parts peuvent baisser comme monter. La VL est fixée par une évaluation publiée, pas par un prix de marché, et les valorisations passées ne préjugent pas des suivantes. L'argent ne revient qu'au règlement d'un rachat ou lorsqu'un acheteur reprend vos parts dans le carnet. N'investissez que ce que vous pouvez laisser immobilisé."
   },
   "invest.about.riskTitle": {
     "en": "Risk.",
@@ -3892,12 +3892,12 @@
     "t": "Ce fonds est fermé aux nouvelles souscriptions. Vos parts ne sont pas affectées — vous pouvez toujours les racheter intégralement."
   },
   "invest.blocked.locked": {
-    "en": "This fund isn't open to you yet. You can see it, but subscribing is locked until an operator raises your access.",
-    "t": "Ce fonds ne vous est pas encore ouvert. Vous pouvez le voir, mais la souscription est verrouillée jusqu'à ce qu'un opérateur relève votre accès."
+    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised. If you think you should have it:",
+    "t": "Ce fonds ne vous est pas encore ouvert. Vous pouvez le voir, mais la souscription reste verrouillée jusqu'à ce que votre accès soit relevé. Si vous pensez y avoir droit :"
   },
   "invest.blocked.staleNav": {
-    "en": "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.",
-    "t": "La valorisation du fonds n’est plus à jour : les opérations sont suspendues jusqu’à ce qu’un opérateur en publie une nouvelle."
+    "en": "The fund's valuation is out of date, so dealing is paused until a fresh one is posted.",
+    "t": "La valorisation du fonds n’est plus à jour : les opérations sont suspendues jusqu’à la publication d’une nouvelle."
   },
   "invest.buysUnits": {
     "en": "Buys {n, plural, one {{units} unit} other {{units} units}} at {nav} USDT per unit.",
@@ -4056,12 +4056,12 @@
     "t": "Aucun fonds n’est ouvert à la souscription pour l’instant."
   },
   "invest.noFundsHint": {
-    "en": "A fund appears here once an operator registers and opens it. Nothing you hold is affected.",
-    "t": "Un fonds apparaît ici une fois qu’un opérateur l’a inscrit et ouvert. Rien de ce que vous détenez n’est affecté."
+    "en": "A fund appears here once it is registered and opened for subscription. Nothing you hold is affected.",
+    "t": "Un fonds apparaît ici une fois inscrit et ouvert à la souscription. Rien de ce que vous détenez n’est affecté."
   },
   "invest.noUnitsHeld": {
-    "en": "You hold no fund units yet.",
-    "t": "Vous ne détenez encore aucune part de fonds."
+    "en": "You hold no units yet.",
+    "t": "Vous ne détenez encore aucune part."
   },
   "invest.noUnitsInFund": {
     "en": "You hold no units in this fund yet.",
@@ -4076,8 +4076,8 @@
     "t": "Aucun fonds n’est inscrit sous « {service} »."
   },
   "invest.notRegisteredHint": {
-    "en": "A fund exists only once an operator registers it. If you followed a link here, the product may never have been opened.",
-    "t": "Un fonds n’existe qu’une fois inscrit par un opérateur. Si vous avez suivi un lien, le produit n’a peut-être jamais été ouvert."
+    "en": "Nothing is registered under this name. If you followed a link here, the product may never have been opened.",
+    "t": "Rien n’est inscrit sous ce nom. Si vous avez suivi un lien, le produit n’a peut-être jamais été ouvert."
   },
   "invest.notYetValued": {
     "en": "Not yet valued",
@@ -4340,8 +4340,8 @@
     "t": "Frais"
   },
   "nav.group.fund": {
-    "en": "Fund",
-    "t": "Fonds"
+    "en": "Your account",
+    "t": "Votre compte"
   },
   "nav.home": {
     "en": "Home",
@@ -4356,8 +4356,8 @@
     "t": "Alertes"
   },
   "nav.operations": {
-    "en": "Operations",
-    "t": "Opérations"
+    "en": "Activity",
+    "t": "Activité"
   },
   "nav.outbox": {
     "en": "Outbox",
@@ -4664,8 +4664,8 @@
     "t": "Retraits"
   },
   "ops.filterByKind": {
-    "en": "Filter operations by kind",
-    "t": "Filtrer les opérations par type"
+    "en": "Filter activity by kind",
+    "t": "Filtrer l’activité par type"
   },
   "ops.filterEmptyHint": {
     "en": "You have other activity — switch back to All to see it.",
@@ -4740,12 +4740,12 @@
     "t": "valorisé à la VL du règlement"
   },
   "ops.step.awaitingRail": {
-    "en": "Awaiting a liquid rail",
-    "t": "En attente d’un rail liquide"
+    "en": "Awaiting network liquidity",
+    "t": "En attente de liquidité sur le réseau"
   },
   "ops.step.awaitingRailMeta": {
-    "en": "ships as soon as the rail is topped up",
-    "t": "part dès que le rail est réapprovisionné"
+    "en": "sent as soon as the network is topped up",
+    "t": "part dès que le réseau est réapprovisionné"
   },
   "ops.step.broadcast": {
     "en": "Broadcast to the network",
@@ -4836,8 +4836,8 @@
     "t": "Chaque dépôt, retrait, souscription et rachat que vous avez effectué, et chaque frais prélevé par un fonds — un seul fil."
   },
   "ops.truncatedNote": {
-    "en": "Showing your most recent operations — older activity isn't listed here yet.",
-    "t": "Affichage de vos opérations les plus récentes — l’activité plus ancienne n’est pas encore listée ici."
+    "en": "Showing your most recent activity — older entries aren't listed here yet.",
+    "t": "Affichage de votre activité la plus récente — les entrées plus anciennes ne sont pas encore listées ici."
   },
   "payment.consent.approve": {
     "en": "Consented",
@@ -4940,8 +4940,8 @@
     "t": "Activité"
   },
   "profile.activityCapped": {
-    "en": "Counted over your {n} most recent operations",
-    "t": "Comptées sur vos {n} opérations les plus récentes"
+    "en": "Counted over your {n} most recent activity entries",
+    "t": "Comptées sur vos {n} entrées d’activité les plus récentes"
   },
   "profile.activitySub": {
     "en": "Everything that has moved money on this account",
@@ -5800,8 +5800,8 @@
     "t": "Valeur du portefeuille"
   },
   "tips.dashboard.performance.series.body": {
-    "en": "'Fund performance' is the fund's return since the first valuation in the range, from the marks the operator posted; 'Your participation' is what your units were worth at each of them, which differs by when you contributed.",
-    "t": "« Performance du fonds » est le rendement du fonds depuis la première valorisation de la période, d’après les marques publiées par l’opérateur ; « Votre participation » est ce que valaient vos parts à chacune d’elles, ce qui dépend du moment où vous avez contribué."
+    "en": "'Fund performance' is the fund's return since the first valuation in the range, from the posted marks; 'Your participation' is what your units were worth at each of them, which differs by when you contributed.",
+    "t": "« Performance du fonds » est le rendement du fonds depuis la première valorisation de la période, d’après les marques publiées ; « Votre participation » est ce que valaient vos parts à chacune d’elles, ce qui dépend du moment où vous avez contribué."
   },
   "tips.dashboard.performance.series.title": {
     "en": "Performance chart",
@@ -5852,8 +5852,8 @@
     "t": "Souscrivez des USDT contre des parts — votre valeur suit la VL du fonds, pas le nombre de parts."
   },
   "tips.invest.overview.title": {
-    "en": "Fund shares",
-    "t": "Parts de fonds"
+    "en": "How investing works",
+    "t": "Comment fonctionne l’investissement"
   },
   "tips.invest.position.nav.body": {
     "en": "Net asset value per unit — the current price at which units are bought on subscribe and priced on redeem.",
@@ -5880,8 +5880,8 @@
     "t": "VL obsolète"
   },
   "tips.invest.position.units.body": {
-    "en": "Your share count in the fund's pool — a fixed quantity you own until you subscribe or redeem more.",
-    "t": "Votre nombre de parts dans la masse du fonds — une quantité fixe qui vous appartient jusqu’à votre prochaine souscription ou votre prochain rachat."
+    "en": "The units you hold in this fund — a fixed quantity until you subscribe or redeem more.",
+    "t": "Les parts que vous détenez dans ce fonds — une quantité fixe jusqu’à votre prochaine souscription ou votre prochain rachat."
   },
   "tips.invest.position.units.title": {
     "en": "Units",
@@ -5951,6 +5951,14 @@
     "en": "Tax residence",
     "t": "Résidence fiscale"
   },
+  "tips.profile.kyc-level.body": {
+    "en": "Level 0 is browse only: products, prices and your account. Level 1 means your identity is verified and opens a deposit address, withdrawals and subscribing.",
+    "t": "Le niveau 0 permet seulement de consulter : produits, prix et votre compte. Le niveau 1 signifie que votre identité est vérifiée et ouvre une adresse de dépôt, les retraits et la souscription."
+  },
+  "tips.profile.kyc-level.title": {
+    "en": "What your KYC level means",
+    "t": "Ce que signifie votre niveau KYC"
+  },
   "tips.profile.personal.compliance.body": {
     "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
     "t": "Ces informations personnelles sont collectées pour satisfaire aux obligations de conformité du fonds et pour établir vos relevés de compte. Elles ne sont pas rendues publiques."
@@ -5999,6 +6007,14 @@
     "en": "This device",
     "t": "Cet appareil"
   },
+  "tips.trade.book.body": {
+    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
+    "t": "Le carnet échange des parts existantes entre détenteurs — acheteur et vendeur se rencontrent à un prix bid ou ask qu’ils fixent eux-mêmes. Souscrire est différent : cela crée de nouvelles parts à la VL publiée, et le rachat les rend à la VL."
+  },
+  "tips.trade.book.title": {
+    "en": "How the book works",
+    "t": "Comment fonctionne le carnet"
+  },
   "tips.wallet.balance.available.body": {
     "en": "Your spendable USDT right now — what you can invest into fund units or withdraw.",
     "t": "Vos USDT immédiatement utilisables — ce que vous pouvez investir en parts de fonds ou retirer."
@@ -6028,8 +6044,8 @@
     "t": "Vous avez un solde USDT unique — les réseaux ne sont que la manière dont vous déposez et retirez. Cette carte le décompose en Total = Disponible + En ordres + Investi + Retrait en attente."
   },
   "tips.wallet.balance.model.title": {
-    "en": "One balance, many rails",
-    "t": "Un seul solde, plusieurs rails"
+    "en": "One balance, many networks",
+    "t": "Un seul solde, plusieurs réseaux"
   },
   "tips.wallet.balance.pending-withdrawal.body": {
     "en": "USDT reserved for withdrawals still in flight (queued or processing). It is no longer part of your available balance.",
@@ -6040,8 +6056,8 @@
     "t": "Retrait en attente"
   },
   "tips.wallet.deposit.address.body": {
-    "en": "A personal, reusable address for this rail. On TON it is shown in the wallet-friendly UQ… form so an uninitialised wallet doesn't bounce the transfer.",
-    "t": "Une adresse personnelle et réutilisable pour ce rail. Sur TON, elle est affichée sous la forme UQ… compatible wallet, afin qu’un wallet non initialisé ne rejette pas le transfert."
+    "en": "A personal, reusable address on this network. On TON it is shown in the wallet-friendly UQ… form so an uninitialised wallet doesn't bounce the transfer.",
+    "t": "Une adresse personnelle et réutilisable sur ce réseau. Sur TON, elle est affichée sous la forme UQ… compatible wallet, afin qu’un wallet non initialisé ne rejette pas le transfert."
   },
   "tips.wallet.deposit.address.title": {
     "en": "Your deposit address",
@@ -6056,24 +6072,24 @@
     "t": "Confirmations réseau"
   },
   "tips.wallet.deposit.network.body": {
-    "en": "Pick the chain you'll send USDT on. Each rail shows its own deposit address below — that address only works on that one chain.",
-    "t": "Choisissez la chaîne sur laquelle vous enverrez les USDT. Chaque rail affiche sa propre adresse de dépôt ci-dessous — cette adresse ne fonctionne que sur cette chaîne."
+    "en": "Pick the chain you'll send USDT on. Each network shows its own deposit address below — that address only works on that one chain.",
+    "t": "Choisissez la chaîne sur laquelle vous enverrez les USDT. Chaque réseau affiche sa propre adresse de dépôt ci-dessous — cette adresse ne fonctionne que sur cette chaîne."
   },
   "tips.wallet.deposit.network.title": {
-    "en": "Network / rail",
-    "t": "Réseau / rail"
+    "en": "Network",
+    "t": "Réseau"
   },
   "tips.wallet.deposit.rail-hazard.body": {
-    "en": "Sending any other asset, or using a different network, loses the funds permanently. This 0x address is NOT your address on the sibling EVM chain — even though both start with 0x, USDT sent on the wrong EVM rail will not be credited.",
-    "t": "Envoyer un autre actif, ou passer par un autre réseau, fait perdre les fonds définitivement. Cette adresse 0x n’est PAS votre adresse sur la chaîne EVM jumelle — même si toutes deux commencent par 0x, des USDT envoyés sur le mauvais rail EVM ne seront pas crédités."
+    "en": "Sending any other asset, or using a different network, loses the funds permanently. This 0x address is NOT your address on the sibling EVM chain — even though both start with 0x, USDT sent on the wrong EVM network will not be credited.",
+    "t": "Envoyer un autre actif, ou passer par un autre réseau, fait perdre les fonds définitivement. Cette adresse 0x n’est PAS votre adresse sur la chaîne EVM jumelle — même si toutes deux commencent par 0x, des USDT envoyés sur le mauvais réseau EVM ne seront pas crédités."
   },
   "tips.wallet.deposit.rail-hazard.title": {
-    "en": "Send only USDT on this rail",
-    "t": "N’envoyez que des USDT sur ce rail"
+    "en": "Send only USDT on this network",
+    "t": "N’envoyez que des USDT sur ce réseau"
   },
   "tips.wallet.withdraw.available.body": {
-    "en": "The most you can withdraw on this rail right now. Tap Max to fill the amount.",
-    "t": "Le maximum que vous pouvez retirer sur ce rail à cet instant. Touchez Max pour remplir le montant."
+    "en": "The most you can withdraw on this network right now. Tap Max to fill the amount.",
+    "t": "Le maximum que vous pouvez retirer sur ce réseau à cet instant. Touchez Max pour remplir le montant."
   },
   "tips.wallet.withdraw.available.title": {
     "en": "Available to withdraw",
@@ -6088,8 +6104,8 @@
     "t": "Adresse du destinataire"
   },
   "tips.wallet.withdraw.network-fee.body": {
-    "en": "A flat on-chain fee for this rail, deducted from your amount before it is sent.",
-    "t": "Des frais on-chain forfaitaires propres à ce rail, déduits de votre montant avant l’envoi."
+    "en": "A flat on-chain fee for this network, deducted from your amount before it is sent.",
+    "t": "Des frais on-chain forfaitaires propres à ce réseau, déduits de votre montant avant l’envoi."
   },
   "tips.wallet.withdraw.network-fee.title": {
     "en": "Network fee",
@@ -6100,20 +6116,20 @@
     "t": "La chaîne sur laquelle part votre retrait. L’adresse de destination doit être une adresse valide sur ce réseau précis, faute de quoi les fonds sont perdus."
   },
   "tips.wallet.withdraw.network.title": {
-    "en": "Network / rail",
-    "t": "Réseau / rail"
+    "en": "Network",
+    "t": "Réseau"
   },
   "tips.wallet.withdraw.queueing.body": {
-    "en": "Up to your instant limit pays out immediately on this rail; anything above it is queued until the rail is topped up. A minimum applies per withdrawal.",
-    "t": "Jusqu’à votre limite instantanée, le versement part immédiatement sur ce rail ; tout ce qui la dépasse est mis en file jusqu’au réapprovisionnement du rail. Un minimum s’applique à chaque retrait."
+    "en": "Up to your instant limit pays out immediately on this network; anything above it is queued until the network is topped up. A minimum applies per withdrawal.",
+    "t": "Jusqu’à votre limite instantanée, le versement part immédiatement sur ce réseau ; tout ce qui la dépasse est mis en file jusqu’au réapprovisionnement du réseau. Un minimum s’applique à chaque retrait."
   },
   "tips.wallet.withdraw.queueing.title": {
     "en": "How withdrawals work",
     "t": "Comment fonctionnent les retraits"
   },
   "tips.wallet.withdraw.review.body": {
-    "en": "Review freezes exactly what you'll send. Confirm submits that snapshot — if the rail list changes underneath, the open review is voided and you re-review.",
-    "t": "Vérifier fige exactement ce que vous allez envoyer. Confirmer valide cet instantané — si la liste des rails change entre-temps, la vérification ouverte est annulée et vous recommencez."
+    "en": "Review freezes exactly what you'll send. Confirm submits that snapshot — if the network list changes underneath, the open review is voided and you re-review.",
+    "t": "Vérifier fige exactement ce que vous allez envoyer. Confirmer valide cet instantané — si la liste des réseaux change entre-temps, la vérification ouverte est annulée et vous recommencez."
   },
   "tips.wallet.withdraw.review.title": {
     "en": "Review, then confirm",
@@ -6188,8 +6204,8 @@
     "t": "Acheter"
   },
   "trade.form.closed": {
-    "en": "The book is closed. Orders are refused until an operator opens it.",
-    "t": "Le carnet est fermé. Les ordres sont refusés tant qu'un opérateur ne l'ouvre pas."
+    "en": "The book is closed. Orders are not accepted until it opens again.",
+    "t": "Le carnet est fermé. Les ordres ne sont pas acceptés tant qu'il n'est pas rouvert."
   },
   "trade.form.duplicateTitle": {
     "en": "Already submitted",
@@ -6216,8 +6232,8 @@
     "t": "Limite"
   },
   "trade.form.locked": {
-    "en": "Trading isn't open to you on this product. Ask an operator if you should have access.",
-    "t": "La négociation de ce produit ne vous est pas ouverte. Demandez à un opérateur si vous devriez y avoir accès."
+    "en": "Trading isn't open to you on this product. If you think you should have access:",
+    "t": "La négociation de ce produit ne vous est pas ouverte. Si vous pensez devoir y avoir accès :"
   },
   "trade.form.market": {
     "en": "Market",
@@ -6244,8 +6260,8 @@
     "t": "{filled} sur {size} exécuté à {avg} USDT ; le reste a été annulé."
   },
   "trade.form.placed.rejected": {
-    "en": "The ledger refused the order: {reason}",
-    "t": "Le registre a refusé l'ordre : {reason}"
+    "en": "The order was not accepted: {reason}",
+    "t": "L'ordre n'a pas été accepté : {reason}"
   },
   "trade.form.placed.resting": {
     "en": "Resting on the book: {filled} of {size} filled so far.",
@@ -6280,8 +6296,8 @@
     "t": "Le prix doit être un multiple de {tick}"
   },
   "trade.form.refusedBody": {
-    "en": "{detail} If you think you should be able to trade this product, ask an operator.",
-    "t": "{detail} Si vous pensez pouvoir négocier ce produit, demandez à un opérateur."
+    "en": "{detail} If you think you should be able to trade this product:",
+    "t": "{detail} Si vous pensez pouvoir négocier ce produit :"
   },
   "trade.form.refusedTitle": {
     "en": "Order refused",
@@ -6306,6 +6322,18 @@
   "trade.form.tif": {
     "en": "Time in force",
     "t": "Validité"
+  },
+  "trade.form.tifHint.alo": {
+    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
+    "t": "Ne fait que reposer dans le carnet : elle est refusée plutôt qu’exécutée contre un ordre existant."
+  },
+  "trade.form.tifHint.gtc": {
+    "en": "Rests on the book until it fills or you cancel it.",
+    "t": "Reste dans le carnet jusqu’à exécution ou jusqu’à ce que vous l’annuliez."
+  },
+  "trade.form.tifHint.ioc": {
+    "en": "Fills whatever it can right now; the rest is cancelled at once.",
+    "t": "Exécute ce qui peut l’être immédiatement ; le reste est annulé aussitôt."
   },
   "trade.form.tifLabel.alo": {
     "en": "Post-only",
@@ -6616,16 +6644,16 @@
     "t": "Réseaux"
   },
   "ui.noOperations": {
-    "en": "No operations yet",
-    "t": "Aucune opération pour l’instant"
+    "en": "No activity yet",
+    "t": "Aucune activité pour l’instant"
   },
   "ui.none": {
     "en": "None",
     "t": "Aucun"
   },
   "ui.operations": {
-    "en": "Operations",
-    "t": "Opérations"
+    "en": "Activity",
+    "t": "Activité"
   },
   "ui.profile": {
     "en": "Profile",
@@ -6700,8 +6728,8 @@
     "t": "Retirer des USDT"
   },
   "wallet.acceptedInstantly": {
-    "en": "Accepted instantly; if the {network} rail is short it queues until funded — you'll be notified.",
-    "t": "Accepté instantanément ; si le rail {network} est à court, la demande est mise en file jusqu’à son réapprovisionnement — vous serez notifié."
+    "en": "Accepted; if {network} liquidity is short right now, it queues until topped up — you'll be notified.",
+    "t": "Accepté ; si la liquidité {network} est à court pour l’instant, la demande est mise en file jusqu’au réapprovisionnement — vous serez notifié."
   },
   "wallet.activitySub": {
     "en": "Deposits and withdrawals — queued, processing, completed",
@@ -6780,8 +6808,8 @@
     "t": "Crédité sur votre solde unique après {n, plural, one {# confirmation réseau} many {# confirmations réseau} other {# confirmations réseau}}."
   },
   "wallet.depositAddressUnavailable": {
-    "en": "A {network} deposit address isn't available yet — this rail is still being provisioned. Check back soon.",
-    "t": "Aucune adresse de dépôt {network} n’est encore disponible — ce rail est en cours de mise en service. Revenez bientôt."
+    "en": "A {network} deposit address isn't available yet — this network is still being set up. Check back soon.",
+    "t": "Aucune adresse de dépôt {network} n’est encore disponible — ce réseau est en cours de mise en service. Revenez bientôt."
   },
   "wallet.depositNetwork": {
     "en": "Deposit network",
@@ -6808,8 +6836,8 @@
     "t": "Cette adresse {network} n’est pas votre adresse {siblings}, même si toutes deux commencent par 0x. Les USDT envoyés sur {siblingsOr} ne seront pas crédités."
   },
   "wallet.exceedsInstant": {
-    "en": "~{amount} USDT exceeds instant {network} liquidity and will be queued until the rail is topped up.",
-    "t": "~{amount} USDT dépasse la liquidité instantanée du rail {network} et sera mis en file jusqu’à son réapprovisionnement."
+    "en": "~{amount} USDT exceeds instant {network} liquidity and will be queued until the network is topped up.",
+    "t": "~{amount} USDT dépasse la liquidité instantanée du réseau {network} et sera mis en file jusqu’à son réapprovisionnement."
   },
   "wallet.minInstantQueued": {
     "en": "Min {min} USDT · instant {network} {instant} · rest queued",
@@ -6840,12 +6868,12 @@
     "t": "Vos dépôts et retraits apparaîtront ici dès votre premier transfert."
   },
   "wallet.noDepositRails": {
-    "en": "No deposit rails are available right now — check back soon.",
-    "t": "Aucun rail de dépôt n’est disponible pour l’instant — revenez bientôt."
+    "en": "No deposit networks are available right now — check back soon.",
+    "t": "Aucun réseau de dépôt n’est disponible pour l’instant — revenez bientôt."
   },
   "wallet.noRails": {
-    "en": "No deposit or withdrawal rails are available right now — check back soon.",
-    "t": "Aucun rail de dépôt ou de retrait n’est disponible pour l’instant — revenez bientôt."
+    "en": "No deposit or withdrawal networks are available right now — check back soon.",
+    "t": "Aucun réseau de dépôt ou de retrait n’est disponible pour l’instant — revenez bientôt."
   },
   "wallet.noRailsTitle": {
     "en": "No networks available yet",
@@ -6860,16 +6888,16 @@
     "t": "Les adresses de dépôt sont émises et les retraits s'ouvrent une fois votre identité vérifiée. Votre solde ci-dessus reste intact."
   },
   "wallet.noWithdrawRails": {
-    "en": "No withdrawal rails are available right now — check back soon.",
-    "t": "Aucun rail de retrait n’est disponible pour l’instant — revenez bientôt."
+    "en": "No withdrawal networks are available right now — check back soon.",
+    "t": "Aucun réseau de retrait n’est disponible pour l’instant — revenez bientôt."
   },
   "wallet.oneFungibleBalance": {
     "en": "≈ ${amount} · one fungible balance",
     "t": "≈ {amount} $ · un seul solde fongible"
   },
   "wallet.overviewSub": {
-    "en": "One USDT balance · networks are deposit / withdrawal rails",
-    "t": "Un solde USDT unique · les réseaux sont des rails de dépôt / retrait"
+    "en": "One USDT balance · networks are how you deposit and withdraw",
+    "t": "Un solde USDT unique · les réseaux servent à déposer et retirer"
   },
   "wallet.pendWd": {
     "en": "PEND WD",
@@ -6880,8 +6908,8 @@
     "t": "Adresse {network}"
   },
   "wallet.railActionUnavailable": {
-    "en": "{action} is not available on this rail yet",
-    "t": "{action} n’est pas encore disponible sur ce rail"
+    "en": "{action} is not available on this network yet",
+    "t": "{action} n’est pas encore disponible sur ce réseau"
   },
   "wallet.railHazard": {
     "en": "Only send USDT on the {network} network to this address. Funds sent on any other network will be lost permanently.",
@@ -6892,12 +6920,12 @@
     "t": "{network} · USDT"
   },
   "wallet.railsCaption": {
-    "en": "deposit & withdrawal rails",
-    "t": "rails de dépôt & de retrait"
+    "en": "deposit & withdrawal networks",
+    "t": "réseaux de dépôt & de retrait"
   },
   "wallet.receiptQueued": {
-    "en": "{amount} USDT to {address} is queued — it ships once the {network} rail is topped up.",
-    "t": "{amount} USDT vers {address} sont en file — l’envoi partira dès que le rail {network} sera réapprovisionné."
+    "en": "{amount} USDT to {address} is queued — it is sent once {network} liquidity is topped up.",
+    "t": "{amount} USDT vers {address} sont en file — l’envoi partira dès que la liquidité {network} sera réapprovisionnée."
   },
   "wallet.receiptSubmitted": {
     "en": "{amount} USDT is on its way to {address} — pending on-chain confirmation.",
@@ -6928,8 +6956,8 @@
     "t": "tx {ref}"
   },
   "wallet.withdrawSub": {
-    "en": "Send funds to an external address — one balance, any rail",
-    "t": "Envoyez des fonds vers une adresse externe — un solde unique, tous les rails"
+    "en": "Send funds to an external address — one balance, any network",
+    "t": "Envoyez des fonds vers une adresse externe — un solde unique, tous les réseaux"
   },
   "wallet.withdrawVerifyBody": {
     "en": "Withdrawals open once your identity is verified. Your balance is untouched in the meantime.",

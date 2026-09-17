@@ -6,7 +6,7 @@
 //
 // A closed book and a caller locked below `invest` are stated before the action rather
 // than after a failed submit; a 412 that still comes back (the gate moved under us) is
-// shown the same way, as "ask an operator" rather than as an error code.
+// shown the same way, as "contact support" with the address, rather than as an error code.
 
 import { useRef, useState } from "react";
 
@@ -18,6 +18,7 @@ import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import type { Position } from "@/shared/contracts";
 import type { BookPolicy, BookSnapshot, Order, OrderSide } from "@/shared/contracts/book";
 import { useResource } from "@/shared/lib/resource";
+import { TipAnchor } from "@/shared/tips";
 import { EMPTY_ORDER_DRAFT, orderSubmissionFor, placeOrderBody, type OrderContext, type OrderDraft, type OrderSubmission } from "@/views/trade/lib/order-form";
 import { OrderFormFields } from "@/views/trade/ui/order-form-fields";
 import { OrderGate, OrderOutcome, type Outcome } from "@/views/trade/ui/order-form-notes";
@@ -117,6 +118,12 @@ export function OrderFormPane({
         <OrderGate closed={closed} locked={locked} unbacked={policy?.allow_unbacked_trading === true} />
         <OrderFormFields draft={draft} context={context} position={position} disabled={disabled} busy={busy} onChange={setDraft} onSubmit={submit} />
         {outcome && <OrderOutcome outcome={outcome} />}
+        {/* Collapsed (see the catalog) and last in flow: the book vs. NAV subscription is the
+            one thing a newcomer to this screen has not been told, and the form is where they
+            find out they need it — but opening it must move none of the controls above.
+            TODO(lib): summary focus ring — the kit's `<summary>` has no focus-visible style of
+            its own, so the cabinet's tinted global ring would paint it; overridden here. */}
+        <TipAnchor anchor="trade.book" className="mx-3 mb-3 [&>summary]:rounded-sm [&>summary]:outline-none [&>summary]:focus-visible:ring-2 [&>summary]:focus-visible:ring-ring" />
       </TerminalPaneBody>
     </TerminalPane>
   );

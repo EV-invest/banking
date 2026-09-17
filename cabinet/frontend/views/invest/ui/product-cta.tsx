@@ -10,9 +10,9 @@ import { ArrowRight, ChartCandlestick, Lock, ShieldCheck } from "lucide-react";
 
 import { Button } from "@evinvest/uikit";
 
-import { SUPPORT_EMAIL } from "@/shared/config/support";
 import { cn } from "@/shared/lib/cn";
 import { Link } from "@/shared/ui/cabinet-link";
+import { supportHref } from "@/shared/ui/support-link";
 import type { CardCta } from "@/views/invest/lib/catalog-card";
 import { TEAL_CTA } from "@/views/invest/ui/atoms";
 
@@ -45,11 +45,11 @@ export function ProductCta({ cta, service, title }: { cta: CardCta; service: str
     case "verify":
       return <VerifyToInvestCta className={className} />;
     case "locked":
-      // There is no self-serve request for access: an operator raises the grant by hand,
-      // so "ask" means the operators' mailbox, with the product named for them.
+      // There is no self-serve request for access: support raises the grant by hand, so
+      // "ask" means the support mailbox, with the product named for them.
       return (
         <Button asChild className={className} variant="outline">
-          <a href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}?subject=${encodeURIComponent(t("invest.cta.lockedSubject", { title }))}`}>
+          <a href={supportHref({ subject: t("invest.cta.lockedSubject", { title }) })}>
             <Lock className="size-4" />
             {t("invest.cta.locked")}
           </a>

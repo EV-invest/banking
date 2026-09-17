@@ -24,6 +24,7 @@ import { accruedFeesResource, allocationDetailResource, allocationsResource, fee
 import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { SupportLink } from "@/shared/ui/support-link";
 import { liquidity } from "@/views/invest/lib/catalog-card";
 import { isZero } from "@/views/invest/lib/format";
 import { blockedReasonKey, isClosed, isInKind, selectProduct } from "@/views/invest/lib/product";
@@ -115,7 +116,18 @@ export function ProductView({ service }: { service: string }) {
           <RiskNote />
 
           {/* The gates, stated before the action rather than after a failed submit. */}
-          {blocked && <Note tone="amber">{t(blocked)}</Note>}
+          {blocked && (
+            <Note tone="amber">
+              {t(blocked)}
+              {/* The lock is the one gate the reader cannot lift alone, so it carries the address. */}
+              {blocked === "invest.blocked.locked" && (
+                <>
+                  {" "}
+                  <SupportLink />
+                </>
+              )}
+            </Note>
+          )}
           {unmarked && !closed && <Note tone="muted">{t("invest.unmarkedNote")}</Note>}
           {inKind && <InKindNote />}
 

@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@evinvest/uikit";
 
 import type { Order } from "@/shared/contracts/book";
 import { RequestError, errorMessage } from "@/shared/lib/api-client";
+import { SupportLink } from "@/shared/ui/support-link";
 import { Note } from "@/views/invest/ui/atoms";
 import { formatUnits, formatUsdt } from "@/views/trade/lib/format";
 import { orderStateKey, placedOutcome } from "@/views/trade/lib/order-state";
@@ -19,7 +20,8 @@ export type Outcome = { order: Order; error?: never } | { error: unknown; order?
 
 /** Why the form is closed, stated before the action — or, on an open book whose units the
  *  fund holds no cash for, what a buyer is actually buying. One line either way: a closed
- *  book already says there is nothing to buy, so the exit warning waits until it opens. */
+ *  book already says there is nothing to buy, so the exit warning waits until it opens.
+ *  A lock is the reader's access, not the book's state, so it carries the way to ask. */
 export function OrderGate({ closed, locked, unbacked }: { closed: boolean; locked: boolean; unbacked: boolean }) {
   const t = useT();
   if (closed || locked) {
@@ -28,6 +30,12 @@ export function OrderGate({ closed, locked, unbacked }: { closed: boolean; locke
         <Note tone={closed ? "muted" : "amber"}>
           <Lock className="mr-1.5 inline size-3.5 align-text-bottom" />
           {t(closed ? "trade.form.closed" : "trade.form.locked")}
+          {!closed && (
+            <>
+              {" "}
+              <SupportLink />
+            </>
+          )}
         </Note>
       </div>
     );
@@ -65,13 +73,22 @@ export function OrderOutcome({ outcome }: { outcome: Outcome }) {
   // 412 is the hub's "not for you": book closed, access below `invest`, or a market order
   // into an empty side. 409 is the retry key doing its job — the order already landed.
   const status = outcome.error instanceof RequestError ? outcome.error.status : 0;
-  const title = status === 412 ? t("trade.form.refusedTitle") : status === 409 ? t("trade.form.duplicateTitle") : t("trade.form.failedTitle");
+  const refused = status === 412;
+  const title = refused ? t("trade.form.refusedTitle") : status === 409 ? t("trade.form.duplicateTitle") : t("trade.form.failedTitle");
   return (
     <div className="px-3 pb-3">
       <Alert variant="destructive">
         <TriangleAlert className="size-4" />
         <AlertTitle>{title}</AlertTitle>
-        <AlertDescription>{status === 412 ? t("trade.form.refusedBody", { detail: errorMessage(outcome.error, t) }) : errorMessage(outcome.error, t)}</AlertDescription>
+        <AlertDescription>
+          {refused ? t("trade.form.refusedBody", { detail: errorMessage(outcome.error, t) }) : errorMessage(outcome.error, t)}
+          {refused && (
+            <>
+              {" "}
+              <SupportLink />
+            </>
+          )}
+        </AlertDescription>
       </Alert>
     </div>
   );

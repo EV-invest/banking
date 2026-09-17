@@ -9,8 +9,8 @@ import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia,
 
 import { useKycStatus } from "@/features/kyc/model/use-kyc-status";
 import { VerificationDialog } from "@/features/kyc/ui/verification-dialog";
-import { SUPPORT_EMAIL } from "@/shared/config/support";
 import { cn } from "@/shared/lib/cn";
+import { SupportLink } from "@/shared/ui/support-link";
 
 /**
  * What stands where a money surface would be for a caller the hub has not cleared yet.
@@ -67,12 +67,7 @@ export function VerificationRequired({ title, description, className }: { title:
           // Waiting on a verdict, with no session left to re-enter. A button here could only
           // fail, so what the screen owes this reader is a person to ask — the same mailbox
           // the profile row and the dialog's `unavailable` outcome offer.
-          <a
-            href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}`}
-            className="rounded-sm text-sm font-medium text-accent-debug underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {t("profile.kyc.contact", { contact: SUPPORT_EMAIL })}
-          </a>
+          <SupportLink className="text-sm" />
         )}
       </EmptyContent>
     </Empty>

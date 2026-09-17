@@ -15,6 +15,7 @@ import { StartVerificationRow } from "@/features/kyc";
 import { isUnverified } from "@/entities/user/lib/kyc";
 import type { Operation, Session, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
 import { Hairline, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
 import { enumLabel, statusTone } from "@/views/profile/lib/format";
@@ -188,7 +189,16 @@ export function VerificationCard({ loading, profile, email, className }: { loadi
       </Row>
       <Hairline />
       <Row>
-        <RowLabel title={t("ui.kycLevel")} sub={t("profile.kycRaisedBy")} />
+        <RowLabel
+          title={
+            // A bare number is not a meaning: the tip says what each level lets the reader do.
+            <span className="inline-flex items-center gap-1.5">
+              {t("ui.kycLevel")}
+              <TipAnchor anchor="profile.kyc-level" />
+            </span>
+          }
+          sub={t("profile.kycRaisedBy")}
+        />
         {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold tabular-nums text-ink">{profile?.kyc_level ?? "—"}</RowValue>}
       </Row>
       <Hairline />

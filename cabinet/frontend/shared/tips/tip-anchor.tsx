@@ -49,7 +49,7 @@ export function TipAnchor({ anchor, className }: TipAnchorProps) {
 
   if (entry.type === "section") {
     return (
-      <SectionDescriptor title={title} className={className}>
+      <SectionDescriptor title={title} collapsible={entry.collapsible} className={className}>
         {body}
       </SectionDescriptor>
     );
