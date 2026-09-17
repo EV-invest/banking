@@ -85,8 +85,9 @@ export const withdrawalQueueResource = defineResource({
   tags: [TAG.adminQueue],
 });
 
-// The fund's own money. Operational cadence like the queues — an owner looking at what
-// is payable is looking at it now, and a settling payout moves the figure.
+// The `fee` allocation — what the platform earned, in the treasury's shape (#245).
+// Operational cadence like the queues: a settling fee or an executed payment out of the
+// claim moves the figure, and an owner looking at it is looking at it now.
 export const fundRevenueResource = defineResource({
   name: "admin.fundRevenue",
   fetch: fetchFundRevenue,
@@ -94,6 +95,8 @@ export const fundRevenueResource = defineResource({
   tags: [TAG.adminRevenue],
 });
 
+// History only: the payouts opened before the kind retired. Still operational, because a
+// still-queued one can be cancelled from the screen.
 export const revenuePayoutsResource = defineResource({
   name: "admin.revenuePayouts",
   fetch: fetchRevenuePayouts,
@@ -172,9 +175,9 @@ export const allocationAccessGrantsResource = defineResource({
   enabled: (service) => service.trim().length > 0,
 });
 
-// The settled supply split by holder class, per service. Operational: the issuance panel
+// The cap table — the settled supply and every holder of it, per service. Operational: the issuance panel
 // opens on one product, and an operator who has just queued a mint is watching for it to
-// land — the split moves when the relay posts, not when the POST answers.
+// land — the table moves when the relay posts, not when the POST answers.
 export const unitHoldersResource = defineResource({
   name: "admin.unitHolders",
   fetch: fetchUnitHolders,

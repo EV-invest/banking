@@ -56,10 +56,10 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
     prefix: "/admin/payments",
     warm: () => {
       // The unfiltered list, plus what the form's pickers read: the product list and the
-      // configured rails (the revenue read carries them).
+      // configured rails (the treasury read carries them).
       paymentsResource.prefetch();
       adminAllocationsResource.prefetch();
-      fundRevenueResource.prefetch();
+      treasuryResource.prefetch();
     },
   },
   {
