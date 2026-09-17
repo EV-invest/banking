@@ -21,6 +21,22 @@ pub trait FundPositionReader: Send + Sync {
 
 	/// All of the caller's position projections.
 	async fn list(&self, user: UserId) -> Result<Vec<FundPosition>, DomainError>;
+
+	/// Every recorded change to the caller's units in one fund, OLDEST first: subscription
+	/// mints, settled redemption burns, fee charges, applied in-kind issuances and book
+	/// fills on either side. Read from the control-plane records of those moves, not from
+	/// the ledger — TigerBeetle holds the balance, not a per-holder history — so a channel
+	/// that moves units without leaving one of those records is invisible here.
+	async fn unit_flows(&self, user: UserId, service: &ServiceId) -> Result<Vec<UnitFlow>, DomainError>;
+}
+
+/// One change to a holder's units, as the control plane recorded it. `delta` is signed
+/// base units: positive for units arriving (mint, issuance, buy), negative for units
+/// leaving (burn, fee charge, sell).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UnitFlow {
+	pub at_unix: i64,
+	pub delta: i128,
 }
 /// A per-(user, service) position projection.
 #[derive(Clone, Debug)]

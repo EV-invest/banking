@@ -308,6 +308,12 @@ impl Grpc {
 		Ok(self.funds().get_fund_nav(bearer(token, req)?).await?.into_inner())
 	}
 
+	/// The marks of one allocation over a window plus the caller's participation — the
+	/// hub derives the second series from the caller's `sub`, so the token is the user's.
+	pub async fn fund_nav_history(&self, token: &str, req: bk::ListFundNavHistoryRequest) -> Result<bk::FundNavHistory, Status> {
+		Ok(self.funds().list_fund_nav_history(bearer(token, req)?).await?.into_inner())
+	}
+
 	/// A fund's fee terms. Readable by any authenticated caller — an investor is entitled
 	/// to know what they are paying before they subscribe, not only after.
 	pub async fn fee_policy(&self, token: &str, service: &str) -> Result<bk::FeePolicy, Status> {

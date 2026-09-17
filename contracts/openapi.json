@@ -4310,6 +4310,65 @@
         }
       }
     },
+    "/banking.v1.FundsService/ListFundNavHistory": {
+      "post": {
+        "tags": [
+          "banking.v1.FundsService"
+        ],
+        "summary": "ListFundNavHistory",
+        "description": "The posted valuation marks of one allocation over a window, plus the caller's own\n participation (units held × NAV) through it — the two series of the performance chart.",
+        "operationId": "banking.v1.FundsService.ListFundNavHistory",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListFundNavHistoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FundNavHistory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.FundsService/ListPositions": {
       "post": {
         "tags": [
@@ -9580,6 +9639,36 @@
         "additionalProperties": false,
         "description": "The current price of a fund's share, derived (AUM / units_outstanding) and frozen\n between operator marks. `posted_at` is 0 when the fund has never been marked (seed\n NAV 1.0); `stale` is true when the latest mark is older than the dealing window."
       },
+      "banking.v1.FundNavHistory": {
+        "type": "object",
+        "properties": {
+          "allocation": {
+            "type": "string",
+            "title": "allocation"
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.NavMark"
+            },
+            "title": "marks"
+          },
+          "participation": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.ParticipationPoint"
+            },
+            "title": "participation"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated"
+          }
+        },
+        "title": "FundNavHistory",
+        "additionalProperties": false,
+        "description": "A fund's valuation log over the requested window (oldest first), and the caller's\n participation through it. `participation` steps at every mark and every change to the\n caller's units (subscribe, redeem, fee charge, in-kind issuance, book fill) and always\n ends at the window's end — \"now\" unless `to` was given — priced off the live holding,\n so the last point equals the position card. Empty `marks` means the fund is still on\n the seed NAV (or no mark fell in the window); it is not an error. `truncated` is true\n when more marks fell in the window than the cap allows and the OLDEST were dropped."
+      },
       "banking.v1.FundRevenue": {
         "type": "object",
         "properties": {
@@ -10050,6 +10139,34 @@
         "title": "ListFundFeeAssessmentsRequest",
         "additionalProperties": false
       },
+      "banking.v1.ListFundNavHistoryRequest": {
+        "type": "object",
+        "properties": {
+          "allocation": {
+            "type": "string",
+            "title": "allocation"
+          },
+          "from": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "from",
+            "format": "int64"
+          },
+          "to": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "to",
+            "format": "int64"
+          }
+        },
+        "title": "ListFundNavHistoryRequest",
+        "additionalProperties": false,
+        "description": "Keyed by the ALLOCATION (the product's registry key — today equal to the service id)\n rather than the service, so a hidden allocation such as the fee fund can serve its\n holders' history later without a second route. `from`/`to` are unix seconds,\n inclusive; 0 means \"from the first mark\" / \"up to now\"."
+      },
       "banking.v1.ListOpenOrdersRequest": {
         "type": "object",
         "properties": {
@@ -10277,6 +10394,33 @@
         },
         "title": "MigrateDepositAddressToCustodianResponse",
         "additionalProperties": false
+      },
+      "banking.v1.NavMark": {
+        "type": "object",
+        "properties": {
+          "nav": {
+            "type": "string",
+            "title": "nav",
+            "description": "decimal USDT per share"
+          },
+          "aum": {
+            "type": "string",
+            "title": "aum",
+            "description": "the posted AUM (decimal USDT)"
+          },
+          "posted_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "posted_at",
+            "format": "int64",
+            "description": "unix seconds"
+          }
+        },
+        "title": "NavMark",
+        "additionalProperties": false,
+        "description": "One operator valuation mark, as posted. Same figures as FundNav, without the live\n supply/capacity fields that only make sense for the current mark."
       },
       "banking.v1.NetworkWithdrawable": {
         "type": "object",
@@ -10651,6 +10795,28 @@
         },
         "title": "ParkedEventList",
         "additionalProperties": false
+      },
+      "banking.v1.ParticipationPoint": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "at",
+            "format": "int64",
+            "description": "unix seconds"
+          },
+          "value": {
+            "type": "string",
+            "title": "value",
+            "description": "decimal USDT"
+          }
+        },
+        "title": "ParticipationPoint",
+        "additionalProperties": false,
+        "description": "The value of the caller's holding at one instant: the units they held then × the\n NAV in force then (the seed NAV 1.0 before the first mark)."
       },
       "banking.v1.Party": {
         "type": "object",

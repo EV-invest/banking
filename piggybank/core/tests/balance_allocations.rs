@@ -496,6 +496,102 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 	);
 }
 
+/// The performance chart's two series: the marks in the window, oldest first, and the
+/// holder's participation walked back from the live holding — with the window's start
+/// priced off the mark BEFORE it and a past `to` valued as of then, not as of now.
+#[tokio::test]
+async fn fund_nav_history_lists_the_window_and_values_the_holder_through_it() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let positions = PgFundPositions::new(h.pool.clone());
+	let fund_ports = funds_app::FundPorts {
+		allocations: &h.allocations,
+		ledger: h.ledger.as_ref(),
+		nav: &nav_repo,
+		relay: &h.notify,
+	};
+	let user = UserId::new();
+	let service = registered_service(&h).await;
+	let history = |from: i64, to: i64, now: i64| funds_app::fund_nav_history(&h.allocations, &nav_repo, h.ledger.as_ref(), &positions, service.clone(), user, false, from, to, now);
+
+	// Never marked, never held: no marks and no participation — and not an error.
+	let blank = history(0, 0, now_unix()).await.unwrap();
+	assert!(
+		blank.marks.is_empty() && blank.participation.is_empty() && !blank.truncated,
+		"seed-only fund answers empty series"
+	);
+
+	// Day −4: 200 cash → 200 units at the seed NAV. Day −3: marked to 1.5. Now: marked to 2.
+	let day = 24 * 60 * 60;
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("400"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("200"), now_unix()).await.unwrap();
+	h.relay.drain().await;
+	let sub_at = now_unix() - 4 * day;
+	sqlx::query("UPDATE subscriptions SET created_at = to_timestamp($2) WHERE user_id = $1")
+		.bind(user.raw())
+		.bind(sub_at as f64)
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("300"), "op", now_unix())
+		.await
+		.unwrap();
+	let mark1_at = now_unix() - 3 * day;
+	sqlx::query("UPDATE fund_valuations SET posted_at = to_timestamp($3) WHERE service = $1 AND nav = $2")
+		.bind(service.as_str())
+		.bind(Nav::parse_decimal("1.5").unwrap().base_units().to_string())
+		.bind(mark1_at as f64)
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	let mark2 = funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", now_unix())
+		.await
+		.unwrap();
+	let now = now_unix();
+	assert!(mark2.posted_at_unix <= now);
+
+	// All-time: both marks, oldest first; the holder's line starts at their subscription.
+	let all = history(0, 0, now).await.unwrap();
+	assert_eq!(
+		all.marks.iter().map(|m| (m.posted_at_unix, m.nav)).collect::<Vec<_>>(),
+		vec![(mark1_at, Nav::parse_decimal("1.5").unwrap()), (mark2.posted_at_unix, mark2.nav)]
+	);
+	assert_eq!(all.marks[1].aum, usdt("400"));
+	assert!(!all.truncated);
+	let series: Vec<(i64, Usdt)> = all.participation.iter().map(|p| (p.at_unix, p.value)).collect();
+	assert_eq!(series[0], (sub_at, usdt("200")), "200 units at the seed NAV when they arrived");
+	assert_eq!(series[1], (mark1_at, usdt("300")), "revalued at the first mark");
+	assert_eq!(series.last().copied(), Some((now, usdt("400"))), "ends now, at the live holding × the current mark");
+	assert!(series.iter().filter(|(at, _)| *at >= mark2.posted_at_unix).all(|(_, v)| *v == usdt("400")));
+
+	// A window opening on day −2: only the second mark, and the line opens at `from`
+	// priced off the mark before the window (1.5), not the seed.
+	let recent = history(now - 2 * day, 0, now).await.unwrap();
+	assert_eq!(recent.marks.len(), 1);
+	assert_eq!(recent.marks[0].nav, mark2.nav);
+	assert_eq!(recent.participation.first().map(|p| (p.at_unix, p.value)), Some((now - 2 * day, usdt("300"))));
+	assert_eq!(recent.participation.last().map(|p| p.value), Some(usdt("400")));
+
+	// A window that ends yesterday: the first mark only, and the last point is AS OF then.
+	let past = history(0, now - day, now).await.unwrap();
+	assert_eq!(past.marks.iter().map(|m| m.nav).collect::<Vec<_>>(), vec![Nav::parse_decimal("1.5").unwrap()]);
+	assert_eq!(past.participation.last().map(|p| (p.at_unix, p.value)), Some((now - day, usdt("300"))));
+
+	// An inverted window is a client error, not an empty answer.
+	assert!(matches!(history(now, now - day, now).await.unwrap_err(), DomainError::Validation(_)));
+
+	// A stranger sees the marks but has no line.
+	let stranger = funds_app::fund_nav_history(&h.allocations, &nav_repo, h.ledger.as_ref(), &positions, service.clone(), UserId::new(), false, 0, 0, now)
+		.await
+		.unwrap();
+	assert_eq!(stranger.marks.len(), 2);
+	assert!(stranger.participation.is_empty());
+}
+
 #[tokio::test]
 async fn redeem_when_fund_is_liquid_auto_completes() {
 	let Some(h) = harness().await else { return };

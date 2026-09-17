@@ -87,6 +87,7 @@ fn requests(state: AppState) -> Router {
 		.route("/api/allocations/detail", get(money::get_allocation))
 		.route("/api/operations", get(money::list_operations))
 		.route("/api/funds/nav", get(money::fund_nav))
+		.route("/api/funds/nav/history", get(money::fund_nav_history))
 		.route("/api/funds/positions", get(money::list_positions))
 		.route("/api/funds/fee-policy", get(money::fee_policy))
 		.route("/api/funds/accrued-fees", get(money::accrued_fees))

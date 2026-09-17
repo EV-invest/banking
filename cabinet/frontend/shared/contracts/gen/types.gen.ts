@@ -1587,6 +1587,36 @@ export type BankingV1FundNav = {
 };
 
 /**
+ * FundNavHistory
+ *
+ * A fund's valuation log over the requested window (oldest first), and the caller's
+ * participation through it. `participation` steps at every mark and every change to the
+ * caller's units (subscribe, redeem, fee charge, in-kind issuance, book fill) and always
+ * ends at the window's end — "now" unless `to` was given — priced off the live holding,
+ * so the last point equals the position card. Empty `marks` means the fund is still on
+ * the seed NAV (or no mark fell in the window); it is not an error. `truncated` is true
+ * when more marks fell in the window than the cap allows and the OLDEST were dropped.
+ */
+export type BankingV1FundNavHistory = {
+    /**
+     * allocation
+     */
+    allocation?: string;
+    /**
+     * marks
+     */
+    marks?: Array<BankingV1NavMark>;
+    /**
+     * participation
+     */
+    participation?: Array<BankingV1ParticipationPoint>;
+    /**
+     * truncated
+     */
+    truncated?: boolean;
+};
+
+/**
  * FundRevenue
  *
  * The fund's OWN money — what it earned, not what it custodies. `earned` is the `fee`
@@ -2049,6 +2079,29 @@ export type BankingV1ListFundFeeAssessmentsRequest = {
 };
 
 /**
+ * ListFundNavHistoryRequest
+ *
+ * Keyed by the ALLOCATION (the product's registry key — today equal to the service id)
+ * rather than the service, so a hidden allocation such as the fee fund can serve its
+ * holders' history later without a second route. `from`/`to` are unix seconds,
+ * inclusive; 0 means "from the first mark" / "up to now".
+ */
+export type BankingV1ListFundNavHistoryRequest = {
+    /**
+     * allocation
+     */
+    allocation?: string;
+    /**
+     * from
+     */
+    from?: number | string;
+    /**
+     * to
+     */
+    to?: number | string;
+};
+
+/**
  * ListOpenOrdersRequest
  */
 export type BankingV1ListOpenOrdersRequest = {
@@ -2293,6 +2346,33 @@ export type BankingV1MigrateDepositAddressToCustodianResponse = {
      * the NEW fundable, custody-held deposit address
      */
     new_address?: string;
+};
+
+/**
+ * NavMark
+ *
+ * One operator valuation mark, as posted. Same figures as FundNav, without the live
+ * supply/capacity fields that only make sense for the current mark.
+ */
+export type BankingV1NavMark = {
+    /**
+     * nav
+     *
+     * decimal USDT per share
+     */
+    nav?: string;
+    /**
+     * aum
+     *
+     * the posted AUM (decimal USDT)
+     */
+    aum?: string;
+    /**
+     * posted_at
+     *
+     * unix seconds
+     */
+    posted_at?: number | string;
 };
 
 /**
@@ -2713,6 +2793,27 @@ export type BankingV1ParkedEventList = {
      * events
      */
     events?: Array<BankingV1ParkedEvent>;
+};
+
+/**
+ * ParticipationPoint
+ *
+ * The value of the caller's holding at one instant: the units they held then × the
+ * NAV in force then (the seed NAV 1.0 before the first mark).
+ */
+export type BankingV1ParticipationPoint = {
+    /**
+     * at
+     *
+     * unix seconds
+     */
+    at?: number | string;
+    /**
+     * value
+     *
+     * decimal USDT
+     */
+    value?: string;
 };
 
 /**
@@ -9320,6 +9421,35 @@ export type BankingV1FundsServiceGetPositionResponses = {
 };
 
 export type BankingV1FundsServiceGetPositionResponse = BankingV1FundsServiceGetPositionResponses[keyof BankingV1FundsServiceGetPositionResponses];
+
+export type BankingV1FundsServiceListFundNavHistoryData = {
+    body: BankingV1ListFundNavHistoryRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FundsService/ListFundNavHistory';
+};
+
+export type BankingV1FundsServiceListFundNavHistoryErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FundsServiceListFundNavHistoryError = BankingV1FundsServiceListFundNavHistoryErrors[keyof BankingV1FundsServiceListFundNavHistoryErrors];
+
+export type BankingV1FundsServiceListFundNavHistoryResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FundNavHistory;
+};
+
+export type BankingV1FundsServiceListFundNavHistoryResponse = BankingV1FundsServiceListFundNavHistoryResponses[keyof BankingV1FundsServiceListFundNavHistoryResponses];
 
 export type BankingV1FundsServiceListPositionsData = {
     body: BankingV1ListPositionsRequest;

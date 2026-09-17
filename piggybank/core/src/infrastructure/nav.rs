@@ -2,7 +2,11 @@
 //!
 //! Amounts/prices are stored as exact integer base-unit strings (the money-plane
 //! convention) and parsed back to the typed `Usdt`/`Shares`/`Nav` on read. `posted_at`
-//! is DB-stamped; `extract(epoch …)` exposes it as unix seconds for the staleness guard.
+//! is DB-stamped; `floor(extract(epoch …))` exposes it as unix seconds for the staleness
+//! guard — FLOORED, as `SystemTime::as_secs` and the window bounds below are, so a mark
+//! reported at second N is exactly one that `history`'s second-granular window at N
+//! includes. A `::bigint` cast alone rounds, and a mark stamped at N.7 then reports N+1
+//! while sitting outside a window that ends at N+1.
 
 use async_trait::async_trait;
 use domain::{
@@ -28,7 +32,7 @@ impl PgNav {
 /// column list is spliced with `concat!` rather than built at runtime.
 macro_rules! valuation_columns {
 	() => {
-		"service, aum, units_outstanding, nav, posted_by, EXTRACT(EPOCH FROM posted_at)::bigint AS posted_at_unix"
+		"service, aum, units_outstanding, nav, posted_by, FLOOR(EXTRACT(EPOCH FROM posted_at))::bigint AS posted_at_unix"
 	};
 }
 
@@ -86,6 +90,28 @@ impl NavMarks for PgNav {
 			.map_err(repo_err)
 	}
 
+	async fn history(&self, service: &ServiceId, from_unix: i64, to_unix: i64, limit: usize) -> Result<Vec<Valuation>, DomainError> {
+		// Newest-first under the LIMIT so the cap drops the oldest marks, then flipped: the
+		// `(service, posted_at DESC)` index serves this order without a sort. The upper
+		// bound admits the whole of second `to` (`< to + 1`), matching the floored seconds
+		// the rows report, so the window is inclusive at the granularity the caller speaks.
+		let rows = sqlx::query(concat!(
+			"SELECT ",
+			valuation_columns!(),
+			" FROM fund_valuations WHERE service = $1 AND posted_at >= to_timestamp($2) AND posted_at < to_timestamp($3) ORDER BY posted_at DESC LIMIT $4"
+		))
+		.bind(service.as_str())
+		.bind(from_unix as f64)
+		.bind(to_unix.saturating_add(1) as f64)
+		.bind(i64::try_from(limit).unwrap_or(i64::MAX))
+		.fetch_all(&self.pool)
+		.await
+		.map_err(repo_err)?;
+		let mut marks = rows.iter().map(valuation_from_row).collect::<Result<Vec<_>, _>>()?;
+		marks.reverse();
+		Ok(marks)
+	}
+
 	async fn find(&self, id: ValuationId) -> Result<Option<Valuation>, DomainError> {
 		let row = sqlx::query(concat!("SELECT ", valuation_columns!(), " FROM fund_valuations WHERE id = $1"))
 			.bind(id.raw())
@@ -98,7 +124,7 @@ impl NavMarks for PgNav {
 	async fn record(&self, id: ValuationId, service: &ServiceId, aum: Usdt, units_outstanding: Shares, nav: Nav, posted_by: &str) -> Result<i64, DomainError> {
 		let posted_at_unix = sqlx::query_scalar::<_, i64>(
 			"INSERT INTO fund_valuations (id, service, aum, units_outstanding, nav, posted_by) \
-			 VALUES ($1, $2, $3, $4, $5, $6) RETURNING EXTRACT(EPOCH FROM posted_at)::bigint",
+			 VALUES ($1, $2, $3, $4, $5, $6) RETURNING FLOOR(EXTRACT(EPOCH FROM posted_at))::bigint",
 		)
 		.bind(id.raw())
 		.bind(service.as_str())

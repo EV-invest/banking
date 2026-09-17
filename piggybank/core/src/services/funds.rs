@@ -139,6 +139,50 @@ impl FundsService for FundsSvc {
 		.map_err(map_err)?;
 		Ok(Response::new(fund_nav_to_proto(&view)))
 	}
+
+	async fn list_fund_nav_history(&self, request: Request<pb::ListFundNavHistoryRequest>) -> Result<Response<pb::FundNavHistory>, Status> {
+		// Gated exactly as `get_fund_nav`: the log of a price the caller may not see is
+		// NOT_FOUND. The request names the ALLOCATION; the registry key is the service id.
+		let caller = caller_id(&request)?;
+		let unrestricted = holds_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let req = request.get_ref();
+		let service = ServiceId::parse(&req.allocation).map_err(map_err)?;
+		let view = funds_app::fund_nav_history(
+			self.state.allocations.as_ref(),
+			self.state.nav.as_ref(),
+			self.state.ledger.as_ref(),
+			self.state.positions.as_ref(),
+			service,
+			caller,
+			unrestricted,
+			req.from,
+			req.to,
+			unix_now(),
+		)
+		.await
+		.map_err(map_err)?;
+		Ok(Response::new(pb::FundNavHistory {
+			allocation: view.service.to_string(),
+			marks: view
+				.marks
+				.iter()
+				.map(|m| pb::NavMark {
+					nav: m.nav.to_decimal_string(),
+					aum: m.aum.to_decimal_string(),
+					posted_at: m.posted_at_unix,
+				})
+				.collect(),
+			participation: view
+				.participation
+				.iter()
+				.map(|p| pb::ParticipationPoint {
+					at: p.at_unix,
+					value: p.value.to_decimal_string(),
+				})
+				.collect(),
+			truncated: view.truncated,
+		}))
+	}
 }
 
 fn subscription_to_proto(subscription: &Subscription) -> pb::Subscription {
