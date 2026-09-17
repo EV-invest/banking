@@ -3,12 +3,12 @@
 // One answer to "what may this screen offer?", so no screen has to compose a tier and a case
 // for itself.
 //
-// Its caller today is the profile card's start row, and that is the whole list: the banner
-// (#213) and the money screens (#215) are the two PRs above this one in the stack, and until
-// they land those surfaces still read the profile's mirrored tier alone. Said plainly here
-// because the first draft of this comment promised all three, and a promise in a docblock
-// reads as coverage — the money screens are exactly where offering a doomed start costs a
-// paid vendor session.
+// Its callers: the profile card's start row, the money screens' gate (`./use-kyc-gate`,
+// #215), the checklist's verify button, and — through the slice's public index — Home's
+// dashboard, which hands the answer to `features/onboarding` so the checklist can decide
+// which step is the reader's. The money screens are where offering a doomed start costs a
+// paid vendor session, which is why every one of them reads this and not the profile's
+// mirrored tier alone.
 //
 // Two sources, in a fixed order of trust. `/kyc/status` is authoritative and fresh — it is
 // the only thing that knows a case is running. The profile is the fallback, and stays the

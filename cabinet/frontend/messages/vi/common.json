@@ -4067,18 +4067,6 @@
     "en": "Verify now",
     "t": "Xác minh ngay"
   },
-  "kyc.banner.title": {
-    "en": "One step before your first top-up",
-    "t": "Một bước trước lần nạp tiền đầu tiên"
-  },
-  "kyc.banner.body": {
-    "en": "We can issue you a deposit address once your identity is verified. It takes a few minutes and is done once.",
-    "t": "Chúng tôi cấp địa chỉ nạp tiền sau khi danh tính của bạn được xác minh. Chỉ mất vài phút và làm một lần."
-  },
-  "kyc.banner.dismiss": {
-    "en": "Dismiss",
-    "t": "Ẩn đi"
-  },
   "kyc.dialog.title": {
     "en": "Verify your identity",
     "t": "Xác minh danh tính"
@@ -6718,5 +6706,77 @@
   "wallet.yourDepositAddress": {
     "en": "Your {network} deposit address",
     "t": "Địa chỉ nạp {network} của bạn"
+  },
+  "onboarding.allSet.body": {
+    "en": "Your holdings and their split are under {own}; every movement lands in {ops}.",
+    "t": "Các vị thế và tỷ trọng của bạn nằm trong mục “{own}”; mọi giao dịch được ghi ở “{ops}”."
+  },
+  "onboarding.allSet.dismiss": {
+    "en": "Got it",
+    "t": "Đã hiểu"
+  },
+  "onboarding.allSet.title": {
+    "en": "You're all set",
+    "t": "Bạn đã sẵn sàng"
+  },
+  "onboarding.deposit.current": {
+    "en": "Send funds to your deposit address — credited once the network confirms it.",
+    "t": "Gửi tiền đến địa chỉ nạp của bạn — được ghi có ngay khi mạng xác nhận giao dịch."
+  },
+  "onboarding.deposit.done": {
+    "en": "Funds received.",
+    "t": "Đã nhận tiền."
+  },
+  "onboarding.deposit.locked": {
+    "en": "Opens once your identity is verified.",
+    "t": "Mở sau khi danh tính của bạn được xác minh."
+  },
+  "onboarding.deposit.title": {
+    "en": "Make your first deposit",
+    "t": "Nạp tiền lần đầu"
+  },
+  "onboarding.invest.current": {
+    "en": "Pick a strategy and subscribe with your available balance.",
+    "t": "Chọn một chiến lược và đăng ký bằng số dư khả dụng của bạn."
+  },
+  "onboarding.invest.done": {
+    "en": "You hold units.",
+    "t": "Bạn đang nắm giữ đơn vị quỹ."
+  },
+  "onboarding.invest.locked": {
+    "en": "Opens once a deposit is credited.",
+    "t": "Mở sau khi khoản nạp được ghi có."
+  },
+  "onboarding.invest.title": {
+    "en": "Choose a strategy",
+    "t": "Chọn chiến lược"
+  },
+  "onboarding.progress": {
+    "en": "{done} of {total} done",
+    "t": "Xong {done}/{total}"
+  },
+  "onboarding.status.complete": {
+    "en": "Verified · funded · invested",
+    "t": "Đã xác minh · đã nạp tiền · đã đầu tư"
+  },
+  "onboarding.subtitle": {
+    "en": "Three steps to your first investment.",
+    "t": "Ba bước đến khoản đầu tư đầu tiên của bạn."
+  },
+  "onboarding.title": {
+    "en": "Get started",
+    "t": "Bắt đầu"
+  },
+  "onboarding.verify.done": {
+    "en": "Your deposit address and withdrawals are open.",
+    "t": "Địa chỉ nạp tiền và rút tiền đã được mở."
+  },
+  "onboarding.verify.review": {
+    "en": "Nothing to do on your side — your documents are with our reviewers and we'll email you the decision.",
+    "t": "Bạn không cần làm gì thêm — hồ sơ đang được đội ngũ xét duyệt, quyết định sẽ được gửi qua email."
+  },
+  "onboarding.verify.title": {
+    "en": "Verify your identity",
+    "t": "Xác minh danh tính"
   }
 }

@@ -4067,18 +4067,6 @@
     "en": "Verify now",
     "t": "Vérifier"
   },
-  "kyc.banner.title": {
-    "en": "One step before your first top-up",
-    "t": "Une étape avant votre premier dépôt"
-  },
-  "kyc.banner.body": {
-    "en": "We can issue you a deposit address once your identity is verified. It takes a few minutes and is done once.",
-    "t": "Nous vous attribuons une adresse de dépôt une fois votre identité vérifiée. Quelques minutes, une seule fois."
-  },
-  "kyc.banner.dismiss": {
-    "en": "Dismiss",
-    "t": "Masquer"
-  },
   "kyc.dialog.title": {
     "en": "Verify your identity",
     "t": "Vérifiez votre identité"
@@ -6718,5 +6706,77 @@
   "wallet.yourDepositAddress": {
     "en": "Your {network} deposit address",
     "t": "Votre adresse de dépôt {network}"
+  },
+  "onboarding.allSet.body": {
+    "en": "Your holdings and their split are under {own}; every movement lands in {ops}.",
+    "t": "Vos positions et leur répartition sont dans « {own} » ; chaque mouvement apparaît dans « {ops} »."
+  },
+  "onboarding.allSet.dismiss": {
+    "en": "Got it",
+    "t": "Compris"
+  },
+  "onboarding.allSet.title": {
+    "en": "You're all set",
+    "t": "Tout est prêt"
+  },
+  "onboarding.deposit.current": {
+    "en": "Send funds to your deposit address — credited once the network confirms it.",
+    "t": "Envoyez des fonds à votre adresse de dépôt — crédités dès que le réseau confirme le virement."
+  },
+  "onboarding.deposit.done": {
+    "en": "Funds received.",
+    "t": "Fonds reçus."
+  },
+  "onboarding.deposit.locked": {
+    "en": "Opens once your identity is verified.",
+    "t": "Disponible une fois votre identité vérifiée."
+  },
+  "onboarding.deposit.title": {
+    "en": "Make your first deposit",
+    "t": "Faites votre premier dépôt"
+  },
+  "onboarding.invest.current": {
+    "en": "Pick a strategy and subscribe with your available balance.",
+    "t": "Choisissez une stratégie et souscrivez avec votre solde disponible."
+  },
+  "onboarding.invest.done": {
+    "en": "You hold units.",
+    "t": "Vous détenez des parts."
+  },
+  "onboarding.invest.locked": {
+    "en": "Opens once a deposit is credited.",
+    "t": "Disponible une fois un dépôt crédité."
+  },
+  "onboarding.invest.title": {
+    "en": "Choose a strategy",
+    "t": "Choisissez une stratégie"
+  },
+  "onboarding.progress": {
+    "en": "{done} of {total} done",
+    "t": "{done} sur {total} terminés"
+  },
+  "onboarding.status.complete": {
+    "en": "Verified · funded · invested",
+    "t": "Vérifié · approvisionné · investi"
+  },
+  "onboarding.subtitle": {
+    "en": "Three steps to your first investment.",
+    "t": "Trois étapes jusqu'à votre premier investissement."
+  },
+  "onboarding.title": {
+    "en": "Get started",
+    "t": "Premiers pas"
+  },
+  "onboarding.verify.done": {
+    "en": "Your deposit address and withdrawals are open.",
+    "t": "Votre adresse de dépôt et les retraits sont ouverts."
+  },
+  "onboarding.verify.review": {
+    "en": "Nothing to do on your side — your documents are with our reviewers and we'll email you the decision.",
+    "t": "Rien à faire de votre côté — vos documents sont chez nos vérificateurs, la décision vous sera envoyée par e-mail."
+  },
+  "onboarding.verify.title": {
+    "en": "Verify your identity",
+    "t": "Vérifiez votre identité"
   }
 }

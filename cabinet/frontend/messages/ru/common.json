@@ -4067,18 +4067,6 @@
     "en": "Verify now",
     "t": "Подтвердить"
   },
-  "kyc.banner.title": {
-    "en": "One step before your first top-up",
-    "t": "Один шаг до первого пополнения"
-  },
-  "kyc.banner.body": {
-    "en": "We can issue you a deposit address once your identity is verified. It takes a few minutes and is done once.",
-    "t": "Адрес для пополнения выдаём после подтверждения личности. Это занимает несколько минут и делается один раз."
-  },
-  "kyc.banner.dismiss": {
-    "en": "Dismiss",
-    "t": "Скрыть"
-  },
   "kyc.dialog.title": {
     "en": "Verify your identity",
     "t": "Подтверждение личности"
@@ -6718,5 +6706,77 @@
   "wallet.yourDepositAddress": {
     "en": "Your {network} deposit address",
     "t": "Ваш адрес для пополнения в сети {network}"
+  },
+  "onboarding.allSet.body": {
+    "en": "Your holdings and their split are under {own}; every movement lands in {ops}.",
+    "t": "Ваши позиции и их доли — в блоке «{own}»; каждое движение средств — в «{ops}»."
+  },
+  "onboarding.allSet.dismiss": {
+    "en": "Got it",
+    "t": "Понятно"
+  },
+  "onboarding.allSet.title": {
+    "en": "You're all set",
+    "t": "Всё готово"
+  },
+  "onboarding.deposit.current": {
+    "en": "Send funds to your deposit address — credited once the network confirms it.",
+    "t": "Отправьте средства на адрес для пополнения — зачислим, как только сеть подтвердит перевод."
+  },
+  "onboarding.deposit.done": {
+    "en": "Funds received.",
+    "t": "Средства получены."
+  },
+  "onboarding.deposit.locked": {
+    "en": "Opens once your identity is verified.",
+    "t": "Откроется после подтверждения личности."
+  },
+  "onboarding.deposit.title": {
+    "en": "Make your first deposit",
+    "t": "Сделайте первое пополнение"
+  },
+  "onboarding.invest.current": {
+    "en": "Pick a strategy and subscribe with your available balance.",
+    "t": "Выберите стратегию и подпишитесь на неё доступным балансом."
+  },
+  "onboarding.invest.done": {
+    "en": "You hold units.",
+    "t": "У вас есть юниты."
+  },
+  "onboarding.invest.locked": {
+    "en": "Opens once a deposit is credited.",
+    "t": "Откроется после зачисления пополнения."
+  },
+  "onboarding.invest.title": {
+    "en": "Choose a strategy",
+    "t": "Выберите стратегию"
+  },
+  "onboarding.progress": {
+    "en": "{done} of {total} done",
+    "t": "Готово {done} из {total}"
+  },
+  "onboarding.status.complete": {
+    "en": "Verified · funded · invested",
+    "t": "Личность подтверждена · счёт пополнен · средства вложены"
+  },
+  "onboarding.subtitle": {
+    "en": "Three steps to your first investment.",
+    "t": "Три шага до первой инвестиции."
+  },
+  "onboarding.title": {
+    "en": "Get started",
+    "t": "Начало работы"
+  },
+  "onboarding.verify.done": {
+    "en": "Your deposit address and withdrawals are open.",
+    "t": "Адрес для пополнения и вывод средств открыты."
+  },
+  "onboarding.verify.review": {
+    "en": "Nothing to do on your side — your documents are with our reviewers and we'll email you the decision.",
+    "t": "От вас ничего не требуется — документы у проверяющих, решение пришлём на почту."
+  },
+  "onboarding.verify.title": {
+    "en": "Verify your identity",
+    "t": "Подтвердите личность"
   }
 }

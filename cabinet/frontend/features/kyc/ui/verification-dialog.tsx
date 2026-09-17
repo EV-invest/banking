@@ -11,15 +11,15 @@ import { useStartVerification } from "@/features/kyc/model/use-start-verificatio
 import { StartVerificationButton, VerificationOutcome } from "@/features/kyc/ui/verification-controls";
 
 // The one explanation of verification in the cabinet, and the one place its primary action
-// lives. Every entry point — the profile's identity card, the home banner, and the wallet —
+// lives. Every entry point — the profile's identity card, Home's checklist, and the wallet —
 // opens THIS, rather than each writing its own account of what the user is about to do.
 //
 // It is centred (`Dialog`, not `Sheet` or `Drawer`, both of which are edge-anchored) because
 // this is a thing the reader stops to read, not a panel they work alongside.
 //
-// It is controlled rather than carrying its own trigger: the banner's trigger is a whole card,
-// the profile's is a row button, and the wallet's is a link inside a rail — one `DialogTrigger`
-// could not be all three. Being controlled is also why it is mounted beside each trigger and
+// It is controlled rather than carrying its own trigger: the checklist's trigger sits in a
+// step row, the profile's is a row button, and the wallet's is a link inside a rail — one
+// `DialogTrigger` could not be all three. Being controlled is also why it is mounted beside each trigger and
 // stays mounted while closed, which is what `reset` below is for.
 
 export function VerificationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {

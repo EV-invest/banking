@@ -15,6 +15,5 @@
 // one hook that leaves.
 export { useKycStatus, type KycGate } from "@/features/kyc/model/use-kyc-status";
 export { StartVerificationRow } from "@/features/kyc/ui/start-verification-row";
-export { VerificationBanner } from "@/features/kyc/ui/verification-banner";
 export { VerificationRequired } from "@/features/kyc/ui/verification-required";
 export { VerifyButton } from "@/features/kyc/ui/verify-button";
