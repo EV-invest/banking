@@ -111,6 +111,9 @@ test("signed summary money carries a sign only when there is something to sign",
   assert.equal(formatSignedUsd("0"), "$0.00");
   assert.equal(formatSignedUsd(-0), "$0.00");
   assert.equal(formatSignedUsd(undefined), "$0.00");
+  assert.equal(formatPct(4.2), "+4.2%");
+  assert.equal(formatPct(0), "0.0%");
+  assert.equal(formatPct(-0), "0.0%");
 });
 
 // ── Locale ───────────────────────────────────────────────────────────────────

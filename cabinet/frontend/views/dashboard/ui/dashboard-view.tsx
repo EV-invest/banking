@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, LineChart, type LucideIcon, PieChart, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeftRight, LineChart, type LucideIcon, Minus, PieChart, TrendingDown, TrendingUp } from "lucide-react";
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Link } from "@/shared/ui/cabinet-link";
@@ -232,7 +232,9 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
   // Same reason as the `usd` binding in DashboardView: a stable identity per locale.
   const usd = useCallback((n: number) => formatUsd(n, locale), [locale]);
   const [range, setRange] = useState<(typeof RANGES)[number]>("all");
-  const down = (allTimePct ?? 0) < 0;
+  // Three tones, not two: a flat all-time return is neither a gain nor a loss, and an
+  // upward arrow on "+0.0%" claims a gain that did not happen — same rule as StatTile.
+  const trend = allTimePct === null || allTimePct === 0 ? "flat" : allTimePct < 0 ? "down" : "up";
   return (
     // From `xl` the hero spans both rows of the side column. With a plot it has to fill
     // that area — otherwise the plot keeps its natural height and leaves a gap under the
@@ -253,8 +255,8 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
             {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={usd} /></p>}
             {allTimePct !== null && (
-              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", down ? "border-accent-error/40 text-accent-error" : "border-accent-warn/40 text-accent-warn")}>
-                {down ? <TrendingDown /> : <TrendingUp />}
+              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", trend === "down" ? "border-accent-error/40 text-accent-error" : trend === "up" ? "border-accent-warn/40 text-accent-warn" : "border-border text-ink-soft")}>
+                {trend === "down" ? <TrendingDown /> : trend === "up" ? <TrendingUp /> : <Minus />}
                 {t("dash.allTimeSuffix", { pct: formatPct(allTimePct, locale) })}
                 <TipAnchor anchor="dashboard.performance.all-time-return" />
               </Badge>
