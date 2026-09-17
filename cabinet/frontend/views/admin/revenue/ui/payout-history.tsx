@@ -17,7 +17,7 @@ import { networkLabel } from "@/shared/lib/rail";
 import { NetworkMark } from "@/shared/ui/icons/networks";
 import { Settled } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
-import { formatUsd, stateLabel } from "@/views/admin/lib/format";
+import { formatUsdt, stateLabel } from "@/views/admin/lib/format";
 import { EDGE_CELL, TABLE_HEAD } from "@/views/admin/lib/table";
 
 /** In flight — the operator can still act on these; the rest are history. */
@@ -62,7 +62,7 @@ export function PayoutHistory({
                 {/* i18n-max: 14 per header — a long header widens the scroll, not a cell. */}
                 <TableRow>
                   <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("ui.destination")}</TableHead>
-                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("ui.amount")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.amountUsdt")}</TableHead>
                   <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.state")}</TableHead>
                   <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.transaction")}</TableHead>
                   <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions")}</TableHead>
@@ -96,7 +96,7 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
           {shortAddress(payout.address)}
         </p>
       </TableCell>
-      <TableCell className={cn(EDGE_CELL, "tabular-nums")}>{formatUsd(payout.amount, locale)}</TableCell>
+      <TableCell className={cn(EDGE_CELL, "tabular-nums")}>{formatUsdt(payout.amount, locale)}</TableCell>
       <TableCell className={EDGE_CELL}>
         <span className={stateTone(payout.state)}>{stateLabel(payout.state, t)}</span>
       </TableCell>

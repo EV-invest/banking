@@ -18,7 +18,7 @@ import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor } from "@/shared/tips";
-import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, stateLabel, toBaseUnits } from "@/views/admin/lib/format";
+import { ago, compactUnits, formatNav, formatUnits, formatUsdt, fractionOfCap, stateLabel, toBaseUnits } from "@/views/admin/lib/format";
 import { EDGE_CELL, TABLE_HEAD } from "@/views/admin/lib/table";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 import { ValuationActions } from "@/views/admin/valuation/ui/valuation-actions";
@@ -280,7 +280,7 @@ export function ValuationView() {
                               it takes `Intl`'s own precision rather than one of the
                               `shared/lib/money.ts` policies. */}
                           <TableCell className={cn(EDGE_CELL, "tabular-nums")}>{Number(item.units).toLocaleString(locale)}</TableCell>
-                          <TableCell className={cn(EDGE_CELL, "tabular-nums text-ink-soft")}>{est ? t("admin.valuation.approx", { amount: formatUsd(est, locale) }) : "—"}</TableCell>
+                          <TableCell className={cn(EDGE_CELL, "tabular-nums text-ink-soft")}>{est ? t("admin.valuation.approx", { amount: `${formatUsdt(String(est), locale)} USDT` }) : "—"}</TableCell>
                           <TableCell className={cn(EDGE_CELL, "text-ink-soft")}>{ago(item.created_at, t)}</TableCell>
                           <TableCell className={EDGE_CELL}>
                             {/* i18n-max: 12 per verb — two `shrink-0` Buttons, each with a

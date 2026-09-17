@@ -17,7 +17,7 @@ import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { networkLabel } from "@/shared/lib/rail";
 import { NetworkMark } from "@/shared/ui/icons/networks";
-import { ago, formatUsd, stateLabel } from "@/views/admin/lib/format";
+import { ago, formatUsdt, stateLabel } from "@/views/admin/lib/format";
 import { EDGE_CELL, TABLE_HEAD } from "@/views/admin/lib/table";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
@@ -219,8 +219,8 @@ function WithdrawalRow({
           </p>
         </TableCell>
         <TableCell className={cn(EDGE_CELL, "tabular-nums")}>
-          <p>{formatUsd(item.amount, locale)}</p>
-          <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", { amount: formatUsd(item.net_amount, locale) })}</p>
+          <p>{formatUsdt(item.amount, locale)} USDT</p>
+          <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", { amount: formatUsdt(item.net_amount, locale) })}</p>
         </TableCell>
         <TableCell className={EDGE_CELL}>
           <span className={queued ? "text-accent-warn" : "text-positive"}>{stateLabel(item.state, t)}</span>

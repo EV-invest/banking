@@ -18,7 +18,7 @@ import { BreakGlassNotice } from "@/shared/ui/break-glass-notice";
 import { Panel, PanelPresence, PanelSwap, Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { KYC_LEVELS, type KycLevel, ROLES, accountStanding, ago, formatUsd, kycLevelLabel, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
+import { KYC_LEVELS, type KycLevel, ROLES, accountStanding, ago, formatUsdt, kycLevelLabel, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
 import { EDGE_CELL, TABLE_HEAD } from "@/views/admin/lib/table";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
 import { AccountStandingField } from "@/views/admin/users/ui/account-standing-field";
@@ -367,7 +367,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
             value={t("admin.users.tokenVersionValue", { n: profile?.token_version ?? summary.token_version })}
             tip="admin.users.identity.token-version"
           />
-          <Row label={t("admin.users.balance")} value={balance ? `${formatUsd(balance.amount, locale)} USDT` : "—"} />
+          <Row label={t("admin.users.balance")} value={balance ? `${formatUsdt(balance.amount, locale)} USDT` : "—"} />
         </Section>
 
         <Section title={t("admin.users.accessSecurity")}>
