@@ -30,7 +30,7 @@ const STATUS_STYLES: Record<string, string> = {
   processing: "bg-accent-debug/15 text-accent-debug",
   completed: "bg-positive/15 text-positive",
   credited: "bg-positive/15 text-positive",
-  failed: "bg-chart-4/15 text-chart-4",
+  failed: "bg-accent-error/15 text-accent-error",
   cancelled: "bg-muted text-ink-soft",
 };
 

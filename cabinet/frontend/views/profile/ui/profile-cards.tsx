@@ -185,7 +185,7 @@ export function VerificationCard({ loading, profile, email, className }: { loadi
       <Row>
         <RowLabel title={t("ui.emailAddress")} sub={loading ? "…" : email || "—"} />
         {/* i18n-max: 12 — `shrink-0` Pills beside the `min-w-0` row label. */}
-        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill icon={BadgeCheck}>{t("ui.verified")}</Pill> : <Pill tone="pending">{t("profile.unverified")}</Pill>}
+        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill tone="success" icon={BadgeCheck}>{t("ui.verified")}</Pill> : <Pill tone="pending">{t("profile.unverified")}</Pill>}
       </Row>
       <Hairline />
       <Row>

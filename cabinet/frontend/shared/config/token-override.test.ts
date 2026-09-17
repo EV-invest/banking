@@ -36,7 +36,7 @@ const LEGACY_NAMES: Record<string, string> = {
   "main-surface": "secondary",
   "main-card": "card",
   "main-mist": "ink",
-  "main-accent-t1": "accent-debug",
+  "main-accent-t1": "primary-ink",
   "main-accent-t2": "positive",
   "main-accent-t3": "accent-warn",
   "main-accent-t4": "chart-4",

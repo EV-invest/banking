@@ -78,7 +78,8 @@ export function Chevron({ className }: { className?: string }) {
 }
 
 const PILL_TONE = {
-  positive: "bg-primary-ink/15 text-primary-ink",
+  // The brand highlight — a fact worth a glance ("Connected", "This device"), not a verdict.
+  accent: "bg-primary-ink/15 text-primary-ink",
   pending: "bg-accent-warn/15 text-accent-warn",
   neutral: "bg-ink/5 text-ink-soft",
   // The gain/loss pair (AGENTS.md § design), for a state that is a verdict rather than a wait.
@@ -89,7 +90,7 @@ const PILL_TONE = {
 export type PillTone = keyof typeof PILL_TONE;
 
 /** uikit's `Badge` in the pill silhouette these surfaces use — it sizes the icon too. */
-export function Pill({ tone = "positive", icon: Icon, className, children }: { tone?: PillTone; icon?: LucideIcon; className?: string; children: ReactNode }) {
+export function Pill({ tone = "accent", icon: Icon, className, children }: { tone?: PillTone; icon?: LucideIcon; className?: string; children: ReactNode }) {
   return (
     <Badge className={cn("rounded-full font-semibold", PILL_TONE[tone], className)}>
       {Icon && <Icon aria-hidden />}
