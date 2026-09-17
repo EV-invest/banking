@@ -2651,13 +2651,21 @@
     "en": "Open your investor account",
     "t": "Откройте инвесторский счёт"
   },
-  "auth.stat.aum": {
-    "en": "Assets under mgmt",
-    "t": "Активы под упр."
+  "auth.stat.asOf": {
+    "en": "As of {date}",
+    "t": "По состоянию на {date}"
+  },
+  "auth.stat.closingTarget": {
+    "en": "Closing target",
+    "t": "Целевой объём закрытия"
+  },
+  "auth.stat.risk": {
+    "en": "Capital at risk. A target is not a forecast, and returns are not guaranteed.",
+    "t": "Капитал под риском. Цель — не прогноз, доходность не гарантирована."
   },
   "auth.stat.targetIrr": {
-    "en": "Avg. target IRR",
-    "t": "Средний целевой IRR"
+    "en": "Target IRR",
+    "t": "Целевой IRR"
   },
   "auth.switch.haveAccount": {
     "en": "Already have an account?",

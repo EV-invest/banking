@@ -2651,13 +2651,21 @@
     "en": "Open your investor account",
     "t": "Ouvrez votre compte investisseur"
   },
-  "auth.stat.aum": {
-    "en": "Assets under mgmt",
-    "t": "Actifs sous gestion"
+  "auth.stat.asOf": {
+    "en": "As of {date}",
+    "t": "Au {date}"
+  },
+  "auth.stat.closingTarget": {
+    "en": "Closing target",
+    "t": "Objectif de clôture"
+  },
+  "auth.stat.risk": {
+    "en": "Capital at risk. A target is not a forecast, and returns are not guaranteed.",
+    "t": "Capital à risque. Un objectif n'est pas une prévision, et les rendements ne sont pas garantis."
   },
   "auth.stat.targetIrr": {
-    "en": "Avg. target IRR",
-    "t": "TRI cible moyen"
+    "en": "Target IRR",
+    "t": "TRI cible"
   },
   "auth.switch.haveAccount": {
     "en": "Already have an account?",

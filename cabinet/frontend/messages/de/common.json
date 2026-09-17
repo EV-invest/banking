@@ -2651,13 +2651,21 @@
     "en": "Open your investor account",
     "t": "Eröffnen Sie Ihr Investorenkonto"
   },
-  "auth.stat.aum": {
-    "en": "Assets under mgmt",
-    "t": "Verwaltetes Vermögen"
+  "auth.stat.asOf": {
+    "en": "As of {date}",
+    "t": "Stand {date}"
+  },
+  "auth.stat.closingTarget": {
+    "en": "Closing target",
+    "t": "Zielvolumen bei Closing"
+  },
+  "auth.stat.risk": {
+    "en": "Capital at risk. A target is not a forecast, and returns are not guaranteed.",
+    "t": "Kapital ist Risiko ausgesetzt. Ein Ziel ist keine Prognose, Renditen sind nicht garantiert."
   },
   "auth.stat.targetIrr": {
-    "en": "Avg. target IRR",
-    "t": "Ø Ziel-IRR"
+    "en": "Target IRR",
+    "t": "Ziel-IRR"
   },
   "auth.switch.haveAccount": {
     "en": "Already have an account?",

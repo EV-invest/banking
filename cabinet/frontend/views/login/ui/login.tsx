@@ -41,7 +41,7 @@ export async function LoginView({ searchParams }: { searchParams: Promise<LoginS
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))]">
       <LoginViewSignal intent={intent} hasReturnTo={returnTo !== undefined} hasError={message !== null} />
-      <BrandPanel t={t} />
+      <BrandPanel t={t} locale={locale} />
       <SignInPanel intent={intent} href={href} switchHref={switchHref} message={message} t={t} />
     </div>
   );

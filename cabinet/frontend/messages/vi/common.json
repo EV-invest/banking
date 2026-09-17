@@ -2651,13 +2651,21 @@
     "en": "Open your investor account",
     "t": "Mở tài khoản nhà đầu tư"
   },
-  "auth.stat.aum": {
-    "en": "Assets under mgmt",
-    "t": "Tài sản quản lý"
+  "auth.stat.asOf": {
+    "en": "As of {date}",
+    "t": "Tính đến {date}"
+  },
+  "auth.stat.closingTarget": {
+    "en": "Closing target",
+    "t": "Mục tiêu đóng quỹ"
+  },
+  "auth.stat.risk": {
+    "en": "Capital at risk. A target is not a forecast, and returns are not guaranteed.",
+    "t": "Vốn có rủi ro. Mục tiêu không phải dự báo, và lợi nhuận không được đảm bảo."
   },
   "auth.stat.targetIrr": {
-    "en": "Avg. target IRR",
-    "t": "IRR mục tiêu TB"
+    "en": "Target IRR",
+    "t": "IRR mục tiêu"
   },
   "auth.switch.haveAccount": {
     "en": "Already have an account?",
