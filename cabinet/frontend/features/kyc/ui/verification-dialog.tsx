@@ -3,11 +3,11 @@
 import { useT } from "@evinvest/i18n/react";
 
 import { Clock, IdCard, ShieldCheck } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@evinvest/uikit";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@evinvest/uikit";
 
 import { useStartVerification } from "@/features/kyc/model/use-start-verification";
+import { Step } from "@/features/kyc/ui/step";
 import { StartVerificationButton, VerificationOutcome } from "@/features/kyc/ui/verification-controls";
 
 // The one explanation of verification in the cabinet, and the one place its primary action
@@ -75,25 +75,5 @@ export function VerificationDialog({ open, onOpenChange }: { open: boolean; onOp
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/**
- * `Item` and not three hand-written `div`s: the kit owns this shape (`views/dashboard` uses
- * the same composition for operation rows), and what is overridden here is only the frame —
- * the chip keeps the dialog's own rounding and surface, and the row drops the padding it
- * would carry as a standalone list item.
- */
-function Step({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
-  return (
-    <Item className="items-start gap-3 rounded-none p-0">
-      <ItemMedia variant="icon" className="rounded-lg border-0 bg-secondary text-ink-mid">
-        <Icon aria-hidden />
-      </ItemMedia>
-      <ItemContent className="min-w-0">
-        <ItemTitle className="font-semibold text-ink">{title}</ItemTitle>
-        <ItemDescription className="line-clamp-none leading-snug">{body}</ItemDescription>
-      </ItemContent>
-    </Item>
   );
 }

@@ -2595,10 +2595,6 @@
     "en": "That sign-in attempt expired. Please try again.",
     "t": "Lượt đăng nhập đó đã hết hạn. Vui lòng thử lại."
   },
-  "auth.newToEv": {
-    "en": "New to EV Invest? Continuing with Google sets up your cabinet.",
-    "t": "Bạn mới đến với EV Invest? Tiếp tục với Google sẽ thiết lập tài khoản cho bạn."
-  },
   "auth.notSignedIn": {
     "en": "Not signed in",
     "t": "Chưa đăng nhập"
@@ -2623,6 +2619,38 @@
     "en": "You've been signed out of your cabinet.",
     "t": "Bạn đã đăng xuất khỏi tài khoản của mình."
   },
+  "auth.signup.next": {
+    "en": "What happens next",
+    "t": "Các bước tiếp theo"
+  },
+  "auth.signup.step.fund.body": {
+    "en": "Fund your wallet — a deposit is credited once the network confirms it — and subscribe to an allocation.",
+    "t": "Nạp tiền vào ví — khoản nạp được ghi có ngay khi mạng lưới xác nhận — rồi đăng ký một phân bổ."
+  },
+  "auth.signup.step.fund.title": {
+    "en": "Deposit and subscribe",
+    "t": "Nạp tiền và đăng ký"
+  },
+  "auth.signup.step.signIn.body": {
+    "en": "Your cabinet is created on the first sign-in.",
+    "t": "Cabinet của bạn được tạo ngay ở lần đăng nhập đầu tiên."
+  },
+  "auth.signup.step.signIn.title": {
+    "en": "Sign in with Google",
+    "t": "Đăng nhập bằng Google"
+  },
+  "auth.signup.step.verify.title": {
+    "en": "Verify your identity",
+    "t": "Xác minh danh tính"
+  },
+  "auth.signup.sub": {
+    "en": "One Google sign-in sets up your cabinet — no forms, no password.",
+    "t": "Một lần đăng nhập Google là đủ để tạo cabinet của bạn — không biểu mẫu, không mật khẩu."
+  },
+  "auth.signup.title": {
+    "en": "Open your investor account",
+    "t": "Mở tài khoản nhà đầu tư"
+  },
   "auth.stat.aum": {
     "en": "Assets under mgmt",
     "t": "Tài sản quản lý"
@@ -2630,6 +2658,22 @@
   "auth.stat.targetIrr": {
     "en": "Avg. target IRR",
     "t": "IRR mục tiêu TB"
+  },
+  "auth.switch.haveAccount": {
+    "en": "Already have an account?",
+    "t": "Đã có tài khoản?"
+  },
+  "auth.switch.newHere": {
+    "en": "New to EV Invest?",
+    "t": "Mới đến EV Invest?"
+  },
+  "auth.switch.openAccount": {
+    "en": "Open an account",
+    "t": "Mở tài khoản"
+  },
+  "auth.switch.signIn": {
+    "en": "Sign in",
+    "t": "Đăng nhập"
   },
   "auth.welcomeBack": {
     "en": "Welcome back",
