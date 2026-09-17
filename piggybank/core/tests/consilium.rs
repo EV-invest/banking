@@ -891,6 +891,48 @@ async fn an_impossible_grant_is_refused_at_open_not_after_a_72h_vote() {
 	assert_eq!(open, 0, "a refused request leaves nothing open (of {stored} historical rows)");
 }
 
+/// L-2 of the #245 security review: a holder grant names a person who can actually hold —
+/// a mirrored user in good standing. A frozen account is refused at open, and one frozen
+/// while the owners were voting fails at execution rather than being seated.
+#[tokio::test]
+async fn a_holder_grant_to_a_frozen_user_is_refused() {
+	let _lock = exclusive_governance().await;
+	let Some(h) = harness().await else { return };
+	reset_governance(&h).await;
+	let roster = owners(&h, 3).await;
+	async fn freeze(h: &Harness, user: UserId) {
+		sqlx::query("UPDATE users SET status = 'disabled' WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
+	}
+
+	// Frozen before the proposal: refused at the door, nothing opened.
+	let frozen = grantee(&h).await;
+	freeze(&h, frozen).await;
+	let before = grant_count(&h).await;
+	let err = consilium_app::open_holder_grant(&ports(&h), roster[0], HolderGrantTerms::new(ServiceId::fee(), frozen, shares("100")).unwrap(), now())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Precondition(ref m) if m.contains("not active")), "got {err:?}");
+	assert!(
+		consilium_app::list(h.consilia.as_ref(), 10).await.unwrap().iter().all(|c| !c.consilium.state().is_open()),
+		"no consilium was opened"
+	);
+
+	// Frozen during the vote: the quorum carries, the mint refuses, the failure is recorded.
+	let c = open_grant(&h, roster[0], "100").await;
+	let id = c.consilium.id();
+	freeze(&h, grantee_of(&c)).await;
+	vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap();
+	assert!(vote(&h, id, roster[2], VoteDecision::Approve).await.unwrap());
+	let executed = consilium_app::execute(&ports(&h), id, now()).await.unwrap();
+	assert_eq!(executed.consilium.state(), ConsiliumState::ExecutionFailed);
+	assert!(
+		executed.consilium.failure_reason().unwrap_or_default().contains("not active"),
+		"{:?}",
+		executed.consilium.failure_reason()
+	);
+	assert_eq!(grant_count(&h).await, before, "nothing was minted to a frozen account");
+}
+
 #[tokio::test]
 async fn every_eligible_seat_is_mailed_a_distinct_token_and_code() {
 	let _lock = exclusive_governance().await;

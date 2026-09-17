@@ -301,7 +301,8 @@ pub async fn open_valuation_override(ports: &ConsiliumPorts<'_>, initiator: User
 /// The same two gates every kind applies — a wired mailer, a settled roster — then the
 /// facts execution will need, checked now so nobody spends 72 hours approving a grant
 /// that cannot be minted: the terms name a reserved allocation (the domain constructor),
-/// the person exists as a mirrored user, and the allocation prices — its NAV is
+/// the person exists as a mirrored, ACTIVE user (units for a frozen account are units
+/// nobody can redeem, and the mint re-checks it), and the allocation prices — its NAV is
 /// derived from what it holds, and a stale product mark under it would refuse the mint.
 /// The NAV is NOT frozen into the terms; the units are, and what they are worth is the
 /// allocation's price at execution, as a subscription's is at its own moment.
@@ -312,12 +313,7 @@ pub async fn open_valuation_override(ports: &ConsiliumPorts<'_>, initiator: User
 pub async fn open_holder_grant(ports: &ConsiliumPorts<'_>, initiator: UserId, terms: HolderGrantTerms, now: i64) -> Result<ConsiliumView, DomainError> {
 	require_governance_mail(ports.governance_mail_wired)?;
 	require_settled_roster(ports.consilia, ConsiliumKind::HolderGrant, now).await?;
-	if ports.users.find_by_id(terms.user).await?.is_none() {
-		return Err(DomainError::NotFound {
-			entity: "user",
-			id: terms.user.to_string(),
-		});
-	}
+	require_active_user(ports.users, terms.user).await?;
 	allocations_app::get(ports.allocations, &terms.allocation).await?;
 	funds_app::dealing_nav(ports.nav, ports.ledger, &terms.allocation, now).await?;
 	let owners = ports.consilia.owner_roster().await?;

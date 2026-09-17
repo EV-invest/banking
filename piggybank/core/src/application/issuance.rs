@@ -307,17 +307,23 @@ pub async fn retire_units(
 /// The holder must exist: units minted to a UUID nobody can sign in as are units nobody
 /// can redeem, and units minted to an allocation with no registry row would trip the
 /// `holder_service` foreign key as an opaque repository error instead of this
-/// `NotFound`. Whether the holder may hold at all ([`UnitHolder::ensure_may_hold`]) is
-/// checked by the use case before any read, so the retired company holder never gets here.
+/// `NotFound`. A person must also be ACTIVE (#245, L-2): a frozen account can no more
+/// redeem than a missing one, and a holder grant approved over an active person must not
+/// mint to them once they have been disabled during the vote. Whether the holder may
+/// hold at all ([`UnitHolder::ensure_may_hold`]) is checked by the use case before any
+/// read, so the retired company holder never gets here.
 #[allow(deprecated)]
 async fn require_holder(allocations: &dyn AllocationRegistry, users: &dyn UserRepository, holder: &UnitHolder) -> Result<(), DomainError> {
 	match holder {
 		UnitHolder::User(user) => {
-			if users.find_by_id(*user).await?.is_none() {
+			let Some(row) = users.find_by_id(*user).await? else {
 				return Err(DomainError::NotFound {
 					entity: "user",
 					id: user.to_string(),
 				});
+			};
+			if !row.is_active() {
+				return Err(DomainError::Precondition(format!("user {user} is not active, so no units can be minted to them")));
 			}
 			Ok(())
 		}
