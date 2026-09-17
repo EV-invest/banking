@@ -22,6 +22,7 @@ import { NetworkMark } from "@/shared/ui/icons/networks";
 import { isEvmRail, networkLabel } from "@/views/wallet/lib/format";
 import { DepositQr } from "@/views/wallet/ui/deposit-qr";
 import { NetworkSegments } from "@/views/wallet/ui/network-segments";
+import { useFirstDepositSignal } from "@/views/wallet/model/use-first-deposit-signal";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
 // Top up the balance with crypto (Figma `cabinet/wallet/deposit` + `cabinet/mobile/wallet/deposit`):
@@ -35,6 +36,7 @@ function orList(items: string[], locale: Locale): string {
 
 export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
   const t = useT();
+  useFirstDepositSignal();
   const locale = useLocale();
   const [selected, setSelected] = useState<string | null>(initialNetwork ?? null);
   const [copied, setCopied] = useState(false);

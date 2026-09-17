@@ -4,6 +4,7 @@ import { Sidebar } from "@/application/layout/sidebar";
 import { BottomNavbar } from "@/application/layout/bottom-navbar";
 import { CacheWarmer } from "@/application/layout/cache-warmer";
 import { LocaleSync } from "@/application/layout/locale-sync";
+import { SessionAnalytics } from "@/application/layout/session-analytics";
 import { SessionKeeper } from "@/application/layout/session-keeper";
 import { SystemBanner } from "@/application/layout/system-banner";
 
@@ -28,6 +29,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] bg-background pb-[var(--cabinet-bottom-nav-h,64px)] lg:pl-[var(--cabinet-rail-w)] lg:pb-0">
       <SessionKeeper />
+      {/* Identifies the PostHog person by user id and records `session_created`, once
+          per tab; sits under the same providers as everything else in the shell. */}
+      <SessionAnalytics />
       <CacheWarmer />
       {/* Reconciles the URL's locale with the language stored on the account —
           adopting the stored one when the proxy had to guess, and recording the

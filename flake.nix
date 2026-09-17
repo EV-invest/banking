@@ -240,6 +240,16 @@
           doCheck = false;
         };
 
+        # The PostHog PROJECT key for the cabinet's product analytics (`phc_…`). Public by
+        # construction — it ships in the browser bundle to every visitor and only lets a
+        # client ingest events, never read them — so it is a literal here, the same way the
+        # Sentry DSN below is. Empty until the owner pastes the project's key: an empty
+        # string reaches `config.ts` as "unset", and the cabinet's analytics stays a no-op
+        # (no posthog-js loaded, no `identify`, no events) rather than talking to a wrong
+        # project. Must be the SAME key the site (site_conductor) uses, so one PostHog
+        # person carries a visitor from the landing to the first subscription.
+        posthogKey = "";
+
         # ── cabinet production image (Next.js standalone, npm workspace build) ──
         cabinetApp = pkgs.buildNpmPackage {
           pname = "${pname}-cabinet";
@@ -261,6 +271,12 @@
             # that is public anyway. `shared/config/security.ts` derives the CSP
             # `connect-src` origin from it, so the browser is allowed to report.
             NEXT_PUBLIC_SENTRY_DSN = "https://702d594df36cfbd3c5a711613d3981e7@o4511508657012736.ingest.de.sentry.io/4511508677066832";
+            # Product analytics, same build-time inlining as the DSN (see `posthogKey`). The
+            # host is pinned alongside the key on purpose: `shared/config/security.ts` puts
+            # its origin into the CSP `connect-src`, and without it a configured key would
+            # make posthog-js default to this very host — and the CSP would then block it.
+            NEXT_PUBLIC_POSTHOG_KEY = posthogKey;
+            NEXT_PUBLIC_POSTHOG_HOST = "https://us.i.posthog.com";
           };
           buildPhase = ''
             runHook preBuild

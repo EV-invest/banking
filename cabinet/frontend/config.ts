@@ -36,6 +36,11 @@ function getSettings() {
       // comma-separated. Optional: the plane refuses a foreign host itself, and an unset
       // value here degrades to the https-only check rather than blocking verification.
       NEXT_PUBLIC_KYC_PROVIDER_HOST: opt(str()),
+      // Unset ⇒ product analytics is a silent no-op: the provider never loads posthog-js.
+      // (An empty string counts as unset — `@evinvest/settings` default — which is how the
+      // flake spells "no key yet".) The key is public (it ships in the bundle), so it is a
+      // build-time literal in flake.nix, not a pod secret — see `cabinetApp.env` there.
+      NEXT_PUBLIC_POSTHOG_KEY: opt(str()),
       NEXT_PUBLIC_POSTHOG_HOST: opt(str()),
       // Unset ⇒ browser error monitoring is a silent no-op: the cabinet's
       // client-side crashes reach nobody. Acceptable locally, not in a deploy.
@@ -59,6 +64,7 @@ function getSettings() {
       NODE_ENV: process.env.NODE_ENV,
       NEXT_PUBLIC_MFE_ALLOWED_ORIGINS: process.env.NEXT_PUBLIC_MFE_ALLOWED_ORIGINS,
       NEXT_PUBLIC_KYC_PROVIDER_HOST: process.env.NEXT_PUBLIC_KYC_PROVIDER_HOST,
+      NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
       NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
       NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
     },
@@ -99,6 +105,7 @@ export const config = ((): Readonly<{
   public: Readonly<{
     mfeAllowedOrigins: string | undefined;
     kycProviderHost: string | undefined;
+    posthogKey: string | undefined;
     posthogHost: string | undefined;
     sentryDsn: string | undefined;
   }>;
@@ -125,6 +132,9 @@ export const config = ((): Readonly<{
       },
       get kycProviderHost(): string | undefined {
         return getSettings().NEXT_PUBLIC_KYC_PROVIDER_HOST;
+      },
+      get posthogKey(): string | undefined {
+        return getSettings().NEXT_PUBLIC_POSTHOG_KEY;
       },
       get posthogHost(): string | undefined {
         return getSettings().NEXT_PUBLIC_POSTHOG_HOST;
@@ -154,6 +164,7 @@ export function assertConfig(): void {
   void config.isDevelopment;
   void config.public.mfeAllowedOrigins;
   void config.public.kycProviderHost;
+  void config.public.posthogKey;
   void config.public.posthogHost;
   void config.public.sentryDsn;
 }
