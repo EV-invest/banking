@@ -328,8 +328,8 @@
     "t": "Phát hành"
   },
   "admin.alloc.issue.costBasisHint": {
-    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the company already owned cost it no cash.",
-    "t": "Không bắt buộc — mặc định là đơn vị quỹ × NAV theo định giá hiện tại. Cho phép bằng 0: phần sở hữu trong tài sản mà công ty đã có sẵn không tốn tiền mặt."
+    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the holder already owned cost them no cash.",
+    "t": "Tùy chọn — mặc định là đơn vị × NAV theo định giá hiện tại. Cho phép bằng 0: phần trong tài sản mà người nắm giữ đã sở hữu không tốn tiền của họ."
   },
   "admin.alloc.issue.field.costBasis": {
     "en": "Cost basis (USDT)",

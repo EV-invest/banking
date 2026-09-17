@@ -83,7 +83,7 @@
   "admin.alloc.issuance.source.mint": "minted",
   "admin.alloc.issuance.source.retire": "retired",
   "admin.alloc.issue.action": "Issue",
-  "admin.alloc.issue.costBasisHint": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the company already owned cost it no cash.",
+  "admin.alloc.issue.costBasisHint": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the holder already owned cost them no cash.",
   "admin.alloc.issue.field.costBasis": "Cost basis (USDT)",
   "admin.alloc.issue.field.holder": "Holder",
   "admin.alloc.issue.field.units": "Units",

@@ -328,8 +328,8 @@
     "t": "Ausgeben"
   },
   "admin.alloc.issue.costBasisHint": {
-    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the company already owned cost it no cash.",
-    "t": "Optional — standardmäßig Anteile × NAV zur aktuellen Bewertung. Null ist zulässig: ein Anteil an einem Vermögenswert, den das Unternehmen bereits besaß, hat es nichts gekostet."
+    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the holder already owned cost them no cash.",
+    "t": "Optional — standardmäßig Anteile × NAV zur aktuellen Bewertung. Null ist erlaubt: Ein Anteil an einem Vermögenswert, den der Halter bereits besaß, hat ihn kein Geld gekostet."
   },
   "admin.alloc.issue.field.costBasis": {
     "en": "Cost basis (USDT)",

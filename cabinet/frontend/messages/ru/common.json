@@ -328,8 +328,8 @@
     "t": "Выпустить"
   },
   "admin.alloc.issue.costBasisHint": {
-    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the company already owned cost it no cash.",
-    "t": "Необязательно — по умолчанию паи × NAV по текущей оценке. Ноль допустим: доля в активе, которым компания уже владела, не стоила ей денег."
+    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the holder already owned cost them no cash.",
+    "t": "Необязательно — по умолчанию юниты × NAV по текущей оценке. Ноль допустим: доля в активе, которым держатель уже владел, не стоила ему денег."
   },
   "admin.alloc.issue.field.costBasis": {
     "en": "Cost basis (USDT)",

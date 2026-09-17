@@ -64,10 +64,10 @@ export function TreasuryView() {
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <div className="flex items-center gap-1.5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.allocations.title")}</p>
-          <TipAnchor anchor="admin.treasury.layer1.allocations" />
-        </div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.allocations.title")}</p>
+        {/* A section-type tip — a descriptor block, not an inline ⓘ — so it sits under the
+            heading rather than in it, the way the settings sections place theirs. */}
+        <TipAnchor anchor="admin.treasury.layer1.allocations" />
         <TreasuryAllocations allocations={treasury?.allocations ?? null} />
       </StaggerItem>
 
