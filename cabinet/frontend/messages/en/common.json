@@ -1331,6 +1331,7 @@
   "settings.hint.preferredName": "How the cabinet and our emails address you.",
   "settings.hint.timeZone": "Saved to your account. The cabinet itself shows times in your device's time zone.",
   "settings.nav.documents": "Documents",
+  "settings.inbox": "Inbox",
   "settings.nav.personal": "Personal details",
   "settings.nav.preferences": "Preferences",
   "settings.noSessions": "No active sessions.",

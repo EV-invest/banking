@@ -5255,6 +5255,10 @@
     "en": "Documents",
     "t": "Dokumente"
   },
+  "settings.inbox": {
+    "en": "Inbox",
+    "t": "Posteingang"
+  },
   "settings.nav.personal": {
     "en": "Personal details",
     "t": "Persönliche Angaben"

@@ -14,6 +14,7 @@ import { type ReactNode, useState } from "react";
 
 import { Skeleton, Spinner } from "@evinvest/uikit";
 
+import { useUnreadCount } from "@/entities/notification/model/notification-store";
 import { cabinetPath } from "@/shared/config/base-path";
 import type { Session } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
@@ -184,13 +185,24 @@ export function MobileSecurityCard({
   );
 }
 
-/** `card-Notifications` — the entry into delivery preferences. The mock's four topic
- *  switches live on the pushed screen, where the real per-topic state comes from. */
+/** `card-Notifications` — the inbox, then the entry into delivery preferences. The mock's
+ *  four topic switches live on the pushed screen, where the real per-topic state comes from.
+ *
+ *  The inbox row is what makes /notifications reachable below `lg` at all: the tab bar's
+ *  Account tab lands here (#388), and the rail's Notifications row has no tab of its own. */
 export function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
   const t = useT();
+  const unread = useUnreadCount();
   return (
     <ListCard>
       <ListCardTitle>{t("nav.notifications")}</ListCardTitle>
+      <Hairline />
+      <Link href="/notifications" className={ROW_BUTTON}>
+        <RowLabel title={t("settings.inbox")} sub={t("notif.subtitle")} />
+        {/* The count the tab's badge promised, so the tap that followed it finds it here. */}
+        {unread ? <RowValue className="shrink-0 font-semibold text-primary-ink tabular-nums">{t("notif.unreadCount", { n: unread })}</RowValue> : null}
+        <Chevron />
+      </Link>
       <Hairline />
       <button
         type="button"

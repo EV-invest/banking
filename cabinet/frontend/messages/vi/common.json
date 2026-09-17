@@ -5253,7 +5253,10 @@
   },
   "settings.nav.documents": {
     "en": "Documents",
-    "t": "Tài liệu"
+    "t": "Tài liệu",
+  "settings.inbox": {
+    "en": "Inbox",
+    "t": "Hộp thư đến",
   },
   "settings.nav.personal": {
     "en": "Personal details",
