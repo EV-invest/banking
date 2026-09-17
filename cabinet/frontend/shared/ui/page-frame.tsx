@@ -14,6 +14,12 @@ import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 
 /** The page inset: the dashboard's, which every other screen now shares. */
 export const PAGE_PAD = "px-4 pb-6 pt-5 lg:px-8 lg:pb-7 lg:pt-6";
+/** The same inset as margins, for a block that sits above the frame (Home's onboarding path). */
+export const PAGE_INSET_X = "mx-4 lg:mx-8";
+export const PAGE_INSET_TOP = "mt-5 lg:mt-6";
+/** A reading measure for screens that are prose and cards rather than a grid: at 1920px an
+ *  unbounded product page ran its paragraphs to ~150 characters a line. */
+export const PAGE_CONTENT_WIDTH = "max-w-5xl";
 /** The rhythm between a page's sections. */
 export const PAGE_GAP = "gap-4 lg:gap-6";
 /** The page title. One step for every screen, so none of them shouts louder than another. */
@@ -24,11 +30,12 @@ export const PAGE_DESCRIPTION = "text-sm text-ink-soft";
 /**
  * The tracked-uppercase label above a figure, a group or a section. `muted` is the
  * section label (the settings groups, a day in the timeline); `accent` announces a
- * hero figure (the portfolio value, the invested band). The uikit's own `Eyebrow` is the
- * landing's — a 10px brand-coloured label with no `uppercase` of its own — so the
- * cabinet keeps one of its own rather than overriding four of its five utilities.
+ * hero figure (the portfolio value, the invested band). Not the uikit's `Eyebrow`, and
+ * not named after it: that one is the landing's — a 10–11.5px brand-coloured label with
+ * `tracking-[0.15em]` and no `uppercase` of its own — so adopting it would have meant
+ * overriding four of its five utilities, and a same-named local would shadow the export.
  */
-export function Eyebrow({ as: Comp = "p", tone = "muted", className, children }: { as?: ElementType; tone?: "muted" | "accent"; className?: string; children: ReactNode }) {
+export function SectionLabel({ as: Comp = "p", tone = "muted", className, children }: { as?: ElementType; tone?: "muted" | "accent"; className?: string; children: ReactNode }) {
   return <Comp className={cn("text-xs font-semibold uppercase tracking-widest", tone === "accent" ? "text-primary-ink" : "text-ink-soft", className)}>{children}</Comp>;
 }
 
@@ -46,7 +53,7 @@ export function PageHeading({ title, description, eyebrow, actions, className }:
   return (
     <StaggerItem as="header" className={cn("flex items-center justify-between gap-4", className)}>
       <div className="flex min-w-0 flex-col gap-1">
-        {eyebrow && <Eyebrow tone="accent">{eyebrow}</Eyebrow>}
+        {eyebrow && <SectionLabel tone="accent">{eyebrow}</SectionLabel>}
         <h1 className={PAGE_TITLE}>{title}</h1>
         {description && <p className={PAGE_DESCRIPTION}>{description}</p>}
       </div>
@@ -64,6 +71,8 @@ export interface PageFrameProps extends Omit<PageHeadingProps, "title" | "classN
    */
   appBar?: ReactNode;
   headingClassName?: string;
+  /** `full` is the dashboard's canon; `content` bounds prose-and-cards screens to a reading measure. */
+  width?: "full" | "content";
   /** Layout for the sections — a column by default; the dashboard passes its grid. */
   className?: string;
   style?: CSSProperties;
@@ -75,11 +84,11 @@ export interface PageFrameProps extends Omit<PageHeadingProps, "title" | "classN
  * Each child is a `StaggerItem` and arrives in DOM order; anything passed as a bare element
  * still renders, it just arrives with the column rather than in sequence.
  */
-export function PageFrame({ title, description, eyebrow, actions, appBar, headingClassName, className, style, children }: PageFrameProps) {
+export function PageFrame({ title, description, eyebrow, actions, appBar, headingClassName, width = "full", className, style, children }: PageFrameProps) {
   return (
     <>
       {appBar}
-      <Stagger delay={appBar ? SECTION_STAGGER : 0} step={SECTION_STAGGER} className={cn("flex flex-col", PAGE_GAP, PAGE_PAD, className)} style={style}>
+      <Stagger delay={appBar ? SECTION_STAGGER : 0} step={SECTION_STAGGER} className={cn("flex flex-col", PAGE_GAP, PAGE_PAD, width === "content" && PAGE_CONTENT_WIDTH, className)} style={style}>
         {title !== undefined && <PageHeading title={title} description={description} eyebrow={eyebrow} actions={actions} className={cn(appBar && "hidden lg:flex", headingClassName)} />}
         {children}
       </Stagger>

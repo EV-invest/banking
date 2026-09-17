@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import type { Session } from "@/shared/contracts";
 import { Reveal, StaggerItem } from "@/shared/ui/motion";
-import { Eyebrow } from "@/shared/ui/page-frame";
+import { SectionLabel } from "@/shared/ui/page-frame";
 import type { Pushable, Section } from "@/views/settings/lib/sections";
 import { DocumentsSection, MobileHelpCard } from "@/views/settings/ui/documents-section";
 import { MobileNotificationsCard, MobileSecurityCard, PersonalDetailsCard, PreferencesCard, ProfileSummaryCard, SignOutButton } from "@/views/settings/ui/mobile-cards";
@@ -60,7 +60,7 @@ export function MobileStack({ pushed, onSelect, personal, sessions, name, sessio
 function MobileGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-4">
-      <Eyebrow className="px-1">{label}</Eyebrow>
+      <SectionLabel className="px-1">{label}</SectionLabel>
       {children}
     </div>
   );

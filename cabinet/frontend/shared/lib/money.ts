@@ -161,6 +161,8 @@ export function valence(value: number | bigint | string | undefined): Valence {
 
 /** The text colour of each valence — for a caller that already holds the valence. */
 export const VALENCE_CLASS: Readonly<Record<Valence, string>> = { gain: "text-positive", loss: "text-accent-error", flat: "text-ink" };
+/** The outline that goes with it, for a pill or badge carrying a signed figure. */
+export const VALENCE_BORDER_CLASS: Readonly<Record<Valence, string>> = { gain: "border-positive/40", loss: "border-accent-error/40", flat: "border-border" };
 
 /** The text colour for a signed figure — the one gain/loss pair, neutral at zero. */
 export function valenceClass(value: number | bigint | string | undefined): string {

@@ -92,7 +92,7 @@ export function ProductView({ service }: { service: string }) {
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <PageFrame>
+    <PageFrame width="content">
       <StaggerItem>
         <BackLink />
       </StaggerItem>

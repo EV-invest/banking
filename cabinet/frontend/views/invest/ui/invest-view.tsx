@@ -24,7 +24,7 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { StaggerItem } from "@/shared/ui/motion";
-import { Eyebrow, PageFrame } from "@/shared/ui/page-frame";
+import { SectionLabel, PageFrame } from "@/shared/ui/page-frame";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { isZero, toBaseUnits } from "@/views/invest/lib/format";
 import { buildProducts, type Product } from "@/views/invest/lib/product";
@@ -62,7 +62,7 @@ export function InvestView() {
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <PageFrame title={t("invest.title")}>
+    <PageFrame title={t("invest.title")} width="content">
       {/* `invest.overview` is a SECTION tip — a descriptor block, not an inline ⓘ — so
           it cannot live inside the heading row: it laid a full-width bordered box across
           the title. It belongs under the header, which is also the one place this
@@ -87,10 +87,10 @@ export function InvestView() {
           <PortfolioBand invested={totals.value} cost={totals.cost} funds={held.length} available={available} queued={queued.length} />
 
           <StaggerItem as="section" className="space-y-3">
-            <Eyebrow className="flex items-center gap-2">
+            <SectionLabel className="flex items-center gap-2">
               {t("invest.products")}
               {products.length > 0 && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary-ink">{products.length}</span>}
-            </Eyebrow>
+            </SectionLabel>
             {products.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-ink-soft">

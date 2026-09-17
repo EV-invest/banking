@@ -12,7 +12,7 @@ import { Card, CardContent, Spinner } from "@evinvest/uikit";
 import type { AccruedFees, FeePolicy, FundNav } from "@/shared/contracts";
 import { basisLabel, crystallizationLabel } from "@/shared/lib/fee-terms";
 import { pct } from "@/shared/lib/rate";
-import { Eyebrow } from "@/shared/ui/page-frame";
+import { SectionLabel } from "@/shared/ui/page-frame";
 import { compactUnits, formatUsdt, isZero } from "@/views/invest/lib/format";
 import { companyStakeBps } from "@/views/invest/lib/product";
 import { SupplyBar } from "@/views/invest/ui/atoms";
@@ -105,7 +105,7 @@ export function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued
             {/* Its own heading, so the rows can be labelled `Management` and `Performance`
                 without colliding with the identically-named terms above. Long enough labels
                 to disambiguate inline would wrap onto two lines in this column. */}
-            <Eyebrow>{t("invest.accruedOnHolding")}</Eyebrow>
+            <SectionLabel>{t("invest.accruedOnHolding")}</SectionLabel>
             <dl className="space-y-2.5 text-sm">
               <Row label={t("admin.fees.field.management")} value={`${formatUsdt(owed.management, locale)} USDT`} />
               <Row label={t("admin.fees.field.performance")} value={`${formatUsdt(owed.performance, locale)} USDT`} />

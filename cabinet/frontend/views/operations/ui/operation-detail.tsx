@@ -10,7 +10,7 @@ import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { amountTone, dayLabel, dayLabelInline, formatUnits, formatUsdt, kindBadge, kindMeta, networkLabel, seconds, STATE_ICONS, stateLabel, stateTone, timeLabel } from "@/views/operations/lib/format";
 import { NetworkMark } from "@/shared/ui/icons/networks";
-import { Eyebrow } from "@/shared/ui/page-frame";
+import { SectionLabel } from "@/shared/ui/page-frame";
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 
@@ -57,7 +57,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
         <>
           <Separator />
           <section className="flex flex-col gap-3 px-4 py-4">
-            <Eyebrow as="h3">{t("ui.progress")}</Eyebrow>
+            <SectionLabel as="h3">{t("ui.progress")}</SectionLabel>
             {steps.map((step, i) => (
               <div key={i} className="flex items-center gap-2.5">
                 <span
@@ -76,7 +76,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
 
       <Separator />
       <section className="flex flex-col gap-2 px-4 py-4">
-        <Eyebrow as="h3">{t("ui.details")}</Eyebrow>
+        <SectionLabel as="h3">{t("ui.details")}</SectionLabel>
         {/* The label is fixed and the value wraps, not the other way round. A deposit
             reference is ~50 characters and a TON address 48; letting the value size the
             row pushed it straight through the panel's right edge and over the row above. */}

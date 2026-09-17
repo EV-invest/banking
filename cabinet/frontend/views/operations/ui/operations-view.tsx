@@ -47,7 +47,7 @@ import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { useIsCompact } from "@/shared/lib/use-is-compact";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
-import { Eyebrow, PageFrame } from "@/shared/ui/page-frame";
+import { SectionLabel, PageFrame } from "@/shared/ui/page-frame";
 import { ResourceError } from "@/shared/ui/resource-error";
 import {
   amountTone,
@@ -247,7 +247,7 @@ export function OperationsView() {
                 {pending.length > 0 && <InProgress operations={pending} titleOf={titleOf} />}
                 {groups.map((group) => (
                   <section key={group.label} className="space-y-2">
-                    <Eyebrow as="h2" className="px-1">{group.label}</Eyebrow>
+                    <SectionLabel as="h2" className="px-1">{group.label}</SectionLabel>
                     <Card>
                       {/* The rows carry the inset instead of the card, so a hover (and the separator
                           between rows) reaches the card's edges rather than stopping 24px short. */}

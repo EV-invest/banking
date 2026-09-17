@@ -20,7 +20,7 @@ export function Note({ tone, children }: { tone: "amber" | "muted" | "accent"; c
   return (
     <p
       className={cn(
-        "rounded-lg border px-3 py-2 text-xs leading-relaxed",
+        "max-w-prose rounded-lg border px-3 py-2 text-xs leading-relaxed",
         tone === "amber" && "border-accent-warn/30 bg-accent-warn/5 text-accent-warn",
         tone === "muted" && "border-border bg-ink/5 text-ink-soft",
         tone === "accent" && "border-primary-ink/40 bg-primary-ink/10 text-ink",

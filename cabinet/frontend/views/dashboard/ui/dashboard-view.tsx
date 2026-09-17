@@ -12,7 +12,7 @@ import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { StaggerItem } from "@/shared/ui/motion";
-import { PageFrame } from "@/shared/ui/page-frame";
+import { PAGE_INSET_TOP, PAGE_INSET_X, PageFrame } from "@/shared/ui/page-frame";
 import { formatCount, STAT_STRIP, StatDivider, StatTile } from "@/shared/ui/stat-tile";
 import { CARD_FROM_LG } from "@/views/dashboard/lib/chrome";
 import { formatSignedUsd, formatUsd, num, valence } from "@/views/dashboard/lib/format";
@@ -82,7 +82,7 @@ export function DashboardView() {
           the whole desktop composition for one temporary state. Above is also the point: for
           an account with a step still to do, the path takes the top slot and the hero — a
           zero over an empty plot — reads second. Once the path is done it is one quiet line. */}
-      <GetStartedSection className="mx-4 mt-5 lg:mx-8 lg:mt-6" />
+      <GetStartedSection className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
       <PageFrame
         title={t("dash.portfolio")}
         description={t("dash.portfolioSub")}

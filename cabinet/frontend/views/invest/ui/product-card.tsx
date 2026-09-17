@@ -18,10 +18,11 @@ import { Badge, Card, CardContent } from "@evinvest/uikit";
 import { bookPolicyResource } from "@/entities/book/model/book-resource";
 import { feePolicyResource, fundNavResource } from "@/entities/fund/model/fund-resource";
 import { cn } from "@/shared/lib/cn";
+import { type Valence, VALENCE_CLASS } from "@/shared/lib/money";
 import { useResource } from "@/shared/lib/resource";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { cardCta, liquidity } from "@/views/invest/lib/catalog-card";
-import { formatSignedUsdt, formatUnits, formatUsdt, isZero, valence, valenceClass } from "@/views/invest/lib/format";
+import { formatSignedUsdt, formatUnits, formatUsdt, isZero, valence } from "@/views/invest/lib/format";
 import { isClosed, isInKind, isLocked, type Product } from "@/views/invest/lib/product";
 import { SupplyBar } from "@/views/invest/ui/atoms";
 import { BackingBadge } from "@/views/invest/ui/backing-badge";
@@ -87,7 +88,7 @@ export function ProductCard({ product, gated }: { product: Product; gated: boole
               <CardStat
                 label={t("invest.pnl")}
                 value={formatSignedUsdt(held.pnl, locale)}
-                tone={valenceClass(held.pnl)}
+                tone={trend}
                 icon={trend === "loss" ? <TrendingDown className="size-3.5" /> : trend === "gain" ? <TrendingUp className="size-3.5" /> : undefined}
               />
             </>
@@ -109,11 +110,11 @@ export function ProductCard({ product, gated }: { product: Product; gated: boole
   );
 }
 
-function CardStat({ label, value, large, tone, icon, children }: { label: string; value: string; large?: boolean; tone?: string; icon?: React.ReactNode; children?: React.ReactNode }) {
+function CardStat({ label, value, large, tone, icon, children }: { label: string; value: string; large?: boolean; tone?: Valence; icon?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <div className="space-y-1">
       <p className="text-xs text-ink-soft">{label}</p>
-      <p className={cn("flex items-center gap-1 font-semibold tabular-nums", large ? "text-xl" : "text-sm", tone)}>
+      <p className={cn("flex items-center gap-1 font-semibold tabular-nums", large ? "text-xl" : "text-sm", VALENCE_CLASS[tone ?? "flat"])}>
         {icon}
         {value}
       </p>

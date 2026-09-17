@@ -19,7 +19,7 @@ import type { NotificationSettings } from "@/shared/contracts/notifications";
 import { errorMessage } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { Hairline, ListCard, ListCardTitle, Row, RowLabel } from "@/shared/ui/list-card";
-import { Eyebrow } from "@/shared/ui/page-frame";
+import { SectionLabel } from "@/shared/ui/page-frame";
 
 /**
  * Delivery preferences. Both master channels are opt-out and may be off at once —
@@ -102,7 +102,7 @@ export function NotificationsSection() {
         <div className="flex items-start justify-between gap-4">
           <ListCardTitle sub={t("notif.topicsSub")}>{t("notif.whatYouFollow")}</ListCardTitle>
           {/* i18n-max: 12 — `shrink-0` uppercase column header with `tracking-widest`. */}
-          <Eyebrow className="shrink-0 pt-3">{t("ui.email")}</Eyebrow>
+          <SectionLabel className="shrink-0 pt-3">{t("ui.email")}</SectionLabel>
         </div>
         {settings
           ? // Named `topic`, not `t`: the translator is bound above and a `t` here would

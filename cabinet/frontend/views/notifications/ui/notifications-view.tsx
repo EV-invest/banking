@@ -133,6 +133,7 @@ export function NotificationsView() {
     <PageFrame
       title={t("nav.notifications")}
       description={t("notif.subtitle")}
+      width="content"
       actions={
         <Button type="button" variant="outline" onClick={markAll} disabled={busy || unread === 0}>
           {t("notif.markAllRead")}

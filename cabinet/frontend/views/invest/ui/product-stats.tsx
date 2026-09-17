@@ -12,7 +12,7 @@ import { Card, CardContent, Skeleton } from "@evinvest/uikit";
 import type { FundNav, Position } from "@/shared/contracts";
 import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
-import { Eyebrow, PageFrame } from "@/shared/ui/page-frame";
+import { PageFrame } from "@/shared/ui/page-frame";
 import { StatTile } from "@/shared/ui/stat-tile";
 import { formatSignedUsdt, formatUnits, formatUsdt, valence } from "@/views/invest/lib/format";
 
@@ -58,10 +58,11 @@ export function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: bo
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-4 py-6">
         <div className="space-y-1">
-          <Eyebrow className="flex items-center gap-1.5">
+          {/* The same label the holding tiles wear, so the slot reads the same whether or not the caller holds units. */}
+          <p className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
             {t("invest.navPerUnit")}
             <TipAnchor anchor="invest.position.nav" />
-          </Eyebrow>
+          </p>
           <p className="text-2xl font-semibold tabular-nums">{nav ? `${formatUsdt(nav.nav, locale)} USDT` : "—"}</p>
         </div>
         <p className="max-w-sm text-sm text-ink-soft">{t(unmarked ? "invest.notYetValuedHint" : "invest.noUnitsInFund")}</p>
@@ -72,7 +73,7 @@ export function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: bo
 
 export function ProductLoading() {
   return (
-    <PageFrame>
+    <PageFrame width="content">
       <Skeleton className="h-10 w-64" />
       <Skeleton className="h-40 w-full" />
       <Skeleton className="h-32 w-full" />
@@ -85,7 +86,7 @@ export function ProductLoading() {
 export function ProductMissing({ service, error }: { service: string; error: string | null }) {
   const t = useT();
   return (
-    <PageFrame>
+    <PageFrame width="content">
       <BackLink />
       <Card>
         <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-ink-soft">

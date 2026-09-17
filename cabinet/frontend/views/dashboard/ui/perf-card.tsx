@@ -13,11 +13,12 @@ import { useCallback, useState } from "react";
 
 import { HISTORY_RANGES, type HistoryRange, isHistoryRange, rangeFrom } from "@/entities/fund/lib/nav-series";
 import { cn } from "@/shared/lib/cn";
+import { VALENCE_BORDER_CLASS, VALENCE_CLASS } from "@/shared/lib/money";
 import { AnimatedNumber, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor } from "@/shared/tips";
-import { Eyebrow } from "@/shared/ui/page-frame";
+import { SectionLabel } from "@/shared/ui/page-frame";
 import { CARD_FROM_LG } from "@/views/dashboard/lib/chrome";
-import { formatPct, formatUsd, num } from "@/views/dashboard/lib/format";
+import { formatPct, formatUsd, num, valence } from "@/views/dashboard/lib/format";
 import { PerfChart } from "@/views/dashboard/ui/perf-chart";
 
 // i18n-max: 4 — four equal columns of a grid segmented control on mobile.
@@ -48,8 +49,8 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
   // no clock at all.
   const [span, setSpan] = useState<{ range: HistoryRange; from: number | undefined }>({ range: "all", from: undefined });
   // Three tones, not two: a flat all-time return is neither a gain nor a loss, and an
-  // upward arrow on "+0.0%" claims a gain that did not happen — same rule as StatTile.
-  const trend = allTimePct === null || allTimePct === 0 ? "flat" : allTimePct < 0 ? "down" : "up";
+  // upward arrow on "+0.0%" claims a gain that did not happen — the one valence rule.
+  const trend = valence(allTimePct ?? 0);
   return (
     // From `xl` the hero spans both rows of the side column and fills them — otherwise the
     // plot keeps its natural height and leaves a gap under the card whenever the side
@@ -58,15 +59,15 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
     <StaggerItem as={Card} className={cn("flex-1 gap-4 lg:gap-5 xl:h-full", CARD_FROM_LG, className)}>
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
         <div className="flex min-w-0 flex-col gap-2">
-          <Eyebrow tone="accent" className="flex items-center gap-1.5">
+          <SectionLabel tone="accent" className="flex items-center gap-1.5">
             {t("dash.portfolioValue")}
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
-          </Eyebrow>
+          </SectionLabel>
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
             {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={usd} /></p>}
             {allTimePct !== null && (
-              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", trend === "down" ? "border-accent-error/40 text-accent-error" : trend === "up" ? "border-positive/40 text-positive" : "border-border text-ink-soft")}>
-                {trend === "down" ? <TrendingDown /> : trend === "up" ? <TrendingUp /> : <Minus />}
+              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", VALENCE_BORDER_CLASS[trend], VALENCE_CLASS[trend])}>
+                {trend === "loss" ? <TrendingDown /> : trend === "gain" ? <TrendingUp /> : <Minus />}
                 {t("dash.allTimeSuffix", { pct: formatPct(allTimePct, locale) })}
                 <TipAnchor anchor="dashboard.performance.all-time-return" />
               </Badge>
