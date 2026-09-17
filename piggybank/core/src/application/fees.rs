@@ -33,7 +33,7 @@ use crate::{
 	application::{
 		allocations as allocations_app,
 		consilium::{mint_credential, require_governance_mail, require_settled_roster},
-		funds::dealing_nav,
+		funds::{dealing_nav, refuse_recent_poster},
 	},
 	infrastructure::consilium::digest,
 	ports::{
@@ -490,6 +490,15 @@ pub async fn fee_shares(ledger: &dyn Ledger, nav: &dyn NavMarks, service: &Servi
 /// estimate — the queue settles at whatever mark is posted then, not this one — but it is
 /// the only honest estimate available, and erring toward the investor is the direction
 /// every rounding decision in this plane already leans.
+///
+/// # The settler is bound by the redeem cooldown
+///
+/// The settlement prices the fee class at the product's dealing NAV and turns it into cash
+/// on `service:fee` — cash the `fee` holders are then paid out of. An administrator who marks
+/// the product up and settles at once has converted their own mark into the fee holders'
+/// (very possibly their own) cash, which is the move the redeem cooldown exists to stop one
+/// step later. So the same cooldown binds the settler (#245, M-1): within
+/// [`VALUATION_REDEEM_COOLDOWN_SECS`] of their own mark, the settlement is refused.
 #[allow(clippy::too_many_arguments)]
 pub async fn settle_fee_shares(
 	settlements: &dyn FeeSettlements,
@@ -499,7 +508,7 @@ pub async fn settle_fee_shares(
 	relay: &Notify,
 	service: ServiceId,
 	units: Option<Shares>,
-	settled_by: &str,
+	settler: UserId,
 	now_unix: i64,
 ) -> Result<FeeSettlement, DomainError> {
 	let held = Shares::from_base_units(ledger.balance(&LedgerAccountKey::FeeShares(service.clone())).await?.available());
@@ -510,6 +519,7 @@ pub async fn settle_fee_shares(
 	if units > held {
 		return Err(DomainError::Validation("cannot settle more fee units than the fund has accumulated".into()));
 	}
+	refuse_recent_poster(nav, ledger, &service, settler, now_unix).await?;
 	let price = dealing_nav(nav, ledger, &service, now_unix).await?;
 	let mut settlement = FeeSettlement::record(FeeSettlementId::new(), service.clone(), units, price)?;
 	let fund = ledger.balance(&LedgerAccountKey::ServiceClaim(service.clone())).await?;
@@ -528,7 +538,7 @@ pub async fn settle_fee_shares(
 			)
 		}));
 	}
-	settlements.settle(&mut settlement, settled_by).await?;
+	settlements.settle(&mut settlement, &settler.to_string()).await?;
 	relay.notify_one();
 	Ok(settlement)
 }

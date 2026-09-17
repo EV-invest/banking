@@ -60,7 +60,7 @@ use piggybank_core::{
 	},
 	ports::{
 		AllocationRegistry, RedemptionRepository, UserRepository,
-		fees::{FeePolicyChanges, PositionAccruals},
+		fees::{FeePolicyChanges, FeeSettlements, PositionAccruals},
 		ledger::Ledger,
 		nav::NavMarks,
 	},
@@ -303,7 +303,7 @@ async fn grant_fee_units(h: &Harness, holder: UserId, units: &str) {
 }
 
 async fn settle_fee_shares(h: &Harness, service: &ServiceId) -> Usdt {
-	let settlement = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
+	let settlement = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, UserId::new(), now_unix())
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -650,4 +650,46 @@ async fn a_fee_holder_who_marked_a_product_cannot_redeem_fee_units_for_seven_day
 		.await
 		.expect("an aged-out mark no longer binds its poster");
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
+}
+
+/// M-1 of the #245 security review. Settling a product's fee class prices it at the
+/// product's dealing NAV and turns it into the `fee` holders' cash — so an administrator
+/// who marks the product up and settles at once has converted their own mark into cash
+/// one step before the redeem cooldown would have caught them. The same cooldown binds
+/// the settler; another administrator settles as before.
+#[tokio::test]
+async fn the_admin_who_marked_a_product_cannot_settle_its_fee_class_for_seven_days() {
+	let Some(h) = harness().await else { return };
+	let (investor, poster, colleague) = (UserId::new(), UserId::new(), UserId::new());
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	fund_user(&h, investor, "1000").await;
+	subscribe(&h, investor, &service, "1000").await;
+	let fee_class = charge_a_year(&h, investor, &service).await;
+	assert!(fee_class > Shares::ZERO);
+	let claim_before = cash_of(&h, fee_claim()).await;
+
+	let aum = cash_of(&h, LedgerAccountKey::ServiceClaim(service.clone())).await;
+	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), aum, &poster.to_string(), now_unix())
+		.await
+		.unwrap();
+
+	let err = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, poster, now_unix())
+		.await
+		.expect_err("the poster must not crystallize their own mark");
+	assert!(
+		matches!(err, DomainError::Precondition(ref m) if m.contains("posted a valuation")),
+		"refused by the cooldown: {err:?}"
+	);
+	assert_eq!(units_of(&h, LedgerAccountKey::FeeShares(service.clone())).await, fee_class, "the fee class is untouched");
+	assert_eq!(cash_of(&h, fee_claim()).await, claim_before, "and no cash moved");
+	assert!(h.settlements.list_by_service(&service).await.unwrap().is_empty(), "no settlement was recorded");
+
+	let settlement = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, colleague, now_unix())
+		.await
+		.expect("an administrator who did not mark the product settles it");
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
+	assert_eq!(settlement.units(), fee_class);
+	assert_eq!(units_of(&h, LedgerAccountKey::FeeShares(service.clone())).await, Shares::ZERO);
+	assert_eq!(cash_of(&h, fee_claim()).await, claim_before.checked_add(settlement.cash()).unwrap());
 }
