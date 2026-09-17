@@ -259,10 +259,6 @@
     "en": "Accepting subscriptions and redemptions",
     "t": "Đang nhận lệnh đăng ký và lệnh hoàn vốn"
   },
-  "admin.alloc.holders.company": {
-    "en": "Company",
-    "t": "Công ty"
-  },
   "admin.alloc.holders.empty": {
     "en": "No units issued yet",
     "t": "Chưa phát hành đơn vị quỹ nào"
@@ -270,14 +266,6 @@
   "admin.alloc.holders.emptyHint": {
     "en": "The split by holder appears once a subscription or an in-kind issuance mints the first unit.",
     "t": "Phân bổ theo người nắm giữ sẽ hiện khi một lượt đăng ký hoặc một lượt phát hành hiện vật tạo ra đơn vị quỹ đầu tiên."
-  },
-  "admin.alloc.holders.fee": {
-    "en": "Fee account",
-    "t": "Tài khoản phí"
-  },
-  "admin.alloc.holders.investors": {
-    "en": "Investors",
-    "t": "Nhà đầu tư"
   },
   "admin.alloc.holders.outstanding": {
     "en": "Outstanding",
@@ -354,14 +342,6 @@
   "admin.alloc.issue.field.units": {
     "en": "Units",
     "t": "Đơn vị quỹ"
-  },
-  "admin.alloc.issue.holder.company": {
-    "en": "Company",
-    "t": "Công ty"
-  },
-  "admin.alloc.issue.holder.investor": {
-    "en": "Investor",
-    "t": "Nhà đầu tư"
   },
   "admin.alloc.issue.note": {
     "en": "In kind: no cash moves. The units count against the cap like a subscription would, and the cost basis is what the holder is deemed to have paid.",
@@ -478,46 +458,6 @@
   "admin.alloc.retire.submit": {
     "en": "Retire",
     "t": "Thu hồi"
-  },
-  "admin.alloc.transfer.action": {
-    "en": "Transfer company stake",
-    "t": "Chuyển phần nắm giữ của công ty"
-  },
-  "admin.alloc.transfer.available": {
-    "en": "The company holds {units} units",
-    "t": "Công ty đang giữ {units} đơn vị quỹ"
-  },
-  "admin.alloc.transfer.confirm": {
-    "en": "{units} units: Company → {holder} — the supply does not change.",
-    "t": "{units} đơn vị quỹ: Công ty → {holder} — tổng cung không thay đổi."
-  },
-  "admin.alloc.transfer.field.recipient": {
-    "en": "Recipient",
-    "t": "Người nhận"
-  },
-  "admin.alloc.transfer.nothingHeld": {
-    "en": "The company holds no settled units in this product — nothing to transfer.",
-    "t": "Công ty không giữ đơn vị quỹ đã ghi sổ nào trong sản phẩm này — không có gì để chuyển."
-  },
-  "admin.alloc.transfer.reason.recipient": {
-    "en": "Pick a recipient",
-    "t": "Chọn người nhận"
-  },
-  "admin.alloc.transfer.resultApplied": {
-    "en": "{units} units moved from the company to {holder}.",
-    "t": "{units} đơn vị quỹ đã chuyển từ công ty sang {holder}."
-  },
-  "admin.alloc.transfer.resultQueued": {
-    "en": "{units} units from the company to {holder} queued — the relay posts the transfer shortly, and the split below follows.",
-    "t": "{units} đơn vị quỹ từ công ty sang {holder} đang chờ — relay sẽ sớm ghi nhận việc chuyển, và phân bổ bên dưới sẽ cập nhật."
-  },
-  "admin.alloc.transfer.review": {
-    "en": "Review transfer",
-    "t": "Xem lại việc chuyển"
-  },
-  "admin.alloc.transfer.submit": {
-    "en": "Transfer",
-    "t": "Chuyển"
   },
   "admin.alloc.open": {
     "en": "Open",
@@ -670,6 +610,18 @@
   "admin.col.when": {
     "en": "When",
     "t": "Thời điểm"
+  },
+  "admin.consilium.open": {
+    "en": "Open the consilium",
+    "t": "Mở hội đồng"
+  },
+  "admin.consilium.openedId": {
+    "en": "Consilium {id}",
+    "t": "Hội đồng {id}"
+  },
+  "admin.consilium.openedTitle": {
+    "en": "Opened — nothing has moved",
+    "t": "Đã mở — chưa có gì thay đổi"
   },
   "admin.dispatch": {
     "en": "Dispatch",
@@ -1159,6 +1111,22 @@
     "en": "Fund revenue",
     "t": "Doanh thu quỹ"
   },
+  "admin.holder.allocation": {
+    "en": "Allocation",
+    "t": "Phân bổ"
+  },
+  "admin.holder.allocation.fee": {
+    "en": "Platform fees",
+    "t": "Phí nền tảng"
+  },
+  "admin.holder.allocation.fund": {
+    "en": "Platform capital",
+    "t": "Vốn nền tảng"
+  },
+  "admin.holder.person": {
+    "en": "Person",
+    "t": "Cá nhân"
+  },
   "admin.kyc.elevated": {
     "en": "Elevated",
     "t": "Chuyên sâu"
@@ -1268,8 +1236,8 @@
     "t": "Lý do là bắt buộc — đó là nội dung người phê duyệt đọc."
   },
   "admin.payments.err.noRailFromPooled": {
-    "en": "Fund capital and a product's pooled claim cannot ship to an address. Move it to fund revenue or to an investor first.",
-    "t": "Vốn quỹ và tài khoản gộp của sản phẩm không thể gửi tới một địa chỉ. Hãy chuyển sang doanh thu quỹ hoặc tới một nhà đầu tư trước."
+    "en": "An allocation's pooled claim — a product's, or the platform's fee and fund — cannot ship to an address. A holder redeems onto their own claim and withdraws from there.",
+    "t": "Quyền gộp của một phân bổ — của sản phẩm, hoặc phí và vốn của nền tảng — không thể gửi đến một địa chỉ. Người nắm giữ rút vốn về quyền của mình rồi rút từ đó."
   },
   "admin.payments.err.pickDestination": {
     "en": "Complete the destination.",
@@ -1298,14 +1266,6 @@
   "admin.payments.kind.external": {
     "en": "An external address",
     "t": "Một địa chỉ bên ngoài"
-  },
-  "admin.payments.kind.piggybank": {
-    "en": "Fund capital (piggybank)",
-    "t": "Vốn quỹ (piggybank)"
-  },
-  "admin.payments.kind.revenue": {
-    "en": "Fund revenue",
-    "t": "Doanh thu quỹ"
   },
   "admin.payments.kind.service": {
     "en": "A product",
@@ -1515,73 +1475,81 @@
     "en": "Governance mail is not configured",
     "t": "Email quản trị chưa được cấu hình"
   },
-  "admin.revenue.amountUsdt": {
-    "en": "Amount (USDT)",
-    "t": "Số tiền (USDT)"
+  "admin.revenue.cashAvailable": {
+    "en": "Cash · available",
+    "t": "Tiền mặt · khả dụng"
   },
-  "admin.revenue.availableHint": {
-    "en": "free of in-flight payouts",
-    "t": "chưa tính các khoản chi trả đang thực hiện"
+  "admin.revenue.cashAvailableHint": {
+    "en": "free of approved payments",
+    "t": "không tính các khoản thanh toán đã duyệt"
   },
-  "admin.revenue.availableToPayOut": {
-    "en": "Available to pay out",
-    "t": "Khả dụng để chi trả"
+  "admin.revenue.cashPosted": {
+    "en": "Cash · posted",
+    "t": "Tiền mặt · đã ghi sổ"
+  },
+  "admin.revenue.cashPostedHint": {
+    "en": "settled fees + settled 2-and-20, reserved included",
+    "t": "phí đã tất toán + 2-và-20 đã tất toán, gồm phần dự trữ"
   },
   "admin.revenue.earned": {
-    "en": "Earned",
-    "t": "Đã thu được"
-  },
-  "admin.revenue.earnedTotal": {
-    "en": "Earned · total",
-    "t": "Đã thu · tổng"
-  },
-  "admin.revenue.earnedTotalHint": {
-    "en": "fees + settled 2-and-20",
-    "t": "phí + phần 2-and-20 đã tất toán"
+    "en": "The fee allocation",
+    "t": "Phân bổ phí"
   },
   "admin.revenue.footnote": {
     "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
     "t": "Một khoản chi trả chạy cùng quy trình saga như lệnh rút của người dùng, nên nó cũng xuất hiện trong hàng đợi Rút tiền để gửi lệnh và tất toán. Chỉ khoản chi trả còn đang xếp hàng mới có thể hủy — khi đã chuyển sang xử lý, giao dịch có thể đã lên mạng và việc hủy sẽ dẫn tới trả trùng."
   },
+  "admin.revenue.grant.intro": {
+    "en": "Seat a person on the fee allocation. The owners are asked; the units are minted only when more than half of them agree.",
+    "t": "Đưa một người vào phân bổ phí. Các chủ sở hữu sẽ được hỏi; đơn vị chỉ được phát hành khi hơn một nửa đồng ý."
+  },
+  "admin.revenue.grant.opened": {
+    "en": "The owners have each been emailed a link. No units are minted until more than half of them confirm from their own mailboxes; the cap table above follows once the relay posts the grant.",
+    "t": "Mỗi chủ sở hữu đã nhận một liên kết qua email. Không đơn vị nào được phát hành cho đến khi hơn một nửa xác nhận từ hộp thư của họ; bảng nắm giữ ở trên sẽ cập nhật khi relay ghi sổ."
+  },
+  "admin.revenue.grant.submit": {
+    "en": "Propose holder grant",
+    "t": "Đề xuất cấp quyền nắm giữ"
+  },
   "admin.revenue.inFlight": {
     "en": "In flight",
     "t": "Đang thực hiện"
+  },
+  "admin.revenue.navPosted": {
+    "en": "marked {ago}",
+    "t": "đã định giá {ago}"
   },
   "admin.revenue.noPayouts": {
     "en": "No payouts yet",
     "t": "Chưa có khoản chi trả nào"
   },
   "admin.revenue.noPayoutsHintConsilium": {
-    "en": "Revenue the fund has earned stays on the ledger until the owners approve a payout. Approved payouts appear here once they execute.",
-    "t": "Doanh thu quỹ kiếm được vẫn nằm trên sổ cái cho đến khi các chủ sở hữu phê duyệt một khoản chi trả. Các khoản chi trả đã được phê duyệt sẽ xuất hiện ở đây sau khi thực hiện."
+    "en": "Nothing opens a revenue payout any more: a holder redeems, or the owners approve a payment out of the fee allocation. Payouts opened before that change appear here.",
+    "t": "Không còn khoản chi trả doanh thu nào được mở: người nắm giữ rút vốn, hoặc các chủ sở hữu duyệt một khoản thanh toán từ phân bổ phí. Các khoản chi trả mở trước thay đổi này hiện ở đây."
   },
   "admin.revenue.ownMoneyNote": {
-    "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
-    "t": "Đây là tiền của chính quỹ. Số dư khách hàng và vốn mồi của quỹ là các quyền đòi riêng trên sổ cái, không nằm trong đây — và không thể chạm tới từ màn hình này."
+    "en": "This is the platform's own money. Client balances and the fund allocation are separate ledger claims and are not included here — and cannot be reached from this screen.",
+    "t": "Đây là tiền riêng của nền tảng. Số dư khách hàng và phân bổ vốn là các quyền riêng trên sổ cái, không nằm ở đây — và không thể truy cập từ màn hình này."
   },
   "admin.revenue.payouts": {
     "en": "Payouts",
     "t": "Các khoản chi trả"
   },
-  "admin.revenue.pendingHint": {
-    "en": "queued + in-flight",
-    "t": "đang chờ + đang thực hiện"
-  },
-  "admin.revenue.pendingPayout": {
-    "en": "Pending payout",
-    "t": "Chi trả đang chờ"
-  },
   "admin.revenue.subtitle": {
-    "en": "What the fund earned — fees and the settled 2-and-20 — and the payouts it has made of it",
-    "t": "Quỹ đã kiếm được gì — phí và 2-và-20 đã quyết toán — và các khoản chi trả đã thực hiện từ đó"
+    "en": "What the platform earned — the fee allocation: its cash, its units and who holds them",
+    "t": "Nền tảng đã kiếm được gì — phân bổ phí: tiền mặt, đơn vị và ai nắm giữ"
   },
   "admin.revenue.toPayments": {
     "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
     "t": "Chi trả doanh thu — tới một địa chỉ, vào một sản phẩm, hoặc cho một nhà đầu tư — là một lệnh thanh toán do chủ sở hữu phê duyệt. Mở lệnh ở đó."
   },
   "admin.revenue.toTreasury": {
-    "en": "The revenue claim beside the fund's other balances: custody per rail, client claims, seed capital.",
-    "t": "Tài khoản doanh thu bên cạnh các số dư khác của quỹ: lưu ký theo rail, tài khoản khách hàng, vốn hạt giống."
+    "en": "The fee allocation beside the platform's other balances: custody per rail, user claims, every allocation and its holders.",
+    "t": "Phân bổ phí bên cạnh các số dư khác của nền tảng: lưu ký theo mạng, quyền của người dùng, mọi phân bổ và người nắm giữ."
+  },
+  "admin.revenue.unitsHint": {
+    "en": "units of the fee allocation, held by people",
+    "t": "đơn vị của phân bổ phí, do cá nhân nắm giữ"
   },
   "admin.revenue.whereNext": {
     "en": "Move or inspect it",
@@ -1683,6 +1651,42 @@
     "en": "Copy {what}",
     "t": "Sao chép {what}"
   },
+  "admin.treasury.allocations.claimDetail": {
+    "en": "posted {posted} · reserved {reserved}",
+    "t": "đã ghi sổ {posted} · dự trữ {reserved}"
+  },
+  "admin.treasury.allocations.col.allocation": {
+    "en": "Allocation",
+    "t": "Phân bổ"
+  },
+  "admin.treasury.allocations.col.claim": {
+    "en": "Cash claim",
+    "t": "Quyền tiền mặt"
+  },
+  "admin.treasury.allocations.empty": {
+    "en": "No allocations yet",
+    "t": "Chưa có phân bổ nào"
+  },
+  "admin.treasury.allocations.emptyHint": {
+    "en": "Every allocation the hub knows appears here with its claim, supply and holders — the products, and the hidden fee and fund allocations once they exist.",
+    "t": "Mọi phân bổ mà hub biết sẽ hiện ở đây cùng quyền, lượng lưu hành và người nắm giữ — các sản phẩm, và các phân bổ phí và vốn ẩn khi chúng tồn tại."
+  },
+  "admin.treasury.allocations.moreHolders": {
+    "en": "+{n} more",
+    "t": "+{n} nữa"
+  },
+  "admin.treasury.allocations.noHolders": {
+    "en": "no holders",
+    "t": "chưa có người nắm giữ"
+  },
+  "admin.treasury.allocations.title": {
+    "en": "Held through allocations",
+    "t": "Nắm giữ qua các phân bổ"
+  },
+  "admin.treasury.allocations.unmarked": {
+    "en": "not yet marked",
+    "t": "chưa định giá"
+  },
   "admin.treasury.alreadyRecorded": {
     "en": "Already recorded — that reference was credited before, nothing changed.",
     "t": "Đã ghi nhận trước đó — tham chiếu này đã được ghi có, không có gì thay đổi."
@@ -1711,18 +1715,6 @@
     "en": "Expected amount (USDT) · optional",
     "t": "Số tiền dự kiến (USDT) · không bắt buộc"
   },
-  "admin.treasury.feeRevenueHint": {
-    "en": "earned — fees + settled 2-and-20",
-    "t": "đã thu — phí + phần 2-and-20 đã tất toán"
-  },
-  "admin.treasury.fundCapital": {
-    "en": "Fund capital",
-    "t": "Vốn của quỹ"
-  },
-  "admin.treasury.fundCapitalHint": {
-    "en": "company's own",
-    "t": "tiền của chính công ty"
-  },
   "admin.treasury.gas": {
     "en": "Gas",
     "t": "Gas"
@@ -1743,21 +1735,21 @@
     "en": "gas",
     "t": "gas"
   },
-  "admin.treasury.heldForClients": {
-    "en": "Held for clients",
-    "t": "Giữ cho khách hàng"
+  "admin.treasury.heldByUsers": {
+    "en": "Held by users",
+    "t": "Người dùng nắm giữ"
   },
-  "admin.treasury.heldForClientsHint": {
-    "en": "user + service balances",
-    "t": "số dư người dùng + dịch vụ"
+  "admin.treasury.heldByUsersHint": {
+    "en": "user claims · held directly",
+    "t": "quyền của người dùng · nắm giữ trực tiếp"
   },
   "admin.treasury.invariantNote": {
     "en": "Per-rail backing is the treasury's job, not the ledger's: a shortfall on one rail is accept-and-queue, then rebalanced via CEX / alt-rail / top-up. The global invariant is {invariant}.",
     "t": "Bảo chứng theo từng kênh là việc của ngân quỹ, không phải của sổ cái: thiếu hụt trên một kênh sẽ được nhận-và-xếp-hàng, sau đó cân đối lại qua CEX / kênh khác / nạp thêm. Bất biến toàn cục là {invariant}."
   },
   "admin.treasury.layer1": {
-    "en": "Layer 1 · Ledger — user claims (USDT)",
-    "t": "Lớp 1 · Sổ cái — quyền đòi của người dùng (USDT)"
+    "en": "Layer 1 · Ledger — claims by holder (USDT)",
+    "t": "Lớp 1 · Sổ cái — quyền theo người nắm giữ (USDT)"
   },
   "admin.treasury.layer2": {
     "en": "Layer 2 · Treasury — liquidity by rail",
@@ -1774,10 +1766,6 @@
   "admin.treasury.onchainUsdt": {
     "en": "On-chain USDT",
     "t": "USDT on-chain"
-  },
-  "admin.treasury.party.fundCapital": {
-    "en": "fund capital",
-    "t": "vốn của quỹ"
   },
   "admin.treasury.party.generic": {
     "en": "{kind} {id}",
@@ -1815,13 +1803,45 @@
     "en": "queued + in-flight (clearing)",
     "t": "đang chờ + đang thực hiện (tài khoản bù trừ)"
   },
+  "admin.treasury.seed.amount": {
+    "en": "Amount (USDT)",
+    "t": "Số tiền (USDT)"
+  },
+  "admin.treasury.seed.amountProblem": {
+    "en": "A positive decimal, e.g. 10000 or 2500.50",
+    "t": "Một số thập phân dương, ví dụ 10000 hoặc 2500.50"
+  },
+  "admin.treasury.seed.depositor": {
+    "en": "Depositor · optional",
+    "t": "Người nạp · tùy chọn"
+  },
+  "admin.treasury.seed.depositorHint": {
+    "en": "Leave empty to attribute the seed to yourself.",
+    "t": "Để trống để ghi nhận vốn hạt giống cho chính bạn."
+  },
+  "admin.treasury.seed.intro": {
+    "en": "USDT sent to a treasury address as the platform's own capital is nobody's until the owners say whose. Name the transfer, the amount the chain must report and the person it is attributed to; when the owners carry it, the hub books their deposit and their subscription into the fund allocation in one step.",
+    "t": "USDT gửi đến địa chỉ kho quỹ như vốn riêng của nền tảng chưa thuộc về ai cho đến khi các chủ sở hữu quyết định. Hãy nêu giao dịch, số tiền mà chuỗi phải báo cáo và người được ghi nhận; khi các chủ sở hữu thông qua, hub ghi sổ khoản nạp và đăng ký của người đó vào phân bổ vốn trong một bước."
+  },
+  "admin.treasury.seed.opened": {
+    "en": "The owners have each been emailed a link. Nothing is booked until more than half of them confirm from their own mailboxes; the treasury follows once the chain-proven deposit and the fund subscription post.",
+    "t": "Mỗi chủ sở hữu đã nhận một liên kết qua email. Không có gì được ghi sổ cho đến khi hơn một nửa xác nhận từ hộp thư của họ; kho quỹ sẽ cập nhật khi khoản nạp đã xác minh trên chuỗi và đăng ký vốn được ghi sổ."
+  },
+  "admin.treasury.seed.submit": {
+    "en": "Propose seed",
+    "t": "Đề xuất"
+  },
+  "admin.treasury.seed.title": {
+    "en": "Propose seed capital",
+    "t": "Đề xuất vốn hạt giống"
+  },
   "admin.treasury.selectRail": {
     "en": "Select a rail…",
     "t": "Chọn một kênh…"
   },
   "admin.treasury.subtitle": {
-    "en": "Two layers — user claims (USDT) vs on-chain liquidity by rail",
-    "t": "Hai lớp — quyền đòi của người dùng (USDT) và thanh khoản on-chain theo từng kênh"
+    "en": "Two layers — ledger claims (USDT) by holder vs on-chain liquidity by rail",
+    "t": "Hai lớp — quyền trên sổ cái (USDT) theo người nắm giữ so với thanh khoản on-chain theo mạng"
   },
   "admin.users.accessSecurity": {
     "en": "Access & security",
@@ -2331,6 +2351,54 @@
     "en": "This link can no longer be used",
     "t": "Liên kết này không còn dùng được"
   },
+  "approval.holderGrant.allocation.fee": {
+    "en": "of the fee allocation",
+    "t": "của phân bổ phí"
+  },
+  "approval.holderGrant.allocation.fund": {
+    "en": "of the fund allocation",
+    "t": "của phân bổ vốn"
+  },
+  "approval.holderGrant.approve": {
+    "en": "Approve this grant",
+    "t": "Phê duyệt cấp quyền này"
+  },
+  "approval.holderGrant.decided.approvedTitle": {
+    "en": "You approved this grant",
+    "t": "Bạn đã phê duyệt cấp quyền này"
+  },
+  "approval.holderGrant.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the units are minted once enough owners have agreed.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Không cần làm gì thêm ở đây — đơn vị sẽ được phát hành khi đủ chủ sở hữu đồng ý."
+  },
+  "approval.holderGrant.decided.rejectedTitle": {
+    "en": "You rejected this grant",
+    "t": "Bạn đã từ chối cấp quyền này"
+  },
+  "approval.holderGrant.executes": {
+    "en": "If it passes, the units are minted to this person in kind, and they hold that share of the allocation from then on.",
+    "t": "Nếu được thông qua, đơn vị được phát hành hiện vật cho người này, và người đó nắm giữ phần đó của phân bổ từ đó."
+  },
+  "approval.holderGrant.holder": {
+    "en": "Holder",
+    "t": "Người nắm giữ"
+  },
+  "approval.holderGrant.lead": {
+    "en": "{initiator} has asked to seat a person on one of the platform's own allocations, as set out below. Who holds the platform's money is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} đã yêu cầu đưa một người vào một trong các phân bổ riêng của nền tảng, như nêu bên dưới. Ai nắm giữ tiền của nền tảng không bao giờ là quyết định của một người, nên cần các chủ sở hữu đồng ý."
+  },
+  "approval.holderGrant.payloadHashHint": {
+    "en": "The fingerprint is taken over the allocation, the person and the units above. It is checked again before anything is minted, so a request cannot be edited after you have agreed to it.",
+    "t": "Dấu vân tay được tính trên phân bổ, người và số đơn vị ở trên. Nó được kiểm tra lại trước khi phát hành, nên yêu cầu không thể bị sửa sau khi bạn đã đồng ý."
+  },
+  "approval.holderGrant.title": {
+    "en": "Approve a holder grant",
+    "t": "Phê duyệt cấp quyền nắm giữ"
+  },
+  "approval.holderGrant.units": {
+    "en": "Units to mint",
+    "t": "Đơn vị sẽ phát hành"
+  },
   "approval.loadFailed": {
     "en": "We couldn't load this request",
     "t": "Chúng tôi không tải được yêu cầu này"
@@ -2510,6 +2578,50 @@
   "approval.removal.title": {
     "en": "A request to end your ownership",
     "t": "Một yêu cầu kết thúc quyền sở hữu của bạn"
+  },
+  "approval.seedCapital.amount": {
+    "en": "Amount",
+    "t": "Số tiền"
+  },
+  "approval.seedCapital.approve": {
+    "en": "Approve this seed",
+    "t": "Phê duyệt vốn này"
+  },
+  "approval.seedCapital.decided.approvedTitle": {
+    "en": "You approved this seed",
+    "t": "Bạn đã phê duyệt vốn này"
+  },
+  "approval.seedCapital.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the deposit is booked once enough owners have agreed.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Không cần làm gì thêm ở đây — khoản nạp sẽ được ghi sổ khi đủ chủ sở hữu đồng ý."
+  },
+  "approval.seedCapital.decided.rejectedTitle": {
+    "en": "You rejected this seed",
+    "t": "Bạn đã từ chối vốn này"
+  },
+  "approval.seedCapital.depositor": {
+    "en": "Depositor",
+    "t": "Người nạp"
+  },
+  "approval.seedCapital.executes": {
+    "en": "If it passes, the transfer is verified on chain and booked as this person's deposit and subscription into the fund allocation — in one step, or not at all.",
+    "t": "Nếu được thông qua, giao dịch được xác minh trên chuỗi và ghi sổ là khoản nạp của người này cùng đăng ký vào phân bổ vốn — trong một bước, hoặc không gì cả."
+  },
+  "approval.seedCapital.lead": {
+    "en": "{initiator} has asked to attribute a transfer to the treasury as a person's seed of the platform's capital, as set out below. Whose capital it is is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} đã yêu cầu ghi nhận một giao dịch chuyển vào kho quỹ là vốn hạt giống của một người cho nền tảng, như nêu bên dưới. Vốn đó của ai không bao giờ là quyết định của một người, nên cần các chủ sở hữu đồng ý."
+  },
+  "approval.seedCapital.payloadHashHint": {
+    "en": "The fingerprint is taken over the reference, the rail, the amount and the depositor above. It is checked again before anything is booked, so a request cannot be edited after you have agreed to it.",
+    "t": "Dấu vân tay được tính trên tham chiếu, mạng, số tiền và người nạp ở trên. Nó được kiểm tra lại trước khi ghi sổ, nên yêu cầu không thể bị sửa sau khi bạn đã đồng ý."
+  },
+  "approval.seedCapital.reference": {
+    "en": "On-chain reference",
+    "t": "Tham chiếu trên chuỗi"
+  },
+  "approval.seedCapital.title": {
+    "en": "Approve seed capital",
+    "t": "Phê duyệt vốn hạt giống"
   },
   "approval.tally": {
     "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}} so far",
@@ -2983,9 +3095,41 @@
     "en": "This room is for the fund's owners",
     "t": "Phòng này dành cho các chủ sở hữu của quỹ"
   },
+  "consilium.holderGrant.allocation": {
+    "en": "Allocation",
+    "t": "Phân bổ"
+  },
+  "consilium.holderGrant.allocation.fee": {
+    "en": "Platform fees (fee)",
+    "t": "Phí nền tảng (fee)"
+  },
+  "consilium.holderGrant.allocation.fund": {
+    "en": "Platform capital (fund)",
+    "t": "Vốn nền tảng (fund)"
+  },
+  "consilium.holderGrant.carried": {
+    "en": "Minted",
+    "t": "Đã phát hành"
+  },
+  "consilium.holderGrant.executes": {
+    "en": "If it passes, the units are minted to this person in kind — the allocation's supply grows by them, and they hold that share from then on.",
+    "t": "Nếu được thông qua, đơn vị được phát hành hiện vật cho người này — lượng lưu hành của phân bổ tăng tương ứng, và người đó nắm giữ phần này từ đó."
+  },
+  "consilium.holderGrant.holder": {
+    "en": "Holder",
+    "t": "Người nắm giữ"
+  },
+  "consilium.holderGrant.unitsWord": {
+    "en": "units",
+    "t": "đơn vị"
+  },
   "consilium.kind.fee_policy": {
     "en": "Fee terms",
     "t": "Điều khoản phí"
+  },
+  "consilium.kind.holder_grant": {
+    "en": "Holder grant",
+    "t": "Cấp quyền nắm giữ"
   },
   "consilium.kind.payment": {
     "en": "Payment",
@@ -2994,6 +3138,10 @@
   "consilium.kind.revenue_payout": {
     "en": "Revenue payout",
     "t": "Chi trả doanh thu"
+  },
+  "consilium.kind.seed_capital": {
+    "en": "Seed capital",
+    "t": "Vốn hạt giống"
   },
   "consilium.kind.valuation_override": {
     "en": "NAV mark",
@@ -3430,6 +3578,18 @@
   "consilium.roster.you": {
     "en": "(you)",
     "t": "(bạn)"
+  },
+  "consilium.seedCapital.carried": {
+    "en": "Booked",
+    "t": "Đã ghi sổ"
+  },
+  "consilium.seedCapital.depositor": {
+    "en": "Depositor · {id}",
+    "t": "Người nạp · {id}"
+  },
+  "consilium.seedCapital.executes": {
+    "en": "If it passes, the transfer is verified on chain, booked as this person's deposit and subscribed into the fund allocation — one chain, or nothing.",
+    "t": "Nếu được thông qua, giao dịch được xác minh trên chuỗi, ghi sổ là khoản nạp của người này và đăng ký vào phân bổ vốn — trong một chuỗi, hoặc không gì cả."
   },
   "consilium.state.approved": {
     "en": "Approved",
@@ -5579,33 +5739,33 @@
     "en": "The invariant",
     "t": "Bất biến"
   },
+  "tips.admin.treasury.layer1.allocations.body": {
+    "en": "Every allocation's cash claim, supply, price and holders — the products and the hidden fee and fund allocations. Every unit belongs to a person or to the fee allocation; nothing is nobody's.",
+    "t": "Quyền tiền mặt, lượng lưu hành, giá và người nắm giữ của mỗi phân bổ — các sản phẩm và các phân bổ phí và vốn ẩn. Mỗi đơn vị thuộc về một cá nhân hoặc phân bổ phí; không có gì là vô chủ."
+  },
+  "tips.admin.treasury.layer1.allocations.title": {
+    "en": "Held through allocations",
+    "t": "Nắm giữ qua các phân bổ"
+  },
   "tips.admin.treasury.layer1.claims-total.body": {
-    "en": "Total user + fund claims. Equals the sum of on-chain custody — every claim is fully backed.",
-    "t": "Tổng quyền đòi của người dùng và của quỹ. Bằng đúng tổng lưu ký on-chain — mọi quyền đòi đều được bảo chứng đầy đủ."
+    "en": "Total claims — users' and allocations'. Equals the sum of on-chain custody — every claim is fully backed.",
+    "t": "Tổng quyền — của người dùng và các phân bổ. Bằng tổng lưu ký on-chain — mọi quyền đều được bảo đảm đầy đủ."
   },
   "tips.admin.treasury.layer1.claims-total.title": {
     "en": "Claims · total",
     "t": "Quyền đòi · tổng"
   },
-  "tips.admin.treasury.layer1.fund-capital.body": {
-    "en": "Claims that are the fund's own capital, not client money.",
-    "t": "Các quyền đòi thuộc vốn của chính quỹ, không phải tiền của khách hàng."
+  "tips.admin.treasury.layer1.held-by-users.body": {
+    "en": "Claims people hold directly — their wallet balances. Read off the user claim accounts, never derived as a remainder.",
+    "t": "Quyền mà cá nhân nắm giữ trực tiếp — số dư ví của họ. Đọc từ các tài khoản quyền của người dùng, không bao giờ suy ra như phần còn lại."
   },
-  "tips.admin.treasury.layer1.fund-capital.title": {
-    "en": "Fund capital",
-    "t": "Vốn của quỹ"
-  },
-  "tips.admin.treasury.layer1.held-for-clients.body": {
-    "en": "The portion of claims owed to clients — user wallet plus service balances.",
-    "t": "Phần quyền đòi thuộc về khách hàng — số dư ví người dùng cộng số dư các dịch vụ."
-  },
-  "tips.admin.treasury.layer1.held-for-clients.title": {
-    "en": "Held for clients",
-    "t": "Giữ cho khách hàng"
+  "tips.admin.treasury.layer1.held-by-users.title": {
+    "en": "Held by users",
+    "t": "Người dùng nắm giữ"
   },
   "tips.admin.treasury.layer1.ledger.body": {
-    "en": "The ledger's network-agnostic claims in USDT. Total claims equal on-chain custody and break down into held-for-clients, fund capital, and reserved-for-withdrawals.",
-    "t": "Các quyền đòi bằng USDT của sổ cái, không phụ thuộc mạng. Tổng quyền đòi bằng lưu ký on-chain và được chia thành phần giữ cho khách hàng, vốn của quỹ và phần giữ cho lệnh rút."
+    "en": "The ledger's network-agnostic claims in USDT. Total claims equal on-chain custody and break down into what users hold directly, what allocations hold for their holders, and reserved-for-withdrawals.",
+    "t": "Các quyền trên sổ cái tính bằng USDT, không phụ thuộc mạng. Tổng quyền bằng lưu ký on-chain và gồm phần người dùng nắm giữ trực tiếp, phần các phân bổ nắm giữ cho người nắm giữ của chúng, và phần dự trữ cho rút tiền."
   },
   "tips.admin.treasury.layer1.ledger.title": {
     "en": "Layer 1 · Ledger",
