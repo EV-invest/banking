@@ -378,20 +378,22 @@ impl BalanceService for BalanceSvc {
 		// The permission check stays FIRST so the refusal reads the same to everyone who could
 		// once call this, and tells nobody else that the path exists at all.
 		//
-		// `consilium_app::execute` is now the only caller that reaches
-		// `withdrawal_app::request_revenue_payout` for fund revenue, and it gets there with a
-		// withdrawal id DERIVED from the consilium — so the payout path itself carries the
-		// proof of authorization rather than trusting its caller.
+		// Since #245 the payout kind itself is retired: the fund's earnings are the `fee`
+		// allocation's, held by people, and cash leaves it only by a holder's redemption
+		// onto their own claim. `consilium_app::execute` still carries the consilia that
+		// were open when the kind was retired, with a withdrawal id DERIVED from the
+		// consilium — so the payout path itself carries the proof of authorization rather
+		// than trusting its caller.
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
 		let req = request.into_inner();
 		tracing::warn!(
 			network = %req.network,
 			address = %req.address,
 			amount = %req.amount,
-			"refused a direct fund revenue payout: revenue leaves only through an approved consilium"
+			"refused a direct fund revenue payout: the fee allocation pays its holders by redemption"
 		);
 		Err(Status::failed_precondition(
-			"the fund's revenue can only be paid out by an approved consilium; open one with ConsiliumService.OpenRevenuePayout and have a quorum of owners approve it",
+			"the revenue payout is retired: the fund's earnings are held through the fee allocation, and a holder is paid by redeeming their units",
 		))
 	}
 

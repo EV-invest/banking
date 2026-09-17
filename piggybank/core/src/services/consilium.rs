@@ -298,10 +298,10 @@ fn approval_err(err: DomainError) -> Status {
 
 #[tonic::async_trait]
 impl ConsiliumService for ConsiliumSvc {
+	/// RETIRED (#245) — the application refuses every well-formed request; the permission
+	/// check stays first so the refusal reads the same to everyone who could once call this
+	/// and tells nobody else that the path exists. The proto arm goes in C-7.
 	async fn open_revenue_payout(&self, request: Request<pb::OpenRevenuePayoutRequest>) -> Result<Response<pb::Consilium>, Status> {
-		// Owner-only, through the same matrix the direct payout RPC uses. `RevenuePayout` is
-		// the capability that moves company money outward; opening a consilium is the first
-		// step of exactly that act.
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
 		let initiator = caller_id(&request)?;
 		let terms = parse_terms(request.into_inner().terms)?;
