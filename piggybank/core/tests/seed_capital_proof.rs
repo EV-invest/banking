@@ -10,8 +10,10 @@
 //! the depositor's deposit plus their subscription into the `fund` allocation — the units
 //! land with the person, the cash on `service:fund`, and the retired `Fund` claim never
 //! moves; a repeat of the same `tx_ref` is an idempotent no-op while a second transfer
-//! doubles the holding; the depositor reads `fund` as a position even though the catalog
-//! hides it; and an operator's `RecordDeposit` refuses the treasury, pointing at the seed.
+//! doubles the holding; a repeat after a crash between the deposit and the subscription
+//! opens the missing subscription for the depositor and nobody else; the depositor reads
+//! `fund` as a position even though the catalog hides it; and an operator's
+//! `RecordDeposit` refuses the treasury, pointing at the seed.
 //!
 //! Every test here reads the one platform-wide `fund` allocation, so the suite runs
 //! serially under the shared outbox guard — the same rule `ownership_fee` applies.
@@ -325,6 +327,84 @@ async fn an_external_treasury_arrival_seeds_the_depositor_once_per_reference() {
 		.expect("the seed is a position of the depositor's");
 	assert_eq!(position.units, minted.checked_add(minted).unwrap());
 	assert_eq!(position.value, usdt("501"), "worth what was put in, at par");
+}
+
+/// The seed is two commits, and a process can die between them: the deposit recorded, the
+/// subscription never opened, the cash resting on the depositor's own claim with no units
+/// against it. That is exactly the state a deposit recorded by hand under the reference
+/// leaves — staged here as such, not by deleting a row after a full seed, which would
+/// leave the mint already on the ledger. A repeat of the seed finds the mint missing
+/// under its deterministic id and opens it; the deposit stays one; a repeat under another
+/// person's name is refused rather than minted to them.
+#[tokio::test]
+async fn a_repeated_seed_reopens_a_subscription_the_first_call_never_opened() {
+	let Some(h) = harness().await else { return };
+	let chain = OneTransferChain {
+		transfer: transfer(OUTSIDER, TREASURY, "120"),
+	};
+	let addresses = OneUserAddresses { user: UserId::new() };
+	let (depositor, someone_else) = (person(&h).await, person(&h).await);
+	let fund = ServiceId::fund();
+	let tx_ref = unique_tx_ref();
+	let claim_before = cash_of(&h, LedgerAccountKey::ServiceClaim(fund.clone())).await;
+	let supply_before = units_of(&h, LedgerAccountKey::SharesOutstanding(fund.clone())).await;
+	let price = funds_app::nav_of(&h.nav, h.ledger.as_ref(), &fund).await.unwrap().nav;
+
+	// The first half of a seed, as a crash leaves it.
+	assert!(
+		balance_app::record_deposit(&h.deposits, &h.notify, tx_ref.clone(), domain::balance::Party::User(depositor), NETWORK, usdt("120"))
+			.await
+			.unwrap()
+	);
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
+	assert_eq!(
+		cash_of(&h, LedgerAccountKey::UserClaim(depositor)).await,
+		usdt("120"),
+		"the cash rests on the depositor's own claim"
+	);
+	assert_eq!(subscription_rows(&h.pool, depositor).await, 0, "and no units stand against it");
+
+	// Not anyone's to repair: the deposit is the depositor's, so nobody else is minted for it.
+	let err = balance_app::seed_fund_capital(&seed_ports(&h, &chain, &addresses), someone_else, tx_ref.clone(), NETWORK, None, now_unix())
+		.await
+		.expect_err("a reference recorded under another name is not this person's seed");
+	assert!(matches!(err, DomainError::Conflict(_)), "got {err:?}");
+	assert_eq!(subscription_rows(&h.pool, someone_else).await, 0, "nothing was opened for them");
+	assert_eq!(subscription_rows(&h.pool, depositor).await, 0);
+
+	let repeat = balance_app::seed_fund_capital(&seed_ports(&h, &chain, &addresses), depositor, tx_ref.clone(), NETWORK, None, now_unix())
+		.await
+		.expect("the repeat repairs the half-done seed");
+	assert!(!repeat.recorded, "the deposit is not new");
+	let subscription = repeat.subscription.expect("the subscription the first call never opened");
+	assert_eq!(subscription.user(), depositor);
+	assert_eq!(subscription.cash(), usdt("120"));
+	assert_eq!(subscription.nav(), price, "priced at the fund's NAV as of now");
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
+
+	let minted = Shares::from_cash(usdt("120"), price).unwrap();
+	assert_eq!(subscription_rows(&h.pool, depositor).await, 1, "one subscription");
+	assert_eq!(
+		deposit_row(&h.pool, &tx_ref).await,
+		Some(("user".to_owned(), depositor.to_string(), usdt("120").base_units().to_string())),
+		"and still one deposit, the depositor's"
+	);
+	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(fund.clone(), depositor)).await, minted, "the units are the depositor's");
+	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(fund.clone())).await, supply_before.checked_add(minted).unwrap());
+	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(depositor)).await, Usdt::ZERO, "the cash moved off the depositor's claim");
+	assert_eq!(
+		cash_of(&h, LedgerAccountKey::ServiceClaim(fund.clone())).await,
+		claim_before.checked_add(usdt("120")).unwrap(),
+		"onto the fund allocation's"
+	);
+
+	// Now whole, the reference is the plain idempotent no-op it always was.
+	let again = balance_app::seed_fund_capital(&seed_ports(&h, &chain, &addresses), depositor, tx_ref.clone(), NETWORK, None, now_unix())
+		.await
+		.expect("a repeat of a whole seed is a no-op");
+	assert!(!again.recorded);
+	assert!(again.subscription.is_none(), "nothing to repair, nothing minted");
+	assert_eq!(subscription_rows(&h.pool, depositor).await, 1);
 }
 
 #[tokio::test]

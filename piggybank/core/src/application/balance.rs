@@ -184,7 +184,8 @@ pub struct SeedPorts<'a> {
 
 /// What a seed did: whether THIS call recorded the arrival (`false` is the idempotent
 /// repeat), the amount the chain reported, and the subscription the depositor's units
-/// come from — `None` on a repeat, which mints nothing.
+/// come from — `None` on a repeat that found the mint already there, `Some` on the one
+/// that had to open it (see [`seed_fund_capital`]).
 #[derive(Debug)]
 pub struct SeededCapital {
 	pub recorded: bool,
@@ -211,10 +212,14 @@ pub struct SeededCapital {
 /// the backstop, and a parked cash leg leaves the money on the depositor's own claim,
 /// where every dollar still has a holder.
 ///
-/// Idempotent by `tx_ref`: the deposit gate admits a reference once, and only the call
-/// that recorded it opens the subscription, whose id is derived from the same reference
-/// so a double mint is impossible even under a race. A repeat reports `recorded: false`
-/// and mints nothing.
+/// Idempotent by `tx_ref`: the deposit gate admits a reference once, and the subscription's
+/// id is derived from the same reference, so a double mint is impossible even under a
+/// race. A repeat reports `recorded: false` and normally mints nothing — unless the first
+/// call recorded the deposit and died before opening the subscription, which is the one
+/// state a repeat repairs: the mint is missing under its deterministic id, the deposit is
+/// this depositor's, so the subscription is opened now, priced at the current NAV and
+/// through the same gates. A reference recorded under another person's name is refused
+/// rather than minted to the caller.
 ///
 /// The subscription is priced and gated **before** the deposit is recorded, so a `fund`
 /// that is not dealing or a stale price refuses with nothing written. The one gate an
@@ -236,19 +241,36 @@ pub async fn seed_fund_capital(
 			transfer.to
 		)));
 	}
-	let mut subscription = funds_app::price_fund_seed(&ports.funds, seed_subscription_id(&tx_ref), depositor, transfer.amount, now_unix).await?;
-	let recorded = record_deposit(ports.deposits, ports.funds.relay, tx_ref, Party::User(depositor), network, transfer.amount).await?;
+	let subscription_id = seed_subscription_id(&tx_ref);
+	let mut subscription = funds_app::price_fund_seed(&ports.funds, subscription_id, depositor, transfer.amount, now_unix).await?;
+	let recorded = record_deposit(ports.deposits, ports.funds.relay, tx_ref.clone(), Party::User(depositor), network, transfer.amount).await?;
 	if !recorded {
-		return Ok(SeededCapital {
-			recorded: false,
-			amount: transfer.amount,
-			subscription: None,
-		});
+		// The deposit and the subscription are two commits: a process that died between
+		// them left the cash on the depositor's own claim with no units against it. A repeat
+		// is where that gets fixed — the id is a function of the reference, so the mint the
+		// first call meant to open is the one looked up here, and one exists at most once.
+		if ports.subscriptions.find_by_id(subscription_id).await?.is_some() {
+			return Ok(SeededCapital {
+				recorded: false,
+				amount: transfer.amount,
+				subscription: None,
+			});
+		}
+		// Only the person the deposit was booked to can be minted against it: opening the
+		// subscription under another name would pull that person's own cash into `fund`
+		// and leave the first depositor's on their claim.
+		if !ports.deposits.list_by_user(depositor).await?.iter().any(|deposit| deposit.tx_ref == tx_ref) {
+			return Err(DomainError::Conflict(format!(
+				"{} was already recorded as another person's deposit — its fund subscription can only be opened for them",
+				tx_ref.as_str()
+			)));
+		}
+		tracing::warn!(tx_ref = %tx_ref.as_str(), %depositor, "seed capital: the deposit was recorded but its fund subscription was never opened — re-opening it");
 	}
 	ports.subscriptions.open(&mut subscription).await?;
 	ports.funds.relay.notify_one();
 	Ok(SeededCapital {
-		recorded: true,
+		recorded,
 		amount: transfer.amount,
 		subscription: Some(subscription),
 	})
