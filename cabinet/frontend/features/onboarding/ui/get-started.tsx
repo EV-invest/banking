@@ -7,7 +7,7 @@ import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import { Button, Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle, ItemGroup, ItemSeparator } from "@evinvest/uikit";
 
 import { type Checklist, STEP_COUNT, type StepState, type VerifyState } from "@/features/onboarding/lib/checklist";
-import { markOpen, stageServerSnapshot, stageSnapshot, subscribeStage } from "@/features/onboarding/lib/checklist-memory";
+import { completionView, markOpen, stageServerSnapshot, stageSnapshot, subscribeStage } from "@/features/onboarding/lib/checklist-memory";
 import { AllSet, CompleteLine } from "@/features/onboarding/ui/all-set";
 import { StepRow } from "@/features/onboarding/ui/step-row";
 import { cn } from "@/shared/lib/cn";
@@ -20,7 +20,8 @@ import { Pill } from "@/shared/ui/list-card";
 // that led to a closed door.
 //
 // Not dismissible while a step is open. What is remembered per browser is only whether the
-// completion has been seen — see ../lib/checklist-memory.
+// completion has been seen — see ../lib/checklist-memory, which also decides that a browser
+// that never saw a step open shows nothing for a finished path.
 //
 // The verify step's control is the caller's to hand in: starting verification belongs to
 // `features/kyc`, and one feature does not import another. Every state other than "current"
@@ -38,7 +39,12 @@ export function GetStarted({ checklist, verifyAction, className }: { checklist: 
     if (!checklist.complete) markOpen();
   }, [checklist.complete]);
 
-  if (checklist.complete) return stage === "open" ? <AllSet className={className} /> : <CompleteLine className={className} />;
+  if (checklist.complete) {
+    const view = completionView(stage);
+    if (view === "all-set") return <AllSet className={className} />;
+    if (view === "line") return <CompleteLine className={className} />;
+    return null;
+  }
 
   return (
     <Card className={cn("gap-3 py-4 lg:gap-4 lg:py-5", className)}>

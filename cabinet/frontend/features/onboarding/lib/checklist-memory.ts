@@ -11,6 +11,10 @@
  *   · `acknowledged` — the reader put that line away. From here the block is a one-line
  *     status and asks for nothing.
  *
+ * A browser that remembers neither renders nothing for a finished path: a veteran opening a
+ * fresh browser never saw the checklist, and a status line for a path they never walked is
+ * an explanation of nothing. The performance card simply stays first.
+ *
  * Per browser, not per account: this is a reading preference, not a fact about the user, and
  * the cabinet has no field to keep it in — a profile column would mean a migration and a write
  * for something a reload may undo anyway (#382). The block itself is NOT dismissible while a
@@ -42,6 +46,15 @@ export function markOpen(): void {
 
 export function acknowledge(): void {
   write("acknowledged");
+}
+
+/** What a finished path shows in this browser — see the note on the key above. */
+export type CompletionView = "all-set" | "line" | null;
+
+export function completionView(stage: ChecklistStage | null): CompletionView {
+  if (stage === "open") return "all-set";
+  if (stage === "acknowledged") return "line";
+  return null;
 }
 
 // ── The React face of the same value ───────────────────────────────────

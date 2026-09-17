@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 
-import { acknowledge, markOpen, readStage } from "./checklist-memory.ts";
+import { acknowledge, completionView, markOpen, readStage } from "./checklist-memory.ts";
 
 /** A `localStorage` that can also be made to throw, the way a private window does. */
 function stub({ throws = false } = {}) {
@@ -50,6 +50,13 @@ test("an acknowledged checklist does not reopen", () => {
   acknowledge();
   markOpen();
   assert.equal(readStage(), "acknowledged");
+});
+
+test("a finished path shows the completion once, then the line, and nothing to a stranger", () => {
+  assert.equal(completionView("open"), "all-set");
+  assert.equal(completionView("acknowledged"), "line");
+  // A veteran in a fresh browser never saw the checklist: no line for a path never walked.
+  assert.equal(completionView(null), null);
 });
 
 test("a nonsense value counts as nothing remembered", () => {
