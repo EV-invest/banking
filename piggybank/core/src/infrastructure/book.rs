@@ -24,7 +24,7 @@
 
 use async_trait::async_trait;
 use domain::{
-	balance::ServiceId,
+	balance::{Party, ServiceId},
 	book::{
 		BookEvent, BookPolicy, CancelReason, CandleResolution, ClientOrderId, IncomingOrder, Locked, MatchingEngine, Order, OrderId, OrderKind, OrderSnapshot, OrderState, Price,
 		RestingOrder, Side, Tif, Trade, TradeId,
@@ -652,6 +652,7 @@ impl BookStore for PgBook {
 					notional,
 					fee,
 					nav,
+					payee: Party::fee_payee(),
 				},
 			)
 			.await?;
