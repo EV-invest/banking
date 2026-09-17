@@ -17,8 +17,8 @@ use std::{collections::HashMap, str::FromStr as _, sync::Arc};
 use domain::money::Network;
 use ed25519_dalek::Signer as _;
 use evbanking_contracts::signer::v1::{
-	MigrateAddressToCustodianRequest, RotateAddressRequest, SignErc20TransferRequest, SignJettonTransferRequest, SignNativeTransferRequest, SignTonTransferRequest, SignTrc20TransferRequest,
-	SignTrxTransferRequest, signer_service_server::SignerService,
+	GetKeyHealthRequest, MigrateAddressToCustodianRequest, ProvisionAddressRequest, RotateAddressRequest, SignErc20TransferRequest, SignJettonTransferRequest, SignNativeTransferRequest,
+	SignTonTransferRequest, SignTrc20TransferRequest, SignTrxTransferRequest, signer_service_server::SignerService,
 };
 use piggybank_signer::{
 	backend::{BackendError, ChainSignature, Curve, CustodyMinter, KeyBackend, KeyHandle, LocalVault, MintedCustodyKey},
@@ -28,6 +28,7 @@ use piggybank_signer::{
 	secrets::WalletSecrets,
 	service::Signer,
 };
+use sqlx::AssertSqlSafe;
 use tonic::{Code, Request, Status};
 use uuid::Uuid;
 
@@ -1257,5 +1258,326 @@ async fn tron_handlers_refuse_everything_while_signing_is_disabled() {
 	let mut req = trc20(rail.user, USDT_TRC20, &rail.treasury_address, 1, -1).into_inner();
 	req.network = "bogus".to_owned();
 	denied(rail.signer.sign_trc20_transfer(Request::new(req)).await, "a malformed request while frozen");
+	db.cleanup().await;
+}
+
+// === #194: the spend brake — an operator's SQL that tightens or halts, never raises ======
+
+/// The operator's hand on the brake: one `UPDATE spend_brake SET <assignments>` — what
+/// `docs/RUNBOOK-withdrawals.md` has an operator type at the signer's own database.
+async fn set_brake(db: &common::TestDb, assignments: &str) {
+	sqlx::query(AssertSqlSafe(format!("UPDATE spend_brake SET {assignments} WHERE id = 1")))
+		.execute(&db.pool)
+		.await
+		.expect("update the spend brake");
+}
+
+fn internal<T>(result: Result<T, Status>, what: &str) -> Status {
+	let status = match result {
+		Ok(_) => panic!("{what}: expected a refusal, got a signature"),
+		Err(status) => status,
+	};
+	assert_eq!(status.code(), Code::Internal, "{what}: {status:?}");
+	status
+}
+
+#[tokio::test]
+async fn spend_brake_tightens_the_per_transfer_cap_to_min_of_env_and_brake() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Bep20, policy(&[("SIGNER_MAX_TRANSFER_USDT", "100")])).await;
+	let usdt: u128 = 1_000_000_000_000_000_000;
+
+	set_brake(&db, "max_transfer_usdt = 50").await;
+	let status = denied(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 60 * usdt, GWEI, 60_000)).await,
+		"60 USDT against a 50 USDT brake",
+	);
+	assert!(status.message().contains("per-transfer cap of 50 USDT"), "{status:?}");
+	rail.signer
+		.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 50 * usdt, GWEI, 60_000))
+		.await
+		.expect("50 USDT under the brake is signed");
+
+	// A brake above env is not a raise: env stays the ceiling.
+	set_brake(&db, "max_transfer_usdt = 500").await;
+	let status = denied(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 150 * usdt, GWEI, 60_000)).await,
+		"150 USDT against env 100 with a 500 USDT brake",
+	);
+	assert!(status.message().contains("per-transfer cap of 100 USDT"), "{status:?}");
+
+	// NULL: the brake lets go and env alone applies.
+	set_brake(&db, "max_transfer_usdt = NULL").await;
+	rail.signer
+		.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 100 * usdt, GWEI, 60_000))
+		.await
+		.expect("100 USDT signs again once the brake column is NULL");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn spend_brake_tightens_the_treasury_usdt_window() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Bep20, policy(&[("SIGNER_MAX_TREASURY_USDT_PER_HOUR", "1000")])).await;
+	let hundred_usdt: u128 = 100 * 1_000_000_000_000_000_000;
+
+	set_brake(&db, "max_treasury_usdt_per_hour = 200").await;
+	for n in 1..=2 {
+		rail.signer
+			.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, hundred_usdt, GWEI, 60_000))
+			.await
+			.unwrap_or_else(|status| panic!("payout {n} of 2 within the braked hour must be signed: {status:?}"));
+	}
+	let status = denied(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, hundred_usdt, GWEI, 60_000)).await,
+		"the third payout against a 200 USDT braked hour",
+	);
+	assert!(status.message().contains("treasury USDT window cap of 200 USDT"), "{status:?}");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn spend_brake_tightens_the_native_spend_window_per_rail() {
+	let db = db_or_skip!();
+	// One ceiling-priced sweep's worth of gas on BEP20 (env admits a hundred of them).
+	let fee: u128 = 100 * GWEI * 100_000;
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
+	set_brake(&db, &format!("max_native_spend_per_hour_bep20 = {fee}")).await;
+
+	rail.signer
+		.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, 1, 100 * GWEI, 100_000))
+		.await
+		.expect("the first ceiling-priced sweep fills the braked window exactly");
+	let status = denied(
+		rail.signer
+			.sign_erc20_transfer(erc20(rail.user, USDT_BEP20, &rail.treasury_address, 1, 100 * GWEI, 100_000))
+			.await,
+		"the second ceiling-priced sweep against the braked BEP20 window",
+	);
+	assert!(status.message().contains("native spend window"), "{status:?}");
+
+	// Polygon has no brake column set: env applies and the same two sweeps both sign.
+	let polygon = Rail::new(&db, Network::Polygon, policy(&[])).await;
+	for n in 1..=2 {
+		let mut req = erc20(polygon.user, "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", &polygon.treasury_address, 1, 100 * GWEI, 100_000).into_inner();
+		req.network = "polygon".to_owned();
+		req.chain_id = 137;
+		polygon
+			.signer
+			.sign_erc20_transfer(Request::new(req))
+			.await
+			.unwrap_or_else(|status| panic!("Polygon sweep {n} of 2 is not braked: {status:?}"));
+	}
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn halted_brake_refuses_every_signature_before_any_key_is_touched() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
+	set_brake(&db, "halted = true, reason = 'drill'").await;
+
+	// A wallet nothing was ever provisioned for, on every rail: a refusal that is
+	// PermissionDenied naming the brake — not FailedPrecondition on the missing key — proves
+	// the brake runs before the backend is consulted.
+	let nobody = Uuid::new_v4();
+	let halted = |result: Result<(), Status>, what: &str| {
+		let status = denied(result, what);
+		assert!(status.message().contains("spend brake"), "{what}: {status:?}");
+		assert!(status.message().contains("drill"), "{what}: {status:?}");
+	};
+	halted(
+		rail.signer
+			.sign_erc20_transfer(erc20(nobody, USDT_BEP20, &rail.treasury_address, 1, GWEI, 60_000))
+			.await
+			.map(drop),
+		"erc20",
+	);
+	halted(
+		rail.signer.sign_native_transfer(native(nobody, "bep20", 56, &rail.user_address, 1, GWEI, 21_000)).await.map(drop),
+		"native",
+	);
+	halted(rail.signer.sign_trc20_transfer(trc20(nobody, USDT_TRC20, OTHER_TRON, 1, 1_000_000)).await.map(drop), "trc20");
+	halted(rail.signer.sign_trx_transfer(trx(nobody, OTHER_TRON, 1)).await.map(drop), "trx");
+	halted(rail.signer.sign_jetton_transfer(jetton(nobody, OTHER_TON, OTHER_TON, 1, 100_000_000)).await.map(drop), "jetton");
+	halted(rail.signer.sign_ton_transfer(ton(nobody, OTHER_TON, 1)).await.map(drop), "ton");
+	// Before parsing, too: a malformed request is refused on the brake, not as malformed.
+	let mut req = erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000).into_inner();
+	req.network = "bogus".to_owned();
+	halted(rail.signer.sign_erc20_transfer(Request::new(req)).await.map(drop), "malformed while halted");
+	// And a legitimate payout from the provisioned treasury: same verdict.
+	halted(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000)).await.map(drop),
+		"treasury payout while halted",
+	);
+
+	// Nothing was charged to any window on the way to those refusals.
+	for wallet in [nobody, TREASURY, GAS_STATION] {
+		assert_eq!(ledger_rows(&db, wallet, "native").await, 0, "no native charge while halted");
+		assert_eq!(ledger_rows(&db, wallet, "usdt").await, 0, "no USDT charge while halted");
+	}
+
+	// Release: the very request that was refused now signs.
+	set_brake(&db, "halted = false, reason = NULL").await;
+	rail.signer
+		.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000))
+		.await
+		.expect("the same payout signs once the brake is released");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn halted_brake_leaves_provisioning_and_health_working() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
+	set_brake(&db, "halted = true, reason = 'drill'").await;
+
+	// Minting a key moves no money, and health must keep answering during a halt.
+	let provisioned = rail
+		.signer
+		.provision_address(Request::new(ProvisionAddressRequest {
+			user_id: Uuid::new_v4().to_string(),
+			network: "polygon".to_owned(),
+		}))
+		.await
+		.expect("provisioning is not gated by the brake")
+		.into_inner();
+	assert!(!provisioned.address.is_empty());
+	let health = rail
+		.signer
+		.get_key_health(Request::new(GetKeyHealthRequest {}))
+		.await
+		.expect("health is not gated by the brake")
+		.into_inner();
+	assert_eq!(health.total_keys, 4, "three from the rail plus the one just minted");
+	db.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_missing_spend_brake_row_refuses_every_signature() {
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
+	sqlx::query("DELETE FROM spend_brake").execute(&db.pool).await.expect("delete the brake row");
+
+	// A deleted row is NOT a release: the signer cannot tell it from a broken database and
+	// fails closed on every handler.
+	internal(rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000)).await.map(drop), "erc20");
+	internal(
+		rail.signer
+			.sign_native_transfer(native(GAS_STATION, "bep20", 56, &rail.user_address, 1, GWEI, 21_000))
+			.await
+			.map(drop),
+		"native",
+	);
+	internal(rail.signer.sign_trc20_transfer(trc20(TREASURY, USDT_TRC20, OTHER_TRON, 1, 1_000_000)).await.map(drop), "trc20");
+	internal(rail.signer.sign_trx_transfer(trx(GAS_STATION, OTHER_TRON, 1)).await.map(drop), "trx");
+	internal(rail.signer.sign_jetton_transfer(jetton(TREASURY, OTHER_TON, OTHER_TON, 1, 100_000_000)).await.map(drop), "jetton");
+	internal(rail.signer.sign_ton_transfer(ton(GAS_STATION, OTHER_TON, 1)).await.map(drop), "ton");
+
+	sqlx::query("INSERT INTO spend_brake (id) VALUES (1)").execute(&db.pool).await.expect("re-seed the brake row");
+	rail.signer
+		.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000))
+		.await
+		.expect("a re-seeded row releases the signer");
+	db.cleanup().await;
+
+	// A missing TABLE is the same verdict: a read error is a refusal, never a bypass.
+	let db = db_or_skip!();
+	let rail = Rail::new(&db, Network::Bep20, policy(&[])).await;
+	sqlx::query("DROP TABLE spend_brake").execute(&db.pool).await.expect("drop the brake table");
+	internal(
+		rail.signer.sign_erc20_transfer(erc20(TREASURY, USDT_BEP20, OTHER_EVM, 1, GWEI, 60_000)).await.map(drop),
+		"erc20 with no table",
+	);
+	db.cleanup().await;
+}
+
+/// `spend_brake` as an operator sees it: id, halted, the two USDT ceilings, the four native
+/// ceilings (NUMERIC read as text) and the reason.
+type BrakeRow = (
+	i16,
+	bool,
+	Option<i64>,
+	Option<i64>,
+	Option<String>,
+	Option<String>,
+	Option<String>,
+	Option<String>,
+	Option<String>,
+);
+
+#[tokio::test]
+async fn spend_brake_is_a_single_seeded_row() {
+	let db = db_or_skip!();
+	let rows: Vec<BrakeRow> = sqlx::query_as(
+		"SELECT id, halted, max_transfer_usdt, max_treasury_usdt_per_hour, max_native_spend_per_hour_bep20::text, max_native_spend_per_hour_polygon::text, \
+		 max_native_spend_per_hour_trc20::text, max_native_spend_per_hour_ton::text, reason FROM spend_brake",
+	)
+	.fetch_all(&db.pool)
+	.await
+	.expect("read spend_brake");
+	assert_eq!(
+		rows,
+		vec![(1, false, None, None, None, None, None, None, None)],
+		"the migration seeds one released row with no ceiling"
+	);
+
+	// One row, by constraint: a second id fails the CHECK, and so does a zero ceiling — a
+	// zero is what `halted` is for.
+	assert!(sqlx::query("INSERT INTO spend_brake (id) VALUES (2)").execute(&db.pool).await.is_err(), "a second row is refused");
+	assert!(
+		sqlx::query("UPDATE spend_brake SET max_transfer_usdt = 0").execute(&db.pool).await.is_err(),
+		"a zero ceiling is refused"
+	);
+
+	// `updated_at` moves on every UPDATE without the operator naming it.
+	let before: f64 = sqlx::query_scalar("SELECT extract(epoch FROM updated_at)::float8 FROM spend_brake")
+		.fetch_one(&db.pool)
+		.await
+		.unwrap();
+	tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+	set_brake(&db, "reason = 'drill'").await;
+	let after: f64 = sqlx::query_scalar("SELECT extract(epoch FROM updated_at)::float8 FROM spend_brake")
+		.fetch_one(&db.pool)
+		.await
+		.unwrap();
+	assert!(after > before, "updated_at is bumped by the trigger: {before} -> {after}");
+	db.cleanup().await;
+}
+
+/// One `spend_brake_history` entry as the runbook reads it: who, whether it came over the
+/// unix socket, and the halt flag before and after.
+type HistoryRow = (String, bool, String, String, bool);
+
+#[tokio::test]
+async fn every_brake_update_leaves_a_history_row_naming_the_role_and_both_states() {
+	let db = db_or_skip!();
+	let before: i64 = sqlx::query_scalar("SELECT count(*) FROM spend_brake_history").fetch_one(&db.pool).await.unwrap();
+	assert_eq!(before, 0, "the seed INSERT is not an operator's hand on the brake");
+
+	set_brake(&db, "halted = true, reason = 'drill'").await;
+	// Two transactions a few microseconds apart carry distinct `now()`s; the pause is what
+	// the assertion on `updated_at` relies on.
+	tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+	set_brake(&db, "halted = false, reason = NULL").await;
+
+	// `from_addr` is whatever this test's own connection presents (NULL over a socket, an
+	// address over TCP) — the same value the trigger saw, whichever transport runs the suite.
+	let rows: Vec<HistoryRow> = sqlx::query_as(
+		"SELECT by_role, from_addr IS NOT DISTINCT FROM inet_client_addr(), old_row->>'halted', new_row->>'halted', \
+		 new_row->>'updated_at' <> old_row->>'updated_at' FROM spend_brake_history ORDER BY id",
+	)
+	.fetch_all(&db.pool)
+	.await
+	.expect("read spend_brake_history");
+	let role: String = sqlx::query_scalar("SELECT current_user::text").fetch_one(&db.pool).await.unwrap();
+	assert_eq!(
+		rows,
+		vec![
+			(role.clone(), true, "false".to_owned(), "true".to_owned(), true),
+			(role, true, "true".to_owned(), "false".to_owned(), true)
+		],
+		"the halt and the release are each one row, by this role, with the stamp moved"
+	);
 	db.cleanup().await;
 }

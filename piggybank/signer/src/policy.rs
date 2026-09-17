@@ -106,6 +106,18 @@
 //! and block its whole outbox for up to an hour behind one request. Treat a window refusal
 //! as an alert: check the volume that filled it, raise the ceiling deliberately or unpark.
 //!
+//! **The spend brake.** The environment is the unliftable ceiling, loaded once at boot. The
+//! `spend_brake` row in the signer's own database (migration 0009, [`crate::spend_brake`]) is
+//! read on EVERY signing request and can only tighten or halt: each of the six window-level
+//! ceilings above — the per-transfer cap, the treasury USDT window and the four native
+//! windows — becomes `min(env, brake)` for that request ([`SignerPolicy::tightened`]), so a
+//! brake value above the environment leaves the environment in force. `halted` refuses every
+//! signature with `permission_denied` naming the brake and the operator's reason, and the hub
+//! parks the withdrawal like any other verdict. A read error or a MISSING row refuses too
+//! (fail-closed, `Internal`, which parks as well): a deleted row is not a release. There is no
+//! RPC to the brake — the hub is the adversary it exists to stop — only an operator's SQL at
+//! the signer's database (`docs/RUNBOOK-withdrawals.md`).
+//!
 //! **Tron signing is off by default** (`SIGNER_TRON_SIGNING_ENABLED`): the hub keeps the rail
 //! frozen (`TRC20_FROZEN` in `piggybank/core/src/config.rs`), so no legitimate Tron signature
 //! exists today and every Tron handler refuses before any other check. Flip it together with
@@ -119,7 +131,7 @@ use std::{str::FromStr as _, time::Duration};
 use domain::money::{Network, Usdt};
 use tonic::Status;
 
-use crate::provision;
+use crate::{provision, spend_brake::SpendBrake};
 
 /// Canonical base units per whole USDT (the domain's 18-dp representation).
 const CANONICAL_PER_USDT: u128 = 1_000_000_000_000_000_000;
@@ -752,6 +764,33 @@ impl SignerPolicy {
 
 	pub fn tron_signing_enabled(&self) -> bool {
 		self.tron_signing_enabled
+	}
+
+	/// This policy with every ceiling the brake sets taken as `min(env, brake)`: the
+	/// per-transfer cap, the treasury USDT window and the four native windows. The brake can
+	/// never raise — a value above the environment's leaves the environment — and nothing
+	/// else (allowlists, pins, the fee budget, the freeze) is its to change. A halt is not a
+	/// number and is not applied here; the caller asks [`SpendBrake::require_released`] first.
+	pub fn tightened(&self, brake: &SpendBrake) -> SignerPolicy {
+		let mut tightened = self.clone();
+		if let Some(cap) = brake.max_transfer_usdt() {
+			tightened.max_transfer_usdt = self.max_transfer_usdt.min(cap);
+		}
+		if let Some(cap) = brake.max_treasury_usdt_per_hour() {
+			tightened.treasury_usdt_per_hour = self.treasury_usdt_per_hour.min(cap);
+		}
+		let native = &mut tightened.native_spend;
+		for (network, env) in [
+			(Network::Bep20, &mut native.bep20_wei),
+			(Network::Polygon, &mut native.polygon_wei),
+			(Network::Trc20, &mut native.trc20_sun),
+			(Network::Ton, &mut native.ton_nano),
+		] {
+			if let Some(cap) = brake.native_spend().cap(network) {
+				*env = (*env).min(cap);
+			}
+		}
+		tightened
 	}
 
 	/// The first gate on every Tron handler: refused outright while the rail is frozen.
@@ -1693,5 +1732,78 @@ mod tests {
 		);
 		let err = SignerPolicy::from_lookup(&lookup(&[("SIGNER_TON_TREASURY_JETTON_WALLET", "not-an-address")])).unwrap_err();
 		assert!(err.to_string().contains("SIGNER_TON_TREASURY_JETTON_WALLET"), "{err}");
+	}
+
+	// === policy: the spend brake only ever tightens ===============================
+
+	#[test]
+	fn tightened_takes_the_min_of_env_and_brake_per_ceiling() {
+		let env = SignerPolicy::from_lookup(&lookup(&[
+			("SIGNER_MAX_TRANSFER_USDT", "100"),
+			("SIGNER_MAX_TREASURY_USDT_PER_HOUR", "1000"),
+			("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_BEP20", "1000"),
+			("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_POLYGON", "1000"),
+			("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TRC20", "1000"),
+			("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TON", "1000"),
+		]))
+		.unwrap();
+		let brake = SpendBrake::released()
+			.with_max_transfer_usdt(50)
+			.with_max_treasury_usdt_per_hour(200)
+			.with_native_spend(Network::Bep20, 10)
+			.with_native_spend(Network::Trc20, 999);
+		assert!(brake.engages());
+		let p = env.tightened(&brake);
+		assert_eq!(p.max_transfer_usdt(), 50);
+		assert_eq!(p.treasury_usdt_per_hour(), 200);
+		assert_eq!(p.native_spend().cap(Network::Bep20), 10);
+		assert_eq!(p.native_spend().cap(Network::Trc20), 999);
+		// NULL columns leave env.
+		assert_eq!(p.native_spend().cap(Network::Polygon), 1000);
+		assert_eq!(p.native_spend().cap(Network::Ton), 1000);
+		// The checks read the tightened figures.
+		assert!(p.check_native_spend_window(Network::Bep20, 0, 10).is_ok());
+		denied(p.check_native_spend_window(Network::Bep20, 0, 11));
+		assert!(env.check_native_spend_window(Network::Bep20, 0, 11).is_ok(), "env itself is untouched");
+	}
+
+	#[test]
+	fn tightened_never_raises_above_env() {
+		let env = SignerPolicy::from_lookup(&lookup(&[("SIGNER_MAX_TRANSFER_USDT", "100"), ("SIGNER_MAX_NATIVE_SPEND_PER_HOUR_TON", "1000")])).unwrap();
+		let brake = SpendBrake::released()
+			.with_max_transfer_usdt(500)
+			.with_max_treasury_usdt_per_hour(1_000_000)
+			.with_native_spend(Network::Ton, 5_000);
+		let p = env.tightened(&brake);
+		assert_eq!(p.max_transfer_usdt(), 100);
+		assert_eq!(p.treasury_usdt_per_hour(), env.treasury_usdt_per_hour());
+		assert_eq!(p.native_spend().cap(Network::Ton), 1000);
+	}
+
+	#[test]
+	fn tightened_by_a_released_or_halted_brake_leaves_the_numbers_alone() {
+		let env = SignerPolicy::from_lookup(&lookup(&[("SIGNER_MAX_TRANSFER_USDT", "100")])).unwrap();
+		let released = SpendBrake::released();
+		assert!(!released.engages());
+		assert!(!released.halted());
+		assert!(released.require_released().is_ok());
+		let p = env.tightened(&released);
+		assert_eq!(p.max_transfer_usdt(), 100);
+		assert_eq!(p.treasury_usdt_per_hour(), env.treasury_usdt_per_hour());
+		assert_eq!(p.native_spend(), env.native_spend());
+
+		// A halt is a verdict of its own, not a ceiling of zero: the numbers stay as they are
+		// and `require_released` is what refuses, naming the brake and the operator's reason.
+		let halted = SpendBrake::released().halted_with(Some("drill"));
+		assert!(halted.halted());
+		assert!(!halted.engages());
+		let p = env.tightened(&halted);
+		assert_eq!(p.max_transfer_usdt(), 100);
+		assert_eq!(p.native_spend(), env.native_spend());
+		let status = denied(halted.require_released());
+		assert!(status.message().contains("spend brake"), "{status:?}");
+		assert!(status.message().contains("drill"), "{status:?}");
+		let status = denied(SpendBrake::released().halted_with(None).require_released());
+		assert!(status.message().contains("spend brake"), "{status:?}");
 	}
 }

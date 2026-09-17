@@ -228,6 +228,11 @@ rotation refused») и после себя оставляет старый ад�
   `SIGNER_TON_TREASURY_JETTON_WALLET`, чтобы treasury на TON не доверял хабу при первом
   переводе. Это **единственный гейт по деньгам вне хаба** — второго нет, см. «Что Turnkey
   реально видит»
+- аварийный тормоз (#194): строка `spend_brake` в БД сайнера
+  (`piggybank/signer/migrations/0009_spend_brake.sql`) сужает эти потолки до
+  `min(env, brake)` или останавливает все подписи без рестарта; RPC к ней нет намеренно —
+  только SQL оператора под `postgres` через unix-сокет, см.
+  `docs/RUNBOOK-withdrawals.md` §Spend brake
 - политики Turnkey настроить как гигиену: `allow`-условия по API-ключу, организации, ключу,
   типу активности и `activity.params.hash_function == HASH_FUNCTION_NO_OP`. Это ограничение
   доступа, а не лимит по сумме или адресу — на `SIGN_RAW_PAYLOAD` такой лимит невыразим.

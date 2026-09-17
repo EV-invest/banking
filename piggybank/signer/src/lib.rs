@@ -19,6 +19,7 @@
 //!   secrets     — the `wallet_secrets` driven store (signer's own database)
 //!   native_spend — the sliding-window spend ledger the policy consults (same database)
 //!   jetton_wallets — the first-use jetton wallet pins the policy consults (same database)
+//!   spend_brake — the operator's brake row that tightens or halts the policy per request (same database)
 
 pub mod backend;
 pub mod config;
@@ -32,6 +33,7 @@ pub mod policy;
 pub mod provision;
 pub mod secrets;
 pub mod service;
+pub mod spend_brake;
 pub mod ton_tx;
 pub mod tron_tx;
 pub mod turnkey;
