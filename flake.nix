@@ -248,7 +248,7 @@
         # (no posthog-js loaded, no `identify`, no events) rather than talking to a wrong
         # project. Must be the SAME key the site (site_conductor) uses, so one PostHog
         # person carries a visitor from the landing to the first subscription.
-        posthogKey = "";
+        posthogKey = "phc_sBwWEgdgockVmfyucBRkTTo6iZ4Y2eApSGorD22WLzj3";
 
         # ── cabinet production image (Next.js standalone, npm workspace build) ──
         cabinetApp = pkgs.buildNpmPackage {
