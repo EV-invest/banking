@@ -22,6 +22,7 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
 import { Panel, PanelPresence } from "@/shared/ui/motion";
+import { SectionLabel } from "@/shared/ui/page-frame";
 import { formatUnits, formatUsdt, fromBaseUnits, toBaseUnits } from "@/views/invest/lib/format";
 import { cashForUnits } from "@/views/invest/lib/product";
 import { TradeLink } from "@/views/invest/ui/trade-link";
@@ -155,10 +156,10 @@ export function QueuedList({ items }: { items: Redemption[] }) {
 
   return (
     <div className="space-y-2 rounded-lg border border-accent-warn/30 bg-accent-warn/5 p-3">
-      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-accent-warn">
+      <SectionLabel className="flex items-center gap-1.5 text-accent-warn">
         {t("invest.awaitingSettlement")}
         <TipAnchor anchor="invest.activity.status" />
-      </p>
+      </SectionLabel>
       {!!error && <p className="text-xs text-accent-error">{errorMessage(error, t)}</p>}
       {items.map((r) => (
         <div key={r.id ?? ""} className="flex items-center justify-between gap-3 text-sm">

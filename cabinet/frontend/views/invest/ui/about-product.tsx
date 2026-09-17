@@ -48,7 +48,7 @@ export function RiskNote() {
     <Note tone="muted">
       <span className="flex gap-2">
         <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-        <span>
+        <span className="max-w-prose">
           <span className="font-semibold text-ink">{t("invest.about.riskTitle")}</span> {t("invest.about.risk")}
         </span>
       </span>

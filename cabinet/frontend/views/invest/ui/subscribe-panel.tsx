@@ -24,13 +24,11 @@ import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { useKycGate, VerificationRequired } from "@/features/kyc";
 import type { FundNav } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
-import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Panel, PanelPresence } from "@/shared/ui/motion";
 import { recordFirstSubscription } from "@/views/invest/lib/first-subscription";
 import { formatExactUsdt, formatUnits, formatUsdt } from "@/views/invest/lib/format";
 import { canSubmit, checkSubscribe } from "@/views/invest/lib/subscribe-check";
-import { TEAL_CTA } from "@/views/invest/ui/atoms";
 import { SubscribeField } from "@/views/invest/ui/subscribe-field";
 
 export function SubscribePanel({ service, nav }: { service: string; nav: FundNav | null }) {
@@ -107,7 +105,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
         nav={nav}
         onChange={setAmount}
         action={
-          <Button type="button" className={cn(TEAL_CTA, "tabular-nums")} disabled={submitting || !canSubmit(check)} onClick={submit}>
+          <Button type="button" className="tabular-nums" disabled={submitting || !canSubmit(check)} onClick={submit}>
             {submitting ? <Spinner aria-hidden /> : <Sparkles className="size-4" />}
             {/* Names the outcome once there is one to name, and names it EXACTLY: the check
                 runs at 18 dp, so a rounding formatter could read "0.00" over an amount

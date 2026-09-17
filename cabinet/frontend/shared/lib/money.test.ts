@@ -15,6 +15,8 @@ import {
   formatUsdt,
   fractionOfCap,
   shareBps,
+  valence,
+  valenceClass,
 } from "./money.ts";
 
 // The sizes this feature actually runs at: a hundred-million-unit cap is 1e26 base units,
@@ -125,7 +127,7 @@ test("with no locale, every formatter still speaks the English it always did", (
   assert.equal(formatNav("1.0423"), "$1.0423");
   assert.equal(formatAmount("1234.5"), "1,234.50");
   assert.equal(formatUsdt("1234.5"), "1,234.50");
-  assert.equal(formatSignedUsdt("-5"), "-5.00");
+  assert.equal(formatSignedUsdt("-5"), "\u22125.00");
   assert.equal(formatUnits("1234.5"), "1,234.50");
   assert.equal(formatPct(4.2), "+4.2%");
   assert.equal(compactUnits("1500000"), "1.5M");
@@ -170,11 +172,42 @@ test("an exact wire decimal keeps every digit in every locale", () => {
 });
 
 test("signs, percent and compact suffixes are appended, not localised", () => {
-  assert.equal(formatSignedUsdt("-5", "de"), "-5,00");
+  assert.equal(formatSignedUsdt("-5", "de"), "\u22125,00");
   assert.equal(formatSignedUsdt("5", "ru"), "+5,00");
   assert.equal(formatPct(4.2, "de"), "+4,2%");
   assert.equal(formatPct(-1.8, "ru"), "\u22121,8%");
   assert.equal(compactUnits("1500000", "de"), "1,5M");
   assert.equal(compactUnits("21000000", "de"), "21M");
   assert.equal(compactUnits("500", "de"), "500,00");
+});
+
+test("a signed figure is a gain, a loss or flat — and zero is never a gain", () => {
+  // The wire string is read exactly: "-0" and "0.000" are flat, not a loss or a gain.
+  assert.equal(valence("12.5"), "gain");
+  assert.equal(valence("-0.000001"), "loss");
+  assert.equal(valence("0"), "flat");
+  assert.equal(valence("-0"), "flat");
+  assert.equal(valence("0.000"), "flat");
+  assert.equal(valence(undefined), "flat");
+  assert.equal(valence(84.83), "gain");
+  assert.equal(valence(-540), "loss");
+  assert.equal(valence(0), "flat");
+  assert.equal(valence(-0), "flat");
+  assert.equal(valence(5n), "gain");
+  assert.equal(valence(-5n), "loss");
+  assert.equal(valence(0n), "flat");
+  // One pair for every investor screen; flat takes the plain ink, never green.
+  assert.equal(valenceClass("12.5"), "text-positive");
+  assert.equal(valenceClass(-1), "text-accent-error");
+  assert.equal(valenceClass("0"), "text-ink");
+  assert.equal(valenceClass(0n), "text-ink");
+});
+
+test("signed USDT carries no sign on zero and the same minus as signed USD", () => {
+  assert.equal(formatSignedUsdt("0"), "0.00");
+  assert.equal(formatSignedUsdt("0.000"), "0.00");
+  assert.equal(formatSignedUsdt(undefined), "0.00");
+  assert.equal(formatSignedUsdt("84.83"), "+84.83");
+  assert.equal(formatSignedUsdt("-84.83"), "\u221284.83");
+  assert.equal(formatSignedUsd(0), "$0.00");
 });

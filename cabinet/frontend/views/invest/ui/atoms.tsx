@@ -1,8 +1,9 @@
 "use client";
 
-// The small pieces both invest screens are built from: a stat tile, a note, the supply
-// bar, and the state badges. They live here rather than in either screen because the
-// list and the product page must not describe the same fund two different ways.
+// The small pieces both invest screens are built from: a note, the supply bar, and the
+// state badges. They live here rather than in either screen because the list and the
+// product page must not describe the same fund two different ways. (The stat tile is the
+// cabinet's one, in `shared/ui/stat-tile`.)
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Clock, Lock } from "lucide-react";
@@ -13,44 +14,13 @@ import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
 import { compactUnits, fractionOfCap } from "@/views/invest/lib/format";
 
-export const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
-
-export function Stat({
-  label,
-  value,
-  emphasis,
-  tip,
-  tone,
-  icon,
-}: {
-  label: string;
-  value: string;
-  emphasis?: boolean;
-  tip?: Parameters<typeof TipAnchor>[0]["anchor"];
-  tone?: string;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-secondary p-3">
-      <div className="flex items-center gap-1.5">
-        <p className="text-xs uppercase tracking-wide text-ink-soft">{label}</p>
-        {tip && <TipAnchor anchor={tip} />}
-      </div>
-      <p className={cn("flex items-center gap-1 tabular-nums", emphasis ? "text-xl font-semibold" : "text-base", tone)}>
-        {icon}
-        {value}
-      </p>
-    </div>
-  );
-}
-
 /** `amber` warns, `muted` explains, `accent` announces — a change on its way that the
  *  reader should know about but nothing is asked of them. */
 export function Note({ tone, children }: { tone: "amber" | "muted" | "accent"; children: React.ReactNode }) {
   return (
     <p
       className={cn(
-        "rounded-lg border px-3 py-2 text-xs leading-relaxed",
+        "max-w-prose rounded-lg border px-3 py-2 text-xs leading-relaxed",
         tone === "amber" && "border-accent-warn/30 bg-accent-warn/5 text-accent-warn",
         tone === "muted" && "border-border bg-ink/5 text-ink-soft",
         tone === "accent" && "border-primary-ink/40 bg-primary-ink/10 text-ink",

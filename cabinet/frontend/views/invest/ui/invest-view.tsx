@@ -23,7 +23,8 @@ import { useKycGate } from "@/features/kyc/model/use-kyc-gate";
 import { errorMessage } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
-import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { StaggerItem } from "@/shared/ui/motion";
+import { SectionLabel, PageFrame } from "@/shared/ui/page-frame";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { isZero, toBaseUnits } from "@/views/invest/lib/format";
 import { buildProducts, type Product } from "@/views/invest/lib/product";
@@ -61,14 +62,13 @@ export function InvestView() {
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <Stagger step={SECTION_STAGGER} className="container max-w-5xl space-y-6 py-10">
-      <StaggerItem as="header" className="space-y-3">
-        <h1 className="text-3xl font-semibold leading-tight">{t("invest.title")}</h1>
-        {/* `invest.overview` is a SECTION tip — a descriptor block, not an inline ⓘ — so
-            it cannot live inside the heading row: it laid a full-width bordered box across
-            the title. It belongs under the header, which is also the one place this
-            explanation should live (the hand-written subtitle that used to sit here said
-            the same thing in slightly different words). */}
+    <PageFrame title={t("invest.title")} width="content">
+      {/* `invest.overview` is a SECTION tip — a descriptor block, not an inline ⓘ — so
+          it cannot live inside the heading row: it laid a full-width bordered box across
+          the title. It belongs under the header, which is also the one place this
+          explanation should live (the hand-written subtitle that used to sit here said
+          the same thing in slightly different words). */}
+      <StaggerItem>
         <TipAnchor anchor="invest.overview" />
       </StaggerItem>
 
@@ -87,10 +87,10 @@ export function InvestView() {
           <PortfolioBand invested={totals.value} cost={totals.cost} funds={held.length} available={available} queued={queued.length} />
 
           <StaggerItem as="section" className="space-y-3">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
+            <SectionLabel className="flex items-center gap-2">
               {t("invest.products")}
               {products.length > 0 && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary-ink">{products.length}</span>}
-            </p>
+            </SectionLabel>
             {products.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-ink-soft">
@@ -109,6 +109,6 @@ export function InvestView() {
           </StaggerItem>
         </>
       )}
-    </Stagger>
+    </PageFrame>
   );
 }

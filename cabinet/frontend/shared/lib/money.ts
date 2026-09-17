@@ -127,19 +127,46 @@ export function formatExactUsdt(value: string | undefined, locale: Locale = DEFA
 }
 
 /** Ledger USDT: "1,234.50", "0.000001". No currency symbol — the unit is spelled out. */
-export function formatUsdt(value: string | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
-  const n = Number(value ?? "0");
-  if (!Number.isFinite(n)) return value ?? "0";
+export function formatUsdt(value: string | number | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
+  const n = typeof value === "number" ? value : Number(value ?? "0");
+  if (!Number.isFinite(n)) return typeof value === "string" ? value : "0";
   return numberFormat(locale, "usdt", { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(n);
 }
 
-// Signed USDT (P&L): "+1,234.50" / "-5.00". Handles a leading "-" in the wire string and
-// keeps the sign explicit so gains/losses read at a glance.
+// Signed USDT (P&L): "+1,234.50" / "−5.00" / "0.00". The sign is read off the wire string
+// exactly, never off a float; the same Unicode minus as the signed USD, and like it no sign
+// on zero — "+0.00" claims a gain that did not happen.
 export function formatSignedUsdt(value: string | undefined, locale: Locale = DEFAULT_MONEY_LOCALE): string {
   const s = (value ?? "0").trim();
-  const negative = s.startsWith("-");
-  const formatted = formatUsdt(negative ? s.slice(1) : s, locale);
-  return `${negative ? "-" : "+"}${formatted}`;
+  const v = valence(s);
+  const formatted = formatUsdt(s.replace(/^-/, ""), locale);
+  return `${v === "loss" ? "\u2212" : v === "gain" ? "+" : ""}${formatted}`;
+}
+
+// A signed figure is one of three things to the eye, and every investor screen colours
+// them the same way: `positive` for a gain, `accent-error` for a loss, and the plain ink for
+// a flat figure. A zero drawn green is the bug this exists to close — it used to be "a gain"
+// on one screen and unstyled on the next. Strings are read exactly (no float); numbers and
+// bigints by sign.
+export type Valence = "gain" | "loss" | "flat";
+
+export function valence(value: number | bigint | string | undefined): Valence {
+  if (typeof value === "string" || value === undefined) {
+    if (isZero(value)) return "flat";
+    return isNegative(value) ? "loss" : "gain";
+  }
+  if (value < 0) return "loss";
+  return value > 0 ? "gain" : "flat";
+}
+
+/** The text colour of each valence — for a caller that already holds the valence. */
+export const VALENCE_CLASS: Readonly<Record<Valence, string>> = { gain: "text-positive", loss: "text-accent-error", flat: "text-ink" };
+/** The outline that goes with it, for a pill or badge carrying a signed figure. */
+export const VALENCE_BORDER_CLASS: Readonly<Record<Valence, string>> = { gain: "border-positive/40", loss: "border-accent-error/40", flat: "border-border" };
+
+/** The text colour for a signed figure — the one gain/loss pair, neutral at zero. */
+export function valenceClass(value: number | bigint | string | undefined): string {
+  return VALENCE_CLASS[valence(value)];
 }
 
 // Fund units (shares) — same dimension as USDT for display, but no currency suffix and a
@@ -176,7 +203,7 @@ export function isNegative(value: string | undefined): boolean {
   return (value ?? "").trim().startsWith("-");
 }
 
-// Whether a decimal P&L string is exactly zero (treated as a gain for colour).
+// Whether a decimal P&L string is exactly zero — neither a gain nor a loss for colour.
 export function isZero(value: string | undefined): boolean {
   return toBaseUnits((value ?? "").trim().replace(/^-/, "")) === 0n;
 }

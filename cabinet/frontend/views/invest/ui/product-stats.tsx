@@ -5,16 +5,16 @@
 // the page (found, not found, loading) draws the same.
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { ArrowLeft, TrendingUp, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Minus, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react";
 
 import { Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import type { FundNav, Position } from "@/shared/contracts";
-import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
-import { formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
-import { Stat } from "@/views/invest/ui/atoms";
+import { PageFrame } from "@/shared/ui/page-frame";
+import { StatTile } from "@/shared/ui/stat-tile";
+import { formatSignedUsdt, formatUnits, formatUsdt, valence } from "@/views/invest/lib/format";
 
 export function BackLink() {
   const t = useT();
@@ -29,20 +29,22 @@ export function BackLink() {
 export function HoldingStats({ position }: { position: Position }) {
   const t = useT();
   const locale = useLocale();
-  const loss = isNegative(position.pnl);
-  const flat = isZero(position.pnl);
+  // Three tones, not two: a flat P&L is neither a gain nor a loss, and an upward arrow on
+  // "0.00" claims a gain that did not happen — the same rule as the dashboard's badge.
+  const trend = valence(position.pnl);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Stat label={t("invest.units")} value={formatUnits(position.units, locale)} tip="invest.position.units" />
-      <Stat label={t("invest.nav")} value={formatUsdt(position.nav, locale)} tip="invest.position.nav" />
-      <Stat label={t("invest.value")} value={`${formatUsdt(position.value, locale)} USDT`} emphasis tip="invest.position.value" />
-      <Stat
+      <StatTile variant="box" label={t("invest.units")} value={formatUnits(position.units, locale)} tip="invest.position.units" />
+      <StatTile variant="box" label={t("invest.nav")} value={formatUsdt(position.nav, locale)} tip="invest.position.nav" />
+      <StatTile variant="box" label={t("invest.value")} value={`${formatUsdt(position.value, locale)} USDT`} emphasis tip="invest.position.value" />
+      <StatTile
+        variant="box"
         label={t("invest.pnl")}
         value={`${formatSignedUsdt(position.pnl, locale)} USDT`}
         tip="invest.position.pnl"
         emphasis
-        tone={loss && !flat ? "text-accent-error" : "text-positive"}
-        icon={<TrendingUp className={cn("size-3.5", loss && !flat && "rotate-180")} />}
+        tone={trend}
+        icon={trend === "loss" ? <TrendingDown className="size-3.5" /> : trend === "gain" ? <TrendingUp className="size-3.5" /> : <Minus className="size-3.5" />}
       />
     </div>
   );
@@ -56,7 +58,8 @@ export function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: bo
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-4 py-6">
         <div className="space-y-1">
-          <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-ink-soft">
+          {/* The same label the holding tiles wear, so the slot reads the same whether or not the caller holds units. */}
+          <p className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
             {t("invest.navPerUnit")}
             <TipAnchor anchor="invest.position.nav" />
           </p>
@@ -70,11 +73,11 @@ export function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: bo
 
 export function ProductLoading() {
   return (
-    <div className="container max-w-4xl space-y-6 py-12">
+    <PageFrame width="content">
       <Skeleton className="h-10 w-64" />
       <Skeleton className="h-40 w-full" />
       <Skeleton className="h-32 w-full" />
-    </div>
+    </PageFrame>
   );
 }
 
@@ -83,7 +86,7 @@ export function ProductLoading() {
 export function ProductMissing({ service, error }: { service: string; error: string | null }) {
   const t = useT();
   return (
-    <div className="container max-w-4xl space-y-6 py-12">
+    <PageFrame width="content">
       <BackLink />
       <Card>
         <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-ink-soft">
@@ -92,6 +95,6 @@ export function ProductMissing({ service, error }: { service: string; error: str
           <p className="max-w-sm text-xs">{t("invest.notRegisteredHint")}</p>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

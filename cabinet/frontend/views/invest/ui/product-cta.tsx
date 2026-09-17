@@ -10,16 +10,14 @@ import { ArrowRight, ChartCandlestick, Lock, ShieldCheck } from "lucide-react";
 
 import { Button } from "@evinvest/uikit";
 
-import { cn } from "@/shared/lib/cn";
 import { Link } from "@/shared/ui/cabinet-link";
 import { supportHref } from "@/shared/ui/support-link";
 import type { CardCta } from "@/views/invest/lib/catalog-card";
-import { TEAL_CTA } from "@/views/invest/ui/atoms";
 
 export function ProductCta({ cta, service, title }: { cta: CardCta; service: string; title: string }) {
   const t = useT();
   const page = `/invest/${encodeURIComponent(service)}` as const;
-  const className = cn("mt-auto w-full", cta === "invest" && TEAL_CTA);
+  const className = "mt-auto w-full";
 
   switch (cta) {
     case "invest":

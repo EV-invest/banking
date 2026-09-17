@@ -23,7 +23,8 @@ import { bookPolicyResource } from "@/entities/book/model/book-resource";
 import { accruedFeesResource, allocationDetailResource, allocationsResource, feePolicyResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
 import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
-import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { StaggerItem } from "@/shared/ui/motion";
+import { PageFrame } from "@/shared/ui/page-frame";
 import { SupportLink } from "@/shared/ui/support-link";
 import { liquidity } from "@/views/invest/lib/catalog-card";
 import { isZero } from "@/views/invest/lib/format";
@@ -91,7 +92,7 @@ export function ProductView({ service }: { service: string }) {
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <Stagger step={SECTION_STAGGER} className="container max-w-4xl space-y-7 py-12">
+    <PageFrame width="content">
       <StaggerItem>
         <BackLink />
       </StaggerItem>
@@ -154,6 +155,6 @@ export function ProductView({ service }: { service: string }) {
           <FeeCard policy={feePolicy} accrued={held ? accruedFees : null} />
         </div>
       </StaggerItem>
-    </Stagger>
+    </PageFrame>
   );
 }

@@ -17,7 +17,7 @@ import type { Form } from "@/views/settings/lib/form";
 import { PERSONAL } from "@/views/settings/lib/sections";
 import { Field, FieldHint, FieldSkeleton, PhoneField, SectionHeader, VerifiedTag } from "@/views/settings/ui/fields";
 
-interface PersonalProps {
+export interface PersonalProps {
   loading: boolean;
   form: Form | null;
   email: string | null;

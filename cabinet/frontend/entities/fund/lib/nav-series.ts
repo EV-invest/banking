@@ -30,6 +30,11 @@ export interface NavSeries {
 export const HISTORY_RANGES = ["1m", "6m", "1y", "all"] as const;
 export type HistoryRange = (typeof HISTORY_RANGES)[number];
 
+/** Whether a control's reported value names a range — the kit's toggle group reports "" for a press on the active item. */
+export function isHistoryRange(value: unknown): value is HistoryRange {
+  return typeof value === "string" && (HISTORY_RANGES as readonly string[]).includes(value);
+}
+
 // Fixed day counts rather than calendar months: "31 March minus one month" has no single
 // answer, and a window that lands on a different day depending on today's date would make
 // the same range key two different cache entries across midnight.

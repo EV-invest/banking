@@ -6,6 +6,8 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 import { intlLocale } from "@/shared/lib/intl-locale";
 
 import { Bell } from "lucide-react";
+
+import { Button } from "@evinvest/uikit";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useEffect, useState } from "react";
 
@@ -17,14 +19,13 @@ import { isUnread, toDate } from "@/shared/contracts/notifications";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
-import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { StaggerItem } from "@/shared/ui/motion";
+import { PageFrame } from "@/shared/ui/page-frame";
 
 const CARD = "rounded-xl border border-border bg-card";
-// Every control on this screen is hand-written rather than a uikit Button, so the keyboard
-// focus ring has to be written out — once, here, so the four of them cannot drift apart.
+// The filter pills and the rows are hand-written rather than uikit Buttons, so the keyboard
+// focus ring has to be written out — once, here, so they cannot drift apart.
 const FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
-// "Mark all read" and "Load older" are the same control in two places.
-const GHOST_BUTTON = `rounded-lg border border-border/60 px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/5 disabled:opacity-40 ${FOCUS}`;
 // Rows are dense, so the inset is wider than the vertical rhythm.
 const ROW_PAD = "px-5.5 py-4.5";
 // A row spans the full width of a card that clips its overflow, so an outset ring would be
@@ -129,20 +130,20 @@ export function NotificationsView() {
   }
 
   return (
-    <Stagger step={SECTION_STAGGER} className="mx-auto w-full max-w-282 px-4 py-6 sm:px-6 lg:px-8">
-      <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold text-ink">{t("nav.notifications")}</h1>
-          <p className="mt-1 text-sm text-ink-soft">{t("notif.subtitle")}</p>
-        </div>
-        <button type="button" onClick={markAll} disabled={busy || unread === 0} className={GHOST_BUTTON}>
+    <PageFrame
+      title={t("nav.notifications")}
+      description={t("notif.subtitle")}
+      width="content"
+      actions={
+        <Button type="button" variant="outline" onClick={markAll} disabled={busy || unread === 0}>
           {t("notif.markAllRead")}
-        </button>
-      </StaggerItem>
-
+        </Button>
+      }
+    >
       {/* `inline-flex` on the bar itself, so the item that carries it has to stay inline
-          too — a block wrapper would stretch the pill pair across the page. */}
-      <StaggerItem className="mt-5 inline-flex gap-0.5 rounded-lg border border-border/60 bg-secondary p-1">
+          too — a block wrapper would stretch the pill pair across the page; `self-start`
+          keeps the column from doing the same. */}
+      <StaggerItem className="inline-flex gap-0.5 self-start rounded-lg border border-border/60 bg-secondary p-1">
         {(["all", "unread"] as const).map((f) => (
           <button
             key={f}
@@ -162,12 +163,12 @@ export function NotificationsView() {
       </StaggerItem>
 
       {error && (
-        <StaggerItem as="p" className="mt-4 rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
+        <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
           {error}
         </StaggerItem>
       )}
 
-      <StaggerItem className={cn("mt-4 overflow-hidden", CARD)}>
+      <StaggerItem className={cn("overflow-hidden", CARD)}>
         {items === null ? (
           <ul>
             {[0, 1, 2].map((i) => (
@@ -192,13 +193,13 @@ export function NotificationsView() {
       </StaggerItem>
 
       {nextCursor && items && items.length > 0 && (
-        <StaggerItem className="mt-4 flex justify-center">
-          <button type="button" onClick={loadMore} disabled={busy} className={GHOST_BUTTON}>
+        <StaggerItem className="flex justify-center">
+          <Button type="button" variant="outline" onClick={loadMore} disabled={busy}>
             {busy ? t("ui.loading") : t("notif.loadOlder")}
-          </button>
+          </Button>
         </StaggerItem>
       )}
-    </Stagger>
+    </PageFrame>
   );
 }
 

@@ -6,7 +6,7 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 import { Check, Copy, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
-import { Skeleton } from "@evinvest/uikit";
+import { Button, Skeleton } from "@evinvest/uikit";
 
 import { isUnverified } from "@/entities/user/lib/kyc";
 import { profileResource } from "@/entities/user/model/profile-resource";
@@ -23,7 +23,7 @@ import { isEvmRail, networkLabel } from "@/views/wallet/lib/format";
 import { DepositQr } from "@/views/wallet/ui/deposit-qr";
 import { NetworkSegments } from "@/views/wallet/ui/network-segments";
 import { useFirstDepositSignal } from "@/views/wallet/model/use-first-deposit-signal";
-import { FieldLabel, WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
+import { FieldLabel, WALLET_CARD, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
 // Top up the balance with crypto (Figma `cabinet/wallet/deposit` + `cabinet/mobile/wallet/deposit`):
 // pick a rail, then copy the address it maps to. The address is fetched per rail from the BFF —
@@ -154,15 +154,15 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                     <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-input px-3 py-2.5 lg:py-2.5 lg:pl-3.5 lg:pr-2">
                       <code className="min-w-0 flex-1 break-all font-sans text-xs text-ink lg:text-sm">{shown}</code>
                       {/* i18n-max: 11 — a `shrink-0` button beside the address it squeezes. */}
-                      <button type="button" onClick={copy} className={cn(WALLET_CTA, "hidden shrink-0 gap-1.5 px-3.5 py-2 text-xs lg:flex")}>
+                      <Button type="button" size="sm" onClick={copy} className="hidden shrink-0 lg:inline-flex">
                         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                         {copied ? t("ui.copied") : t("ui.copy")}
-                      </button>
+                      </Button>
                     </div>
-                    <button type="button" onClick={copy} className={cn(WALLET_CTA, "w-full gap-1.5 py-2.5 text-sm lg:hidden")}>
+                    <Button type="button" onClick={copy} className="w-full lg:hidden">
                       {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                       {copied ? t("ui.copied") : t("wallet.copyAddress")}
-                    </button>
+                    </Button>
                     <p className="flex items-center justify-center gap-1.5 text-center text-xs text-ink-soft">
                       {t("wallet.creditedAfterConfirmations", { n: address.min_confirmations ?? 0 })}
                       <TipAnchor anchor="wallet.deposit.min-confirmations" />

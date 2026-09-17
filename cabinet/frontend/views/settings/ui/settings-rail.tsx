@@ -9,6 +9,7 @@ import { useT } from "@evinvest/i18n/react";
 import { Bell, FileText, type LucideIcon, Monitor, Shield, SlidersHorizontal, UserRound } from "lucide-react";
 
 import { cn } from "@/shared/lib/cn";
+import { SectionLabel } from "@/shared/ui/page-frame";
 import { GROUPS, type Section } from "@/views/settings/lib/sections";
 
 // Module-scope, so the labels are catalogue keys rather than finished English — the rail
@@ -39,7 +40,7 @@ export function SettingsRail({ section, onSelect }: { section: Section; onSelect
           <div key={group.id} className="flex flex-col gap-1">
             {/* The same eyebrow the sidebar's groups use, so the two rails read as one system. */}
             <div className="mb-1 flex flex-col gap-0.5 px-3">
-              <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t(copy.labelKey)}</p>
+              <SectionLabel>{t(copy.labelKey)}</SectionLabel>
               <p className="text-xs leading-snug text-ink-soft">{t(copy.subKey)}</p>
             </div>
             {group.sections.map((id) => {

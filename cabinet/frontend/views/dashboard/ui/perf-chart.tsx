@@ -17,7 +17,7 @@ import { useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { EMPTY_BOX } from "@/views/dashboard/lib/chrome";
-import { formatPct, formatUsd } from "@/views/dashboard/lib/format";
+import { formatPct, formatUsdt } from "@/views/dashboard/lib/format";
 import { type PerfFormat, usePerfChart } from "@/views/dashboard/lib/use-perf-chart";
 
 // The plot's own height: tall enough for a curve to have a shape, and from `xl` whatever
@@ -37,8 +37,9 @@ export function PerfChart({ allocation, from, className }: PerfChartProps) {
   const locale = useLocale();
   const history = useResource(fundNavHistoryResource, allocation ?? "", from);
   const series = useMemo(() => toNavSeries(history.data), [history.data]);
-  // Bound once per locale: the engine re-reads its formatters on identity.
-  const format = useMemo<PerfFormat>(() => ({ performance: (pct) => formatPct(pct, locale), participation: (usdt) => formatUsd(usdt, locale) }), [locale]);
+  // Bound once per locale: the engine re-reads its formatters on identity. The participation
+  // line is the caller's stake in USDT — the ledger unit, not the dashboard's summary "$".
+  const format = useMemo<PerfFormat>(() => ({ performance: (pct) => formatPct(pct, locale), participation: (usdt) => formatUsdt(usdt, locale) }), [locale]);
   const loading = allocation === null || history.isLoading;
 
   return (

@@ -4,7 +4,7 @@ import { ArrowUpRight, X } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type CSSProperties, useState } from "react";
 
-import { Skeleton, Spinner } from "@evinvest/uikit";
+import { Button, Skeleton, Spinner } from "@evinvest/uikit";
 
 import { cancelWithdrawal, depositsResource, withdrawalsResource } from "@/entities/wallet/model/wallet-resource";
 import type { Deposit, Withdrawal } from "@/shared/contracts";
@@ -16,7 +16,7 @@ import { StaggerItem } from "@/shared/ui/motion";
 import { STATE_ICONS, stateLabel } from "@/views/operations/lib/format";
 import { formatUsdt, networkLabel, railMeta, shortAddress } from "@/views/wallet/lib/format";
 import { useFirstDepositSignal } from "@/views/wallet/model/use-first-deposit-signal";
-import { WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
+import { WALLET_CARD, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 
@@ -179,9 +179,9 @@ function EmptyState() {
       </span>
       <p className="text-sm font-semibold text-ink">{t("wallet.noActivity")}</p>
       <p className="max-w-65 text-xs text-ink-soft">{t("wallet.noActivityHint")}</p>
-      <Link href="/wallet/deposit" className={cn(WALLET_CTA, "mt-1 px-4 py-2.5 text-sm")}>
-        {t("wallet.newDeposit")}
-      </Link>
+      <Button asChild className="mt-1">
+        <Link href="/wallet/deposit">{t("wallet.newDeposit")}</Link>
+      </Button>
     </div>
   );
 }
