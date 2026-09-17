@@ -77,6 +77,34 @@ export interface ConsiliumFeePolicyTerms {
   reason: string;
 }
 
+// ── The ownership terms being authorized (#245) ─────────────────────────────────
+
+/**
+ * What a holder-grant consilium asks the owners to carry: `units` of the reserved
+ * `allocation` (`fee` | `fund`) minted to `user_id`. The only way a person becomes a holder
+ * of either — an operator's mint refuses the reserved allocations, and the company is not a
+ * holder. All three fields are inside the hashed subject.
+ */
+export interface HolderGrantTerms {
+  allocation: string;
+  /** The money-plane id the terms stored — a person, never the company. */
+  user_id: string;
+  units: Decimal;
+}
+
+/**
+ * What a seed-capital consilium asks the owners to carry: the chain transfer `tx_ref` on
+ * `network`, which the chain must report as exactly `amount` USDT, is `depositor_user_id`'s
+ * — booked as their deposit and subscription into `fund` once the quorum carries. The
+ * reference is carried in FULL, as a payout's address is (policy 13).
+ */
+export interface SeedCapitalTerms {
+  tx_ref: string;
+  network: string;
+  amount: Decimal;
+  depositor_user_id: string;
+}
+
 // ── Public: the emailed payout approval ────────────────────────────────────────
 
 export type PayoutDecision = "approve" | "reject";
@@ -100,8 +128,13 @@ export interface PayoutApproval {
   /** Present for a NAV mark past the move guard — the third sibling (banking#232). */
   valuation_override?: ValuationOverride | null;
   /** Present for a fee-policy consilium — the third sibling (docs/FEES.md § Changing the
-   *  terms). Exactly one of the three describes the subject. */
+   *  terms). */
   fee_policy?: ConsiliumFeePolicyTerms | null;
+  /** Present for a holder grant — a person seated on `fee` / `fund` (#245). */
+  holder_grant?: HolderGrantTerms | null;
+  /** Present for a seed of the platform's capital (#245). Exactly one of the siblings
+   *  describes the subject. */
+  seed_capital?: SeedCapitalTerms | null;
   /** Full hash; the page shows a short prefix of it. */
   payload_hash: string;
   initiator_email: string;
@@ -379,11 +412,12 @@ export interface ValuationOverride {
 }
 
 /**
- * A consilium as the owners' room sees it. Four kinds: a revenue payout (`revenue_payout`),
- * a payment order (`payment`), a NAV mark past the move guard (`valuation_override`) and a
- * change of a product's fee terms (`fee_policy`), told apart by which sibling is set —
- * exactly one is, and a kind is never expressed by
- * widening another one's field.
+ * A consilium as the owners' room sees it. Six kinds: a revenue payout (`revenue_payout`,
+ * history only since #245), a payment order (`payment`), a NAV mark past the move guard
+ * (`valuation_override`), a change of a product's fee terms (`fee_policy`), a person seated
+ * on a reserved allocation (`holder_grant`) and a seed of the platform's capital
+ * (`seed_capital`), told apart by which sibling is set — exactly one is, and a kind is
+ * never expressed by widening another one's field.
  *
  * The fields past `expires_at` are the ones the money plane records as a request settles.
  * They are optional because an open request carries none of them, and because a client
@@ -396,6 +430,8 @@ export interface Consilium {
   payment?: ConsiliumPaymentTerms | null;
   valuation_override?: ValuationOverride | null;
   fee_policy?: ConsiliumFeePolicyTerms | null;
+  holder_grant?: HolderGrantTerms | null;
+  seed_capital?: SeedCapitalTerms | null;
   payload_hash: string;
   initiator_user_id?: string;
   initiator_email: string;
@@ -414,6 +450,10 @@ export interface Consilium {
   executed_valuation_id?: string | null;
   /** The change a fee-policy consilium scheduled when the owners carried it. */
   executed_fee_policy_change_id?: string | null;
+  /** The in-kind issuance a holder-grant consilium minted when the owners carried it. */
+  executed_issuance_id?: string | null;
+  /** The `fund` subscription a seed-capital consilium booked when the owners carried it. */
+  executed_subscription_id?: string | null;
 }
 
 export interface ConsiliumList {
