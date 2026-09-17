@@ -4343,6 +4343,10 @@
     "en": "Secondary",
     "t": "Sekundärnavigation"
   },
+  "nav.account": {
+    "en": "Account",
+    "t": "Konto"
+  },
   "nav.allocations": {
     "en": "Allocations",
     "t": "Allokation"
@@ -5254,6 +5258,10 @@
   "settings.nav.documents": {
     "en": "Documents",
     "t": "Dokumente"
+  },
+  "settings.inbox": {
+    "en": "Inbox",
+    "t": "Posteingang"
   },
   "settings.nav.personal": {
     "en": "Personal details",
@@ -6730,6 +6738,10 @@
   "ui.verified": {
     "en": "Verified",
     "t": "Bestätigt"
+  },
+  "ui.walletHistory": {
+    "en": "History",
+    "t": "Verlauf"
   },
   "ui.viewAll": {
     "en": "View all",

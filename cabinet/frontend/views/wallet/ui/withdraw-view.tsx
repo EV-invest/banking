@@ -3,7 +3,7 @@
 import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { Clock, TriangleAlert } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import { Skeleton, Spinner } from "@evinvest/uikit";
 
@@ -46,6 +46,9 @@ function withdrawableFor(wallet: Wallet | null | undefined, network: string): Ne
 export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   const t = useT();
   const locale = useLocale();
+  const id = useId();
+  const addressId = `${id}-address`;
+  const amountId = `${id}-amount`;
   const [selected, setSelected] = useState<string | null>(initialNetwork ?? null);
   const [address, setAddress] = useState("");
   const [amount, setAmount] = useState("");
@@ -136,12 +139,13 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
               label={t("wallet.withdrawalNetwork")}
             />
 
-            <label className="flex flex-col gap-2">
-              <FieldLabel>
+            <div className="flex flex-col gap-2">
+              <FieldLabel htmlFor={addressId}>
                 {t("wallet.destinationAddressCaps")}
                 <TipAnchor anchor="wallet.withdraw.destination" />
               </FieldLabel>
               <input
+                id={addressId}
                 value={address}
                 onChange={(e) => {
                   setAddress(e.target.value);
@@ -151,11 +155,11 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 spellCheck={false}
                 className={FIELD}
               />
-            </label>
+            </div>
 
-            <label className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2">
               <span className="flex items-center justify-between gap-2">
-                <FieldLabel>{t("wallet.amountCaps")}</FieldLabel>
+                <FieldLabel htmlFor={amountId}>{t("wallet.amountCaps")}</FieldLabel>
                 <span className="flex items-center gap-1.5 text-xs text-ink-soft">
                   {t("wallet.availPrefix", { amount: formatUsdt(opts?.withdrawable, locale) })}
                   <TipAnchor anchor="wallet.withdraw.available" />
@@ -165,6 +169,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   belongs on the wrapper, reached from the input via focus-within. */}
               <span className="flex w-full items-center gap-2 rounded-lg border border-border bg-input py-2 pl-3 pr-2 focus-within:ring-2 focus-within:ring-ring/50">
                 <input
+                  id={amountId}
                   value={amount}
                   onChange={(e) => {
                     setAmount(e.target.value);
@@ -185,7 +190,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   {t("ui.max")}
                 </button>
               </span>
-            </label>
+            </div>
 
             <div className="flex flex-col gap-2.5 rounded-lg bg-secondary px-3.5 py-3">
               <Row label={t("wallet.networkFee")} value={`${formatUsdt(opts?.withdrawal_fee, locale)} USDT`} tip="wallet.withdraw.network-fee" />

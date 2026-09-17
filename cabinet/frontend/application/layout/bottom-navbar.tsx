@@ -2,12 +2,12 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { Home, LineChart, ListChecks, Settings, Wallet, type LucideIcon } from "lucide-react";
+import { CircleUserRound, Home, LineChart, ListChecks, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link } from "@/shared/ui/cabinet-link";
 
+import { AccountTabBadge } from "@/application/layout/account-tab-badge";
 import { prefetchOn } from "@/application/prefetch";
-import { KycStatusDot } from "@/features/kyc";
 import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
 import { DUR, EASE } from "@/shared/ui/motion";
@@ -22,7 +22,8 @@ interface TabItem {
 }
 
 // The 5-tab mobile navigation bar (Figma cabinet mobile tab bar). These tabs
-// replace the desktop sidebar on narrow viewports (<1024px).
+// replace the desktop sidebar on narrow viewports (<1024px), in the rail's
+// order: its FUND group, then one tab standing in for its whole bottom group.
 //
 // The predicates are pairwise disjoint, and have to stay that way: the active
 // marker below is one element that moves to the matching tab, so two tabs
@@ -31,12 +32,19 @@ interface TabItem {
 // /invest as well — Products is gone, and Wallet (a real destination with no
 // tab of its own) took the slot. Operations no longer claims /wallet either,
 // which was the other half of that collision.
+//
+// Account is the rail's Profile, Notifications and Settings rows folded into
+// the one slot the bar has left (#388). It lands on /settings, whose mobile
+// root already carries the profile card and the inbox row, so each of the
+// three is one tap from the tab — and it claims all three routes, so the
+// marker stays on it while the reader is inside any of them.
+const ACCOUNT_ROUTES = ["/settings", "/profile", "/notifications"] as const;
 const TABS: TabItem[] = [
   { href: "/", label: "Home", key: "nav.home", icon: Home, active: (p) => p === "/" },
   { href: "/invest", label: "Invest", key: "nav.invest", icon: LineChart, active: (p) => p.startsWith("/invest") },
-  { href: "/operations", label: "Activity", key: "nav.operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
   { href: "/wallet", label: "Wallet", key: "nav.wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
-  { href: "/settings", label: "Settings", key: "nav.settings", icon: Settings, active: (p) => p.startsWith("/settings") },
+  { href: "/operations", label: "Activity", key: "nav.operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
+  { href: "/settings", label: "Account", key: "nav.account", icon: CircleUserRound, active: (p) => ACCOUNT_ROUTES.some((r) => p.startsWith(r)) },
 ];
 
 /** Horizontal padding of the bar, as a length the marker's width math can use. */
@@ -50,14 +58,14 @@ export function BottomNavbar() {
   const onTab = activeAt >= 0;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-[var(--cabinet-bottom-nav-h,64px)] items-center border-t border-border bg-secondary px-2 pb-[env(safe-area-inset-bottom,0px)] lg:hidden">
+    <nav aria-label={t("nav.a11y.primary")} className="fixed bottom-0 left-0 right-0 z-50 flex h-[var(--cabinet-bottom-nav-h,64px)] items-center border-t border-border bg-secondary px-2 pb-[env(safe-area-inset-bottom,0px)] lg:hidden">
       {/* One marker for the whole bar, mounted once and translated — not a node
           per tab that mounts and unmounts.
 
           The old version rendered it inside the active <Link>, which had two
           consequences. It sat at the top of the *link box*, a couple of pixels
           off the icon rather than on the bar's edge. And on any route no tab
-          claims — /profile, /notifications — the index was -1, so the marker
+          claims — the operator screens, /consilium — the index was -1, so the marker
           unmounted completely and then reappeared out of nowhere on the way
           back, with no previous position to travel from. A shared `layoutId`
           cannot paper over that: an element that does not exist has no origin.
@@ -102,11 +110,11 @@ export function BottomNavbar() {
               isActive ? "text-accent-debug" : "text-ink-soft hover:text-ink",
             )}
           >
-            {/* Below `lg` the profile is reached through Settings, so that is the tab
-                the verification state marks (#395); the rail's chip sits on Profile. */}
+            {/* Account carries the two facts the rail spreads over two rows — the
+                unread count and the verification state (#395); the badge picks. */}
             <span className="relative shrink-0">
               <Icon className="size-5" />
-              {tab.href === "/settings" && <KycStatusDot className="absolute -right-1 -top-0.5" />}
+              {tab.href === "/settings" && <AccountTabBadge />}
             </span>
             {/* `truncate` is the net, not the plan. Five tabs on a 390px phone give each
                 label a 75px box, measured; every `nav.*` value is authored to fit it.

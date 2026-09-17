@@ -4343,6 +4343,10 @@
     "en": "Secondary",
     "t": "Дополнительная"
   },
+  "nav.account": {
+    "en": "Account",
+    "t": "Аккаунт"
+  },
   "nav.allocations": {
     "en": "Allocations",
     "t": "Продукты"
@@ -5254,6 +5258,10 @@
   "settings.nav.documents": {
     "en": "Documents",
     "t": "Документы"
+  },
+  "settings.inbox": {
+    "en": "Inbox",
+    "t": "Входящие"
   },
   "settings.nav.personal": {
     "en": "Personal details",
@@ -6730,6 +6738,10 @@
   "ui.verified": {
     "en": "Verified",
     "t": "Проверен"
+  },
+  "ui.walletHistory": {
+    "en": "History",
+    "t": "История"
   },
   "ui.viewAll": {
     "en": "View all",
