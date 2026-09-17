@@ -473,7 +473,7 @@ async fn per_allocation_units_reconcile_after_grant_redeem_and_fee_charge() {
 
 	// Seat a holder of `fee` (value first) and settle the fee class into cash.
 	grant_fee_units(&h, owner, "10").await;
-	fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, product.clone(), None, "itest", now_unix())
+	fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, product.clone(), None, UserId::new(), now_unix())
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
