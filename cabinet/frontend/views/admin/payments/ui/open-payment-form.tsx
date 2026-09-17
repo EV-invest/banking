@@ -26,7 +26,7 @@ import { RefusalNotice } from "@/views/admin/ui/refusal-notice";
 export function OpenPaymentForm() {
   const t = useT();
   const [source, setSource] = useState<EndDraft>(EMPTY_END);
-  const [destination, setDestination] = useState<EndDraft>({ ...EMPTY_END, kind: "revenue" });
+  const [destination, setDestination] = useState<EndDraft>({ ...EMPTY_END, kind: "user" });
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState(false);
