@@ -244,6 +244,10 @@ impl Ledger for TbLedger {
 	}
 
 	async fn transfer_exists(&self, id: u128) -> Result<bool, LedgerError> {
+		Ok(self.transfer_amount(id).await?.is_some())
+	}
+
+	async fn transfer_amount(&self, id: u128) -> Result<Option<u128>, LedgerError> {
 		let call = self
 			.tb
 			.client()
@@ -252,7 +256,7 @@ impl Ledger for TbLedger {
 		let transfers = deadline("lookup_transfers", call, TB_CALL_TIMEOUT)
 			.await?
 			.map_err(|e| LedgerError::Unavailable(format!("lookup_transfers: {e:?}")))?;
-		Ok(!transfers.is_empty())
+		Ok(transfers.first().map(|transfer| transfer.amount))
 	}
 
 	async fn post(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError> {

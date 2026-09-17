@@ -622,6 +622,10 @@ impl Ledger for FailFeeLegOnce {
 		self.inner.transfer_exists(id).await
 	}
 
+	async fn transfer_amount(&self, id: u128) -> Result<Option<u128>, LedgerError> {
+		self.inner.transfer_amount(id).await
+	}
+
 	async fn share_holdings(&self, scope: &HoldingScope) -> Result<Vec<(LedgerAccountKey, u128)>, LedgerError> {
 		self.inner.share_holdings(scope).await
 	}
