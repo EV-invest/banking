@@ -3632,8 +3632,8 @@
     "t": "Диапазон графика"
   },
   "dash.recentOperations": {
-    "en": "Recent operations",
-    "t": "Последние операции"
+    "en": "Recent activity",
+    "t": "Последняя активность"
   },
   "dash.strategyCount": {
     "en": "{n, plural, one {# strategy} other {# strategies}}",
@@ -3752,8 +3752,8 @@
     "t": "Не найдено."
   },
   "err.opsLoad": {
-    "en": "Couldn't load your operations",
-    "t": "Не удалось загрузить ваши операции"
+    "en": "Couldn't load your activity",
+    "t": "Не удалось загрузить вашу активность"
   },
   "err.phone.invalid": {
     "en": "Enter a valid phone number starting with + or country code",
@@ -3884,8 +3884,8 @@
     "t": "Фонд закрыт для новых подписок. Ваши паи это не затрагивает — вы можете погасить их полностью."
   },
   "invest.blocked.locked": {
-    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised — contact support if you think you should have it.",
-    "t": "Этот фонд пока не открыт для вас. Вы можете его видеть, но подписка заблокирована, пока ваш доступ не повысят — напишите в поддержку, если считаете, что доступ должен быть."
+    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised. If you think you should have it:",
+    "t": "Этот фонд пока не открыт для вас. Вы можете его видеть, но подписка заблокирована, пока ваш доступ не повысят. Если считаете, что доступ должен быть:"
   },
   "invest.blocked.staleNav": {
     "en": "The fund's valuation is out of date, so dealing is paused until a fresh one is posted.",
@@ -4648,8 +4648,8 @@
     "t": "Выводы"
   },
   "ops.filterByKind": {
-    "en": "Filter operations by kind",
-    "t": "Фильтровать операции по типу"
+    "en": "Filter activity by kind",
+    "t": "Фильтровать активность по типу"
   },
   "ops.filterEmptyHint": {
     "en": "You have other activity — switch back to All to see it.",
@@ -4820,8 +4820,8 @@
     "t": "Все ваши пополнения, выводы, подписки и погашения, а также все комиссии, начисленные фондами, — одной лентой."
   },
   "ops.truncatedNote": {
-    "en": "Showing your most recent operations — older activity isn't listed here yet.",
-    "t": "Показаны последние операции — более ранние здесь пока не отображаются."
+    "en": "Showing your most recent activity — older entries aren't listed here yet.",
+    "t": "Показана последняя активность — более ранние записи здесь пока не отображаются."
   },
   "payment.consent.approve": {
     "en": "Consented",
@@ -4924,8 +4924,8 @@
     "t": "Активность"
   },
   "profile.activityCapped": {
-    "en": "Counted over your {n} most recent operations",
-    "t": "Подсчитано по вашим {n} последним операциям"
+    "en": "Counted over your {n} most recent activity entries",
+    "t": "Подсчитано по вашим {n} последним записям активности"
   },
   "profile.activitySub": {
     "en": "Everything that has moved money on this account",
@@ -5879,13 +5879,13 @@
     "en": "Tax residence",
     "t": "Налоговое резидентство"
   },
-  "tips.profile.kyc-level.title": {
-    "en": "What your KYC level means",
-    "t": "Что значит ваш уровень KYC"
-  },
   "tips.profile.kyc-level.body": {
     "en": "Level 0 is browse only: products, prices and your account. Level 1 means your identity is verified and opens a deposit address, withdrawals and subscribing.",
     "t": "Уровень 0 — только просмотр: продукты, цены и ваш счёт. Уровень 1 означает, что личность подтверждена, и открывает адрес для пополнения, вывод и подписку."
+  },
+  "tips.profile.kyc-level.title": {
+    "en": "What your KYC level means",
+    "t": "Что значит ваш уровень KYC"
   },
   "tips.profile.personal.compliance.body": {
     "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
@@ -5894,14 +5894,6 @@
   "tips.profile.personal.compliance.title": {
     "en": "Why we collect this",
     "t": "Зачем мы это собираем"
-  },
-  "tips.trade.book.title": {
-    "en": "How the book works",
-    "t": "Как работает книга"
-  },
-  "tips.trade.book.body": {
-    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
-    "t": "В книге держатели торгуют уже выпущенными паями — покупатель и продавец встречаются по цене bid или ask, которую задают сами. Подписка — другое: она выпускает новые паи по опубликованному NAV, а погашение возвращает их по NAV."
   },
   "tips.settings.security.google-signin.body": {
     "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
@@ -5942,6 +5934,14 @@
   "tips.settings.sessions.this-device.title": {
     "en": "This device",
     "t": "Текущее устройство"
+  },
+  "tips.trade.book.body": {
+    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
+    "t": "В книге держатели торгуют уже выпущенными паями — покупатель и продавец встречаются по цене bid или ask, которую задают сами. Подписка — другое: она выпускает новые паи по опубликованному NAV, а погашение возвращает их по NAV."
+  },
+  "tips.trade.book.title": {
+    "en": "How the book works",
+    "t": "Как работает книга"
   },
   "tips.wallet.balance.available.body": {
     "en": "Your spendable USDT right now — what you can invest into fund units or withdraw.",
@@ -6160,8 +6160,8 @@
     "t": "Лимит"
   },
   "trade.form.locked": {
-    "en": "Trading isn't open to you on this product. Contact support if you think you should have access.",
-    "t": "Торговля этим продуктом вам не открыта. Напишите в поддержку, если считаете, что доступ должен быть."
+    "en": "Trading isn't open to you on this product. If you think you should have access:",
+    "t": "Торговля этим продуктом вам не открыта. Если считаете, что доступ должен быть:"
   },
   "trade.form.market": {
     "en": "Market",
@@ -6224,8 +6224,8 @@
     "t": "Цена должна быть кратна {tick}"
   },
   "trade.form.refusedBody": {
-    "en": "{detail} If you think you should be able to trade this product, contact support.",
-    "t": "{detail} Если вы считаете, что должны торговать этим продуктом, напишите в поддержку."
+    "en": "{detail} If you think you should be able to trade this product:",
+    "t": "{detail} Если вы считаете, что должны торговать этим продуктом:"
   },
   "trade.form.refusedTitle": {
     "en": "Order refused",
@@ -6251,6 +6251,18 @@
     "en": "Time in force",
     "t": "Срок действия"
   },
+  "trade.form.tifHint.alo": {
+    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
+    "t": "Только встаёт в книгу: если бы она исполнилась по существующей заявке, она отклоняется."
+  },
+  "trade.form.tifHint.gtc": {
+    "en": "Rests on the book until it fills or you cancel it.",
+    "t": "Остаётся в книге, пока не исполнится или вы её не отмените."
+  },
+  "trade.form.tifHint.ioc": {
+    "en": "Fills whatever it can right now; the rest is cancelled at once.",
+    "t": "Исполняется на то, что доступно сейчас; остаток сразу отменяется."
+  },
   "trade.form.tifLabel.alo": {
     "en": "Post-only",
     "t": "Только мейкер"
@@ -6262,18 +6274,6 @@
   "trade.form.tifLabel.ioc": {
     "en": "Immediate or cancel",
     "t": "Исполнить или отменить"
-  },
-  "trade.form.tifHint.gtc": {
-    "en": "Rests on the book until it fills or you cancel it.",
-    "t": "Остаётся в книге, пока не исполнится или вы её не отмените."
-  },
-  "trade.form.tifHint.ioc": {
-    "en": "Fills whatever it can right now; the rest is cancelled at once.",
-    "t": "Исполняется на то, что доступно сейчас; остаток сразу отменяется."
-  },
-  "trade.form.tifHint.alo": {
-    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
-    "t": "Только встаёт в книгу: если бы она исполнилась по существующей заявке, она отклоняется."
   },
   "trade.orders.col.avgFill": {
     "en": "Avg fill",
@@ -6572,8 +6572,8 @@
     "t": "Сети"
   },
   "ui.noOperations": {
-    "en": "No operations yet",
-    "t": "Операций пока нет"
+    "en": "No activity yet",
+    "t": "Активности пока нет"
   },
   "ui.none": {
     "en": "None",

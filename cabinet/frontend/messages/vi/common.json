@@ -3632,8 +3632,8 @@
     "t": "Khoảng thời gian biểu đồ"
   },
   "dash.recentOperations": {
-    "en": "Recent operations",
-    "t": "Giao dịch gần đây"
+    "en": "Recent activity",
+    "t": "Hoạt động gần đây"
   },
   "dash.strategyCount": {
     "en": "{n, plural, one {# strategy} other {# strategies}}",
@@ -3752,8 +3752,8 @@
     "t": "Không tìm thấy."
   },
   "err.opsLoad": {
-    "en": "Couldn't load your operations",
-    "t": "Không tải được danh sách giao dịch của bạn"
+    "en": "Couldn't load your activity",
+    "t": "Không tải được hoạt động của bạn"
   },
   "err.phone.invalid": {
     "en": "Enter a valid phone number starting with + or country code",
@@ -3884,8 +3884,8 @@
     "t": "Quỹ này đã đóng với các lệnh đăng ký mới. Đơn vị quỹ của bạn không bị ảnh hưởng — bạn vẫn có thể hoàn vốn toàn bộ."
   },
   "invest.blocked.locked": {
-    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised — contact support if you think you should have it.",
-    "t": "Quỹ này chưa mở cho bạn. Bạn có thể xem, nhưng việc đăng ký vẫn bị khóa cho đến khi quyền truy cập của bạn được nâng — hãy liên hệ hỗ trợ nếu bạn cho rằng mình nên có quyền."
+    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised. If you think you should have it:",
+    "t": "Quỹ này chưa mở cho bạn. Bạn có thể xem, nhưng việc đăng ký vẫn bị khóa cho đến khi quyền truy cập của bạn được nâng. Nếu bạn cho rằng mình nên có quyền:"
   },
   "invest.blocked.staleNav": {
     "en": "The fund's valuation is out of date, so dealing is paused until a fresh one is posted.",
@@ -4648,8 +4648,8 @@
     "t": "Rút tiền"
   },
   "ops.filterByKind": {
-    "en": "Filter operations by kind",
-    "t": "Lọc giao dịch theo loại"
+    "en": "Filter activity by kind",
+    "t": "Lọc hoạt động theo loại"
   },
   "ops.filterEmptyHint": {
     "en": "You have other activity — switch back to All to see it.",
@@ -4820,8 +4820,8 @@
     "t": "Mọi khoản nạp, rút, đăng ký mua và hoàn vốn bạn đã thực hiện, cùng mọi khoản phí một quỹ đã thu — trên một dòng thời gian."
   },
   "ops.truncatedNote": {
-    "en": "Showing your most recent operations — older activity isn't listed here yet.",
-    "t": "Đang hiển thị các giao dịch gần nhất — hoạt động cũ hơn chưa được liệt kê ở đây."
+    "en": "Showing your most recent activity — older entries aren't listed here yet.",
+    "t": "Đang hiển thị hoạt động gần nhất — các mục cũ hơn chưa được liệt kê ở đây."
   },
   "payment.consent.approve": {
     "en": "Consented",
@@ -4924,8 +4924,8 @@
     "t": "Hoạt động"
   },
   "profile.activityCapped": {
-    "en": "Counted over your {n} most recent operations",
-    "t": "Tính trên {n} giao dịch gần nhất của bạn"
+    "en": "Counted over your {n} most recent activity entries",
+    "t": "Tính trên {n} mục hoạt động gần nhất của bạn"
   },
   "profile.activitySub": {
     "en": "Everything that has moved money on this account",
@@ -5879,13 +5879,13 @@
     "en": "Tax residence",
     "t": "Nơi cư trú thuế"
   },
-  "tips.profile.kyc-level.title": {
-    "en": "What your KYC level means",
-    "t": "Cấp KYC của bạn nghĩa là gì"
-  },
   "tips.profile.kyc-level.body": {
     "en": "Level 0 is browse only: products, prices and your account. Level 1 means your identity is verified and opens a deposit address, withdrawals and subscribing.",
     "t": "Cấp 0 chỉ để xem: sản phẩm, giá và tài khoản của bạn. Cấp 1 nghĩa là danh tính đã được xác minh, mở địa chỉ nạp, rút tiền và đăng ký mua."
+  },
+  "tips.profile.kyc-level.title": {
+    "en": "What your KYC level means",
+    "t": "Cấp KYC của bạn nghĩa là gì"
   },
   "tips.profile.personal.compliance.body": {
     "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
@@ -5894,14 +5894,6 @@
   "tips.profile.personal.compliance.title": {
     "en": "Why we collect this",
     "t": "Vì sao chúng tôi thu thập"
-  },
-  "tips.trade.book.title": {
-    "en": "How the book works",
-    "t": "Sổ lệnh hoạt động thế nào"
-  },
-  "tips.trade.book.body": {
-    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
-    "t": "Sổ lệnh trao đổi các đơn vị đã có giữa những người nắm giữ — người mua và người bán gặp nhau ở giá bid hoặc ask do chính họ đặt. Đăng ký mua thì khác: nó phát hành đơn vị mới theo NAV đã công bố, và hoàn vốn trả lại đơn vị theo NAV."
   },
   "tips.settings.security.google-signin.body": {
     "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
@@ -5942,6 +5934,14 @@
   "tips.settings.sessions.this-device.title": {
     "en": "This device",
     "t": "Thiết bị này"
+  },
+  "tips.trade.book.body": {
+    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
+    "t": "Sổ lệnh trao đổi các đơn vị đã có giữa những người nắm giữ — người mua và người bán gặp nhau ở giá bid hoặc ask do chính họ đặt. Đăng ký mua thì khác: nó phát hành đơn vị mới theo NAV đã công bố, và hoàn vốn trả lại đơn vị theo NAV."
+  },
+  "tips.trade.book.title": {
+    "en": "How the book works",
+    "t": "Sổ lệnh hoạt động thế nào"
   },
   "tips.wallet.balance.available.body": {
     "en": "Your spendable USDT right now — what you can invest into fund units or withdraw.",
@@ -6160,8 +6160,8 @@
     "t": "Giới hạn"
   },
   "trade.form.locked": {
-    "en": "Trading isn't open to you on this product. Contact support if you think you should have access.",
-    "t": "Bạn chưa được mở giao dịch sản phẩm này. Hãy liên hệ hỗ trợ nếu bạn cho rằng mình nên có quyền."
+    "en": "Trading isn't open to you on this product. If you think you should have access:",
+    "t": "Bạn chưa được mở giao dịch sản phẩm này. Nếu bạn cho rằng mình nên có quyền:"
   },
   "trade.form.market": {
     "en": "Market",
@@ -6224,8 +6224,8 @@
     "t": "Giá phải là bội số của {tick}"
   },
   "trade.form.refusedBody": {
-    "en": "{detail} If you think you should be able to trade this product, contact support.",
-    "t": "{detail} Nếu bạn cho rằng mình được giao dịch sản phẩm này, hãy liên hệ hỗ trợ."
+    "en": "{detail} If you think you should be able to trade this product:",
+    "t": "{detail} Nếu bạn cho rằng mình được giao dịch sản phẩm này:"
   },
   "trade.form.refusedTitle": {
     "en": "Order refused",
@@ -6251,6 +6251,18 @@
     "en": "Time in force",
     "t": "Hiệu lực"
   },
+  "trade.form.tifHint.alo": {
+    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
+    "t": "Chỉ nằm chờ trong sổ: bị từ chối thay vì khớp với lệnh đang có."
+  },
+  "trade.form.tifHint.gtc": {
+    "en": "Rests on the book until it fills or you cancel it.",
+    "t": "Nằm trong sổ lệnh cho tới khi khớp hoặc bạn hủy."
+  },
+  "trade.form.tifHint.ioc": {
+    "en": "Fills whatever it can right now; the rest is cancelled at once.",
+    "t": "Khớp phần có thể ngay lúc này; phần còn lại bị hủy ngay."
+  },
   "trade.form.tifLabel.alo": {
     "en": "Post-only",
     "t": "Chỉ đặt chờ"
@@ -6262,18 +6274,6 @@
   "trade.form.tifLabel.ioc": {
     "en": "Immediate or cancel",
     "t": "Khớp ngay hoặc hủy"
-  },
-  "trade.form.tifHint.gtc": {
-    "en": "Rests on the book until it fills or you cancel it.",
-    "t": "Nằm trong sổ lệnh cho tới khi khớp hoặc bạn hủy."
-  },
-  "trade.form.tifHint.ioc": {
-    "en": "Fills whatever it can right now; the rest is cancelled at once.",
-    "t": "Khớp phần có thể ngay lúc này; phần còn lại bị hủy ngay."
-  },
-  "trade.form.tifHint.alo": {
-    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
-    "t": "Chỉ nằm chờ trong sổ: bị từ chối thay vì khớp với lệnh đang có."
   },
   "trade.orders.col.avgFill": {
     "en": "Avg fill",
@@ -6572,8 +6572,8 @@
     "t": "Mạng lưới"
   },
   "ui.noOperations": {
-    "en": "No operations yet",
-    "t": "Chưa có giao dịch nào"
+    "en": "No activity yet",
+    "t": "Chưa có hoạt động nào"
   },
   "ui.none": {
     "en": "None",

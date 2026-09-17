@@ -3632,8 +3632,8 @@
     "t": "Période du graphique"
   },
   "dash.recentOperations": {
-    "en": "Recent operations",
-    "t": "Opérations récentes"
+    "en": "Recent activity",
+    "t": "Activité récente"
   },
   "dash.strategyCount": {
     "en": "{n, plural, one {# strategy} other {# strategies}}",
@@ -3752,8 +3752,8 @@
     "t": "Introuvable."
   },
   "err.opsLoad": {
-    "en": "Couldn't load your operations",
-    "t": "Impossible de charger vos opérations"
+    "en": "Couldn't load your activity",
+    "t": "Impossible de charger votre activité"
   },
   "err.phone.invalid": {
     "en": "Enter a valid phone number starting with + or country code",
@@ -3884,8 +3884,8 @@
     "t": "Ce fonds est fermé aux nouvelles souscriptions. Vos parts ne sont pas affectées — vous pouvez toujours les racheter intégralement."
   },
   "invest.blocked.locked": {
-    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised — contact support if you think you should have it.",
-    "t": "Ce fonds ne vous est pas encore ouvert. Vous pouvez le voir, mais la souscription reste verrouillée jusqu'à ce que votre accès soit relevé — contactez le support si vous pensez y avoir droit."
+    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised. If you think you should have it:",
+    "t": "Ce fonds ne vous est pas encore ouvert. Vous pouvez le voir, mais la souscription reste verrouillée jusqu'à ce que votre accès soit relevé. Si vous pensez y avoir droit :"
   },
   "invest.blocked.staleNav": {
     "en": "The fund's valuation is out of date, so dealing is paused until a fresh one is posted.",
@@ -4648,8 +4648,8 @@
     "t": "Retraits"
   },
   "ops.filterByKind": {
-    "en": "Filter operations by kind",
-    "t": "Filtrer les opérations par type"
+    "en": "Filter activity by kind",
+    "t": "Filtrer l’activité par type"
   },
   "ops.filterEmptyHint": {
     "en": "You have other activity — switch back to All to see it.",
@@ -4820,8 +4820,8 @@
     "t": "Chaque dépôt, retrait, souscription et rachat que vous avez effectué, et chaque frais prélevé par un fonds — un seul fil."
   },
   "ops.truncatedNote": {
-    "en": "Showing your most recent operations — older activity isn't listed here yet.",
-    "t": "Affichage de vos opérations les plus récentes — l’activité plus ancienne n’est pas encore listée ici."
+    "en": "Showing your most recent activity — older entries aren't listed here yet.",
+    "t": "Affichage de votre activité la plus récente — les entrées plus anciennes ne sont pas encore listées ici."
   },
   "payment.consent.approve": {
     "en": "Consented",
@@ -4924,8 +4924,8 @@
     "t": "Activité"
   },
   "profile.activityCapped": {
-    "en": "Counted over your {n} most recent operations",
-    "t": "Comptées sur vos {n} opérations les plus récentes"
+    "en": "Counted over your {n} most recent activity entries",
+    "t": "Comptées sur vos {n} entrées d’activité les plus récentes"
   },
   "profile.activitySub": {
     "en": "Everything that has moved money on this account",
@@ -5879,13 +5879,13 @@
     "en": "Tax residence",
     "t": "Résidence fiscale"
   },
-  "tips.profile.kyc-level.title": {
-    "en": "What your KYC level means",
-    "t": "Ce que signifie votre niveau KYC"
-  },
   "tips.profile.kyc-level.body": {
     "en": "Level 0 is browse only: products, prices and your account. Level 1 means your identity is verified and opens a deposit address, withdrawals and subscribing.",
     "t": "Le niveau 0 permet seulement de consulter : produits, prix et votre compte. Le niveau 1 signifie que votre identité est vérifiée et ouvre une adresse de dépôt, les retraits et la souscription."
+  },
+  "tips.profile.kyc-level.title": {
+    "en": "What your KYC level means",
+    "t": "Ce que signifie votre niveau KYC"
   },
   "tips.profile.personal.compliance.body": {
     "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
@@ -5894,14 +5894,6 @@
   "tips.profile.personal.compliance.title": {
     "en": "Why we collect this",
     "t": "Pourquoi nous collectons ces données"
-  },
-  "tips.trade.book.title": {
-    "en": "How the book works",
-    "t": "Comment fonctionne le carnet"
-  },
-  "tips.trade.book.body": {
-    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
-    "t": "Le carnet échange des parts existantes entre détenteurs — acheteur et vendeur se rencontrent à un prix bid ou ask qu’ils fixent eux-mêmes. Souscrire est différent : cela crée de nouvelles parts à la VL publiée, et le rachat les rend à la VL."
   },
   "tips.settings.security.google-signin.body": {
     "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
@@ -5942,6 +5934,14 @@
   "tips.settings.sessions.this-device.title": {
     "en": "This device",
     "t": "Cet appareil"
+  },
+  "tips.trade.book.body": {
+    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
+    "t": "Le carnet échange des parts existantes entre détenteurs — acheteur et vendeur se rencontrent à un prix bid ou ask qu’ils fixent eux-mêmes. Souscrire est différent : cela crée de nouvelles parts à la VL publiée, et le rachat les rend à la VL."
+  },
+  "tips.trade.book.title": {
+    "en": "How the book works",
+    "t": "Comment fonctionne le carnet"
   },
   "tips.wallet.balance.available.body": {
     "en": "Your spendable USDT right now — what you can invest into fund units or withdraw.",
@@ -6160,8 +6160,8 @@
     "t": "Limite"
   },
   "trade.form.locked": {
-    "en": "Trading isn't open to you on this product. Contact support if you think you should have access.",
-    "t": "La négociation de ce produit ne vous est pas ouverte. Contactez le support si vous pensez devoir y avoir accès."
+    "en": "Trading isn't open to you on this product. If you think you should have access:",
+    "t": "La négociation de ce produit ne vous est pas ouverte. Si vous pensez devoir y avoir accès :"
   },
   "trade.form.market": {
     "en": "Market",
@@ -6224,8 +6224,8 @@
     "t": "Le prix doit être un multiple de {tick}"
   },
   "trade.form.refusedBody": {
-    "en": "{detail} If you think you should be able to trade this product, contact support.",
-    "t": "{detail} Si vous pensez pouvoir négocier ce produit, contactez le support."
+    "en": "{detail} If you think you should be able to trade this product:",
+    "t": "{detail} Si vous pensez pouvoir négocier ce produit :"
   },
   "trade.form.refusedTitle": {
     "en": "Order refused",
@@ -6251,6 +6251,18 @@
     "en": "Time in force",
     "t": "Validité"
   },
+  "trade.form.tifHint.alo": {
+    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
+    "t": "Ne fait que reposer dans le carnet : elle est refusée plutôt qu’exécutée contre un ordre existant."
+  },
+  "trade.form.tifHint.gtc": {
+    "en": "Rests on the book until it fills or you cancel it.",
+    "t": "Reste dans le carnet jusqu’à exécution ou jusqu’à ce que vous l’annuliez."
+  },
+  "trade.form.tifHint.ioc": {
+    "en": "Fills whatever it can right now; the rest is cancelled at once.",
+    "t": "Exécute ce qui peut l’être immédiatement ; le reste est annulé aussitôt."
+  },
   "trade.form.tifLabel.alo": {
     "en": "Post-only",
     "t": "Maker uniquement"
@@ -6262,18 +6274,6 @@
   "trade.form.tifLabel.ioc": {
     "en": "Immediate or cancel",
     "t": "Immédiat ou annulé"
-  },
-  "trade.form.tifHint.gtc": {
-    "en": "Rests on the book until it fills or you cancel it.",
-    "t": "Reste dans le carnet jusqu’à exécution ou jusqu’à ce que vous l’annuliez."
-  },
-  "trade.form.tifHint.ioc": {
-    "en": "Fills whatever it can right now; the rest is cancelled at once.",
-    "t": "Exécute ce qui peut l’être immédiatement ; le reste est annulé aussitôt."
-  },
-  "trade.form.tifHint.alo": {
-    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
-    "t": "Ne fait que reposer dans le carnet : elle est refusée plutôt qu’exécutée contre un ordre existant."
   },
   "trade.orders.col.avgFill": {
     "en": "Avg fill",
@@ -6572,8 +6572,8 @@
     "t": "Réseaux"
   },
   "ui.noOperations": {
-    "en": "No operations yet",
-    "t": "Aucune opération pour l’instant"
+    "en": "No activity yet",
+    "t": "Aucune activité pour l’instant"
   },
   "ui.none": {
     "en": "None",

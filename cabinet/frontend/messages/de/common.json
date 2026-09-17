@@ -3632,8 +3632,8 @@
     "t": "Zeitraum des Diagramms"
   },
   "dash.recentOperations": {
-    "en": "Recent operations",
-    "t": "Letzte Vorgänge"
+    "en": "Recent activity",
+    "t": "Letzte Aktivität"
   },
   "dash.strategyCount": {
     "en": "{n, plural, one {# strategy} other {# strategies}}",
@@ -3752,8 +3752,8 @@
     "t": "Nicht gefunden."
   },
   "err.opsLoad": {
-    "en": "Couldn't load your operations",
-    "t": "Ihre Vorgänge konnten nicht geladen werden"
+    "en": "Couldn't load your activity",
+    "t": "Ihre Aktivität konnte nicht geladen werden"
   },
   "err.phone.invalid": {
     "en": "Enter a valid phone number starting with + or country code",
@@ -3884,8 +3884,8 @@
     "t": "Dieser Fonds ist für neue Zeichnungen geschlossen. Ihre Anteile sind davon nicht betroffen — Sie können sie weiterhin vollständig zurückgeben."
   },
   "invest.blocked.locked": {
-    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised — contact support if you think you should have it.",
-    "t": "Dieser Fonds ist für Sie noch nicht geöffnet. Sie können ihn sehen, aber die Zeichnung bleibt gesperrt, bis Ihr Zugriff erhöht wird — wenden Sie sich an den Support, falls Sie ihn haben sollten."
+    "en": "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised. If you think you should have it:",
+    "t": "Dieser Fonds ist für Sie noch nicht geöffnet. Sie können ihn sehen, aber die Zeichnung bleibt gesperrt, bis Ihr Zugriff erhöht wird. Falls Sie ihn haben sollten:"
   },
   "invest.blocked.staleNav": {
     "en": "The fund's valuation is out of date, so dealing is paused until a fresh one is posted.",
@@ -4648,8 +4648,8 @@
     "t": "Auszahlungen"
   },
   "ops.filterByKind": {
-    "en": "Filter operations by kind",
-    "t": "Vorgänge nach Art filtern"
+    "en": "Filter activity by kind",
+    "t": "Aktivität nach Art filtern"
   },
   "ops.filterEmptyHint": {
     "en": "You have other activity — switch back to All to see it.",
@@ -4820,8 +4820,8 @@
     "t": "Jede Einzahlung, Auszahlung, Zeichnung und Rücknahme, die Sie getätigt haben, und jede Gebühr, die ein Fonds berechnet hat — in einer Zeitleiste."
   },
   "ops.truncatedNote": {
-    "en": "Showing your most recent operations — older activity isn't listed here yet.",
-    "t": "Es werden Ihre jüngsten Vorgänge gezeigt — ältere Aktivität ist hier noch nicht aufgeführt."
+    "en": "Showing your most recent activity — older entries aren't listed here yet.",
+    "t": "Es wird Ihre jüngste Aktivität gezeigt — ältere Einträge sind hier noch nicht aufgeführt."
   },
   "payment.consent.approve": {
     "en": "Consented",
@@ -4924,8 +4924,8 @@
     "t": "Aktivität"
   },
   "profile.activityCapped": {
-    "en": "Counted over your {n} most recent operations",
-    "t": "Gezählt über Ihre {n} letzten Vorgänge"
+    "en": "Counted over your {n} most recent activity entries",
+    "t": "Gezählt über Ihre {n} letzten Aktivitätseinträge"
   },
   "profile.activitySub": {
     "en": "Everything that has moved money on this account",
@@ -5879,13 +5879,13 @@
     "en": "Tax residence",
     "t": "Steuerlicher Wohnsitz"
   },
-  "tips.profile.kyc-level.title": {
-    "en": "What your KYC level means",
-    "t": "Was Ihr KYC-Level bedeutet"
-  },
   "tips.profile.kyc-level.body": {
     "en": "Level 0 is browse only: products, prices and your account. Level 1 means your identity is verified and opens a deposit address, withdrawals and subscribing.",
     "t": "Level 0 heißt nur ansehen: Produkte, Kurse und Ihr Konto. Level 1 bedeutet, Ihre Identität ist verifiziert, und öffnet eine Einzahlungsadresse, Auszahlungen und die Zeichnung."
+  },
+  "tips.profile.kyc-level.title": {
+    "en": "What your KYC level means",
+    "t": "Was Ihr KYC-Level bedeutet"
   },
   "tips.profile.personal.compliance.body": {
     "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
@@ -5894,14 +5894,6 @@
   "tips.profile.personal.compliance.title": {
     "en": "Why we collect this",
     "t": "Warum wir das erheben"
-  },
-  "tips.trade.book.title": {
-    "en": "How the book works",
-    "t": "So funktioniert das Buch"
-  },
-  "tips.trade.book.body": {
-    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
-    "t": "Im Buch handeln Halter bestehende Anteile untereinander — Käufer und Verkäufer treffen sich zu einem Geld- oder Briefkurs, den sie selbst setzen. Zeichnen ist etwas anderes: Es erzeugt neue Anteile zum veröffentlichten NAV, und die Rückgabe gibt sie zum NAV zurück."
   },
   "tips.settings.security.google-signin.body": {
     "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
@@ -5942,6 +5934,14 @@
   "tips.settings.sessions.this-device.title": {
     "en": "This device",
     "t": "Dieses Gerät"
+  },
+  "tips.trade.book.body": {
+    "en": "The book trades existing units between holders — a buyer and a seller meet at a bid or ask price they set themselves. Subscribing is different: it mints new units at the posted NAV, and redeeming returns them at NAV.",
+    "t": "Im Buch handeln Halter bestehende Anteile untereinander — Käufer und Verkäufer treffen sich zu einem Geld- oder Briefkurs, den sie selbst setzen. Zeichnen ist etwas anderes: Es erzeugt neue Anteile zum veröffentlichten NAV, und die Rückgabe gibt sie zum NAV zurück."
+  },
+  "tips.trade.book.title": {
+    "en": "How the book works",
+    "t": "So funktioniert das Buch"
   },
   "tips.wallet.balance.available.body": {
     "en": "Your spendable USDT right now — what you can invest into fund units or withdraw.",
@@ -6160,8 +6160,8 @@
     "t": "Limit"
   },
   "trade.form.locked": {
-    "en": "Trading isn't open to you on this product. Contact support if you think you should have access.",
-    "t": "Der Handel mit diesem Produkt ist für Sie nicht freigeschaltet. Wenden Sie sich an den Support, falls Sie Zugang haben sollten."
+    "en": "Trading isn't open to you on this product. If you think you should have access:",
+    "t": "Der Handel mit diesem Produkt ist für Sie nicht freigeschaltet. Falls Sie Zugang haben sollten:"
   },
   "trade.form.market": {
     "en": "Market",
@@ -6224,8 +6224,8 @@
     "t": "Der Preis muss ein Vielfaches von {tick} sein"
   },
   "trade.form.refusedBody": {
-    "en": "{detail} If you think you should be able to trade this product, contact support.",
-    "t": "{detail} Wenn Sie meinen, dieses Produkt handeln zu dürfen, wenden Sie sich an den Support."
+    "en": "{detail} If you think you should be able to trade this product:",
+    "t": "{detail} Wenn Sie meinen, dieses Produkt handeln zu dürfen:"
   },
   "trade.form.refusedTitle": {
     "en": "Order refused",
@@ -6251,6 +6251,18 @@
     "en": "Time in force",
     "t": "Gültigkeit"
   },
+  "trade.form.tifHint.alo": {
+    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
+    "t": "Wird nur ins Buch gestellt: statt gegen eine bestehende Order ausgeführt zu werden, wird sie abgelehnt."
+  },
+  "trade.form.tifHint.gtc": {
+    "en": "Rests on the book until it fills or you cancel it.",
+    "t": "Bleibt im Buch, bis sie ausgeführt wird oder Sie sie stornieren."
+  },
+  "trade.form.tifHint.ioc": {
+    "en": "Fills whatever it can right now; the rest is cancelled at once.",
+    "t": "Führt sofort aus, was möglich ist; der Rest wird umgehend storniert."
+  },
   "trade.form.tifLabel.alo": {
     "en": "Post-only",
     "t": "Nur Maker"
@@ -6262,18 +6274,6 @@
   "trade.form.tifLabel.ioc": {
     "en": "Immediate or cancel",
     "t": "Sofort oder stornieren"
-  },
-  "trade.form.tifHint.gtc": {
-    "en": "Rests on the book until it fills or you cancel it.",
-    "t": "Bleibt im Buch, bis sie ausgeführt wird oder Sie sie stornieren."
-  },
-  "trade.form.tifHint.ioc": {
-    "en": "Fills whatever it can right now; the rest is cancelled at once.",
-    "t": "Führt sofort aus, was möglich ist; der Rest wird umgehend storniert."
-  },
-  "trade.form.tifHint.alo": {
-    "en": "Only rests on the book: it is refused rather than filled against an existing order.",
-    "t": "Wird nur ins Buch gestellt: statt gegen eine bestehende Order ausgeführt zu werden, wird sie abgelehnt."
   },
   "trade.orders.col.avgFill": {
     "en": "Avg fill",
@@ -6572,8 +6572,8 @@
     "t": "Netzwerke"
   },
   "ui.noOperations": {
-    "en": "No operations yet",
-    "t": "Noch keine Vorgänge"
+    "en": "No activity yet",
+    "t": "Noch keine Aktivität"
   },
   "ui.none": {
     "en": "None",
