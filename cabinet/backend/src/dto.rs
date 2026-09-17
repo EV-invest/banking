@@ -1315,6 +1315,25 @@ impl From<bk::Treasury> for Treasury {
 	}
 }
 
+/// What `POST /api/admin/treasury/seed-capital` answers: a seed is a consilium, not a
+/// write, so `recorded` is always false and `consilium_id` is where the proposal lives.
+#[derive(Serialize)]
+pub struct SeedCapitalProposal {
+	pub recorded: bool,
+	pub amount: String,
+	pub consilium_id: String,
+}
+
+impl From<bk::SeedCapitalResponse> for SeedCapitalProposal {
+	fn from(r: bk::SeedCapitalResponse) -> Self {
+		Self {
+			recorded: r.recorded,
+			amount: r.amount,
+			consilium_id: r.consilium_id,
+		}
+	}
+}
+
 /// One outbox row the relay parked — the "money didn't move" set (Outbox screen).
 /// `reason` is the relay's last error; a `compensated` row already ran its recovery and
 /// must never be unparked (the hub refuses).

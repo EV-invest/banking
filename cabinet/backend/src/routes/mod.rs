@@ -121,6 +121,7 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/users/balance", get(admin::user_balance))
 		.route("/api/admin/treasury", get(admin::treasury))
 		.route("/api/admin/treasury/record-deposit", post(admin::record_treasury_deposit))
+		.route("/api/admin/treasury/seed-capital", post(admin::seed_capital))
 		.route("/api/admin/allocations", get(admin::list_allocations))
 		.route("/api/admin/allocations/register", post(admin::register_allocation))
 		.route("/api/admin/allocations/update", post(admin::update_allocation))
@@ -170,6 +171,7 @@ fn requests(state: AppState) -> Router {
 		// Consilium — the platform's own money moving or changing hands, gated on a quorum
 		// of owners. Money plane: the tally is computed and verified where the money is.
 		.route("/api/consilium", get(consilium::list))
+		.route("/api/consilium/holder-grant", post(consilium::open_holder_grant))
 		.route("/api/consilium/{id}", get(consilium::get))
 		.route("/api/consilium/{id}/cancel", post(consilium::cancel))
 		// Ownership — seats, and the two consilia that move them. Concierge plane:

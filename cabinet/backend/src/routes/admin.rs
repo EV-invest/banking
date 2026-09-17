@@ -264,8 +264,8 @@ pub async fn treasury(State(st): State<AppState>, jar: CookieJar) -> Result<Json
 /// Chain-proven and idempotent by `tx_ref`: the amount and the credited party are read off
 /// the chain, never taken from the form — the chain names the deposit address's owner, so
 /// this always credits a person. A transfer to a rail's treasury address is nobody's until
-/// the owners say whose: it is refused here and proposed through `SeedCapital` instead.
-/// Pass the real on-chain reference
+/// the owners say whose: it is refused here and proposed through
+/// `/api/admin/treasury/seed-capital` instead. Pass the real on-chain reference
 /// (`txhash:logIndex` on an EVM rail) so a re-submission, and any watcher that later scans
 /// the same transfer, collapse onto the same key.
 pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
@@ -295,6 +295,33 @@ pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar,
 		"party_kind": res.party_kind,
 		"party_id": res.party_id,
 	})))
+}
+
+/// `POST /api/admin/treasury/seed-capital` — propose a seed of the platform's capital
+/// (#245): a transfer that reached a rail's treasury address, proven against the chain,
+/// attributed to a person as their deposit and subscription into `fund`. Body: `tx_ref`,
+/// `network`, `expected_amount` (required — the figure the owners approve), and
+/// `depositor_user_id` (the id the console carries, resolved hub-side; empty = the
+/// caller). Opens a consilium and books nothing: the answer is `recorded: false`, the
+/// amount the terms carry, and the `consilium_id` the owners' room shows. The plane
+/// re-checks `CapitalManage` and refuses a proposer who holds no owner seat.
+pub async fn seed_capital(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::SeedCapitalProposal>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(tx_ref), Some(network), Some(expected_amount)) = (required(&v, "tx_ref"), required(&v, "network"), required(&v, "expected_amount")) else {
+		return Err(ApiError::BadRequest("tx_ref, network and expected_amount are required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::SeedCapitalRequest {
+		network,
+		tx_ref,
+		expected_amount,
+		depositor_user_id: required(&v, "depositor_user_id").unwrap_or_default(),
+	};
+	Ok(Json(st.grpc.seed_capital(&token, req).await?.into()))
 }
 
 // ── fees ─────────────────────────────────────────────────────────────────────
@@ -2680,6 +2707,10 @@ mod admin_route_tests {
 				r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000","idempotency_key":"k"}"#,
 			),
 			("/api/admin/allocations/backing", r#"{"service":"quy-nhon","backing":"cash"}"#),
+			(
+				"/api/admin/treasury/seed-capital",
+				r#"{"tx_ref":"0xabc:0","network":"bep20","expected_amount":"100","depositor_user_id":"investor-7"}"#,
+			),
 		] {
 			let (status, _) = send(&app, signed("POST", uri, Some(body), true)).await;
 			assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not change access or holdings: {uri}");
@@ -2764,6 +2795,12 @@ mod admin_route_tests {
 			("/api/admin/allocations/issue", r#"{"service":"quy-nhon","company":true,"units":"13000","idempotency_key":"k"}"#),
 			("/api/admin/allocations/issue", r#"{"service":"quy-nhon","user_id":"investor-7","idempotency_key":"k"}"#),
 			("/api/admin/allocations/issue", r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000"}"#),
+			// A seed names the transfer, its rail and the figure the owners approve, or it
+			// is not a proposal — `expected_amount` is not optional here as it is on a
+			// deposit, because the amount goes under the owners' signature.
+			("/api/admin/treasury/seed-capital", r#"{"network":"bep20","expected_amount":"100"}"#),
+			("/api/admin/treasury/seed-capital", r#"{"tx_ref":"0xabc:0","expected_amount":"100"}"#),
+			("/api/admin/treasury/seed-capital", r#"{"tx_ref":"0xabc:0","network":"bep20"}"#),
 		] {
 			let (status, response) = send(&app, signed("POST", uri, Some(body), true)).await;
 			assert_eq!(status, StatusCode::BAD_REQUEST, "must be refused before the hub is called: {uri} {body}");

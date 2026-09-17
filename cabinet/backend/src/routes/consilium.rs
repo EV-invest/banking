@@ -19,6 +19,7 @@ use axum::{
 	http::HeaderMap,
 };
 use axum_extra::extract::cookie::CookieJar;
+use evbanking_contracts::banking::v1 as bk;
 use evconcierge_contracts::concierge::v1 as cc;
 use serde::Deserialize;
 
@@ -57,6 +58,25 @@ pub async fn get(State(st): State<AppState>, jar: CookieJar, Path(id): Path<Stri
 	let token = require_money_token(&st, &jar).await?;
 	let consilium = st.grpc.get_consilium(&token, &id).await.map_err(|s| ApiError::read(s, "consilium unavailable"))?;
 	Ok(Json(consilium.into()))
+}
+
+/// `POST /api/consilium/holder-grant` — CSRF-checked: put a new holder of a reserved
+/// allocation to the owners (#245). Body `{allocation, user_id, units}`: `allocation` is
+/// `fee` or `fund`, `user_id` the id the console carries (resolved hub-side like every
+/// admin target), `units` a positive decimal. The plane refuses a roster too small to
+/// reach quorum, a person who is not an active user, and a proposer who holds no owner
+/// seat; the terms are immutable once open, so a correction means cancel and reopen.
+pub async fn open_holder_grant(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Consilium>, ApiError> {
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(allocation), Some(user_id), Some(units)) = (required(&v, "allocation"), required(&v, "user_id"), required(&v, "units")) else {
+		return Err(ApiError::BadRequest("allocation, user_id and units are required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let terms = bk::HolderGrantTerms { allocation, user_id, units };
+	Ok(Json(st.grpc.open_holder_grant(&token, terms).await?.into()))
 }
 
 /// `POST /api/consilium/{id}/cancel` — CSRF-checked: the initiator withdraws their own
@@ -390,6 +410,7 @@ mod route_tests {
 	#[tokio::test]
 	async fn every_signed_in_mutation_is_csrf_gated() {
 		let mutations = [
+			("/api/consilium/holder-grant", r#"{"allocation":"fee","user_id":"u-1","units":"100"}"#),
 			("/api/consilium/c-1/cancel", "{}"),
 			("/api/owners/removals", r#"{"target_user_id":"u-2","reason":"inactive"}"#),
 			("/api/owners/removals/r-1/vote", r#"{"vote":"remove"}"#),

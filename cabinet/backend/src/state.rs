@@ -748,6 +748,13 @@ impl Grpc {
 		Ok(self.balance().record_deposit(bearer(token, req)?).await?.into_inner())
 	}
 
+	/// Propose a seed of the platform's capital (#245): a chain-proven treasury arrival
+	/// attributed to a person as their deposit and subscription into `fund`. Opens a
+	/// consilium; nothing is booked until the owners' quorum executes it.
+	pub async fn seed_capital(&self, token: &str, req: bk::SeedCapitalRequest) -> Result<bk::SeedCapitalResponse, Status> {
+		Ok(self.balance().seed_capital(bearer(token, req)?).await?.into_inner())
+	}
+
 	pub async fn admin_user_balance(&self, token: &str, user_id: &str) -> Result<bk::UserBalanceResponse, Status> {
 		let req = bk::AdminBalanceRequest { user_id: user_id.to_string() };
 		Ok(self.users_svc().get_user_balance(bearer(token, req)?).await?.into_inner())
@@ -840,6 +847,14 @@ impl Grpc {
 			consilium_id: consilium_id.to_string(),
 		};
 		Ok(self.consilium().get_consilium(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Seat a new holder of a reserved allocation (#245): `units` of `fee` or `fund` for a
+	/// person, minted once the owners' quorum carries. Same plane and same token as the
+	/// other opens: the units are a share of the owners' money.
+	pub async fn open_holder_grant(&self, token: &str, terms: bk::HolderGrantTerms) -> Result<bk::Consilium, Status> {
+		let req = bk::OpenHolderGrantRequest { terms: Some(terms) };
+		Ok(self.consilium().open_holder_grant(bearer(token, req)?).await?.into_inner())
 	}
 
 	/// Put a NAV mark past the move guard to the owners (banking#232). Same plane and same

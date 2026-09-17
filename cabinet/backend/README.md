@@ -56,7 +56,8 @@ is that allocation in the treasury's shape; the old revenue payout is history on
 | Route | Plane | Token |
 | ----- | ----- | ----- |
 | `GET /api/consilium`, `GET /api/consilium/{id}` | money | banking |
-| `POST /api/consilium/{id}/cancel` | money | banking |
+| `POST /api/consilium/holder-grant` (`{ allocation, user_id, units }`), `POST /api/consilium/{id}/cancel` | money | banking |
+| `POST /api/admin/treasury/seed-capital` (`{ tx_ref, network, expected_amount, depositor_user_id? }` → `{ recorded: false, amount, consilium_id }`) | money | banking (Admin\|Owner) |
 | `GET /api/owners`, `POST /api/owners/resign` | ownership | concierge |
 | `GET`/`POST /api/owners/removals`, `POST /api/owners/removals/{id}/vote`, `…/cancel` | ownership | concierge |
 | `GET`/`POST /api/owners/admissions`, `POST /api/owners/admissions/{id}/vote`, `…/cancel` | ownership | concierge |
@@ -166,7 +167,7 @@ the holder has AVAILABLE (units resting on the book or reserved by a redemption 
 count) is `400`; an unknown `service` or `user_id` is `404`. A retirement out of a product
 that is not `closed` is `412` unless the body carries `force: true`. Units of the reserved
 `fee` / `fund` allocations are never minted here: a person is seated in them by the
-owners' consilium (`ConsiliumService.OpenHolderGrant`).
+owners' consilium (`POST /api/consilium/holder-grant`).
 
 `Allocation.backing` (`cash` | `in_kind`) says what stands behind the units. The hub
 flips a product to `in_kind` on its first mint; `/allocations/backing` is how an operator
