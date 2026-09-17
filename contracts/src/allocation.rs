@@ -17,12 +17,11 @@
 //! investor ─ FundsService.Subscribe ────▶ refused unless open AND `invest` for the caller
 //! investor ─ FundsService.Redeem ───────▶ allowed while open OR closed, at ANY access
 //! operator ─ SetAllocationUnitCap ▶ supply  (how many units may ever be issued)
-//! operator ─ IssueUnits ─────────▶ units minted IN KIND to a user or the fee allocation
-//! operator ─ TransferCompanyStake ▶ retired (#245): FAILED_PRECONDITION
+//! operator ─ IssueUnits ─────────▶ units minted IN KIND to a person
 //! operator ─ RetireUnits ────────▶ a holder's units burnt IN KIND, supply shrinks
 //! operator ─ SetAllocationBacking ▶ cash | in_kind — whether Redeem may pay out
 //! investor ─ FundsService.Redeem ───────▶ refused while `in_kind` (sell on the book instead)
-//! operator ─ ListUnitHolders ────▶ company / fee / investor split of the supply
+//! operator ─ ListUnitHolders ────▶ the cap table: every holder (people, the `fee` allocation) and their units
 //! operator ─ RevokeAllocationAccess ▶ the investor falls back to the default
 //! operator ─ SetAllocationState ─▶ closed   (redeem only — never traps an investor)
 //! ```
@@ -39,21 +38,20 @@
 //! [`FundsService`](crate::banking::v1::funds_service_client::FundsServiceClient) and
 //! `BalanceService`, keyed by the same `service` slug this registry owns. The one
 //! exception is `IssueUnits`: supply an operator mints **in kind** — no cash leg — to a
-//! [`holder`] that is an investor or the reserved `fee` allocation, for a product
-//! registered against an asset that already has owners — and `RetireUnits`, the mint's
-//! mirror. (`TransferCompanyStake` is retired with the company holder, #245.) Its vocabularies ([`holder`], [`issuance_source`],
-//! [`issuance_state`]) are pinned here like the others, as is [`backing`]: whether a
-//! product's units have the fund's cash behind them, which is what decides whether
-//! `Redeem` may pay them out.
+//! person, for a product registered against an asset that already has owners — and
+//! `RetireUnits`, the mint's mirror. The other [`holder`] kind, a reserved allocation
+//! (`fee` holding a product's fee class), is minted to by the fee accrual alone; the
+//! company is no holder at all (#245 — `TransferCompanyStake` went with it). Its
+//! vocabularies ([`holder`], [`issuance_source`], [`issuance_state`]) are pinned here
+//! like the others, as is [`backing`]: whether a product's units have the fund's cash
+//! behind them, which is what decides whether `Redeem` may pay them out.
 
 pub use crate::banking::v1::{
 	Allocation, AllocationAccessGrant, AllocationAccessGrantList, AllocationList, GetAllocationRequest, GrantAllocationAccessRequest, IssueUnitsRequest, ListAllocationAccessGrantsRequest,
 	ListAllocationsRequest, ListUnitHoldersRequest, RegisterAllocationRequest, RetireUnitsRequest, RevokeAllocationAccessRequest, RevokeAllocationAccessResponse, SetAllocationAccessRequest,
-	SetAllocationBackingRequest, SetAllocationStateRequest, SetAllocationUnitCapRequest, TransferCompanyStakeRequest, UnitHolders, UnitIssuance, UpdateAllocationRequest,
+	SetAllocationBackingRequest, SetAllocationStateRequest, SetAllocationUnitCapRequest, UnitHolderRef, UnitHolders, UnitHolding, UnitIssuance, UpdateAllocationRequest,
 	allocations_service_client::AllocationsServiceClient,
 	allocations_service_server::{AllocationsService, AllocationsServiceServer},
-	issue_units_request::Holder as IssueUnitsHolder,
-	retire_units_request::Holder as RetireUnitsHolder,
 };
 
 /// The unit cap a `RegisterAllocation` lands on, as its wire decimal — 100,000,000
@@ -237,25 +235,31 @@ pub mod backing {
 	}
 }
 
-/// The canonical `UnitIssuance.holder_kind` strings — who an in-kind issuance minted
-/// units to.
+/// The canonical holder-kind strings — `UnitIssuance.holder_kind`, and
+/// `UnitHolderRef.kind` on the cap table (`UnitHolders.holders`) and the treasury
+/// (`AllocationTreasury.holders`).
 ///
 /// The hub's `domain::issuance::UnitHolder` stores exactly these
-/// (`unit_holder_strings_are_canonical` guards that side). Only a `user` row's
-/// `holder_id` is a user: an `allocation` row's is the holding allocation's slug, and a
+/// (`unit_holder_strings_are_canonical` guards that side). Only a `user` row's id is a
+/// user: an `allocation` row's is the holding allocation's slug, and a historical
 /// `company` row's is empty — a client must never resolve either as a user.
 pub mod holder {
-	/// An investor; `holder_id` is their banking user id.
+	/// An investor; the id is their banking user id.
 	pub const USER: &str = "user";
-	/// The fund's own stake; `holder_id` is empty. Retired (#245): no new issuance names
-	/// it, but the rows that do are still served and must still render.
+	/// The fund's own stake; the id is empty. Retired (#245): no new issuance names it
+	/// and no cap table lists it, but the issuance rows that do are still served and must
+	/// still render.
 	pub const COMPANY: &str = "company";
 	/// A reserved allocation (`fee` | `fund`) holding units of this product — the
-	/// product's fee class is held by `fee`; `holder_id` is that allocation's slug.
+	/// product's fee class is held by `fee`; the id is that allocation's slug.
 	pub const ALLOCATION: &str = "allocation";
 
 	/// Every holder kind.
 	pub const ALL: [&str; 3] = [USER, COMPANY, ALLOCATION];
+
+	/// The kinds a LIVE holder can be — what `UnitHolderRef.kind` carries. `company` is
+	/// history only.
+	pub const LIVE: [&str; 2] = [USER, ALLOCATION];
 
 	/// Whether `kind` is one this contract defines.
 	pub fn is_known(kind: &str) -> bool {
@@ -267,12 +271,12 @@ pub mod holder {
 ///
 /// The hub's `domain::issuance::IssuanceSource` stores exactly these
 /// (`issuance_source_strings_are_canonical` guards that side). A `mint` grew the
-/// supply by the row's `units`; a `company` row moved them out of the company's stake
-/// and left the supply alone; a `retire` row burnt them and shrank the supply. `units`
-/// is always the magnitude — a client summing issuances into "units created" adds the
-/// first, ignores the second and subtracts the third.
+/// supply by the row's `units`; a `company` row (history only, #245) moved them out of
+/// the company's stake and left the supply alone; a `retire` row burnt them and shrank
+/// the supply. `units` is always the magnitude — a client summing issuances into "units
+/// created" adds the first, ignores the second and subtracts the third.
 pub mod issuance_source {
-	/// Minted in kind (`IssueUnits`).
+	/// Minted in kind (`IssueUnits`, or an executed holder grant).
 	pub const MINT: &str = "mint";
 	/// Handed over out of the company's stake (`TransferCompanyStake`, retired — historical rows only).
 	pub const COMPANY: &str = "company";
@@ -402,6 +406,10 @@ mod tests {
 		// (`unit_holder_strings_are_canonical` guards the other side).
 		assert_eq!(holder::ALL, ["user", "company", "allocation"]);
 		assert!(holder::ALL.iter().all(|h| holder::is_known(h)));
+		// The company is history: a live holder on a cap table is a person or an allocation.
+		assert_eq!(holder::LIVE, ["user", "allocation"]);
+		assert!(holder::LIVE.iter().all(|h| holder::is_known(h)));
+		assert!(!holder::LIVE.contains(&holder::COMPANY));
 		// A reserved allocation is a holder of kind `allocation`, named by `holder_id` —
 		// its slug is never a kind of its own.
 		assert!(!holder::is_known("fund"));

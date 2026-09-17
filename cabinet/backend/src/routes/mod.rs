@@ -131,7 +131,6 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/allocations/grants/grant", post(admin::grant_allocation_access))
 		.route("/api/admin/allocations/grants/revoke", post(admin::revoke_allocation_access))
 		.route("/api/admin/allocations/issue", post(admin::issue_units))
-		.route("/api/admin/allocations/transfer-stake", post(admin::transfer_company_stake))
 		.route("/api/admin/allocations/retire", post(admin::retire_units))
 		.route("/api/admin/allocations/backing", post(admin::set_allocation_backing))
 		.route("/api/admin/allocations/holders", get(admin::list_unit_holders))
@@ -154,7 +153,6 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/withdrawals/settle", post(admin::settle_withdrawal))
 		.route("/api/admin/withdrawals/fail", post(admin::fail_withdrawal))
 		.route("/api/admin/revenue", get(admin::fund_revenue))
-		.route("/api/admin/revenue/payout", post(admin::request_revenue_payout))
 		.route("/api/admin/revenue/cancel", post(admin::cancel_revenue_payout))
 		.route("/api/admin/revenue/payouts", get(admin::revenue_payouts))
 		.route("/api/admin/outbox/parked", get(admin::parked_events))
@@ -169,10 +167,9 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/payments", get(payments::list).post(payments::open))
 		.route("/api/admin/payments/{id}", get(payments::get))
 		.route("/api/admin/payments/{id}/cancel", post(payments::cancel))
-		// Consilium — the fund's own money leaving, gated on a quorum of owners. Money
-		// plane: the tally is computed and verified where the money is.
+		// Consilium — the platform's own money moving or changing hands, gated on a quorum
+		// of owners. Money plane: the tally is computed and verified where the money is.
 		.route("/api/consilium", get(consilium::list))
-		.route("/api/consilium/revenue-payout", post(consilium::open_revenue_payout))
 		.route("/api/consilium/{id}", get(consilium::get))
 		.route("/api/consilium/{id}/cancel", post(consilium::cancel))
 		// Ownership — seats, and the two consilia that move them. Concierge plane:

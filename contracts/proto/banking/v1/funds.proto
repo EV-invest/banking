@@ -136,11 +136,12 @@ message FundNav {
   // than Subscribe will accept.
   string unit_cap = 7;           // decimal units
   string remaining_capacity = 8; // decimal units still issuable (0 once at the cap)
-  // Of `units_outstanding`, the company's own stake — units issued in kind to the fund
-  // itself (AllocationsService.IssueUnits), never bought through Subscribe. Shown to an
-  // investor so the share of the product that is neither theirs nor the market's is on
-  // the card rather than inferred from a supply that does not add up.
-  string company_units = 9;      // decimal units
+  // Field 9 was `company_units`, the company's own in-kind stake. The company is not a
+  // holder any more (#245): every unit is a person's, directly or through the units of
+  // a reserved allocation, and the cap table (`AllocationsService.ListUnitHolders`) is
+  // where the split lives. Reserved so no later field inherits the number.
+  reserved 9;
+  reserved "company_units";
 }
 
 // One operator valuation mark, as posted. Same figures as FundNav, without the live

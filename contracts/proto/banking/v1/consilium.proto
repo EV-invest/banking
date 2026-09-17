@@ -2,9 +2,16 @@ syntax = "proto3";
 
 package banking.v1;
 
-// ConsiliumService — multi-owner authorization for the fund paying its OWN earned
-// revenue out. One owner opens an invoice; strictly more than half of ALL owners must
-// each confirm it from their mailbox before a single cent moves.
+// ConsiliumService — multi-owner authorization over the platform's own money and its
+// price: a payment out of a service claim (opened inside `PaymentsService.OpenPayment`),
+// a NAV mark past the move guard, a change of fee terms beyond the house envelope, a new
+// holder of a reserved allocation (`OpenHolderGrant`), and a seed of the platform's
+// capital (`BalanceService.SeedCapital`). One owner opens a request; strictly more than
+// half of ALL owners must each confirm it from their mailbox before anything happens.
+//
+// The kinds, as the `Consilium` message tells them apart (exactly one terms sibling is
+// set): `revenue_payout` (HISTORY ONLY — retired by #245, nothing opens one), `payment`,
+// `valuation_override`, `fee_policy`, `holder_grant`, `seed_capital`.
 //
 // WHY THE MONEY PLANE OWNS THIS. docs/ARCHITECTURE.md rejects letting a
 // concierge-signed artifact authorize money movement, and a consilium verdict is
@@ -21,10 +28,14 @@ package banking.v1;
 // terms shown in the mail; changing anything means cancel and reopen, and votes are not
 // carried over. See docs/CONSILIUM.md for the full policy and threat model.
 service ConsiliumService {
-  // Open an invoice to pay fund revenue out on-chain (Owner only). Refused when a
-  // consilium is already open — one at a time removes the concurrent-approval
-  // overdraw race instead of trying to win it — or when the roster is too small.
-  rpc OpenRevenuePayout(OpenRevenuePayoutRequest) returns (Consilium);
+  // Seat a new holder of a reserved allocation (Owner only): `units` of `fee` or `fund`
+  // minted to a person, with no cash leg, once the quorum carries. The units are
+  // frozen into the terms, not a cash figure — what they are worth is the allocation's
+  // NAV at execution, as a subscription is priced at its own moment. Refused when the
+  // person is not an active user, when the allocation is not reserved, or when the
+  // roster is too small. This is the ONLY way a person comes to hold `fee` or `fund`
+  // other than a seed (`BalanceService.SeedCapital`) or the book.
+  rpc OpenHolderGrant(OpenHolderGrantRequest) returns (Consilium);
 
   // Put a NAV mark the move guard refuses to the owners (ValuationPost holders — the
   // poster proposes, the owners decide). Executing it records the mark at exactly this
@@ -66,7 +77,7 @@ enum ConsiliumState {
   CONSILIUM_STATE_UNSPECIFIED = 0;
   // Collecting votes.
   CONSILIUM_STATE_OPEN = 1;
-  // Quorum reached; the payout has not been created yet.
+  // Quorum reached; the effect has not been created yet.
   CONSILIUM_STATE_APPROVED = 2;
   // Enough owners rejected that the threshold can no longer be reached.
   CONSILIUM_STATE_REJECTED = 3;
@@ -74,9 +85,9 @@ enum ConsiliumState {
   CONSILIUM_STATE_EXPIRED = 4;
   // The initiator withdrew it.
   CONSILIUM_STATE_CANCELLED = 5;
-  // The payout exists; `executed_withdrawal_id` points at it.
+  // The effect exists; the matching `executed_*_id` points at it.
   CONSILIUM_STATE_EXECUTED = 6;
-  // Approved, but the payout could not be created (e.g. revenue no longer covers it).
+  // Approved, but the effect could not be created (e.g. the claim no longer covers it).
   // `failure_reason` says why. Nothing retries silently.
   CONSILIUM_STATE_EXECUTION_FAILED = 7;
 }
@@ -89,8 +100,11 @@ enum VoteDecision {
   VOTE_DECISION_REJECT = 3;
 }
 
-// The immutable subject of a revenue payout. Amounts are decimal USDT STRINGS, as
-// everywhere else on this wire.
+// The immutable subject of a revenue payout — HISTORY ONLY. Retired by #245: the
+// platform's earnings are the `fee` allocation's, held by people, and cash leaves it by
+// a holder's redemption or a `payment` out of `service:fee`. Consilia opened before the
+// retirement still read (and, if approved, execute) through this. Amounts are decimal
+// USDT STRINGS, as everywhere else on this wire.
 message RevenuePayoutTerms {
   // Rail the payout ships on (BEP20 / POLYGON / TRC20 / TON).
   string network = 1;
@@ -103,9 +117,9 @@ message RevenuePayoutTerms {
   string memo = 4;
 }
 
-// The immutable subject of a PAYMENT consilium — the §3 rule that money belonging to the
-// fund (`piggybank`, `revenue`, `service:<id>`) moves only on the owners' quorum, at every
-// tier.
+// The immutable subject of a PAYMENT consilium — the §3 rule that money pooled in an
+// allocation (`service:<id>`, the reserved `fee` and `fund` included) moves only on the
+// owners' quorum, at every tier.
 //
 // A PROJECTION OF THE ORDER, not the order. `banking.v1.Payment` (payments.proto) is what
 // the payments screen reads; this is what an owner needs in order to judge one request:
@@ -178,6 +192,33 @@ message ValuationOverrideTerms {
   string aum = 2;
 }
 
+// The immutable subject of a HOLDER-GRANT consilium (#245): `units` of the reserved
+// `allocation` minted to `user_id`, with no cash leg. The units are frozen, not a cash
+// figure — what they are worth is the allocation's NAV at execution. Executing it records
+// a `UnitIssuance` (`source = "mint"`, holder `user`) that `executed_issuance_id` names.
+message HolderGrantTerms {
+  string allocation = 1;  // fee | fund — a reserved allocation only
+  // On the request: a banking (or concierge) user id, resolved the way every admin RPC
+  // resolves a target. On a response: the money-plane id the terms stored.
+  string user_id = 2;
+  string units = 3;       // decimal units, > 0
+}
+
+// The immutable subject of a SEED-CAPITAL consilium (#245): the transfer `tx_ref` names
+// on `network`, which the chain must report as exactly `amount` USDT landing on the
+// treasury from outside, is `depositor_user_id`'s — booked as their deposit and
+// subscribed into `fund` at its price when the quorum executes. The amount is frozen
+// into the terms (the owners approve "this dollar is this person's"); the units are
+// not — they are what the cash buys at execution. Executing it records the fund
+// subscription `executed_subscription_id` names. Opened through
+// `BalanceService.SeedCapital`, never here.
+message SeedCapitalTerms {
+  string tx_ref = 1;             // `txhash:logIndex` (EVM) | `txhash:recipient` (TON)
+  string network = 2;            // bep20 | polygon | trc20 | ton
+  string amount = 3;             // decimal USDT, as the chain reports it
+  string depositor_user_id = 4;  // the money-plane id the terms stored
+}
+
 // One owner's seat in a consilium.
 message ConsiliumVoter {
   string user_id = 1;
@@ -194,9 +235,9 @@ message Consilium {
   string id = 1;
   ConsiliumState state = 2;
   // EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,
-  // `fee_policy`) is set, decided by the kind. Named fields rather than a oneof because the
-  // surfaces read them by name and a oneof buys nothing here that the "exactly one" rule
-  // does not already give.
+  // `fee_policy`, `holder_grant`, `seed_capital`) is set, decided by the kind. Named fields
+  // rather than a oneof because the surfaces read them by name and a oneof buys nothing
+  // here that the "exactly one" rule does not already give.
   RevenuePayoutTerms revenue_payout = 3;
   // Hex SHA-256 over the canonical terms. Shown (short prefix) in the mail so an owner
   // can tell that what they approved is what will execute.
@@ -213,10 +254,11 @@ message Consilium {
   int64 created_at = 12;
   int64 expires_at = 13;
   int64 decided_at = 14;
-  // Set exactly once, on EXECUTED — and exactly ONE of the three effect ids is
-  // (`executed_withdrawal_id`, `executed_payment_id`, `executed_valuation_id`), because a
-  // consilium has one effect. `consilium_execution_is_recorded` states that to the database
-  // as `num_nonnulls(...) = 1`.
+  // Set exactly once, on EXECUTED — and exactly ONE of the effect ids is
+  // (`executed_withdrawal_id`, `executed_payment_id`, `executed_valuation_id`,
+  // `executed_fee_policy_change_id`, `executed_issuance_id`, `executed_subscription_id`),
+  // because a consilium has one effect. `consilium_execution_is_recorded` states that to
+  // the database as `num_nonnulls(...) = 1`.
   string executed_withdrawal_id = 15;
   string failure_reason = 16;
   // Monotonic per consilium. The live page watches this and refetches when it moves —
@@ -233,14 +275,24 @@ message Consilium {
   ConsiliumFeePolicyTerms fee_policy = 22;
   // The fee-policy change an executed FEE_POLICY consilium scheduled.
   string executed_fee_policy_change_id = 23;
+  // The fifth terms sibling — set exactly for a HOLDER_GRANT consilium.
+  HolderGrantTerms holder_grant = 24;
+  // The sixth — set exactly for a SEED_CAPITAL consilium.
+  SeedCapitalTerms seed_capital = 25;
+  // The in-kind issuance an executed HOLDER_GRANT consilium minted
+  // (`AllocationsService.UnitIssuance`).
+  string executed_issuance_id = 26;
+  // The `fund` subscription an executed SEED_CAPITAL consilium booked
+  // (`FundsService.Subscription`).
+  string executed_subscription_id = 27;
 }
 
 message ConsiliumList {
   repeated Consilium items = 1;
 }
 
-message OpenRevenuePayoutRequest {
-  RevenuePayoutTerms terms = 1;
+message OpenHolderGrantRequest {
+  HolderGrantTerms terms = 1;
 }
 
 message OpenValuationOverrideRequest {
@@ -270,8 +322,7 @@ message GetInvitationRequest {
 message ConsiliumInvitation {
   string consilium_id = 1;
   ConsiliumState state = 2;
-  // Exactly one of `revenue_payout`, `payment` and `valuation_override` is set — see
-  // `Consilium`.
+  // Exactly one of the terms siblings is set — see `Consilium`.
   RevenuePayoutTerms revenue_payout = 3;
   string payload_hash = 4;
   // Who opened it, masked.
@@ -291,6 +342,8 @@ message ConsiliumInvitation {
   ConsiliumPaymentTerms payment = 14;
   ValuationOverrideTerms valuation_override = 15;
   ConsiliumFeePolicyTerms fee_policy = 16;
+  HolderGrantTerms holder_grant = 17;
+  SeedCapitalTerms seed_capital = 18;
 }
 
 message SubmitDecisionRequest {

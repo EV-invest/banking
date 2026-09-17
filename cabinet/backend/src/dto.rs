@@ -480,19 +480,21 @@ impl From<bk::AllocationAccessGrant> for AllocationAccessGrant {
 
 list_dto! { AllocationAccessGrantList from bk::AllocationAccessGrantList { grants: Vec<AllocationAccessGrant> } }
 
-/// One in-kind issuance — units an operator moved with no cash behind them: minted
-/// (`source: mint`), moved out of the company's stake (`source: company`, supply
-/// unchanged) or burnt out of the holder's account (`source: retire`, supply shrank).
-/// `units` is always the magnitude; `source` is the direction. `holder_id` is a
-/// BANKING user id for a `user` holder and empty for `company` (the fund's own stake,
-/// which has no user to resolve). `state` is `queued` until the relay posts the leg,
-/// then `applied`; the console polls for the latter before it shows the holder their
-/// units.
+/// One in-kind issuance — units moved with no cash behind them: minted (`source: mint`,
+/// by an operator or an executed holder grant) or burnt out of the holder's account
+/// (`source: retire`, supply shrank); rows that predate #245 may read `source: company`
+/// (moved out of the company's stake, supply unchanged). `units` is always the
+/// magnitude; `source` is the direction. `holder_id` is a BANKING user id for a `user`
+/// holder and the holding allocation's slug for an `allocation` holder (the `fee`
+/// allocation holding a product's fee class) — never resolve the latter as a user;
+/// empty on a historical `company` row. `state` is `queued` until the relay posts the
+/// leg, then `applied`; the console polls for the latter before it shows the holder
+/// their units.
 #[derive(Serialize)]
 pub struct UnitIssuance {
 	pub id: String,
 	pub service: String,
-	/// `user` | `company`.
+	/// `user` | `allocation` (`company` on rows that predate #245).
 	pub holder_kind: String,
 	pub holder_id: String,
 	pub units: String,
@@ -501,7 +503,7 @@ pub struct UnitIssuance {
 	/// `queued` | `applied`.
 	pub state: String,
 	pub created_at: String,
-	/// `mint` | `company` | `retire`.
+	/// `mint` | `retire` (`company` on rows that predate #245).
 	pub source: String,
 }
 
@@ -522,18 +524,53 @@ impl From<bk::UnitIssuance> for UnitIssuance {
 	}
 }
 
-/// A product's settled supply by holder class, all decimal units. `investor_units` is
-/// what is left once the company's and the fee account's holdings are taken out of
-/// `units_outstanding`. `queued_units` are mints recorded but not yet on the ledger —
-/// the console must not pin the cap to `units_outstanding` while it is non-zero.
+/// One holder of an allocation's units, as the cap table and the treasury name them:
+/// `kind` is `user` (`id` is the banking user id) or `allocation` (`id` is the holding
+/// allocation's slug — the reserved `fee` allocation holding a product's fee class). A
+/// screen resolves a `user` through the directory and renders an `allocation` by its
+/// slug; it never looks the latter up as a person.
+#[derive(Serialize)]
+pub struct UnitHolderRef {
+	/// `user` | `allocation`.
+	pub kind: String,
+	pub id: String,
+}
+
+impl From<bk::UnitHolderRef> for UnitHolderRef {
+	fn from(h: bk::UnitHolderRef) -> Self {
+		Self { kind: h.kind, id: h.id }
+	}
+}
+
+/// One line of a cap table: who, and how many units (decimal). Zero holdings are not
+/// listed. `holder` is never `null`: the plane always names one, and a line without a
+/// holder would be the very "unit that is nobody's" #245 rules out — it is dropped
+/// rather than rendered as a blank row.
+#[derive(Serialize)]
+pub struct UnitHolding {
+	pub holder: UnitHolderRef,
+	pub units: String,
+}
+
+impl UnitHolding {
+	fn from_wire(h: bk::UnitHolding) -> Option<Self> {
+		Some(Self {
+			holder: h.holder.map(UnitHolderRef::from)?,
+			units: h.units,
+		})
+	}
+}
+
+/// A product's cap table (#245): the settled supply and every holder of it, largest
+/// first — people and the `fee` allocation alike, each a line. `queued_units` are mints
+/// recorded but not yet on the ledger — the console must not pin the cap to
+/// `units_outstanding` while it is non-zero.
 #[derive(Serialize)]
 pub struct UnitHolders {
 	pub service: String,
 	pub units_outstanding: String,
-	pub company_units: String,
-	pub fee_units: String,
-	pub investor_units: String,
 	pub queued_units: String,
+	pub holders: Vec<UnitHolding>,
 }
 
 impl From<bk::UnitHolders> for UnitHolders {
@@ -541,10 +578,8 @@ impl From<bk::UnitHolders> for UnitHolders {
 		Self {
 			service: h.service,
 			units_outstanding: h.units_outstanding,
-			company_units: h.company_units,
-			fee_units: h.fee_units,
-			investor_units: h.investor_units,
 			queued_units: h.queued_units,
+			holders: h.holders.into_iter().filter_map(UnitHolding::from_wire).collect(),
 		}
 	}
 }
@@ -636,9 +671,6 @@ pub struct FundNav {
 	/// Units still issuable — already nets off in-flight mints, so a screen offering it
 	/// can never offer more than Subscribe accepts.
 	pub remaining_capacity: String,
-	/// Of `units_outstanding`, the company's own in-kind stake — so the share of the
-	/// product that is neither the investor's nor the market's is on the card.
-	pub company_units: String,
 }
 
 impl From<bk::FundNav> for FundNav {
@@ -652,7 +684,6 @@ impl From<bk::FundNav> for FundNav {
 			stale: f.stale,
 			unit_cap: f.unit_cap,
 			remaining_capacity: f.remaining_capacity,
-			company_units: f.company_units,
 		}
 	}
 }
@@ -1191,16 +1222,71 @@ pub struct RailLiquidity {
 	pub is_testnet: bool,
 }
 
-/// The two-layer treasury picture (Treasury screen).
+/// An allocation's cash claim, read off one ledger balance: `posted` is settled,
+/// `reserved` is spoken for by approved payments out of it, `available` is the difference.
+#[derive(Default, Serialize)]
+pub struct AllocationClaim {
+	pub posted: String,
+	pub available: String,
+	pub reserved: String,
+}
+
+impl From<bk::AllocationClaim> for AllocationClaim {
+	fn from(c: bk::AllocationClaim) -> Self {
+		Self {
+			posted: c.posted,
+			available: c.available,
+			reserved: c.reserved,
+		}
+	}
+}
+
+/// One allocation as the treasury shows it (#245): name, cash, supply, price and who
+/// holds it — the same shape for a product and for the hidden `fee` / `fund` allocations
+/// (`access: hidden`), which is also what the Revenue screen reads for `fee`.
+/// `nav_posted_at` is `"0"` while nothing under it has been marked (seed-priced). A
+/// missing `claim` on the wire (a plane older than this contract) crosses as zeros
+/// rather than `null`, so a figure is always a figure.
+#[derive(Serialize)]
+pub struct AllocationTreasury {
+	pub service: String,
+	pub title: String,
+	/// `hidden` | `view` | `invest`.
+	pub access: String,
+	pub claim: AllocationClaim,
+	pub units_outstanding: String,
+	pub nav: String,
+	pub nav_posted_at: String,
+	pub holders: Vec<UnitHolding>,
+}
+
+impl From<bk::AllocationTreasury> for AllocationTreasury {
+	fn from(a: bk::AllocationTreasury) -> Self {
+		Self {
+			service: a.service,
+			title: a.title,
+			access: a.access,
+			claim: a.claim.map(AllocationClaim::from).unwrap_or_default(),
+			units_outstanding: a.units_outstanding,
+			nav: a.nav,
+			nav_posted_at: a.nav_posted_at_unix.to_string(),
+			holders: a.holders.into_iter().filter_map(UnitHolding::from_wire).collect(),
+		}
+	}
+}
+
+/// The two-layer treasury picture (Treasury screen): per-rail custody, and who the claims
+/// on it belong to — people directly (`held_by_users`) or through the units of an
+/// allocation (`allocations`, the hidden `fee` and `fund` included). No remainder: each
+/// figure is read off its own accounts.
 #[derive(Serialize)]
 pub struct Treasury {
 	pub rails: Vec<RailLiquidity>,
 	pub bank: String,
 	pub total_custody: String,
-	pub fund_capital: String,
-	pub fee_revenue: String,
-	pub held_for_clients: String,
 	pub reserved_for_withdrawals: String,
+	pub held_by_users: String,
+	pub allocations: Vec<AllocationTreasury>,
 }
 
 impl From<bk::Treasury> for Treasury {
@@ -1222,10 +1308,9 @@ impl From<bk::Treasury> for Treasury {
 				.collect(),
 			bank: t.bank,
 			total_custody: t.total_custody,
-			fund_capital: t.fund_capital,
-			fee_revenue: t.fee_revenue,
-			held_for_clients: t.held_for_clients,
 			reserved_for_withdrawals: t.reserved_for_withdrawals,
+			held_by_users: t.held_by_users,
+			allocations: t.allocations.into_iter().map(AllocationTreasury::from).collect(),
 		}
 	}
 }
@@ -1336,47 +1421,6 @@ impl From<bk::WithdrawalQueue> for WithdrawalQueue {
 					net_amount: i.net_amount,
 					state: i.state,
 					created_at: i.created_at.to_string(),
-				})
-				.collect(),
-		}
-	}
-}
-
-/// Per-rail payout options (admin Revenue screen) — the mirror of a user's
-/// `NetworkWithdrawable`.
-#[derive(Serialize)]
-pub struct RevenueRail {
-	pub network: String,
-	pub payable: String,
-	pub instant: String,
-	pub minimum: String,
-}
-
-/// What the fund has EARNED and may pay itself: the `fee` claim, credited by the fee
-/// retained on a user withdrawal and by the settled 2-and-20. Client money and the
-/// fund's seed capital are separate claims and are not part of this figure.
-#[derive(Serialize)]
-pub struct FundRevenue {
-	pub earned: String,
-	pub available: String,
-	pub pending_payout: String,
-	pub rails: Vec<RevenueRail>,
-}
-
-impl From<bk::FundRevenue> for FundRevenue {
-	fn from(r: bk::FundRevenue) -> Self {
-		Self {
-			earned: r.earned,
-			available: r.available,
-			pending_payout: r.pending_payout,
-			rails: r
-				.rails
-				.into_iter()
-				.map(|rail| RevenueRail {
-					network: rail.network,
-					payable: rail.payable,
-					instant: rail.instant,
-					minimum: rail.minimum,
 				})
 				.collect(),
 		}
@@ -1572,7 +1616,8 @@ pub fn mask_email(email: &str) -> String {
 	}
 }
 
-/// The immutable subject of a revenue payout. The address is carried in FULL — a
+/// The immutable subject of a revenue payout — HISTORY ONLY since #245 (nothing opens
+/// one; the consilia that were open still read). The address is carried in FULL — a
 /// truncated address on a surface where a human approves it is an invitation to approve
 /// the wrong one.
 #[derive(Default, Serialize)]
@@ -1711,13 +1756,55 @@ impl From<bk::ConsiliumFeePolicyTerms> for ConsiliumFeePolicyTerms {
 	}
 }
 
+/// The immutable subject of a holder-grant consilium (#245): `units` of the reserved
+/// `allocation` (`fee` | `fund`) for `user_id` — the money-plane id the terms stored.
+#[derive(Serialize)]
+pub struct HolderGrantTerms {
+	pub allocation: String,
+	pub user_id: String,
+	pub units: String,
+}
+
+impl From<bk::HolderGrantTerms> for HolderGrantTerms {
+	fn from(t: bk::HolderGrantTerms) -> Self {
+		Self {
+			allocation: t.allocation,
+			user_id: t.user_id,
+			units: t.units,
+		}
+	}
+}
+
+/// The immutable subject of a seed-capital consilium (#245): the chain transfer
+/// `tx_ref` on `network`, worth `amount`, is `depositor_user_id`'s — booked as their
+/// deposit and subscription into `fund` once the quorum carries. The reference is
+/// carried in FULL, as a payout's address is.
+#[derive(Serialize)]
+pub struct SeedCapitalTerms {
+	pub tx_ref: String,
+	pub network: String,
+	pub amount: String,
+	pub depositor_user_id: String,
+}
+
+impl From<bk::SeedCapitalTerms> for SeedCapitalTerms {
+	fn from(t: bk::SeedCapitalTerms) -> Self {
+		Self {
+			tx_ref: t.tx_ref,
+			network: t.network,
+			amount: t.amount,
+			depositor_user_id: t.depositor_user_id,
+		}
+	}
+}
+
 /// One consilium in full — the owner-only view, with the per-voter breakdown.
 ///
-/// Exactly one of `revenue_payout`, `payment`, `valuation_override` and `fee_policy`
-/// describes the subject. `revenue_payout` keeps its always-present shape for the screens
-/// that predate the other kinds; the other three are `null` on any other kind — never an
-/// empty object, which the invitation page treats as unrenderable — so a screen tells the
-/// kinds apart by which sibling is set.
+/// Exactly one of `revenue_payout`, `payment`, `valuation_override`, `fee_policy`,
+/// `holder_grant` and `seed_capital` describes the subject. `revenue_payout` keeps its
+/// always-present shape for the screens that predate the other kinds; the others are
+/// `null` on any other kind — never an empty object, which the invitation page treats as
+/// unrenderable — so a screen tells the kinds apart by which sibling is set.
 #[derive(Serialize)]
 pub struct Consilium {
 	pub id: String,
@@ -1726,6 +1813,10 @@ pub struct Consilium {
 	pub payment: Option<ConsiliumPaymentTerms>,
 	pub valuation_override: Option<ValuationOverrideTerms>,
 	pub fee_policy: Option<ConsiliumFeePolicyTerms>,
+	/// Set exactly when this is a HOLDER_GRANT consilium.
+	pub holder_grant: Option<HolderGrantTerms>,
+	/// Set exactly when this is a SEED_CAPITAL consilium.
+	pub seed_capital: Option<SeedCapitalTerms>,
 	pub payload_hash: String,
 	pub initiator_user_id: String,
 	pub initiator_email: String,
@@ -1744,6 +1835,10 @@ pub struct Consilium {
 	pub executed_valuation_id: Option<String>,
 	/// The change an executed FEE_POLICY consilium scheduled; `null` otherwise.
 	pub executed_fee_policy_change_id: Option<String>,
+	/// The in-kind issuance an executed HOLDER_GRANT consilium minted; `null` otherwise.
+	pub executed_issuance_id: Option<String>,
+	/// The `fund` subscription an executed SEED_CAPITAL consilium booked; `null` otherwise.
+	pub executed_subscription_id: Option<String>,
 	pub failure_reason: String,
 	/// Monotonic per consilium. The live page watches this and refetches when it moves.
 	pub version: String,
@@ -1759,6 +1854,8 @@ impl From<bk::Consilium> for Consilium {
 			payment: c.payment.map(ConsiliumPaymentTerms::from),
 			valuation_override: c.valuation_override.map(ValuationOverrideTerms::from),
 			fee_policy: c.fee_policy.map(ConsiliumFeePolicyTerms::from),
+			holder_grant: c.holder_grant.map(HolderGrantTerms::from),
+			seed_capital: c.seed_capital.map(SeedCapitalTerms::from),
 			payload_hash: c.payload_hash,
 			initiator_user_id: c.initiator_user_id,
 			initiator_email: c.initiator_email,
@@ -1774,6 +1871,8 @@ impl From<bk::Consilium> for Consilium {
 			executed_payment_id: non_empty(c.executed_payment_id),
 			executed_valuation_id: non_empty(c.executed_valuation_id),
 			executed_fee_policy_change_id: non_empty(c.executed_fee_policy_change_id),
+			executed_issuance_id: non_empty(c.executed_issuance_id),
+			executed_subscription_id: non_empty(c.executed_subscription_id),
 			failure_reason: c.failure_reason,
 			version: c.version.to_string(),
 		}
@@ -1796,6 +1895,10 @@ pub struct ConsiliumInvitation {
 	pub valuation_override: Option<ValuationOverrideTerms>,
 	/// Set exactly when this is a FEE_POLICY consilium — see [`Consilium`].
 	pub fee_policy: Option<ConsiliumFeePolicyTerms>,
+	/// Set exactly when this is a HOLDER_GRANT consilium — see [`Consilium`].
+	pub holder_grant: Option<HolderGrantTerms>,
+	/// Set exactly when this is a SEED_CAPITAL consilium — see [`Consilium`].
+	pub seed_capital: Option<SeedCapitalTerms>,
 	pub payload_hash: String,
 	pub initiator_email: String,
 	pub voter_email: String,
@@ -1819,6 +1922,8 @@ impl From<bk::ConsiliumInvitation> for ConsiliumInvitation {
 			payment: i.payment.map(ConsiliumPaymentTerms::from),
 			valuation_override: i.valuation_override.map(ValuationOverrideTerms::from),
 			fee_policy: i.fee_policy.map(ConsiliumFeePolicyTerms::from),
+			holder_grant: i.holder_grant.map(HolderGrantTerms::from),
+			seed_capital: i.seed_capital.map(SeedCapitalTerms::from),
 			payload_hash: i.payload_hash,
 			initiator_email: mask_email(&i.initiator_email),
 			voter_email: mask_email(&i.voter_email),
@@ -1887,7 +1992,8 @@ fn non_empty(value: String) -> Option<String> {
 #[derive(Default, Serialize)]
 pub struct PaymentEnd {
 	pub label: String,
-	/// `piggybank` | `revenue` | `service` | `user`, or `external` for an address.
+	/// `service` | `user`, or `external` for an address (`piggybank` | `revenue` on orders
+	/// that predate #245).
 	pub kind: String,
 	pub id: String,
 	pub network: String,
@@ -2413,7 +2519,8 @@ mod tests {
 	}
 
 	/// An issuance crosses with its `source` intact: the console tells a mint (supply
-	/// grew) from a hand-over of the company's stake (it did not) by this field alone.
+	/// grew) from a historical hand-over of the company's stake (it did not) by this
+	/// field alone.
 	#[test]
 	fn an_issuance_carries_its_source_and_holder() {
 		let issuance = UnitIssuance::from(bk::UnitIssuance {
@@ -2436,6 +2543,141 @@ mod tests {
 			(issuance.units.as_str(), issuance.cost_basis.as_str(), issuance.created_at.as_str()),
 			("13000", "16250", "1700000000")
 		);
+	}
+
+	/// The treasury lists every allocation with its holders (#245): a holder is named by
+	/// kind and id — a person or the `fee` allocation — a line without a holder is
+	/// dropped rather than rendered as nobody's units, a missing claim crosses as zeros,
+	/// and the seed-priced `nav_posted_at` is the string `"0"` like every stamp here.
+	#[test]
+	fn the_treasury_names_every_allocation_and_its_holders() {
+		let holding = |kind: &str, id: &str, units: &str| bk::UnitHolding {
+			holder: Some(bk::UnitHolderRef { kind: kind.into(), id: id.into() }),
+			units: units.into(),
+		};
+		let treasury = Treasury::from(bk::Treasury {
+			rails: vec![],
+			bank: "0".into(),
+			total_custody: "1500".into(),
+			reserved_for_withdrawals: "10".into(),
+			held_by_users: "400".into(),
+			allocations: vec![
+				bk::AllocationTreasury {
+					service: "fee".into(),
+					title: "Fees".into(),
+					access: "hidden".into(),
+					claim: Some(bk::AllocationClaim {
+						posted: "100".into(),
+						available: "90".into(),
+						reserved: "10".into(),
+					}),
+					units_outstanding: "80".into(),
+					nav: "1.25".into(),
+					nav_posted_at_unix: 0,
+					holders: vec![holding("user", "d4d6", "64"), holding("user", "e5e7", "16")],
+				},
+				bk::AllocationTreasury {
+					service: "quy-nhon".into(),
+					title: "Quy Nhon".into(),
+					access: "invest".into(),
+					claim: None,
+					units_outstanding: "1000".into(),
+					nav: "1.00".into(),
+					nav_posted_at_unix: 1_750_000_000,
+					holders: vec![holding("allocation", "fee", "20"), bk::UnitHolding { holder: None, units: "5".into() }],
+				},
+			],
+		});
+		assert_eq!((treasury.held_by_users.as_str(), treasury.total_custody.as_str()), ("400", "1500"));
+		let [fee, product] = treasury.allocations.as_slice() else { panic!("two allocations") };
+		assert_eq!((fee.service.as_str(), fee.access.as_str(), fee.nav_posted_at.as_str()), ("fee", "hidden", "0"));
+		assert_eq!((fee.claim.posted.as_str(), fee.claim.available.as_str(), fee.claim.reserved.as_str()), ("100", "90", "10"));
+		assert_eq!(
+			fee.holders.iter().map(|h| (h.holder.kind.as_str(), h.holder.id.as_str(), h.units.as_str())).collect::<Vec<_>>(),
+			[("user", "d4d6", "64"), ("user", "e5e7", "16")]
+		);
+		assert_eq!(
+			(product.claim.posted.as_str(), product.nav_posted_at.as_str()),
+			("", "1750000000"),
+			"a missing claim is zeros, never null"
+		);
+		assert_eq!(product.holders.len(), 1, "a line with no holder is not a line");
+		assert_eq!((product.holders[0].holder.kind.as_str(), product.holders[0].holder.id.as_str()), ("allocation", "fee"));
+	}
+
+	/// The cap table crosses line by line, in the hub's order, with nothing summed.
+	#[test]
+	fn the_cap_table_keeps_the_hubs_order_and_sums_nothing() {
+		let holders = UnitHolders::from(bk::UnitHolders {
+			service: "quy-nhon".into(),
+			units_outstanding: "13250".into(),
+			queued_units: "100".into(),
+			holders: vec![
+				bk::UnitHolding {
+					holder: Some(bk::UnitHolderRef {
+						kind: "user".into(),
+						id: "d4d6".into(),
+					}),
+					units: "13000".into(),
+				},
+				bk::UnitHolding {
+					holder: Some(bk::UnitHolderRef {
+						kind: "allocation".into(),
+						id: "fee".into(),
+					}),
+					units: "250".into(),
+				},
+			],
+		});
+		assert_eq!((holders.units_outstanding.as_str(), holders.queued_units.as_str()), ("13250", "100"));
+		assert_eq!(
+			holders
+				.holders
+				.iter()
+				.map(|h| (h.holder.kind.as_str(), h.holder.id.as_str(), h.units.as_str()))
+				.collect::<Vec<_>>(),
+			[("user", "d4d6", "13000"), ("allocation", "fee", "250")]
+		);
+		let json = serde_json::to_value(&holders).unwrap();
+		for retired in ["company_units", "fee_units", "investor_units"] {
+			assert!(json.get(retired).is_none(), "`{retired}` is not on the wire any more");
+		}
+	}
+
+	/// The two #245 kinds cross as their own siblings, `null` on every other kind, and
+	/// their effect ids follow the same empty-means-null rule as the older ones.
+	#[test]
+	fn a_holder_grant_and_a_seed_are_their_own_terms_siblings() {
+		let grant = Consilium::from(bk::Consilium {
+			holder_grant: Some(bk::HolderGrantTerms {
+				allocation: "fund".into(),
+				user_id: "d4d6".into(),
+				units: "1000".into(),
+			}),
+			executed_issuance_id: "7c1e".into(),
+			..Default::default()
+		});
+		let terms = grant.holder_grant.as_ref().expect("the grant terms");
+		assert_eq!((terms.allocation.as_str(), terms.user_id.as_str(), terms.units.as_str()), ("fund", "d4d6", "1000"));
+		assert!(grant.seed_capital.is_none() && grant.payment.is_none() && grant.valuation_override.is_none() && grant.fee_policy.is_none());
+		assert_eq!(grant.executed_issuance_id.as_deref(), Some("7c1e"));
+		assert_eq!(grant.executed_subscription_id, None);
+
+		let seed = ConsiliumInvitation::from(bk::ConsiliumInvitation {
+			seed_capital: Some(bk::SeedCapitalTerms {
+				tx_ref: "0xabc:0".into(),
+				network: "bep20".into(),
+				amount: "250.5".into(),
+				depositor_user_id: "d4d6".into(),
+			}),
+			..Default::default()
+		});
+		let terms = seed.seed_capital.as_ref().expect("the seed terms");
+		assert_eq!(
+			(terms.tx_ref.as_str(), terms.network.as_str(), terms.amount.as_str(), terms.depositor_user_id.as_str()),
+			("0xabc:0", "bep20", "250.5", "d4d6")
+		);
+		assert!(seed.holder_grant.is_none());
 	}
 
 	/// A non-ASCII local part must not be sliced mid-character — a byte slice would panic

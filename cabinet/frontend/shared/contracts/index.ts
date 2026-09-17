@@ -28,8 +28,23 @@ export type {
   BankingV1RequestWithdrawalRequest as RequestWithdrawalRequest,
   BankingV1CancelWithdrawalRequest as CancelWithdrawalRequest,
   BankingV1UserBalanceResponse as UserBalanceResponse,
+  // The treasury lists every allocation with its claim, supply, price and holders (#245):
+  // `held_by_users` is what people hold directly, `allocations[]` the rest — the hidden
+  // `fee` / `fund` included, which is what the Revenue screen reads for `fee`.
   BankingV1Treasury as Treasury,
   BankingV1RailLiquidity as RailLiquidity,
+  BankingV1AllocationTreasury as AllocationTreasury,
+  BankingV1AllocationClaim as AllocationClaim,
+  // One holder of an allocation's units — a person (`user`, `id` is the banking user id)
+  // or the reserved `fee` allocation (`allocation`, `id` its slug; never a user to look
+  // up). The cap table (`UnitHolders.holders`) and the treasury share the shape.
+  BankingV1UnitHolderRef as UnitHolderRef,
+  BankingV1UnitHolding as UnitHolding,
+  // What a seed proposal answers: a consilium id, never a booking.
+  BankingV1SeedCapitalResponse as SeedCapitalResponse,
+  // The two #245 consilium kinds, as the BFF's `Consilium` carries them by name.
+  BankingV1HolderGrantTerms as HolderGrantTerms,
+  BankingV1SeedCapitalTerms as SeedCapitalTerms,
   // Fund shares (the service currency).
   BankingV1Position as Position,
   BankingV1PositionList as PositionList,

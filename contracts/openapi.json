@@ -303,7 +303,7 @@
           "banking.v1.AllocationsService"
         ],
         "summary": "ListUnitHolders",
-        "description": "The settled supply of one product by holder class (AllocationManage): what the\n company holds, what the fee account holds, and what is left to investors. Read\n straight from the ledger — the number an operator checks against the registration\n before opening a product to the market.",
+        "description": "The cap table of one product (AllocationManage): the settled supply and every\n holder of it — people, and the reserved `fee` allocation holding the product's fee\n class — largest first. Read straight from the ledger — the number an operator\n checks against the registration before opening a product to the market.",
         "operationId": "banking.v1.AllocationsService.ListUnitHolders",
         "parameters": [
           {
@@ -420,8 +420,8 @@
         "tags": [
           "banking.v1.AllocationsService"
         ],
-        "summary": "Burn a holder's units with no cash leg (AllocationManage) — the reverse of\n IssueUnits: `units` leave the holder's account (a user's or the company's) and the\n supply shrinks by the same amount. Nothing is paid; this is a cap-table correction,\n the way an in-kind mint was. The holder must have at least `units` AVAILABLE\n (Read-First; units resting on the book or reserved by a redemption do not count) —\n otherwise INVALID_ARGUMENT — and the allocation must be `closed`, because burning a\n holder's units out of a live product is a decision that deserves a closed door\n first; `force` is the explicit override for a live product (FAILED_PRECONDITION\n without it). Priced at the current (fresh) NAV for the record; the default\n `cost_basis` is `units × NAV`, the book value written off.",
-        "description": "Answers a `UnitIssuance` with `source = \"retire\"` and POSITIVE `units`: the row is\n the magnitude, the source is the direction, and the console lists mints, hand-overs\n and retirements as one history. Idempotent by `idempotency_key` in the same key\n space as IssueUnits: the same key naming a mint and then a retirement is\n ALREADY_EXISTS, not a retry.",
+        "summary": "Burn a holder's units with no cash leg (AllocationManage) — the reverse of\n IssueUnits: `units` leave the holder's account and the supply shrinks by the same\n amount. Nothing is paid; this is a cap-table correction,\n the way an in-kind mint was. The holder must have at least `units` AVAILABLE\n (Read-First; units resting on the book or reserved by a redemption do not count) —\n otherwise INVALID_ARGUMENT — and the allocation must be `closed`, because burning a\n holder's units out of a live product is a decision that deserves a closed door\n first; `force` is the explicit override for a live product (FAILED_PRECONDITION\n without it). Priced at the current (fresh) NAV for the record; the default\n `cost_basis` is `units × NAV`, the book value written off.",
+        "description": "Answers a `UnitIssuance` with `source = \"retire\"` and POSITIVE `units`: the row is\n the magnitude, the source is the direction, and the console lists mints and\n retirements as one history. Idempotent by `idempotency_key` in the same key space\n as IssueUnits: the same key naming a mint and then a retirement is ALREADY_EXISTS,\n not a retry.",
         "operationId": "banking.v1.AllocationsService.RetireUnits",
         "parameters": [
           {
@@ -762,65 +762,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.Allocation"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/banking.v1.AllocationsService/TransferCompanyStake": {
-      "post": {
-        "tags": [
-          "banking.v1.AllocationsService"
-        ],
-        "summary": "Hand part of the company's stake to a user (AllocationManage): `units` leave\n `CompanyShares` and land in the user's holding, and the supply does NOT change —\n this is the only way units come back out of the company, since the company has no\n user and so cannot sell on the book, and minting the user a copy of what the\n company holds would inflate the supply past the cap table. The allocation must be\n registered, in any state; the user must exist; the recipient's access level is not\n consulted (an operator command, like IssueUnits). Priced at the current (fresh) NAV\n for the record and the default cost basis; refused (INVALID_ARGUMENT, as a mint past\n the cap is) when the company holds fewer than `units`.",
-        "description": "Answers a `UnitIssuance` with `holder_kind = \"user\"` and `source = \"company\"`\n rather than a message of its own: from the recipient's side it IS an issuance —\n units they did not pay cash for, a stated basis, the same queued → applied life —\n and the console lists mints and hand-overs as one history. A second message would\n restate the same nine fields to say one word. Idempotent by `idempotency_key`\n exactly as IssueUnits, in the same key space: the same key naming a mint and then a\n hand-over is ALREADY_EXISTS, not a retry.",
-        "operationId": "banking.v1.AllocationsService.TransferCompanyStake",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/banking.v1.TransferCompanyStakeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/banking.v1.UnitIssuance"
                 }
               }
             }
@@ -1247,7 +1188,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "CancelRevenuePayout",
-        "description": "Cancel a still-QUEUED revenue payout (refund to the revenue claim). Refuses a\n user's withdrawal, and refuses once processing — a broadcast may have landed.",
+        "description": "HISTORY ONLY. Cancel a still-QUEUED revenue payout that predates #245 (refund to\n the retired revenue claim). Refuses a user's withdrawal, and refuses once\n processing — a broadcast may have landed. Nothing opens a new revenue payout.",
         "operationId": "banking.v1.BalanceService.CancelRevenuePayout",
         "parameters": [
           {
@@ -1483,7 +1424,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "GetFundRevenue",
-        "description": "What the fund has EARNED and may pay itself — the `fee` claim, segmented into\n earned / available / pending, plus the rails a payout can ship on. Admin/Owner.",
+        "description": "What the platform has EARNED: the `fee` allocation, in the same shape the treasury\n lists every allocation in — its cash (settled / reserved / available), its supply,\n its price and who holds it. Admin/Owner. Nothing pays it out from here: a holder is\n paid by redeeming their units, and a payment out of its claim is an order the owners\n approve (`PaymentsService.OpenPayment` with source `{kind: \"service\", id: \"fee\"}`).",
         "operationId": "banking.v1.BalanceService.GetFundRevenue",
         "parameters": [
           {
@@ -1528,7 +1469,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/banking.v1.FundRevenue"
+                  "$ref": "#/components/schemas/banking.v1.AllocationTreasury"
                 }
               }
             }
@@ -1778,7 +1719,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "ListRevenuePayouts",
-        "description": "The fund's own payouts, newest first — the payout history. Admin/Owner.",
+        "description": "HISTORY ONLY. The revenue payouts opened before #245, newest first. Admin/Owner.",
         "operationId": "banking.v1.BalanceService.ListRevenuePayouts",
         "parameters": [
           {
@@ -2067,65 +2008,6 @@
         }
       }
     },
-    "/banking.v1.BalanceService/RequestRevenuePayout": {
-      "post": {
-        "tags": [
-          "banking.v1.BalanceService"
-        ],
-        "summary": "RequestRevenuePayout",
-        "description": "Pay the fund's own earned revenue out to an external wallet (Admin/Owner). Capped\n by `FundRevenue.available`: client claims and the fund's seed capital are different\n ledger accounts and are unreachable from here. Runs the same saga as a user\n withdrawal — accepted and queued when the rail is short, then dispatched/settled\n through the usual operator RPCs — so it shares the withdrawal queue and history.",
-        "operationId": "banking.v1.BalanceService.RequestRevenuePayout",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/banking.v1.RequestRevenuePayoutRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/banking.v1.Withdrawal"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/banking.v1.BalanceService/RotateDepositAddress": {
       "post": {
         "tags": [
@@ -2191,7 +2073,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "SeedCapital",
-        "description": "Record the company's own capital arriving on a rail (Dr WALLET / Cr FUND), PROVEN\n against the chain. Same verification as RecordDeposit plus the assertion that the\n transfer is fund capital: it must have landed on the rail's treasury address from an\n external sender. A transfer to a user's deposit address is that user's deposit and is\n refused (record it with RecordDeposit); the sweep is refused. Idempotent by `tx_ref`.",
+        "description": "Propose a seed of the platform's capital: a transfer that reached a rail's treasury\n address from outside, PROVEN against the chain, to be booked as the depositor's\n deposit and subscribed into the `fund` allocation — units of `fund` for the person\n whose money it was. This OPENS A CONSILIUM and books nothing: the chain proves the\n dollar arrived, it cannot say whose it is, and the first administrator to name a\n reference must not be the one who decides. The caller must hold an owner seat. The\n arrival is verified now (same verification as RecordDeposit, against\n `expected_amount`); a transfer to a user's deposit address is that user's deposit\n and is refused (record it with RecordDeposit); the sweep is refused; a reference\n already recorded is a conflict.",
         "operationId": "banking.v1.BalanceService.SeedCapital",
         "parameters": [
           {
@@ -3366,14 +3248,14 @@
         }
       }
     },
-    "/banking.v1.ConsiliumService/OpenRevenuePayout": {
+    "/banking.v1.ConsiliumService/OpenHolderGrant": {
       "post": {
         "tags": [
           "banking.v1.ConsiliumService"
         ],
-        "summary": "OpenRevenuePayout",
-        "description": "Open an invoice to pay fund revenue out on-chain (Owner only). Refused when a\n consilium is already open — one at a time removes the concurrent-approval\n overdraw race instead of trying to win it — or when the roster is too small.",
-        "operationId": "banking.v1.ConsiliumService.OpenRevenuePayout",
+        "summary": "OpenHolderGrant",
+        "description": "Seat a new holder of a reserved allocation (Owner only): `units` of `fee` or `fund`\n minted to a person, with no cash leg, once the quorum carries. The units are\n frozen into the terms, not a cash figure — what they are worth is the allocation's\n NAV at execution, as a subscription is priced at its own moment. Refused when the\n person is not an active user, when the allocation is not reserved, or when the\n roster is too small. This is the ONLY way a person comes to hold `fee` or `fund`\n other than a seed (`BalanceService.SeedCapital`) or the book.",
+        "operationId": "banking.v1.ConsiliumService.OpenHolderGrant",
         "parameters": [
           {
             "name": "Connect-Protocol-Version",
@@ -3395,7 +3277,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/banking.v1.OpenRevenuePayoutRequest"
+                "$ref": "#/components/schemas/banking.v1.OpenHolderGrantRequest"
               }
             }
           },
@@ -4080,7 +3962,7 @@
           "banking.v1.FeesService"
         ],
         "summary": "SettleFeeShares",
-        "description": "Convert accumulated fee units into fee revenue (AllocationManage). Omit `units`\n to settle the whole balance. Refused — never queued — when the fund's claim\n cannot cover the payout: nobody is waiting on this, and unconverted fee units\n keep accumulating at no cost.",
+        "description": "Convert accumulated fee units into the `fee` allocation's cash (AllocationManage).\n Omit `units` to settle the whole balance. Refused — never queued — when the fund's\n claim cannot cover the payout: nobody is waiting on this, and unconverted fee units\n keep accumulating at no cost. The settler is the CALLER, never a field: whoever\n posted the product's latest mark cannot settle its fee class for 7 days, so a\n request cannot name somebody else to get past that.",
         "operationId": "banking.v1.FeesService.SettleFeeShares",
         "parameters": [
           {
@@ -5081,7 +4963,7 @@
           "banking.v1.PaymentsService"
         ],
         "summary": "OpenPayment",
-        "description": "Open a payment order (Admin/Owner). Refused when the source cannot cover the amount\n right now, when the shape could never execute (an unconfigured rail, a sub-minimum\n external amount, an external destination out of `piggybank` or a service claim), or\n when another order is already open against the same fund-owned source.",
+        "description": "Open a payment order (Admin/Owner). Refused when the source cannot cover the amount\n right now, when the shape could never execute (an unconfigured rail, a sub-minimum\n external amount, an external destination out of a service claim), or when another\n order is already open against the same service claim.",
         "operationId": "banking.v1.PaymentsService.OpenPayment",
         "parameters": [
           {
@@ -8272,6 +8154,26 @@
         "title": "AllocationAccessGrantList",
         "additionalProperties": false
       },
+      "banking.v1.AllocationClaim": {
+        "type": "object",
+        "properties": {
+          "posted": {
+            "type": "string",
+            "title": "posted"
+          },
+          "available": {
+            "type": "string",
+            "title": "available"
+          },
+          "reserved": {
+            "type": "string",
+            "title": "reserved"
+          }
+        },
+        "title": "AllocationClaim",
+        "additionalProperties": false,
+        "description": "An allocation's cash claim (`service:\u003cid\u003e`), split the way every reader needs it and\n read off ONE ledger balance, so the three can never disagree: `posted` is settled,\n `reserved` is spoken for by approved payments out of it that have not settled, and\n `available = posted − reserved` is what a redemption or a new payment may take."
+      },
       "banking.v1.AllocationList": {
         "type": "object",
         "properties": {
@@ -8285,6 +8187,56 @@
         },
         "title": "AllocationList",
         "additionalProperties": false
+      },
+      "banking.v1.AllocationTreasury": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "access": {
+            "type": "string",
+            "title": "access",
+            "description": "hidden | view | invest"
+          },
+          "claim": {
+            "title": "claim",
+            "$ref": "#/components/schemas/banking.v1.AllocationClaim"
+          },
+          "units_outstanding": {
+            "type": "string",
+            "title": "units_outstanding",
+            "description": "decimal units"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav",
+            "description": "decimal USDT per unit"
+          },
+          "nav_posted_at_unix": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "nav_posted_at_unix",
+            "format": "int64"
+          },
+          "holders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.UnitHolding"
+            },
+            "title": "holders"
+          }
+        },
+        "title": "AllocationTreasury",
+        "additionalProperties": false,
+        "description": "One allocation as the treasury shows it (#245): the registry's name for it, its cash,\n its supply, its price and who holds it — the same shape for a product and for the\n reserved `fee` / `fund` allocations, whose `access` is `hidden`. `nav` is a product's\n posted mark, or the computed value of a reserved allocation (its cash plus every fee\n class it holds at that product's NAV) over its supply; `nav_posted_at_unix` is 0\n while nothing under it has been marked (seed-priced). `holders` are largest first —\n people, or the `fee` allocation holding a product's fee class."
       },
       "banking.v1.Balance": {
         "type": "object",
@@ -8672,7 +8624,7 @@
           },
           "revenue_payout": {
             "title": "revenue_payout",
-            "description": "EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,\n `fee_policy`) is set, decided by the kind. Named fields rather than a oneof because the\n surfaces read them by name and a oneof buys nothing here that the \"exactly one\" rule\n does not already give.",
+            "description": "EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,\n `fee_policy`, `holder_grant`, `seed_capital`) is set, decided by the kind. Named fields\n rather than a oneof because the surfaces read them by name and a oneof buys nothing\n here that the \"exactly one\" rule does not already give.",
             "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
           },
           "payload_hash": {
@@ -8740,7 +8692,7 @@
           "executed_withdrawal_id": {
             "type": "string",
             "title": "executed_withdrawal_id",
-            "description": "Set exactly once, on EXECUTED — and exactly ONE of the three effect ids is\n (`executed_withdrawal_id`, `executed_payment_id`, `executed_valuation_id`), because a\n consilium has one effect. `consilium_execution_is_recorded` states that to the database\n as `num_nonnulls(...) = 1`."
+            "description": "Set exactly once, on EXECUTED — and exactly ONE of the effect ids is\n (`executed_withdrawal_id`, `executed_payment_id`, `executed_valuation_id`,\n `executed_fee_policy_change_id`, `executed_issuance_id`, `executed_subscription_id`),\n because a consilium has one effect. `consilium_execution_is_recorded` states that to\n the database as `num_nonnulls(...) = 1`."
           },
           "failure_reason": {
             "type": "string",
@@ -8783,6 +8735,26 @@
             "type": "string",
             "title": "executed_fee_policy_change_id",
             "description": "The fee-policy change an executed FEE_POLICY consilium scheduled."
+          },
+          "holder_grant": {
+            "title": "holder_grant",
+            "description": "The fifth terms sibling — set exactly for a HOLDER_GRANT consilium.",
+            "$ref": "#/components/schemas/banking.v1.HolderGrantTerms"
+          },
+          "seed_capital": {
+            "title": "seed_capital",
+            "description": "The sixth — set exactly for a SEED_CAPITAL consilium.",
+            "$ref": "#/components/schemas/banking.v1.SeedCapitalTerms"
+          },
+          "executed_issuance_id": {
+            "type": "string",
+            "title": "executed_issuance_id",
+            "description": "The in-kind issuance an executed HOLDER_GRANT consilium minted\n (`AllocationsService.UnitIssuance`)."
+          },
+          "executed_subscription_id": {
+            "type": "string",
+            "title": "executed_subscription_id",
+            "description": "The `fund` subscription an executed SEED_CAPITAL consilium booked\n (`FundsService.Subscription`)."
           }
         },
         "title": "Consilium",
@@ -8887,7 +8859,7 @@
           },
           "revenue_payout": {
             "title": "revenue_payout",
-            "description": "Exactly one of `revenue_payout`, `payment` and `valuation_override` is set — see\n `Consilium`.",
+            "description": "Exactly one of the terms siblings is set — see `Consilium`.",
             "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
           },
           "payload_hash": {
@@ -8953,6 +8925,14 @@
           "fee_policy": {
             "title": "fee_policy",
             "$ref": "#/components/schemas/banking.v1.ConsiliumFeePolicyTerms"
+          },
+          "holder_grant": {
+            "title": "holder_grant",
+            "$ref": "#/components/schemas/banking.v1.HolderGrantTerms"
+          },
+          "seed_capital": {
+            "title": "seed_capital",
+            "$ref": "#/components/schemas/banking.v1.SeedCapitalTerms"
           }
         },
         "title": "ConsiliumInvitation",
@@ -9009,7 +8989,7 @@
         },
         "title": "ConsiliumPaymentTerms",
         "additionalProperties": false,
-        "description": "The immutable subject of a PAYMENT consilium — the §3 rule that money belonging to the\n fund (`piggybank`, `revenue`, `service:\u003cid\u003e`) moves only on the owners' quorum, at every\n tier.\n\n A PROJECTION OF THE ORDER, not the order. `banking.v1.Payment` (payments.proto) is what\n the payments screen reads; this is what an owner needs in order to judge one request:\n where the money leaves from, where it lands, how much, and why. The two ends are rendered\n as LABELS rather than as `(kind, id)` pairs because the question an owner is answering is\n \"should this money move\", and an account id is not an answer to it."
+        "description": "The immutable subject of a PAYMENT consilium — the §3 rule that money pooled in an\n allocation (`service:\u003cid\u003e`, the reserved `fee` and `fund` included) moves only on the\n owners' quorum, at every tier.\n\n A PROJECTION OF THE ORDER, not the order. `banking.v1.Payment` (payments.proto) is what\n the payments screen reads; this is what an owner needs in order to judge one request:\n where the money leaves from, where it lands, how much, and why. The two ends are rendered\n as LABELS rather than as `(kind, id)` pairs because the question an owner is answering is\n \"should this money move\", and an account id is not an answer to it."
       },
       "banking.v1.ConsiliumState": {
         "type": "string",
@@ -9582,7 +9562,7 @@
         },
         "title": "FeeShares",
         "additionalProperties": false,
-        "description": "The manager's uncollected fee units in one fund."
+        "description": "The `fee` allocation's uncollected fee units in one fund — the product's fee class."
       },
       "banking.v1.FundNav": {
         "type": "object",
@@ -9628,11 +9608,6 @@
             "type": "string",
             "title": "remaining_capacity",
             "description": "decimal units still issuable (0 once at the cap)"
-          },
-          "company_units": {
-            "type": "string",
-            "title": "company_units",
-            "description": "Of `units_outstanding`, the company's own stake — units issued in kind to the fund\n itself (AllocationsService.IssueUnits), never bought through Subscribe. Shown to an\n investor so the share of the product that is neither theirs nor the market's is on\n the card rather than inferred from a supply that does not add up. decimal units"
           }
         },
         "title": "FundNav",
@@ -9668,36 +9643,6 @@
         "title": "FundNavHistory",
         "additionalProperties": false,
         "description": "A fund's valuation log over the requested window (oldest first), and the caller's\n participation through it. `participation` steps at every mark and every change to the\n caller's units (subscribe, redeem, fee charge, in-kind issuance, book fill) and always\n ends at the window's end — \"now\" unless `to` was given — priced off the live holding,\n so the last point equals the position card. Empty `marks` means the fund is still on\n the seed NAV (or no mark fell in the window); it is not an error. `truncated` is true\n when more marks fell in the window than the cap allows and the OLDEST were dropped."
-      },
-      "banking.v1.FundRevenue": {
-        "type": "object",
-        "properties": {
-          "earned": {
-            "type": "string",
-            "title": "earned",
-            "description": "everything earned and still held"
-          },
-          "available": {
-            "type": "string",
-            "title": "available",
-            "description": "free to pay out now"
-          },
-          "pending_payout": {
-            "type": "string",
-            "title": "pending_payout",
-            "description": "locked by queued / in-flight payouts"
-          },
-          "rails": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/banking.v1.RevenueRail"
-            },
-            "title": "rails"
-          }
-        },
-        "title": "FundRevenue",
-        "additionalProperties": false,
-        "description": "The fund's OWN money — what it earned, not what it custodies. `earned` is the `fee`\n claim, credited by exactly two things: the fee retained on a user withdrawal, and the\n settled management + performance fee (the \"2 and 20\").\n `earned = available + pending_payout` by construction (all three are read off one\n ledger balance), so the figures can never disagree about a payout in flight."
       },
       "banking.v1.GetAccruedFeesRequest": {
         "type": "object",
@@ -9901,63 +9846,57 @@
         "title": "GrantAllocationAccessRequest",
         "additionalProperties": false
       },
+      "banking.v1.HolderGrantTerms": {
+        "type": "object",
+        "properties": {
+          "allocation": {
+            "type": "string",
+            "title": "allocation",
+            "description": "fee | fund — a reserved allocation only"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "On the request: a banking (or concierge) user id, resolved the way every admin RPC\n resolves a target. On a response: the money-plane id the terms stored."
+          },
+          "units": {
+            "type": "string",
+            "title": "units",
+            "description": "decimal units, \u003e 0"
+          }
+        },
+        "title": "HolderGrantTerms",
+        "additionalProperties": false,
+        "description": "The immutable subject of a HOLDER-GRANT consilium (#245): `units` of the reserved\n `allocation` minted to `user_id`, with no cash leg. The units are frozen, not a cash\n figure — what they are worth is the allocation's NAV at execution. Executing it records\n a `UnitIssuance` (`source = \"mint\"`, holder `user`) that `executed_issuance_id` names."
+      },
       "banking.v1.IssueUnitsRequest": {
         "type": "object",
-        "allOf": [
-          {
-            "properties": {
-              "service": {
-                "type": "string",
-                "title": "service"
-              },
-              "units": {
-                "type": "string",
-                "title": "units",
-                "description": "decimal units, \u003e 0"
-              },
-              "cost_basis": {
-                "type": "string",
-                "title": "cost_basis",
-                "description": "Decimal USDT the holder is deemed to have paid. Empty means `units × NAV` at the\n dealing mark — what a subscription for these units would have cost right now. An\n explicit value may be anything, zero included: the company's stake in an asset it\n already owned cost it no cash. For a user holder this is what lands in their\n position's cost basis, and so what their P\u0026L and management fee are measured from."
-              },
-              "idempotency_key": {
-                "type": "string",
-                "title": "idempotency_key",
-                "description": "required, 1..64 chars, unique per service"
-              }
-            }
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
           },
-          {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "company": {
-                    "type": "boolean",
-                    "title": "company"
-                  }
-                },
-                "title": "company",
-                "required": [
-                  "company"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "user_id": {
-                    "type": "string",
-                    "title": "user_id"
-                  }
-                },
-                "title": "user_id",
-                "required": [
-                  "user_id"
-                ]
-              }
-            ]
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "Who receives the units: a banking (or concierge) user id, resolved the way every\n admin RPC resolves a target. Required — a mint to nobody is a malformed request.\n Only a person: the company is not a holder (#245), and a reserved allocation is\n seated by the owners' consilium (`ConsiliumService.OpenHolderGrant`) or by the fee\n accrual, never by an operator's mint — so there is deliberately no arm for either."
+          },
+          "units": {
+            "type": "string",
+            "title": "units",
+            "description": "decimal units, \u003e 0"
+          },
+          "cost_basis": {
+            "type": "string",
+            "title": "cost_basis",
+            "description": "Decimal USDT the holder is deemed to have paid. Empty means `units × NAV` at the\n dealing mark — what a subscription for these units would have cost right now. An\n explicit value may be anything, zero included: a stake in an asset the holder\n already owned cost them no cash. This is what lands in their position's cost basis,\n and so what their P\u0026L and management fee are measured from."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "title": "idempotency_key",
+            "description": "required, 1..64 chars, unique per service"
           }
-        ],
+        },
         "title": "IssueUnitsRequest",
         "additionalProperties": false
       },
@@ -10234,7 +10173,7 @@
           "fund_owned_only": {
             "type": "boolean",
             "title": "fund_owned_only",
-            "description": "Only orders whose source is fund-owned — the governance surface."
+            "description": "Only orders whose source is an allocation's claim (`service:\u003cid\u003e`) — the ones the\n owners' consilium gates, i.e. the governance surface."
           }
         },
         "title": "ListPaymentsRequest",
@@ -10455,6 +10394,17 @@
         "additionalProperties": false,
         "description": "Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole\n available balance (a request beyond `instant` is accepted and queued); `instant` is\n the portion that ships without queueing = min(available, rail liquidity)."
       },
+      "banking.v1.OpenHolderGrantRequest": {
+        "type": "object",
+        "properties": {
+          "terms": {
+            "title": "terms",
+            "$ref": "#/components/schemas/banking.v1.HolderGrantTerms"
+          }
+        },
+        "title": "OpenHolderGrantRequest",
+        "additionalProperties": false
+      },
       "banking.v1.OpenPaymentRequest": {
         "type": "object",
         "properties": {
@@ -10478,17 +10428,6 @@
           }
         },
         "title": "OpenPaymentRequest",
-        "additionalProperties": false
-      },
-      "banking.v1.OpenRevenuePayoutRequest": {
-        "type": "object",
-        "properties": {
-          "terms": {
-            "title": "terms",
-            "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
-          }
-        },
-        "title": "OpenRevenuePayoutRequest",
         "additionalProperties": false
       },
       "banking.v1.OpenValuationOverrideRequest": {
@@ -10824,12 +10763,12 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "description": "piggybank | revenue | service | user."
+            "description": "user | service. (`piggybank` and `revenue` are retired, #245 — the platform's money is\n the `fee` and `fund` allocations: `{kind: \"service\", id: \"fee\" | \"fund\"}`.)"
           },
           "id": {
             "type": "string",
             "title": "id",
-            "description": "Empty for the two singleton claims. A service slug for `service`. For `user`, the\n CONCIERGE user id the console carries (resolved to the money-plane id here; a banking\n id is accepted as a fallback, the way UsersService.GetUserBalance resolves one)."
+            "description": "A service slug for `service` (`fee` and `fund` included). For `user`, the CONCIERGE\n user id the console carries (resolved to the money-plane id here; a banking id is\n accepted as a fallback, the way UsersService.GetUserBalance resolves one)."
           }
         },
         "title": "Party",
@@ -11090,12 +11029,12 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "description": "piggybank | revenue | service | user, or `external` for an address."
+            "description": "service | user, or `external` for an address. An order opened before #245 may read\n `piggybank` or `revenue` — the retired singleton claims; nothing opens one now."
           },
           "id": {
             "type": "string",
             "title": "id",
-            "description": "The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the\n response carries what the order stored). Empty for singletons and addresses."
+            "description": "The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the\n response carries what the order stored). Empty for addresses and the retired\n singletons."
           },
           "network": {
             "type": "string",
@@ -11422,16 +11361,17 @@
           "party_kind": {
             "type": "string",
             "title": "party_kind",
-            "description": "who the chain says it belongs to: piggybank | user | service"
+            "description": "always `user`"
           },
           "party_id": {
             "type": "string",
             "title": "party_id",
-            "description": "the user UUID or service id (empty for piggybank)"
+            "description": "the banking user id"
           }
         },
         "title": "RecordDepositResponse",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "The chain names the owner of the deposit address the transfer landed on, so the\n credited party is always a PERSON: `party_kind` is `user` and `party_id` their banking\n id. A transfer to the treasury address is nobody's until the owners say whose — it is\n refused here and attributed through `SeedCapital`."
       },
       "banking.v1.RedeemRequest": {
         "type": "object",
@@ -11583,28 +11523,6 @@
         "title": "RegisterAllocationRequest",
         "additionalProperties": false
       },
-      "banking.v1.RequestRevenuePayoutRequest": {
-        "type": "object",
-        "properties": {
-          "network": {
-            "type": "string",
-            "title": "network",
-            "description": "bep20 | polygon | trc20 | ton — the rail to ship on"
-          },
-          "address": {
-            "type": "string",
-            "title": "address",
-            "description": "destination on-chain address (validated per network)"
-          },
-          "amount": {
-            "type": "string",
-            "title": "amount",
-            "description": "decimal USDT to pay out; no fee is charged, so this is the net"
-          }
-        },
-        "title": "RequestRevenuePayoutRequest",
-        "additionalProperties": false
-      },
       "banking.v1.RequestWithdrawalRequest": {
         "type": "object",
         "properties": {
@@ -11629,66 +11547,37 @@
       },
       "banking.v1.RetireUnitsRequest": {
         "type": "object",
-        "allOf": [
-          {
-            "properties": {
-              "service": {
-                "type": "string",
-                "title": "service"
-              },
-              "units": {
-                "type": "string",
-                "title": "units",
-                "description": "decimal units, \u003e 0, at most what the holder has available"
-              },
-              "cost_basis": {
-                "type": "string",
-                "title": "cost_basis",
-                "description": "Decimal USDT of book value written off, recorded on the row. Empty means\n `units × NAV` at the dealing mark, like IssueUnits. No cash moves either way."
-              },
-              "idempotency_key": {
-                "type": "string",
-                "title": "idempotency_key",
-                "description": "required, 1..64 chars, unique per service (shared with IssueUnits)"
-              },
-              "force": {
-                "type": "boolean",
-                "title": "force",
-                "description": "Retiring is allowed on a `closed` allocation only; `force = true` is the operator's\n explicit override to burn units out of a live (draft or open) product."
-              }
-            }
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
           },
-          {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "company": {
-                    "type": "boolean",
-                    "title": "company"
-                  }
-                },
-                "title": "company",
-                "required": [
-                  "company"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "user_id": {
-                    "type": "string",
-                    "title": "user_id"
-                  }
-                },
-                "title": "user_id",
-                "required": [
-                  "user_id"
-                ]
-              }
-            ]
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "Whose units are burnt: a banking (or concierge) user id, shaped as IssueUnits'\n holder is and for the same reason. Required — a burn of nobody's units is a\n malformed request."
+          },
+          "units": {
+            "type": "string",
+            "title": "units",
+            "description": "decimal units, \u003e 0, at most what the holder has available"
+          },
+          "cost_basis": {
+            "type": "string",
+            "title": "cost_basis",
+            "description": "Decimal USDT of book value written off, recorded on the row. Empty means\n `units × NAV` at the dealing mark, like IssueUnits. No cash moves either way."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "title": "idempotency_key",
+            "description": "required, 1..64 chars, unique per service (shared with IssueUnits)"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "force",
+            "description": "Retiring is allowed on a `closed` allocation only; `force = true` is the operator's\n explicit override to burn units out of a live (draft or open) product."
           }
-        ],
+        },
         "title": "RetireUnitsRequest",
         "additionalProperties": false
       },
@@ -11718,35 +11607,7 @@
         },
         "title": "RevenuePayoutTerms",
         "additionalProperties": false,
-        "description": "The immutable subject of a revenue payout. Amounts are decimal USDT STRINGS, as\n everywhere else on this wire."
-      },
-      "banking.v1.RevenueRail": {
-        "type": "object",
-        "properties": {
-          "network": {
-            "type": "string",
-            "title": "network",
-            "description": "bep20 | polygon | trc20 | ton"
-          },
-          "payable": {
-            "type": "string",
-            "title": "payable",
-            "description": "max requestable on this rail (= FundRevenue.available)"
-          },
-          "instant": {
-            "type": "string",
-            "title": "instant",
-            "description": "ships now = min(available, min(TB rail, on-chain treasury))"
-          },
-          "minimum": {
-            "type": "string",
-            "title": "minimum",
-            "description": "smallest payout accepted"
-          }
-        },
-        "title": "RevenueRail",
-        "additionalProperties": false,
-        "description": "Per-rail payout options, the mirror of WalletService's `NetworkWithdrawable`.\n `payable` is the whole available revenue (a request beyond `instant` is accepted and\n queued until the treasury is topped up); `instant` ships without queueing."
+        "description": "The immutable subject of a revenue payout — HISTORY ONLY. Retired by #245: the\n platform's earnings are the `fee` allocation's, held by people, and cash leaves it by\n a holder's redemption or a `payment` out of `service:fee`. Consilia opened before the\n retirement still read (and, if approved, execute) through this. Amounts are decimal\n USDT STRINGS, as everywhere else on this wire."
       },
       "banking.v1.RevokeAllocationAccessRequest": {
         "type": "object",
@@ -11906,12 +11767,17 @@
           "expected_amount": {
             "type": "string",
             "title": "expected_amount",
-            "description": "Optional operator assertion in decimal USDT. When set it must equal what the chain\n reports or the call is refused, so a mistyped reference fails loudly instead of\n silently crediting some other transfer."
+            "description": "REQUIRED, decimal USDT: what the chain must report for this reference. A seed is\n proposed at a figure the owners approve, not at \"whatever the chain says\" — a\n mistyped reference naming some other real transfer fails here, loudly."
+          },
+          "depositor_user_id": {
+            "type": "string",
+            "title": "depositor_user_id",
+            "description": "Whose money it is: the person booked as depositor and seated as a holder of `fund`.\n A banking (or concierge) user id, resolved the way every admin RPC resolves a\n target. Empty means the caller — an owner attributing their own transfer."
           }
         },
         "title": "SeedCapitalRequest",
         "additionalProperties": false,
-        "description": "Record fund capital that reached a rail's treasury, PROVEN against the chain.\n\n Like RecordDepositRequest the caller supplies only a pointer to a fact: the amount is\n read back from the chain and the recipient decides whether it is capital at all. The\n transfer must have landed on the rail's treasury address from a sender outside every\n wallet we control. A transfer to a user's deposit address is that user's deposit, not\n capital — refused, use RecordDeposit. The sweep consolidating a user's address into\n the treasury is money already on the ledger — refused."
+        "description": "Propose a seed: a transfer that reached a rail's treasury, PROVEN against the chain,\n as `depositor_user_id`'s deposit and subscription into `fund`.\n\n Like RecordDepositRequest the caller supplies only a pointer to a fact: the transfer\n must have landed on the rail's treasury address from a sender outside every wallet we\n control. A transfer to a user's deposit address is that user's deposit, not a seed —\n refused, use RecordDeposit. The sweep consolidating a user's address into the treasury\n is money already on the ledger — refused. Unlike RecordDeposit the amount is UNDER THE\n OWNERS' SIGNATURE: `expected_amount` is required, checked against the chain now, and\n frozen into the terms the owners vote over."
       },
       "banking.v1.SeedCapitalResponse": {
         "type": "object",
@@ -11919,16 +11785,50 @@
           "recorded": {
             "type": "boolean",
             "title": "recorded",
-            "description": "false if `tx_ref` was already recorded (idempotent no-op)"
+            "description": "always false: the booking is the consilium's execution"
           },
           "amount": {
             "type": "string",
             "title": "amount",
-            "description": "what the CHAIN reported, decimal USDT — never the caller's number"
+            "description": "what the terms carry, decimal USDT — verified against the chain"
+          },
+          "consilium_id": {
+            "type": "string",
+            "title": "consilium_id",
+            "description": "the seed-capital consilium this opened"
           }
         },
         "title": "SeedCapitalResponse",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "A seed is a consilium, not a write: `recorded` is always false here — nothing is\n booked until the owners' quorum executes it — and `consilium_id` is where the\n proposal lives (`ConsiliumService.GetConsilium`)."
+      },
+      "banking.v1.SeedCapitalTerms": {
+        "type": "object",
+        "properties": {
+          "tx_ref": {
+            "type": "string",
+            "title": "tx_ref",
+            "description": "`txhash:logIndex` (EVM) | `txhash:recipient` (TON)"
+          },
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | polygon | trc20 | ton"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "decimal USDT, as the chain reports it"
+          },
+          "depositor_user_id": {
+            "type": "string",
+            "title": "depositor_user_id",
+            "description": "the money-plane id the terms stored"
+          }
+        },
+        "title": "SeedCapitalTerms",
+        "additionalProperties": false,
+        "description": "The immutable subject of a SEED-CAPITAL consilium (#245): the transfer `tx_ref` names\n on `network`, which the chain must report as exactly `amount` USDT landing on the\n treasury from outside, is `depositor_user_id`'s — booked as their deposit and\n subscribed into `fund` at its price when the quorum executes. The amount is frozen\n into the terms (the owners approve \"this dollar is this person's\"); the units are\n not — they are what the cash buys at execution. Executing it records the fund\n subscription `executed_subscription_id` names. Opened through\n `BalanceService.SeedCapital`, never here."
       },
       "banking.v1.Session": {
         "type": "object",
@@ -12378,37 +12278,6 @@
         "title": "TradeList",
         "additionalProperties": false
       },
-      "banking.v1.TransferCompanyStakeRequest": {
-        "type": "object",
-        "properties": {
-          "service": {
-            "type": "string",
-            "title": "service"
-          },
-          "user_id": {
-            "type": "string",
-            "title": "user_id",
-            "description": "The recipient: a banking (or concierge) user id, resolved the way every admin RPC\n resolves a target. Never the company — the company handing units to itself is not\n a request, so there is no `oneof` here."
-          },
-          "units": {
-            "type": "string",
-            "title": "units",
-            "description": "decimal units, \u003e 0, at most what the company holds"
-          },
-          "cost_basis": {
-            "type": "string",
-            "title": "cost_basis",
-            "description": "Decimal USDT the recipient is deemed to have paid — what lands in their position's\n cost basis. Empty means `units × NAV` at the dealing mark, like IssueUnits; an\n explicit value may be anything, zero included."
-          },
-          "idempotency_key": {
-            "type": "string",
-            "title": "idempotency_key",
-            "description": "required, 1..64 chars, unique per service (shared with IssueUnits)"
-          }
-        },
-        "title": "TransferCompanyStakeRequest",
-        "additionalProperties": false
-      },
       "banking.v1.Treasury": {
         "type": "object",
         "properties": {
@@ -12430,30 +12299,44 @@
             "title": "total_custody",
             "description": "sum of rail custody — the asset side"
           },
-          "fund_capital": {
-            "type": "string",
-            "title": "fund_capital",
-            "description": "the fund's own unallocated capital"
-          },
-          "fee_revenue": {
-            "type": "string",
-            "title": "fee_revenue",
-            "description": "retained withdrawal-fee revenue"
-          },
-          "held_for_clients": {
-            "type": "string",
-            "title": "held_for_clients",
-            "description": "claims owed to users + services"
-          },
           "reserved_for_withdrawals": {
             "type": "string",
             "title": "reserved_for_withdrawals",
-            "description": "of held_for_clients, locked by in-flight withdrawals"
+            "description": "locked by in-flight withdrawals and approved payments"
+          },
+          "held_by_users": {
+            "type": "string",
+            "title": "held_by_users",
+            "description": "Σ user claims — what people hold directly"
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.AllocationTreasury"
+            },
+            "title": "allocations"
           }
         },
         "title": "Treasury",
         "additionalProperties": false,
-        "description": "The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).\n Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset\n side) equals the sum of all claims — so client liabilities are the remainder beyond\n the fund's own capital and retained fees."
+        "description": "The treasury picture: per-rail liquidity (Layer 2) and who the claims on it belong to\n (Layer 1). Under the unified-claim model the invariant is GLOBAL — `total_custody`\n (the asset side) equals the sum of all claims — and every claim is somebody's (#245):\n a person's directly (`held_by_users`, Σ `user:\u003cid\u003e` claims) or an allocation's, whose\n units people hold (`allocations`, the hidden `fee` and `fund` included). Nothing here\n is a remainder: each figure is read off its own accounts, and whether they add up to\n the custody is the reconciliation's finding, not this view's arithmetic."
+      },
+      "banking.v1.UnitHolderRef": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "user | allocation"
+          },
+          "id": {
+            "type": "string",
+            "title": "id"
+          }
+        },
+        "title": "UnitHolderRef",
+        "additionalProperties": false,
+        "description": "One holder of an allocation's units, as the cap table and the treasury name them.\n `kind` is `user` (`id` is the banking user id) or `allocation` (`id` is the holding\n allocation's slug — the reserved `fee` allocation holding a product's fee class). The\n reserved allocations' own holders are always people."
       },
       "banking.v1.UnitHolders": {
         "type": "object",
@@ -12466,27 +12349,38 @@
             "type": "string",
             "title": "units_outstanding"
           },
-          "company_units": {
-            "type": "string",
-            "title": "company_units"
-          },
-          "fee_units": {
-            "type": "string",
-            "title": "fee_units"
-          },
-          "investor_units": {
-            "type": "string",
-            "title": "investor_units"
-          },
           "queued_units": {
             "type": "string",
             "title": "queued_units",
-            "description": "Decimal units of `mint` issuances still `queued` — recorded, not yet posted by the\n relay. Once they land, `units_outstanding` grows by this much, so an operator\n pinning the cap to what is issued must wait for it to read zero: a cap pinned to\n the settled figure alone leaves the queued mint to land above it. Only `mint`\n counts — a `company` hand-over moves units between holders and leaves the supply\n as it was.\n TODO(#271): retire (PR #278) shrinks supply — subtract queued retires once it lands."
+            "description": "Decimal units of `mint` issuances still `queued` — recorded, not yet posted by the\n relay. Once they land, `units_outstanding` grows by this much, so an operator\n pinning the cap to what is issued must wait for it to read zero: a cap pinned to\n the settled figure alone leaves the queued mint to land above it.\n TODO(#271): retire (PR #278) shrinks supply — subtract queued retires once it lands."
+          },
+          "holders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.UnitHolding"
+            },
+            "title": "holders"
           }
         },
         "title": "UnitHolders",
         "additionalProperties": false,
-        "description": "The settled supply of one product by holder class, all decimal units.\n `investor_units` is `units_outstanding − company_units − fee_units`: the ledger keeps\n one holding per investor, and the supply invariant makes the difference exact."
+        "description": "The cap table of one product: the settled supply and every holder of it, largest\n first (ties by the holder's stored identity, so the table reads the same on every\n refresh). Σ `holders[].units` = `units_outstanding` is the supply invariant the\n reconciliation checks — it is read, never derived, here. All units decimal."
+      },
+      "banking.v1.UnitHolding": {
+        "type": "object",
+        "properties": {
+          "holder": {
+            "title": "holder",
+            "$ref": "#/components/schemas/banking.v1.UnitHolderRef"
+          },
+          "units": {
+            "type": "string",
+            "title": "units"
+          }
+        },
+        "title": "UnitHolding",
+        "additionalProperties": false,
+        "description": "One line of a cap table: who, and how many units (decimal). Holdings of zero are not\n listed."
       },
       "banking.v1.UnitIssuance": {
         "type": "object",
@@ -12502,17 +12396,17 @@
           "holder_kind": {
             "type": "string",
             "title": "holder_kind",
-            "description": "user | company"
+            "description": "`user` | `allocation`. Rows written before #245 may still read `company`; nothing\n writes it any more."
           },
           "holder_id": {
             "type": "string",
             "title": "holder_id",
-            "description": "the banking user id for `user`; empty for `company`"
+            "description": "The banking user id for `user`; the holding allocation's slug (`fee`) for\n `allocation`; empty on a historical `company` row. A client must never resolve an\n `allocation` holder as a user."
           },
           "units": {
             "type": "string",
             "title": "units",
-            "description": "decimal units minted, handed over or retired (always positive)"
+            "description": "decimal units minted or retired (always positive)"
           },
           "nav": {
             "type": "string",
@@ -12541,12 +12435,12 @@
           "source": {
             "type": "string",
             "title": "source",
-            "description": "Where the units came from — or went: `mint` (IssueUnits — supply grew by `units`),\n `company` (TransferCompanyStake — moved out of the company's stake, supply\n unchanged) or `retire` (RetireUnits — burnt out of the holder's account, supply\n shrank by `units`). `units` is always the magnitude; the source is the direction.\n Always populated; a row that predates the field reads as `mint`."
+            "description": "Where the units came from — or went: `mint` (IssueUnits or an executed holder\n grant — supply grew by `units`) or `retire` (RetireUnits — burnt out of the\n holder's account, supply shrank by `units`). Rows written before #245 may read\n `company` (the retired TransferCompanyStake — moved out of the company's stake,\n supply unchanged). `units` is always the magnitude; the source is the direction.\n Always populated; a row that predates the field reads as `mint`."
           }
         },
         "title": "UnitIssuance",
         "additionalProperties": false,
-        "description": "One in-kind issuance: a mint, a hand-over out of the company's stake, or a\n retirement (`source`).\n The holder is flattened to a kind + id pair here, unlike the request's `oneof`,\n because this shape is projected to TypeScript through OpenAPI and a flat message\n survives that pipeline unambiguously (the same trade the operations timeline makes)."
+        "description": "One in-kind issuance: a mint or a retirement (`source`), or — on rows that predate\n #245 — a hand-over out of the company's stake.\n The holder is a flattened `UnitHolderRef`: a person, or the reserved allocation the\n fee accrual minted a product's fee class to."
       },
       "banking.v1.UnparkEventRequest": {
         "type": "object",
@@ -13013,7 +12907,7 @@
         },
         "title": "WithdrawalQueueItem",
         "additionalProperties": false,
-        "description": "One withdrawal awaiting operator action. `email` is the mirrored identity email\n (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.\n\n Revenue payouts share this queue: they need the same dispatch/settle/fail actions,\n and an operator clearing the queue must see everything in flight against the rails.\n They carry `source = \"revenue\"` with `user_id`/`email` empty — the fund owns them."
+        "description": "One withdrawal awaiting operator action. `email` is the mirrored identity email\n (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.\n\n A revenue payout opened before #245 shares this queue while it is still in flight: it\n needs the same dispatch/settle/fail actions, and an operator clearing the queue must\n see everything in flight against the rails. It carries `source = \"revenue\"` with\n `user_id`/`email` empty. Nothing opens a new one."
       },
       "concierge.v1.AdminUserSummary": {
         "type": "object",
@@ -15250,7 +15144,7 @@
   "tags": [
     {
       "name": "banking.v1.AllocationsService",
-      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation, lifecycle and\n access only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Access is a second axis, orthogonal to the lifecycle. `state` says whether the\n product takes money at all; `access` says WHO may see it and who may put money in.\n Every allocation carries a default level — `hidden` | `view` | `invest` — and an\n operator may raise one investor above it with a per-user grant (`view` | `invest`).\n The level a caller effectively holds is the higher of the two. A registration lands\n on `view`: visible, but locked until an operator opens it or grants the investor.\n\n Reads are open to any authenticated user, filtered by that effective level:\n `ListAllocations` returns only `open` allocations the caller may at least view, and\n `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller\n holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses\n (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is\n never gated on access, so locking a product cannot trap an investor. See\n docs/ARCHITECTURE.md.\n\n The one place this service touches supply is `IssueUnits`: an operator minting units\n IN KIND — to an investor or to the company — with no cash behind them, for a product\n registered against an asset that already exists and already has owners. It lives here\n rather than on FundsService because it is a registry decision about who holds what,\n made by the same `AllocationManage` holder who sizes the product, not an investor\n dealing at NAV. `TransferCompanyStake` is the same decision in the other direction —\n units the company was seeded with handed to the person they belong to — and touches\n holdings, not supply. `RetireUnits` is the mirror of `IssueUnits`: a holder's units\n burnt with no cash leg, supply shrinking by exactly that. It is Read-First on what the\n holder has AVAILABLE (units resting on the book or reserved by a redemption cannot be\n retired), and the burn shows in `ListUnitHolders` like any other supply change.\n\n Backing is the third axis. Units minted in kind have no cash in the fund's claim\n behind them, so `Redeem` — which pays cash out of that claim — is refused on a product\n whose `backing` is `in_kind` (FAILED_PRECONDITION); holders exit through the book. The\n first `IssueUnits` flips a product from `cash` to `in_kind` on its own; an operator\n flips it back with `SetAllocationBacking` once the fund does hold cash for the units."
+      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation, lifecycle and\n access only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Access is a second axis, orthogonal to the lifecycle. `state` says whether the\n product takes money at all; `access` says WHO may see it and who may put money in.\n Every allocation carries a default level — `hidden` | `view` | `invest` — and an\n operator may raise one investor above it with a per-user grant (`view` | `invest`).\n The level a caller effectively holds is the higher of the two. A registration lands\n on `view`: visible, but locked until an operator opens it or grants the investor.\n\n Reads are open to any authenticated user, filtered by that effective level:\n `ListAllocations` returns only `open` allocations the caller may at least view, and\n `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller\n holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses\n (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is\n never gated on access, so locking a product cannot trap an investor. See\n docs/ARCHITECTURE.md.\n\n The one place this service touches supply is `IssueUnits`: an operator minting units\n IN KIND — to an investor — with no cash behind them, for a product registered against\n an asset that already exists and already has owners. It lives here rather than on\n FundsService because it is a registry decision about who holds what, made by the same\n `AllocationManage` holder who sizes the product, not an investor dealing at NAV. The\n holder is always a PERSON: the company is not a holder (#245 — every unit of value is\n somebody's), and a reserved allocation (`fee`) comes to hold a product's fee class\n only through the fee accrual, never through this surface. `RetireUnits` is the mirror\n of `IssueUnits`: a holder's units burnt with no cash leg, supply shrinking by exactly\n that. It is Read-First on what the holder has AVAILABLE (units resting on the book or\n reserved by a redemption cannot be retired), and the burn shows in `ListUnitHolders`\n like any other supply change.\n\n Backing is the third axis. Units minted in kind have no cash in the fund's claim\n behind them, so `Redeem` — which pays cash out of that claim — is refused on a product\n whose `backing` is `in_kind` (FAILED_PRECONDITION); holders exit through the book. The\n first `IssueUnits` flips a product from `cash` to `in_kind` on its own; an operator\n flips it back with `SetAllocationBacking` once the fund does hold cash for the units."
     },
     {
       "name": "banking.v1.AuthService",
@@ -15266,7 +15160,7 @@
     },
     {
       "name": "banking.v1.BalanceService",
-      "description": "BalanceService — the bank's treasury and company capital (operator surface).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events from\n Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated\n (allowlist) at the boundary. See docs/ARCHITECTURE.md."
+      "description": "BalanceService — the bank's treasury and the platform's own allocations (operator\n surface).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events from\n Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated\n (allowlist) at the boundary. See docs/ARCHITECTURE.md.\n\n The platform holds no money of its own (#245): what it earns is the `fee` allocation's\n and what it was seeded with is the `fund` allocation's, and both are held by PEOPLE\n through units — so the treasury lists every allocation with its holders, and nothing\n here pays \"the fund\" out. Cash leaves a reserved allocation by a holder's redemption\n or by a payment the owners' consilium approved (`PaymentsService`)."
     },
     {
       "name": "banking.v1.BookService",
@@ -15274,7 +15168,7 @@
     },
     {
       "name": "banking.v1.ConsiliumService",
-      "description": "ConsiliumService — multi-owner authorization for the fund paying its OWN earned\n revenue out. One owner opens an invoice; strictly more than half of ALL owners must\n each confirm it from their mailbox before a single cent moves.\n\n WHY THE MONEY PLANE OWNS THIS. docs/ARCHITECTURE.md rejects letting a\n concierge-signed artifact authorize money movement, and a consilium verdict is\n exactly such an artifact. So the tally is computed, stored and verified here, against\n the owner roster this plane already mirrors (`0016_user_role.sql`). Concierge is used\n only to DELIVER the mail, over a typed payload it renders itself.\n\n QUORUM. `threshold = floor(N / 2) + 1` where N is the owner count at open. The\n initiator is in the denominator but gets NO vote and is never minted a token — so\n opening a request can never lower the bar the initiator has to clear. N \u003c 3 makes\n the threshold unreachable and is refused at open rather than parked forever.\n\n IMMUTABILITY. There is no edit RPC. `payload_hash` binds every approval to the exact\n terms shown in the mail; changing anything means cancel and reopen, and votes are not\n carried over. See docs/CONSILIUM.md for the full policy and threat model."
+      "description": "ConsiliumService — multi-owner authorization over the platform's own money and its\n price: a payment out of a service claim (opened inside `PaymentsService.OpenPayment`),\n a NAV mark past the move guard, a change of fee terms beyond the house envelope, a new\n holder of a reserved allocation (`OpenHolderGrant`), and a seed of the platform's\n capital (`BalanceService.SeedCapital`). One owner opens a request; strictly more than\n half of ALL owners must each confirm it from their mailbox before anything happens.\n\n The kinds, as the `Consilium` message tells them apart (exactly one terms sibling is\n set): `revenue_payout` (HISTORY ONLY — retired by #245, nothing opens one), `payment`,\n `valuation_override`, `fee_policy`, `holder_grant`, `seed_capital`.\n\n WHY THE MONEY PLANE OWNS THIS. docs/ARCHITECTURE.md rejects letting a\n concierge-signed artifact authorize money movement, and a consilium verdict is\n exactly such an artifact. So the tally is computed, stored and verified here, against\n the owner roster this plane already mirrors (`0016_user_role.sql`). Concierge is used\n only to DELIVER the mail, over a typed payload it renders itself.\n\n QUORUM. `threshold = floor(N / 2) + 1` where N is the owner count at open. The\n initiator is in the denominator but gets NO vote and is never minted a token — so\n opening a request can never lower the bar the initiator has to clear. N \u003c 3 makes\n the threshold unreachable and is refused at open rather than parked forever.\n\n IMMUTABILITY. There is no edit RPC. `payload_hash` binds every approval to the exact\n terms shown in the mail; changing anything means cancel and reopen, and votes are not\n carried over. See docs/CONSILIUM.md for the full policy and threat model."
     },
     {
       "name": "banking.v1.ConsiliumApprovalService",
@@ -15282,7 +15176,7 @@
     },
     {
       "name": "banking.v1.FeesService",
-      "description": "FeesService — a fund's management and performance fee (\"2 and 20\").\n\n Two charges, answering different questions. **Management** (2% p.a. by default) is\n rent on parked capital: it accrues continuously with elapsed time and is charged\n whether the fund made money or not. **Performance** (20% by default) is a share of\n profit above the investor's OWN high-water mark, crystallized at the end of a\n period. A product with no policy charges nothing — the fee is opt-in per product.\n\n The mark is PER INVESTOR, not per fund. That is what stops one investor from paying\n for another's timing: somebody who subscribed at the top pays only on gains above\n the price they actually paid, and somebody who subscribed after a drawdown does not\n ride the recovery fee-free. (A fund-level mark, which a tokenized vault is forced\n into, mutualizes both.)\n\n A fee is collected by clawing back UNITS — the holder's fund units move to the\n manager's fee-unit account on the share ledger — never by moving cash. So: no chain\n fee is ever paid to collect a fee, an investor's cash balance is untouched and\n cannot be driven negative, and because total units outstanding do not change, NAV\n per unit does not move and no other investor pays for the charge. What cannot be\n collected (units locked by a queued redemption, or a residue below one base unit)\n is carried as debt and taken next time; it is never written off.\n\n SettleFeeShares is the one operation that crosses into cash, converting a whole\n fund's accumulated fee units in one go rather than once per investor. Amounts and\n prices are exact decimal strings. See piggybank/core/PATTERNS.md and docs/FEES.md."
+      "description": "FeesService — a fund's management and performance fee (\"2 and 20\").\n\n Two charges, answering different questions. **Management** (2% p.a. by default) is\n rent on parked capital: it accrues continuously with elapsed time and is charged\n whether the fund made money or not. **Performance** (20% by default) is a share of\n profit above the investor's OWN high-water mark, crystallized at the end of a\n period. A product with no policy charges nothing — the fee is opt-in per product.\n\n The mark is PER INVESTOR, not per fund. That is what stops one investor from paying\n for another's timing: somebody who subscribed at the top pays only on gains above\n the price they actually paid, and somebody who subscribed after a drawdown does not\n ride the recovery fee-free. (A fund-level mark, which a tokenized vault is forced\n into, mutualizes both.)\n\n A fee is collected by clawing back UNITS — the holder's fund units move to the\n product's fee class, held by the reserved `fee` allocation (#245: what the platform\n earns is that allocation's, and its holders are people) — never by moving cash. So: no chain\n fee is ever paid to collect a fee, an investor's cash balance is untouched and\n cannot be driven negative, and because total units outstanding do not change, NAV\n per unit does not move and no other investor pays for the charge. What cannot be\n collected (units locked by a queued redemption, or a residue below one base unit)\n is carried as debt and taken next time; it is never written off.\n\n SettleFeeShares is the one operation that crosses into cash, converting a whole\n fund's accumulated fee units in one go rather than once per investor — at the NAV of\n the day, out of the product's claim into the `fee` allocation's. Amounts and prices\n are exact decimal strings. See piggybank/core/PATTERNS.md and docs/FEES.md."
     },
     {
       "name": "banking.v1.HealthService",
@@ -15294,7 +15188,7 @@
     },
     {
       "name": "banking.v1.PaymentsService",
-      "description": "PaymentsService — the ORDER that moves money between two named ends of the platform.\n\n Three tiers on one order, DERIVED from the destination and never supplied: an external\n wallet address (L1, settled by the withdrawal saga), a product's pooled claim\n `service:\u003cid\u003e` (L2, one posted transfer), any other internal claim (L3, one posted\n transfer). See domain/src/payments.rs for the aggregate and docs/CONSILIUM.md § Payments\n for the policy.\n\n AUTHORIZATION IS A FUNCTION OF THE SOURCE. A payment out of fund-owned money\n (`piggybank`, `revenue`, `service:\u003cid\u003e`) needs the owners' consilium at every tier — the\n consilium is opened INSIDE OpenPayment, there is no separate RPC. A payment out of an\n investor's own claim (`user:\u003cid\u003e`) needs THAT investor's emailed consent at every tier.\n There is deliberately no cell in which one admin moves fund money alone.\n\n IMMUTABILITY. There is no edit RPC. `payload_hash` binds the approval to the exact terms\n shown in the mail; changing anything means cancel and reopen."
+      "description": "PaymentsService — the ORDER that moves money between two named ends of the platform.\n\n Three tiers on one order, DERIVED from the destination and never supplied: an external\n wallet address (L1, settled by the withdrawal saga), a product's pooled claim\n `service:\u003cid\u003e` (L2, one posted transfer), any other internal claim (L3, one posted\n transfer). See domain/src/payments.rs for the aggregate and docs/CONSILIUM.md § Payments\n for the policy.\n\n AUTHORIZATION IS A FUNCTION OF THE SOURCE. A payment out of an allocation's pooled\n claim (`service:\u003cid\u003e` — a product's, or the platform's own `fee` / `fund`) needs the\n owners' consilium at every tier — the consilium is opened INSIDE OpenPayment, there is\n no separate RPC. A payment out of an investor's own claim (`user:\u003cid\u003e`) needs THAT\n investor's emailed consent at every tier. There is deliberately no cell in which one\n admin moves pooled money alone. The platform has no money of its own outside an\n allocation (#245): the singleton `piggybank` / `revenue` sources are retired, and a\n request naming them is refused.\n\n IMMUTABILITY. There is no edit RPC. `payload_hash` binds the approval to the exact terms\n shown in the mail; changing anything means cancel and reopen."
     },
     {
       "name": "banking.v1.PaymentConsentService",

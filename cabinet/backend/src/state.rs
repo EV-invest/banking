@@ -282,10 +282,6 @@ impl Grpc {
 		Ok(self.allocations().issue_units(bearer(token, req)?).await?.into_inner())
 	}
 
-	pub async fn transfer_company_stake(&self, token: &str, req: bk::TransferCompanyStakeRequest) -> Result<bk::UnitIssuance, Status> {
-		Ok(self.allocations().transfer_company_stake(bearer(token, req)?).await?.into_inner())
-	}
-
 	pub async fn retire_units(&self, token: &str, req: bk::RetireUnitsRequest) -> Result<bk::UnitIssuance, Status> {
 		Ok(self.allocations().retire_units(bearer(token, req)?).await?.into_inner())
 	}
@@ -745,10 +741,9 @@ impl Grpc {
 	}
 
 	/// Record an out-of-band on-chain arrival against the ledger, chain-proven and
-	/// idempotent by `tx_ref`. The operator funds a rail's treasury hot wallet directly,
-	/// which moves real USDT without producing any ledger fact — this is how that fact gets
-	/// written. It is the general path (the chain decides whose money it is); `SeedCapital`
-	/// is the same verification with the added assertion that it is the fund's own capital.
+	/// idempotent by `tx_ref`. The chain names the deposit address's owner, so this always
+	/// credits a person; a transfer to the treasury address is refused here and attributed
+	/// through [`Self::seed_capital`] instead.
 	pub async fn record_deposit(&self, token: &str, req: bk::RecordDepositRequest) -> Result<bk::RecordDepositResponse, Status> {
 		Ok(self.balance().record_deposit(bearer(token, req)?).await?.into_inner())
 	}
@@ -810,17 +805,13 @@ impl Grpc {
 		Ok(())
 	}
 
-	/// What the fund has earned (the `fee` claim) and the rails a payout can ship on.
-	pub async fn fund_revenue(&self, token: &str) -> Result<bk::FundRevenue, Status> {
+	/// What the platform has earned: the `fee` allocation, in the treasury's shape — cash,
+	/// supply, price and holders (#245). Nothing pays it out from here.
+	pub async fn fund_revenue(&self, token: &str) -> Result<bk::AllocationTreasury, Status> {
 		Ok(self.balance().get_fund_revenue(bearer(token, bk::GetFundRevenueRequest {})?).await?.into_inner())
 	}
 
-	/// Pay the fund's own earned revenue out to an external wallet. The hub caps it at
-	/// the revenue claim's available balance — client money is a different account.
-	pub async fn request_revenue_payout(&self, token: &str, req: bk::RequestRevenuePayoutRequest) -> Result<bk::Withdrawal, Status> {
-		Ok(self.balance().request_revenue_payout(bearer(token, req)?).await?.into_inner())
-	}
-
+	/// HISTORY ONLY (#245): cancel a revenue payout queued before the kind was retired.
 	pub async fn cancel_revenue_payout(&self, token: &str, withdrawal_id: &str) -> Result<bk::Withdrawal, Status> {
 		let req = bk::CancelRevenuePayoutRequest {
 			withdrawal_id: withdrawal_id.to_string(),
@@ -828,11 +819,12 @@ impl Grpc {
 		Ok(self.balance().cancel_revenue_payout(bearer(token, req)?).await?.into_inner())
 	}
 
+	/// HISTORY ONLY (#245): the revenue payouts opened before the kind was retired.
 	pub async fn revenue_payouts(&self, token: &str) -> Result<bk::WithdrawalList, Status> {
 		Ok(self.balance().list_revenue_payouts(bearer(token, bk::ListRevenuePayoutsRequest {})?).await?.into_inner())
 	}
 
-	// ── consilium: multi-owner authorization for a revenue payout ──────────────
+	// ── consilium: multi-owner authorization over the platform's own money ──────
 	// The tally lives in the MONEY plane, against the owner roster this plane already
 	// mirrors: `docs/ARCHITECTURE.md` rejects letting a concierge-signed artifact
 	// authorize money movement, and a consilium verdict is exactly such an artifact.
@@ -848,11 +840,6 @@ impl Grpc {
 			consilium_id: consilium_id.to_string(),
 		};
 		Ok(self.consilium().get_consilium(bearer(token, req)?).await?.into_inner())
-	}
-
-	pub async fn open_revenue_payout(&self, token: &str, terms: bk::RevenuePayoutTerms) -> Result<bk::Consilium, Status> {
-		let req = bk::OpenRevenuePayoutRequest { terms: Some(terms) };
-		Ok(self.consilium().open_revenue_payout(bearer(token, req)?).await?.into_inner())
 	}
 
 	/// Put a NAV mark past the move guard to the owners (banking#232). Same plane and same

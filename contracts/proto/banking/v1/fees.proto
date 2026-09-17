@@ -17,7 +17,8 @@ package banking.v1;
 // into, mutualizes both.)
 //
 // A fee is collected by clawing back UNITS — the holder's fund units move to the
-// manager's fee-unit account on the share ledger — never by moving cash. So: no chain
+// product's fee class, held by the reserved `fee` allocation (#245: what the platform
+// earns is that allocation's, and its holders are people) — never by moving cash. So: no chain
 // fee is ever paid to collect a fee, an investor's cash balance is untouched and
 // cannot be driven negative, and because total units outstanding do not change, NAV
 // per unit does not move and no other investor pays for the charge. What cannot be
@@ -25,8 +26,9 @@ package banking.v1;
 // is carried as debt and taken next time; it is never written off.
 //
 // SettleFeeShares is the one operation that crosses into cash, converting a whole
-// fund's accumulated fee units in one go rather than once per investor. Amounts and
-// prices are exact decimal strings. See piggybank/core/PATTERNS.md and docs/FEES.md.
+// fund's accumulated fee units in one go rather than once per investor — at the NAV of
+// the day, out of the product's claim into the `fee` allocation's. Amounts and prices
+// are exact decimal strings. See piggybank/core/PATTERNS.md and docs/FEES.md.
 service FeesService {
   // One fund's terms, or an empty policy when the product charges nothing. Readable
   // by any authenticated user — an investor is entitled to know what they are paying.
@@ -92,10 +94,12 @@ service FeesService {
   // (AllocationManage).
   rpc GetFeeShares(GetFeeSharesRequest) returns (FeeShares);
 
-  // Convert accumulated fee units into fee revenue (AllocationManage). Omit `units`
-  // to settle the whole balance. Refused — never queued — when the fund's claim
-  // cannot cover the payout: nobody is waiting on this, and unconverted fee units
-  // keep accumulating at no cost.
+  // Convert accumulated fee units into the `fee` allocation's cash (AllocationManage).
+  // Omit `units` to settle the whole balance. Refused — never queued — when the fund's
+  // claim cannot cover the payout: nobody is waiting on this, and unconverted fee units
+  // keep accumulating at no cost. The settler is the CALLER, never a field: whoever
+  // posted the product's latest mark cannot settle its fee class for 7 days, so a
+  // request cannot name somebody else to get past that.
   rpc SettleFeeShares(SettleFeeSharesRequest) returns (FeeSettlement);
 }
 
@@ -264,7 +268,7 @@ message GetFeeSharesRequest {
   string service = 1;
 }
 
-// The manager's uncollected fee units in one fund.
+// The `fee` allocation's uncollected fee units in one fund — the product's fee class.
 message FeeShares {
   string service = 1;
   string units = 2;

@@ -10,19 +10,22 @@ package banking.v1;
 // transfer). See domain/src/payments.rs for the aggregate and docs/CONSILIUM.md § Payments
 // for the policy.
 //
-// AUTHORIZATION IS A FUNCTION OF THE SOURCE. A payment out of fund-owned money
-// (`piggybank`, `revenue`, `service:<id>`) needs the owners' consilium at every tier — the
-// consilium is opened INSIDE OpenPayment, there is no separate RPC. A payment out of an
-// investor's own claim (`user:<id>`) needs THAT investor's emailed consent at every tier.
-// There is deliberately no cell in which one admin moves fund money alone.
+// AUTHORIZATION IS A FUNCTION OF THE SOURCE. A payment out of an allocation's pooled
+// claim (`service:<id>` — a product's, or the platform's own `fee` / `fund`) needs the
+// owners' consilium at every tier — the consilium is opened INSIDE OpenPayment, there is
+// no separate RPC. A payment out of an investor's own claim (`user:<id>`) needs THAT
+// investor's emailed consent at every tier. There is deliberately no cell in which one
+// admin moves pooled money alone. The platform has no money of its own outside an
+// allocation (#245): the singleton `piggybank` / `revenue` sources are retired, and a
+// request naming them is refused.
 //
 // IMMUTABILITY. There is no edit RPC. `payload_hash` binds the approval to the exact terms
 // shown in the mail; changing anything means cancel and reopen.
 service PaymentsService {
   // Open a payment order (Admin/Owner). Refused when the source cannot cover the amount
   // right now, when the shape could never execute (an unconfigured rail, a sub-minimum
-  // external amount, an external destination out of `piggybank` or a service claim), or
-  // when another order is already open against the same fund-owned source.
+  // external amount, an external destination out of a service claim), or when another
+  // order is already open against the same service claim.
   rpc OpenPayment(OpenPaymentRequest) returns (Payment);
 
   // The payment history, newest first, filtered (Admin/Owner). Nothing is ever deleted.
@@ -82,11 +85,12 @@ enum ConsentDecision {
 
 // One end of a payment, as a REQUEST names it.
 message Party {
-  // piggybank | revenue | service | user.
+  // user | service. (`piggybank` and `revenue` are retired, #245 — the platform's money is
+  // the `fee` and `fund` allocations: `{kind: "service", id: "fee" | "fund"}`.)
   string kind = 1;
-  // Empty for the two singleton claims. A service slug for `service`. For `user`, the
-  // CONCIERGE user id the console carries (resolved to the money-plane id here; a banking
-  // id is accepted as a fallback, the way UsersService.GetUserBalance resolves one).
+  // A service slug for `service` (`fee` and `fund` included). For `user`, the CONCIERGE
+  // user id the console carries (resolved to the money-plane id here; a banking id is
+  // accepted as a fallback, the way UsersService.GetUserBalance resolves one).
   string id = 2;
 }
 
@@ -112,10 +116,12 @@ message PaymentDestination {
 // fields let a screen link to the account.
 message PaymentEnd {
   string label = 1;
-  // piggybank | revenue | service | user, or `external` for an address.
+  // service | user, or `external` for an address. An order opened before #245 may read
+  // `piggybank` or `revenue` — the retired singleton claims; nothing opens one now.
   string kind = 2;
   // The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the
-  // response carries what the order stored). Empty for singletons and addresses.
+  // response carries what the order stored). Empty for addresses and the retired
+  // singletons.
   string id = 3;
   // Set only when `kind` is `external`.
   string network = 4;
@@ -195,7 +201,8 @@ message ListPaymentsRequest {
   PaymentState state = 2;
   // Either end. Unset means every party.
   Party party = 3;
-  // Only orders whose source is fund-owned — the governance surface.
+  // Only orders whose source is an allocation's claim (`service:<id>`) — the ones the
+  // owners' consilium gates, i.e. the governance surface.
   bool fund_owned_only = 4;
 }
 

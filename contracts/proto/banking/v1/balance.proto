@@ -2,25 +2,38 @@ syntax = "proto3";
 
 package banking.v1;
 
+import "banking/v1/allocations.proto";
 import "banking/v1/funds.proto";
 import "banking/v1/wallet.proto";
 
-// BalanceService — the bank's treasury and company capital (operator surface).
+// BalanceService — the bank's treasury and the platform's own allocations (operator
+// surface).
 //
 // Reads authoritative balances from the TigerBeetle ledger; metadata and events from
 // Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is
 // lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated
 // (allowlist) at the boundary. See docs/ARCHITECTURE.md.
+//
+// The platform holds no money of its own (#245): what it earns is the `fee` allocation's
+// and what it was seeded with is the `fund` allocation's, and both are held by PEOPLE
+// through units — so the treasury lists every allocation with its holders, and nothing
+// here pays "the fund" out. Cash leaves a reserved allocation by a holder's redemption
+// or by a payment the owners' consilium approved (`PaymentsService`).
 service BalanceService {
   // The treasury: per-rail on-chain liquidity (Layer 2) and the claims it backs
   // (Layer 1), read live from TigerBeetle (Read-First).
   rpc GetTreasury(GetTreasuryRequest) returns (Treasury);
 
-  // Record the company's own capital arriving on a rail (Dr WALLET / Cr FUND), PROVEN
-  // against the chain. Same verification as RecordDeposit plus the assertion that the
-  // transfer is fund capital: it must have landed on the rail's treasury address from an
-  // external sender. A transfer to a user's deposit address is that user's deposit and is
-  // refused (record it with RecordDeposit); the sweep is refused. Idempotent by `tx_ref`.
+  // Propose a seed of the platform's capital: a transfer that reached a rail's treasury
+  // address from outside, PROVEN against the chain, to be booked as the depositor's
+  // deposit and subscribed into the `fund` allocation — units of `fund` for the person
+  // whose money it was. This OPENS A CONSILIUM and books nothing: the chain proves the
+  // dollar arrived, it cannot say whose it is, and the first administrator to name a
+  // reference must not be the one who decides. The caller must hold an owner seat. The
+  // arrival is verified now (same verification as RecordDeposit, against
+  // `expected_amount`); a transfer to a user's deposit address is that user's deposit
+  // and is refused (record it with RecordDeposit); the sweep is refused; a reference
+  // already recorded is a conflict.
   rpc SeedCapital(SeedCapitalRequest) returns (SeedCapitalResponse);
 
   // Record a settled on-chain deposit, crediting a party's claim. Idempotent by
@@ -101,22 +114,19 @@ service BalanceService {
   // an address other than the one this hub cleared.
   rpc MigrateDepositAddressToCustodian(MigrateDepositAddressToCustodianRequest) returns (MigrateDepositAddressToCustodianResponse);
 
-  // What the fund has EARNED and may pay itself — the `fee` claim, segmented into
-  // earned / available / pending, plus the rails a payout can ship on. Admin/Owner.
-  rpc GetFundRevenue(GetFundRevenueRequest) returns (FundRevenue);
+  // What the platform has EARNED: the `fee` allocation, in the same shape the treasury
+  // lists every allocation in — its cash (settled / reserved / available), its supply,
+  // its price and who holds it. Admin/Owner. Nothing pays it out from here: a holder is
+  // paid by redeeming their units, and a payment out of its claim is an order the owners
+  // approve (`PaymentsService.OpenPayment` with source `{kind: "service", id: "fee"}`).
+  rpc GetFundRevenue(GetFundRevenueRequest) returns (AllocationTreasury);
 
-  // Pay the fund's own earned revenue out to an external wallet (Admin/Owner). Capped
-  // by `FundRevenue.available`: client claims and the fund's seed capital are different
-  // ledger accounts and are unreachable from here. Runs the same saga as a user
-  // withdrawal — accepted and queued when the rail is short, then dispatched/settled
-  // through the usual operator RPCs — so it shares the withdrawal queue and history.
-  rpc RequestRevenuePayout(RequestRevenuePayoutRequest) returns (Withdrawal);
-
-  // Cancel a still-QUEUED revenue payout (refund to the revenue claim). Refuses a
-  // user's withdrawal, and refuses once processing — a broadcast may have landed.
+  // HISTORY ONLY. Cancel a still-QUEUED revenue payout that predates #245 (refund to
+  // the retired revenue claim). Refuses a user's withdrawal, and refuses once
+  // processing — a broadcast may have landed. Nothing opens a new revenue payout.
   rpc CancelRevenuePayout(CancelRevenuePayoutRequest) returns (Withdrawal);
 
-  // The fund's own payouts, newest first — the payout history. Admin/Owner.
+  // HISTORY ONLY. The revenue payouts opened before #245, newest first. Admin/Owner.
   rpc ListRevenuePayouts(ListRevenuePayoutsRequest) returns (WithdrawalList);
 }
 
@@ -168,9 +178,10 @@ message ListWithdrawalQueueRequest {}
 // One withdrawal awaiting operator action. `email` is the mirrored identity email
 // (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.
 //
-// Revenue payouts share this queue: they need the same dispatch/settle/fail actions,
-// and an operator clearing the queue must see everything in flight against the rails.
-// They carry `source = "revenue"` with `user_id`/`email` empty — the fund owns them.
+// A revenue payout opened before #245 shares this queue while it is still in flight: it
+// needs the same dispatch/settle/fail actions, and an operator clearing the queue must
+// see everything in flight against the rails. It carries `source = "revenue"` with
+// `user_id`/`email` empty. Nothing opens a new one.
 message WithdrawalQueueItem {
   string withdrawal_id = 1;
   string user_id = 2;
@@ -220,28 +231,65 @@ message RailLiquidity {
   bool is_testnet = 8;
 }
 
-// The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).
-// Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset
-// side) equals the sum of all claims — so client liabilities are the remainder beyond
-// the fund's own capital and retained fees.
+// An allocation's cash claim (`service:<id>`), split the way every reader needs it and
+// read off ONE ledger balance, so the three can never disagree: `posted` is settled,
+// `reserved` is spoken for by approved payments out of it that have not settled, and
+// `available = posted − reserved` is what a redemption or a new payment may take.
+message AllocationClaim {
+  string posted = 1;
+  string available = 2;
+  string reserved = 3;
+}
+
+// One allocation as the treasury shows it (#245): the registry's name for it, its cash,
+// its supply, its price and who holds it — the same shape for a product and for the
+// reserved `fee` / `fund` allocations, whose `access` is `hidden`. `nav` is a product's
+// posted mark, or the computed value of a reserved allocation (its cash plus every fee
+// class it holds at that product's NAV) over its supply; `nav_posted_at_unix` is 0
+// while nothing under it has been marked (seed-priced). `holders` are largest first —
+// people, or the `fee` allocation holding a product's fee class.
+message AllocationTreasury {
+  string service = 1;
+  string title = 2;
+  string access = 3;              // hidden | view | invest
+  AllocationClaim claim = 4;
+  string units_outstanding = 5;   // decimal units
+  string nav = 6;                 // decimal USDT per unit
+  int64 nav_posted_at_unix = 7;
+  repeated UnitHolding holders = 8;
+}
+
+// The treasury picture: per-rail liquidity (Layer 2) and who the claims on it belong to
+// (Layer 1). Under the unified-claim model the invariant is GLOBAL — `total_custody`
+// (the asset side) equals the sum of all claims — and every claim is somebody's (#245):
+// a person's directly (`held_by_users`, Σ `user:<id>` claims) or an allocation's, whose
+// units people hold (`allocations`, the hidden `fee` and `fund` included). Nothing here
+// is a remainder: each figure is read off its own accounts, and whether they add up to
+// the custody is the reconciliation's finding, not this view's arithmetic.
 message Treasury {
   repeated RailLiquidity rails = 1;     // per-rail on-chain liquidity (USDT)
   string bank = 2;                      // mocked USD liquidity (separate ledger; off-ramp FX)
   string total_custody = 3;             // sum of rail custody — the asset side
-  string fund_capital = 4;              // the fund's own unallocated capital
-  string fee_revenue = 5;               // retained withdrawal-fee revenue
-  string held_for_clients = 6;          // claims owed to users + services
-  string reserved_for_withdrawals = 7;  // of held_for_clients, locked by in-flight withdrawals
+  // Fields 4..6 were `fund_capital`, `fee_revenue` and `held_for_clients` — the fund's
+  // own singleton claims and the remainder `custody − fund − fee` (#245). Reserved so no
+  // later field inherits a number an old client reads as "the fund's own money".
+  reserved 4, 5, 6;
+  reserved "fund_capital", "fee_revenue", "held_for_clients";
+  string reserved_for_withdrawals = 7;  // locked by in-flight withdrawals and approved payments
+  string held_by_users = 8;             // Σ user claims — what people hold directly
+  repeated AllocationTreasury allocations = 9;
 }
 
-// Record fund capital that reached a rail's treasury, PROVEN against the chain.
+// Propose a seed: a transfer that reached a rail's treasury, PROVEN against the chain,
+// as `depositor_user_id`'s deposit and subscription into `fund`.
 //
-// Like RecordDepositRequest the caller supplies only a pointer to a fact: the amount is
-// read back from the chain and the recipient decides whether it is capital at all. The
-// transfer must have landed on the rail's treasury address from a sender outside every
-// wallet we control. A transfer to a user's deposit address is that user's deposit, not
-// capital — refused, use RecordDeposit. The sweep consolidating a user's address into
-// the treasury is money already on the ledger — refused.
+// Like RecordDepositRequest the caller supplies only a pointer to a fact: the transfer
+// must have landed on the rail's treasury address from a sender outside every wallet we
+// control. A transfer to a user's deposit address is that user's deposit, not a seed —
+// refused, use RecordDeposit. The sweep consolidating a user's address into the treasury
+// is money already on the ledger — refused. Unlike RecordDeposit the amount is UNDER THE
+// OWNERS' SIGNATURE: `expected_amount` is required, checked against the chain now, and
+// frozen into the terms the owners vote over.
 message SeedCapitalRequest {
   string network = 1;  // bep20 | polygon | trc20 | ton — the rail the capital lands on
   // The amount was once caller-supplied — a free credit of `fund` with no dedup key
@@ -249,15 +297,23 @@ message SeedCapitalRequest {
   reserved 2;
   reserved "amount";
   string tx_ref = 3;  // `txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key
-  // Optional operator assertion in decimal USDT. When set it must equal what the chain
-  // reports or the call is refused, so a mistyped reference fails loudly instead of
-  // silently crediting some other transfer.
+  // REQUIRED, decimal USDT: what the chain must report for this reference. A seed is
+  // proposed at a figure the owners approve, not at "whatever the chain says" — a
+  // mistyped reference naming some other real transfer fails here, loudly.
   string expected_amount = 4;
+  // Whose money it is: the person booked as depositor and seated as a holder of `fund`.
+  // A banking (or concierge) user id, resolved the way every admin RPC resolves a
+  // target. Empty means the caller — an owner attributing their own transfer.
+  string depositor_user_id = 5;
 }
 
+// A seed is a consilium, not a write: `recorded` is always false here — nothing is
+// booked until the owners' quorum executes it — and `consilium_id` is where the
+// proposal lives (`ConsiliumService.GetConsilium`).
 message SeedCapitalResponse {
-  bool recorded = 1;  // false if `tx_ref` was already recorded (idempotent no-op)
-  string amount = 2;  // what the CHAIN reported, decimal USDT — never the caller's number
+  bool recorded = 1;        // always false: the booking is the consilium's execution
+  string amount = 2;        // what the terms carry, decimal USDT — verified against the chain
+  string consilium_id = 3;  // the seed-capital consilium this opened
 }
 
 // Record an arrival that reached a rail out of band, PROVEN against the chain.
@@ -279,11 +335,15 @@ message RecordDepositRequest {
   string expected_amount = 6;
 }
 
+// The chain names the owner of the deposit address the transfer landed on, so the
+// credited party is always a PERSON: `party_kind` is `user` and `party_id` their banking
+// id. A transfer to the treasury address is nobody's until the owners say whose — it is
+// refused here and attributed through `SeedCapital`.
 message RecordDepositResponse {
   bool recorded = 1;      // false if `tx_ref` was already recorded (idempotent no-op)
   string amount = 2;      // what the CHAIN reported, decimal USDT — never the caller's number
-  string party_kind = 3;  // who the chain says it belongs to: piggybank | user | service
-  string party_id = 4;    // the user UUID or service id (empty for piggybank)
+  string party_kind = 3;  // always `user`
+  string party_id = 4;    // the banking user id
 }
 
 message DispatchWithdrawalRequest {
@@ -336,34 +396,6 @@ message MigrateDepositAddressToCustodianResponse {
 }
 
 message GetFundRevenueRequest {}
-
-// Per-rail payout options, the mirror of WalletService's `NetworkWithdrawable`.
-// `payable` is the whole available revenue (a request beyond `instant` is accepted and
-// queued until the treasury is topped up); `instant` ships without queueing.
-message RevenueRail {
-  string network = 1;   // bep20 | polygon | trc20 | ton
-  string payable = 2;   // max requestable on this rail (= FundRevenue.available)
-  string instant = 3;   // ships now = min(available, min(TB rail, on-chain treasury))
-  string minimum = 4;   // smallest payout accepted
-}
-
-// The fund's OWN money — what it earned, not what it custodies. `earned` is the `fee`
-// claim, credited by exactly two things: the fee retained on a user withdrawal, and the
-// settled management + performance fee (the "2 and 20").
-// `earned = available + pending_payout` by construction (all three are read off one
-// ledger balance), so the figures can never disagree about a payout in flight.
-message FundRevenue {
-  string earned = 1;           // everything earned and still held
-  string available = 2;        // free to pay out now
-  string pending_payout = 3;   // locked by queued / in-flight payouts
-  repeated RevenueRail rails = 4;
-}
-
-message RequestRevenuePayoutRequest {
-  string network = 1;  // bep20 | polygon | trc20 | ton — the rail to ship on
-  string address = 2;  // destination on-chain address (validated per network)
-  string amount = 3;   // decimal USDT to pay out; no fee is charged, so this is the net
-}
 
 message CancelRevenuePayoutRequest {
   string withdrawal_id = 1;
