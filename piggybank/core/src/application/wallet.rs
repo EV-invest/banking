@@ -29,12 +29,13 @@
 use domain::{
 	balance::LedgerAccountKey,
 	error::DomainError,
-	money::{Nav, Network, Shares, Usdt, WalletAddress},
+	money::{Network, Shares, Usdt, WalletAddress},
 	users::UserId,
 	withdrawals::WithdrawalPolicy,
 };
 
 use crate::{
+	application::funds as funds_app,
 	config::KycGate,
 	ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, UserRepository, deposit_addresses::MigratedAddress, deposits::DepositRecord, ledger::Ledger},
 };
@@ -178,7 +179,7 @@ pub async fn get_wallet(ports: &WalletPorts<'_>, configured: &[Network], gate: K
 		if owned.is_zero() {
 			continue;
 		}
-		let price = nav.current(&position.service).await?.map(|v| v.nav).unwrap_or(Nav::SEED);
+		let price = funds_app::nav_of(nav, ledger, &position.service).await?.nav;
 		let value = price.value(owned)?;
 		invested = invested.checked_add(value).ok_or_else(|| DomainError::Repository("invested total overflow".into()))?;
 	}

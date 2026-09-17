@@ -41,9 +41,9 @@ use sqlx::PgPool;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
-/// `FeeRevenue` is one platform-wide account, so a test that brackets it must not
-/// interleave with another that credits it. Every test that reads or credits it takes
-/// this exclusively; the rest trade fee-free and stay parallel.
+/// The fee allocation's claim (`service:fee`) is one platform-wide account, so a test that
+/// brackets it must not interleave with another that credits it. Every test that reads or
+/// credits it takes this exclusively; the rest trade fee-free and stay parallel.
 static REVENUE: std::sync::LazyLock<tokio::sync::Mutex<()>> = std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 struct Harness {
@@ -266,8 +266,6 @@ async fn parked(h: &Harness, aggregate_id: Uuid) -> Vec<String> {
 }
 
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fee() {
 	let _revenue = REVENUE.lock().await;
 	let Some(h) = harness().await else { return };
@@ -275,7 +273,7 @@ async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fe
 	let (seller, buyer) = (provisioned_user(&h).await, provisioned_user(&h).await);
 	issue_units(&h, &service, seller, "100").await;
 	fund_user(&h, buyer, "100").await;
-	let revenue_before = cash_of(&h, LedgerAccountKey::FeeRevenue).await;
+	let revenue_before = cash_of(&h, LedgerAccountKey::ServiceClaim(ServiceId::fee())).await;
 
 	// The seller rests 10 at 1.50: its units leave the holding for the book's escrow.
 	let ask = sell(&h, seller, &service, "1.5", "10").await;
@@ -304,8 +302,12 @@ async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fe
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(seller)).await, usdt("15"));
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(buyer)).await, usdt("84.85"));
 	assert_eq!(cash_of(&h, LedgerAccountKey::BookCash(buyer)).await, Usdt::ZERO);
-	let revenue_after = cash_of(&h, LedgerAccountKey::FeeRevenue).await;
-	assert_eq!(revenue_after.checked_sub(revenue_before), Some(usdt("0.15")), "the taker's fee landed in fee revenue");
+	let revenue_after = cash_of(&h, LedgerAccountKey::ServiceClaim(ServiceId::fee())).await;
+	assert_eq!(
+		revenue_after.checked_sub(revenue_before),
+		Some(usdt("0.15")),
+		"the taker's fee landed in the fee allocation's claim"
+	);
 	// Supply is untouched: the book never mints or burns.
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("100"));
 	assert_eq!(parked(&h, ask.order.id().raw()).await, Vec::<String>::new());
@@ -330,7 +332,7 @@ async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fe
 		(Side::Sell, ask.order.id(), Usdt::ZERO),
 		"the maker paid nothing"
 	);
-	let snapshot = book_app::snapshot(&h.book, &h.nav, &service, 20, now_unix()).await.unwrap();
+	let snapshot = book_app::snapshot(&h.book, &h.nav, h.ledger.as_ref(), &service, 20, now_unix()).await.unwrap();
 	assert!(snapshot.bids.is_empty() && snapshot.asks.is_empty());
 	assert_eq!(snapshot.last, Some((price("1.5"), Side::Buy)));
 	assert_eq!(snapshot.volume_24h, shares("10"));
@@ -342,7 +344,7 @@ async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fe
 
 #[tokio::test]
 async fn a_buy_below_its_limit_gets_the_price_improvement_back() {
-	// Pays a fee, so it must not interleave with the test bracketing `FeeRevenue`.
+	// Pays a fee, so it must not interleave with the test bracketing `service:fee`.
 	let _revenue = REVENUE.lock().await;
 	let Some(h) = harness().await else { return };
 	let service = tradable_product(&h, 100).await;
@@ -380,7 +382,7 @@ async fn a_partial_fill_leaves_the_maker_resting_with_the_rest() {
 		(OrderState::PartiallyFilled, shares("4"), shares("6"))
 	);
 
-	let snapshot = book_app::snapshot(&h.book, &h.nav, &service, 20, now_unix()).await.unwrap();
+	let snapshot = book_app::snapshot(&h.book, &h.nav, h.ledger.as_ref(), &service, 20, now_unix()).await.unwrap();
 	assert_eq!(snapshot.asks.len(), 1);
 	assert_eq!((snapshot.asks[0].price, snapshot.asks[0].size, snapshot.asks[0].orders), (price("1"), shares("6"), 1));
 	assert_eq!(book_app::list_open_orders(&h.book, seller, Some(&service)).await.unwrap().len(), 1);
@@ -735,7 +737,7 @@ async fn candles_aggregate_the_tape_by_bucket() {
 	assert!(book_app::candles(&h.book, &service, CandleResolution::M1, 0, now).await.is_err());
 	assert!(book_app::candles(&h.book, &service, CandleResolution::M1, now, now).await.is_err());
 	// The snapshot's 24h change measures the last fill against the first.
-	let snapshot = book_app::snapshot(&h.book, &h.nav, &service, 20, now).await.unwrap();
+	let snapshot = book_app::snapshot(&h.book, &h.nav, h.ledger.as_ref(), &service, 20, now).await.unwrap();
 	assert_eq!(snapshot.change_24h_pct.as_deref(), Some("-10.00"));
 	assert_eq!(snapshot.volume_24h, shares("6"));
 }
@@ -754,7 +756,7 @@ async fn the_feed_frames_on_every_change_and_reports_where_the_callers_orders_mo
 	sell(&h, seller, &service, "1", "10").await;
 	receiver.changed().await.expect("a placement frames");
 	let after_ask = *receiver.borrow_and_update();
-	let frame = book_app::watch_frame(&h.book, &h.nav, &service, buyer, 20, 20, now_unix()).await.unwrap();
+	let frame = book_app::watch_frame(&h.book, &h.nav, h.ledger.as_ref(), &service, buyer, 20, 20, now_unix()).await.unwrap();
 	assert_eq!(frame.snapshot.revision, after_ask);
 	assert_eq!(frame.orders_revision, 0, "the buyer has no orders yet");
 	assert_eq!(frame.snapshot.asks.len(), 1);
@@ -764,10 +766,10 @@ async fn the_feed_frames_on_every_change_and_reports_where_the_callers_orders_mo
 	receiver.changed().await.expect("a fill frames");
 	let after_fill = *receiver.borrow_and_update();
 	assert!(after_fill > after_ask);
-	let frame = book_app::watch_frame(&h.book, &h.nav, &service, buyer, 20, 20, now_unix()).await.unwrap();
+	let frame = book_app::watch_frame(&h.book, &h.nav, h.ledger.as_ref(), &service, buyer, 20, 20, now_unix()).await.unwrap();
 	assert_eq!(frame.orders_revision, after_fill, "the buyer's order moved at this revision");
 	assert_eq!(frame.trades.len(), 1);
-	let sellers = book_app::watch_frame(&h.book, &h.nav, &service, seller, 20, 20, now_unix()).await.unwrap();
+	let sellers = book_app::watch_frame(&h.book, &h.nav, h.ledger.as_ref(), &service, seller, 20, 20, now_unix()).await.unwrap();
 	assert_eq!(sellers.orders_revision, after_fill, "so did the maker's");
 	assert_eq!(sellers.snapshot.mid, None, "one-sided book: no mid");
 	assert!(!receiver.has_changed().unwrap(), "nothing more until the next change");
@@ -799,7 +801,7 @@ async fn the_policy_is_operator_set_and_bounded() {
 	assert_eq!(defaults.policy, BookPolicy::default());
 	assert_eq!(defaults.updated_at, 0);
 	assert!(book_app::list_trades(&h.book, &fresh, 10).await.unwrap().is_empty());
-	let snapshot = book_app::snapshot(&h.book, &h.nav, &fresh, 20, now_unix()).await.unwrap();
+	let snapshot = book_app::snapshot(&h.book, &h.nav, h.ledger.as_ref(), &fresh, 20, now_unix()).await.unwrap();
 	assert_eq!(snapshot.revision, 0);
 	assert_eq!(snapshot.last, None);
 }

@@ -165,6 +165,30 @@ fn fee_holder() -> UnitHolder {
 	UnitHolder::Allocation(ServiceId::fee())
 }
 
+/// The cap table's units for one class of holder — a person, the fee allocation, or the
+/// retired company stake — summed over its lines, so the assertions below read as the
+/// three-line summary the wire still carries.
+fn units_held_by(holders: &issuance_app::UnitHoldersView, pick: fn(&UnitHolder) -> bool) -> Shares {
+	holders
+		.holders
+		.iter()
+		.filter(|line| pick(&line.holder))
+		.fold(Shares::ZERO, |acc, line| acc.checked_add(line.units).unwrap())
+}
+
+fn investor_units(holders: &issuance_app::UnitHoldersView) -> Shares {
+	units_held_by(holders, |holder| matches!(holder, UnitHolder::User(_)))
+}
+
+fn fee_units(holders: &issuance_app::UnitHoldersView) -> Shares {
+	units_held_by(holders, |holder| matches!(holder, UnitHolder::Allocation(a) if *a == ServiceId::fee()))
+}
+
+#[allow(deprecated)]
+fn company_units(holders: &issuance_app::UnitHoldersView) -> Shares {
+	units_held_by(holders, |holder| matches!(holder, UnitHolder::Company))
+}
+
 async fn units_of(h: &Harness, key: LedgerAccountKey) -> Shares {
 	Shares::from_base_units(h.ledger.balance(&key).await.unwrap().posted)
 }
@@ -460,14 +484,25 @@ async fn units_issued_in_kind_land_on_the_holder_and_in_the_supply_with_no_cash_
 	// The cap table the operator reads before opening the product.
 	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
 	assert_eq!(holders.units_outstanding, shares("16250"));
-	assert_eq!(holders.company_units, Shares::ZERO);
-	assert_eq!(holders.fee_units, shares("13000"));
-	assert_eq!(holders.investor_units, shares("3250"));
-	// And what the investor's own screen shows: no company stake any more.
+	// Every line is a holder read from the ledger, largest first — nobody is a remainder.
+	assert_eq!(
+		holders.holders,
+		vec![
+			issuance_app::UnitHolding {
+				holder: fee_holder(),
+				units: shares("13000")
+			},
+			issuance_app::UnitHolding {
+				holder: UnitHolder::User(investor),
+				units: shares("3250")
+			},
+		]
+	);
+	assert_eq!(company_units(&holders), Shares::ZERO);
+	// And what the investor's own screen shows.
 	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), investor, false, now_unix())
 		.await
 		.unwrap();
-	assert_eq!(view.company_units, Shares::ZERO);
 	assert_eq!(view.units_outstanding, shares("16250"));
 }
 
@@ -571,7 +606,6 @@ async fn capping_at_the_issued_supply_closes_the_product_to_further_units() {
 		.await
 		.unwrap();
 	assert_eq!(view.remaining_capacity, Shares::ZERO, "cap == issued means nothing is left");
-	assert_eq!(view.company_units, Shares::ZERO);
 
 	// Opened to everyone, and still no subscription fits.
 	open_to_everyone(&h, &service).await;
@@ -698,8 +732,8 @@ async fn a_company_row_written_before_the_retirement_still_reads_and_replays() {
 	assert_eq!(record.issuance.state(), IssuanceState::Applied, "the relay stamped the replayed row");
 	// And the cap table still shows the retired stake until the data migration moves it.
 	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
-	assert_eq!(holders.company_units, units);
-	assert_eq!(holders.investor_units, Shares::ZERO);
+	assert_eq!(company_units(&holders), units);
+	assert_eq!(investor_units(&holders), Shares::ZERO);
 }
 
 #[tokio::test]
@@ -718,9 +752,9 @@ async fn the_fee_allocation_holds_a_products_fee_class_and_nothing_holds_a_reser
 	assert_eq!(units_of(&h, LedgerAccountKey::FeeShares(service.clone())).await, shares("800"));
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("800"));
 	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
-	assert_eq!(holders.fee_units, shares("800"));
-	assert_eq!(holders.company_units, Shares::ZERO);
-	assert_eq!(holders.investor_units, Shares::ZERO);
+	assert_eq!(fee_units(&holders), shares("800"));
+	assert_eq!(company_units(&holders), Shares::ZERO);
+	assert_eq!(investor_units(&holders), Shares::ZERO);
 	// The row round-trips through its own column, not the user one.
 	let (kind, user, holder_service): (String, Option<Uuid>, Option<String>) = sqlx::query_as("SELECT holder_kind, holder_id, holder_service FROM unit_issuances WHERE id = $1")
 		.bind(record.issuance.id().raw())
@@ -1294,7 +1328,7 @@ async fn a_queued_mint_is_reported_beside_the_settled_supply_until_the_relay_pos
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
 	assert_eq!(holders.units_outstanding, shares("13000"));
-	assert_eq!(holders.fee_units, shares("13000"));
+	assert_eq!(fee_units(&holders), shares("13000"));
 	assert_eq!(holders.queued_units, Shares::ZERO, "applied rows drop out of the queue");
 }
 
@@ -1385,7 +1419,7 @@ async fn retiring_units_on_a_closed_product_burns_them_out_of_the_holder_and_the
 	);
 	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
 	assert_eq!(
-		(holders.units_outstanding, holders.fee_units, holders.investor_units),
+		(holders.units_outstanding, fee_units(&holders), investor_units(&holders)),
 		(shares("12250"), shares("10000"), shares("2250"))
 	);
 

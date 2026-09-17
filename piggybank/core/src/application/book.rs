@@ -33,7 +33,7 @@ use domain::{
 use tokio::sync::{Notify, watch};
 
 use crate::{
-	application::allocations as allocations_app,
+	application::{allocations as allocations_app, funds as funds_app},
 	ports::{
 		allocations::AllocationRegistry,
 		book::{BookLevel, BookPolicyRecord, BookStore, Candle, OrderRecord, PlaceOutcome, TradeRecord, UserTrade},
@@ -179,10 +179,10 @@ pub async fn set_policy(allocations: &dyn AllocationRegistry, store: &dyn BookSt
 	store.set_policy(service, &policy).await
 }
 
-/// The fund's current mark, staleness ignored — the book does not deal at it, it only
+/// The fund's current price, staleness ignored — the book does not deal at it, it only
 /// records it (on each trade, for the buyer's high-water mark) and shows it.
-async fn current_nav(nav: &dyn NavMarks, service: &ServiceId) -> Result<Nav, DomainError> {
-	Ok(nav.current(service).await?.map(|v| v.nav).unwrap_or(Nav::SEED))
+async fn current_nav(nav: &dyn NavMarks, ledger: &dyn Ledger, service: &ServiceId) -> Result<Nav, DomainError> {
+	Ok(funds_app::nav_of(nav, ledger, service).await?.nav)
 }
 
 /// Place an order for `user`. Gates in order: the registry (registered, visible, and
@@ -248,7 +248,7 @@ pub async fn place_order(ports: &BookPorts<'_>, user: UserId, request: PlaceOrde
 			Locked::Cash(reserve)
 		}
 	};
-	let nav = current_nav(ports.nav, &request.service).await?;
+	let nav = current_nav(ports.nav, ports.ledger, &request.service).await?;
 	let order = Order::place(
 		OrderId::new(),
 		request.service.clone(),
@@ -319,9 +319,9 @@ pub async fn list_trades(store: &dyn BookStore, service: &ServiceId, limit: u32)
 
 /// The aggregated book with its derived figures. Visibility is the caller's to check
 /// first ([`require_visible`]).
-pub async fn snapshot(store: &dyn BookStore, nav: &dyn NavMarks, service: &ServiceId, depth: u32, now_unix: i64) -> Result<BookSnapshotView, DomainError> {
+pub async fn snapshot(store: &dyn BookStore, nav: &dyn NavMarks, ledger: &dyn Ledger, service: &ServiceId, depth: u32, now_unix: i64) -> Result<BookSnapshotView, DomainError> {
 	let depth_view = store.depth(service, depth).await?;
-	let nav = current_nav(nav, service).await?;
+	let nav = current_nav(nav, ledger, service).await?;
 	let best_bid = depth_view.bids.first().map(|level| level.price);
 	let best_ask = depth_view.asks.first().map(|level| level.price);
 	let (mid, spread) = match (best_bid, best_ask) {
@@ -354,8 +354,19 @@ pub async fn snapshot(store: &dyn BookStore, nav: &dyn NavMarks, service: &Servi
 
 /// One frame for a `WatchBook` subscriber: the snapshot, the freshest `trades` public
 /// trades, and where the caller's own orders last moved.
-pub async fn watch_frame(store: &dyn BookStore, nav: &dyn NavMarks, service: &ServiceId, caller: UserId, depth: u32, trades: u32, now_unix: i64) -> Result<WatchFrame, DomainError> {
-	let snapshot = snapshot(store, nav, service, depth, now_unix).await?;
+// Three ports and a five-field request; a struct would serve this one call site only.
+#[allow(clippy::too_many_arguments)]
+pub async fn watch_frame(
+	store: &dyn BookStore,
+	nav: &dyn NavMarks,
+	ledger: &dyn Ledger,
+	service: &ServiceId,
+	caller: UserId,
+	depth: u32,
+	trades: u32,
+	now_unix: i64,
+) -> Result<WatchFrame, DomainError> {
+	let snapshot = snapshot(store, nav, ledger, service, depth, now_unix).await?;
 	let trades = store.list_trades(service, trades).await?;
 	let orders_revision = store.orders_revision(caller, service).await?;
 	Ok(WatchFrame { snapshot, trades, orders_revision })

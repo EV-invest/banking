@@ -164,7 +164,7 @@ impl BookService for BookSvc {
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		self.visible(&request, &service).await?;
 		let depth = bounded(request.get_ref().depth, DEFAULT_DEPTH, MAX_DEPTH);
-		let view = book_app::snapshot(self.state.book.as_ref(), self.state.nav.as_ref(), &service, depth, unix_now())
+		let view = book_app::snapshot(self.state.book.as_ref(), self.state.nav.as_ref(), self.state.ledger.as_ref(), &service, depth, unix_now())
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(snapshot_to_proto(&view)))
@@ -275,6 +275,7 @@ async fn next_frame(mut watch: WatchState) -> Option<(Result<pb::BookEvent, Stat
 	let frame = book_app::watch_frame(
 		watch.state.book.as_ref(),
 		watch.state.nav.as_ref(),
+		watch.state.ledger.as_ref(),
 		&watch.service,
 		watch.caller,
 		watch.depth,

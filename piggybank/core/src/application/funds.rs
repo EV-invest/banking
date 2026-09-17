@@ -6,10 +6,16 @@
 //! (later slices) deal on the latest mark — a deliberate *backward-pricing* tradeoff,
 //! guarded by a **staleness** check; the operator post is guarded by a **move** check,
 //! because the AUM input is the most dangerous seam in the system ("trusted" ≠ "safe").
+//!
+//! The reserved `fee` and `fund` allocations (#245) take no mark at all: their price is
+//! **computed** from what they hold — the products' fee classes at those products' NAV
+//! plus the cash on their own claim, over their own supply — by [`nav_of`], the one
+//! reader every price in this module and beyond goes through.
 
 use domain::{
 	balance::{LedgerAccountKey, ServiceId, ValuationId},
 	error::DomainError,
+	issuance::UnitHolder,
 	money::{Nav, Shares, Usdt},
 	redemptions::{Redemption, RedemptionId, RedemptionState},
 	subscriptions::{Subscription, SubscriptionId},
@@ -21,8 +27,8 @@ use crate::{
 	application::allocations as allocations_app,
 	ports::{
 		FundPositionReader, RedemptionRepository, SubscriptionRepository, UnitFlow,
-		allocations::AllocationRegistry,
-		ledger::Ledger,
+		allocations::{AllocationRecord, AllocationRegistry},
+		ledger::{HoldingScope, Ledger},
 		nav::{NavMarks, Valuation},
 	},
 };
@@ -81,9 +87,6 @@ pub struct FundNavView {
 	pub aum: Option<Usdt>,
 	/// The **settled** supply — the denominator NAV is derived against.
 	pub units_outstanding: Shares,
-	/// Of `units_outstanding`, the company's own in-kind stake. Shown to an investor so
-	/// the share of the product that is not theirs and not the market's is on the card.
-	pub company_units: Shares,
 	/// The allocation's authorised unit supply.
 	pub unit_cap: Shares,
 	/// Units still issuable, measured the way [`subscribe`] measures them (settled plus
@@ -132,19 +135,127 @@ pub struct FundPorts<'a> {
 	pub relay: &'a Notify,
 }
 
+/// One allocation's price as every reader sees it: the NAV, the AUM it prices (the
+/// posted mark's, or the computed value of a reserved allocation), and the instant the
+/// price is as of — `0` when nothing has ever been marked, which is also "never stale".
+#[derive(Clone, Copy, Debug)]
+pub struct NavQuote {
+	pub nav: Nav,
+	/// `None` for a product still on the seed NAV; always `Some` for a reserved
+	/// allocation, whose value is a sum, not a mark.
+	pub aum: Option<Usdt>,
+	/// A product: its latest mark's `posted_at`. A reserved allocation: the OLDEST mark
+	/// among the products it holds units of — its price is only as fresh as its stalest
+	/// input — or `0` when none of them has been marked (cash and seed-priced units).
+	pub posted_at_unix: i64,
+}
+
+impl NavQuote {
+	fn seed() -> Self {
+		Self {
+			nav: Nav::SEED,
+			aum: None,
+			posted_at_unix: 0,
+		}
+	}
+
+	/// Whether the price is older than [`MAX_NAV_AGE_SECS`] at `now`. A never-marked
+	/// price has nothing to be stale against.
+	pub fn is_stale(&self, now_unix: i64) -> bool {
+		self.posted_at_unix != 0 && now_unix.saturating_sub(self.posted_at_unix) > MAX_NAV_AGE_SECS
+	}
+}
+
+/// The price of `service` — THE reader of NAV, for every position, deal and screen.
+///
+/// A product's is its latest mark (the seed NAV before the first). A reserved
+/// allocation's (`fee`, `fund`) is **computed**, never posted: the value of the product
+/// units it holds — for `fee`, every product's fee class, each at that product's own
+/// NAV — plus the cash on its claim, divided by its own supply. With no units
+/// outstanding the price is the seed NAV, so the first units issued to a holder are
+/// worth exactly what stands behind them and a later `SharesOutstanding` of zero can
+/// never divide anything. The holdings are read from the ledger, not the registry: what
+/// the allocation is worth is what it holds, whether or not a product is still listed.
+pub async fn nav_of(nav: &dyn NavMarks, ledger: &dyn Ledger, service: &ServiceId) -> Result<NavQuote, DomainError> {
+	if !service.is_reserved() {
+		return marked_quote(nav, service).await;
+	}
+	let mut value = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::ServiceClaim(service.clone())).await?.posted);
+	let mut oldest_mark = 0i64;
+	for (key, units) in ledger.share_holdings(&HoldingScope::Holder(UnitHolder::Allocation(service.clone()))).await? {
+		if units == 0 {
+			continue;
+		}
+		let Some((product, _)) = UnitHolder::of_holding(&key) else { continue };
+		// A reserved allocation holds product units only (the holder graph is reserved →
+		// product, one hop), so a product's price is always a mark, never another sum.
+		let product_price = marked_quote(nav, &product).await?;
+		let holding = product_price.nav.value(Shares::from_base_units(units))?;
+		value = value.checked_add(holding).ok_or_else(|| DomainError::Repository("allocation value overflows".into()))?;
+		if product_price.posted_at_unix != 0 && (oldest_mark == 0 || product_price.posted_at_unix < oldest_mark) {
+			oldest_mark = product_price.posted_at_unix;
+		}
+	}
+	let outstanding = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
+	let price = if outstanding.is_zero() { Nav::SEED } else { Nav::from_aum(value, outstanding)? };
+	Ok(NavQuote {
+		nav: price,
+		aum: Some(value),
+		posted_at_unix: oldest_mark,
+	})
+}
+
+/// A product's price: its latest mark, or the seed NAV before the first.
+async fn marked_quote(nav: &dyn NavMarks, service: &ServiceId) -> Result<NavQuote, DomainError> {
+	Ok(match nav.current(service).await? {
+		Some(v) => NavQuote {
+			nav: v.nav,
+			aum: Some(v.aum),
+			posted_at_unix: v.posted_at_unix,
+		},
+		None => NavQuote::seed(),
+	})
+}
+
 /// The current NAV plus whether it is fresh enough to deal on (`now − posted_at ≤
 /// MAX_NAV_AGE_SECS`). A fund with no mark yet uses the seed NAV and is always fresh
-/// (nothing to be stale against). Subscribe/redeem call this before pricing.
-pub async fn dealing_nav(nav: &dyn NavMarks, service: &ServiceId, now_unix: i64) -> Result<Nav, DomainError> {
-	match nav.current(service).await? {
-		Some(v) => {
-			if now_unix.saturating_sub(v.posted_at_unix) > MAX_NAV_AGE_SECS {
-				return Err(DomainError::Validation("fund nav is stale — a fresh valuation is required before dealing".into()));
-			}
-			Ok(v.nav)
-		}
-		None => Ok(Nav::SEED),
+/// (nothing to be stale against); a reserved allocation is as fresh as the stalest
+/// product mark its price depends on. Subscribe/redeem call this before pricing.
+pub async fn dealing_nav(nav: &dyn NavMarks, ledger: &dyn Ledger, service: &ServiceId, now_unix: i64) -> Result<Nav, DomainError> {
+	let quote = nav_of(nav, ledger, service).await?;
+	if quote.is_stale(now_unix) {
+		return Err(DomainError::Validation("fund nav is stale — a fresh valuation is required before dealing".into()));
 	}
+	Ok(quote.nav)
+}
+
+/// One allocation as `caller` may read it: as [`allocations_app::get_for`] answers — or,
+/// when that answer is `NotFound` because the product is hidden from them, as its
+/// **holder**. Whoever holds units of an allocation reads its title and price like any
+/// other holder, however the catalog treats them: the reserved `fee` and `fund`
+/// allocations are hidden from everyone and held by people (#245), and a person's own
+/// position cannot be a product that does not exist. Holding is a ledger fact, read
+/// live — free units or units resting in a sell. The catalog listing is untouched.
+pub async fn allocation_for_holder(
+	allocations: &dyn AllocationRegistry,
+	ledger: &dyn Ledger,
+	service: &ServiceId,
+	caller: UserId,
+	unrestricted: bool,
+) -> Result<AllocationRecord, DomainError> {
+	match allocations_app::get_for(allocations, service, caller, unrestricted).await {
+		Err(DomainError::NotFound { .. }) if holds_units(ledger, service, caller).await? => allocations.find_for(service, caller).await?.ok_or_else(|| DomainError::NotFound {
+			entity: "allocation",
+			id: service.to_string(),
+		}),
+		answer => answer,
+	}
+}
+
+async fn holds_units(ledger: &dyn Ledger, service: &ServiceId, user: UserId) -> Result<bool, DomainError> {
+	let free = ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?.posted;
+	let escrowed = ledger.balance(&LedgerAccountKey::BookShares(service.clone(), user)).await?.posted;
+	Ok(free != 0 || escrowed != 0)
 }
 
 /// A user subscribes `cash` of their free balance into `service`, minting
@@ -185,7 +296,7 @@ pub async fn subscribe(ports: &FundPorts<'_>, subscriptions: &dyn SubscriptionRe
 	if Usdt::from_base_units(claim.available()) < cash {
 		return Err(DomainError::Validation("insufficient available balance to subscribe".into()));
 	}
-	let price = dealing_nav(ports.nav, &service, now_unix).await?;
+	let price = dealing_nav(ports.nav, ports.ledger, &service, now_unix).await?;
 	allocation.ensure_capacity(issued_units(ports.ledger, &service).await?, Shares::from_cash(cash, price)?)?;
 	let mut subscription = Subscription::open(SubscriptionId::new(), user, service, cash, price)?;
 	subscriptions.open(&mut subscription).await?;
@@ -216,6 +327,12 @@ pub(crate) async fn issued_units(ledger: &dyn Ledger, service: &ServiceId) -> Re
 /// The registry gate here is the **laxer** one: a `closed` allocation still redeems, and
 /// the caller's access is never consulted, so neither winding a product down nor locking
 /// it can trap an investor's units inside it.
+///
+/// A reserved allocation (`fee`, `fund`) is priced by [`nav_of`] and paid out of its own
+/// claim like any product — but a shortfall there is **refused, never queued**: nobody
+/// tops a reserved allocation up on request, its cash grows only as products settle
+/// their fee classes, and a queue of the platform's own holders waiting on themselves
+/// would be a queue nobody drains. The holder settles fee units first and asks again.
 pub async fn request_redemption(
 	ports: &FundPorts<'_>,
 	redemptions: &dyn RedemptionRepository,
@@ -231,20 +348,26 @@ pub async fn request_redemption(
 		return Err(DomainError::Validation("insufficient units to redeem".into()));
 	}
 	// Fresh NAV (staleness guard) — also the auto-settle liquidity estimate.
-	let price = dealing_nav(ports.nav, &service, now_unix).await?;
+	let price = dealing_nav(ports.nav, ports.ledger, &service, now_unix).await?;
 	let cash_out = price.value(units)?;
+	let fund = ports.ledger.balance(&LedgerAccountKey::ServiceClaim(service.clone())).await?;
+	let covered = Usdt::from_base_units(fund.available()) >= cash_out;
+	if !covered && service.is_reserved() {
+		return Err(DomainError::Validation(format!(
+			"the '{service}' allocation's cash cannot cover this redemption — settle fee units into it first, or redeem fewer units"
+		)));
+	}
 	let mut redemption = Redemption::request(RedemptionId::new(), user, service.clone(), units)?;
 	redemptions.open(&mut redemption).await?;
 	ports.relay.notify_one();
 	// Accept-and-queue: settle now (as a separate command) iff the fund's claim can cover
 	// the payout; else leave it queued for the treasury worker.
-	let fund = ports.ledger.balance(&LedgerAccountKey::ServiceClaim(service)).await?;
-	if Usdt::from_base_units(fund.available()) >= cash_out {
+	if covered {
 		// The settle can lose a race — to the relay's subscribe projection (rolled back,
 		// stays queued for the operator) or to a concurrent cancel/fail. The redemption
 		// was accepted either way, so a `Conflict` reports its actual current state
 		// rather than surfacing an error for an already-opened redemption.
-		return match settle_redemption(redemptions, ports.nav, ports.relay, redemption.id(), now_unix).await {
+		return match settle_redemption(redemptions, ports.nav, ports.ledger, ports.relay, redemption.id(), now_unix).await {
 			Err(DomainError::Conflict(_)) => redemptions.find_by_id(redemption.id()).await?.ok_or_else(|| DomainError::NotFound {
 				entity: "redemption",
 				id: redemption.id().to_string(),
@@ -262,7 +385,14 @@ pub async fn request_redemption(
 /// the locked settle tx — not a live TB holding, which lags the async burn — so back-to-back
 /// settles compound deterministically (BANK-MONEY-3), and it applies exactly once per
 /// redemption (see [`crate::infrastructure::redemptions`]).
-pub async fn settle_redemption(redemptions: &dyn RedemptionRepository, nav: &dyn NavMarks, relay: &Notify, id: RedemptionId, now_unix: i64) -> Result<Redemption, DomainError> {
+pub async fn settle_redemption(
+	redemptions: &dyn RedemptionRepository,
+	nav: &dyn NavMarks,
+	ledger: &dyn Ledger,
+	relay: &Notify,
+	id: RedemptionId,
+	now_unix: i64,
+) -> Result<Redemption, DomainError> {
 	let existing = redemptions.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "redemption",
 		id: id.to_string(),
@@ -277,7 +407,7 @@ pub async fn settle_redemption(redemptions: &dyn RedemptionRepository, nav: &dyn
 	// Checked at settle too, not only at request: a queued redemption can outlive a mark
 	// its owner posts later, and settle is where the cash is actually priced.
 	refuse_recent_poster(nav, existing.service(), existing.user(), now_unix).await?;
-	let price = dealing_nav(nav, existing.service(), now_unix).await?;
+	let price = dealing_nav(nav, ledger, existing.service(), now_unix).await?;
 	let redemption = redemptions.settle(id, price).await?;
 	relay.notify_one();
 	Ok(redemption)
@@ -346,12 +476,12 @@ pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Led
 
 /// The current NAV + freshness for a fund (the seed NAV when never marked), plus the
 /// supply headroom left against its allocation's cap, as `caller` may see it. Gated the
-/// same way [`allocations_app::get_for`] is: an unregistered service is `NotFound`, and
-/// so — unless `unrestricted` — is one hidden from this caller. A price is as good a
-/// probe as a title: were the NAV of a hidden product readable, a locked slug would
-/// answer differently from an unregistered one and the catalog could be enumerated
-/// through this route. `unrestricted` is the `AllocationManage` view, gated at the
-/// boundary.
+/// same way [`allocation_for_holder`] is: an unregistered service is `NotFound`, and
+/// so — unless `unrestricted` or the caller holds its units — is one hidden from this
+/// caller. A price is as good a probe as a title: were the NAV of a hidden product
+/// readable, a locked slug would answer differently from an unregistered one and the
+/// catalog could be enumerated through this route. `unrestricted` is the
+/// `AllocationManage` view, gated at the boundary.
 pub async fn fund_nav_view(
 	allocations: &dyn AllocationRegistry,
 	nav: &dyn NavMarks,
@@ -361,44 +491,30 @@ pub async fn fund_nav_view(
 	unrestricted: bool,
 	now_unix: i64,
 ) -> Result<FundNavView, DomainError> {
-	let allocation = allocations_app::get_for(allocations, &service, caller, unrestricted).await?.allocation;
+	let allocation = allocation_for_holder(allocations, ledger, &service, caller, unrestricted).await?.allocation;
 	let balance = ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?;
 	let units_outstanding = Shares::from_base_units(balance.posted);
-	// The retired company stake is still shown until the data migration zeroes it (C-2 drops the field).
-	#[allow(deprecated)]
-	let company_units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::CompanyShares(service.clone())).await?.posted);
 	let remaining_capacity = allocation.remaining_capacity(Shares::from_base_units(balance.posted.saturating_add(balance.pending)));
-	let (unit_cap, current) = (allocation.unit_cap(), nav.current(&service).await?);
-	Ok(match current {
-		Some(v) => FundNavView {
-			service,
-			nav: v.nav,
-			aum: Some(v.aum),
-			units_outstanding,
-			company_units,
-			unit_cap,
-			remaining_capacity,
-			posted_at: v.posted_at_unix,
-			stale: now_unix.saturating_sub(v.posted_at_unix) > MAX_NAV_AGE_SECS,
-		},
-		None => FundNavView {
-			service,
-			nav: Nav::SEED,
-			aum: None,
-			units_outstanding,
-			company_units,
-			unit_cap,
-			remaining_capacity,
-			posted_at: 0,
-			stale: false,
-		},
+	let quote = nav_of(nav, ledger, &service).await?;
+	Ok(FundNavView {
+		service,
+		nav: quote.nav,
+		aum: quote.aum,
+		units_outstanding,
+		unit_cap: allocation.unit_cap(),
+		remaining_capacity,
+		posted_at: quote.posted_at_unix,
+		stale: quote.is_stale(now_unix),
 	})
 }
 
 /// The marks of `service` with `from ≤ posted_at ≤ to` (`0` = unbounded on that side;
 /// `to` is clamped to `now`), oldest first, plus `caller`'s participation through the
 /// same window. Visible to exactly whom [`fund_nav_view`] is: the history of a product
-/// hidden from this caller is `NotFound`, as its price is.
+/// hidden from this caller is `NotFound`, as its price is. A reserved allocation has no
+/// marks — its price is computed, never posted — so its history is its holder's flows
+/// priced at the seed NAV: the chart's deep past, not its current price, which the
+/// position card reads from [`nav_of`].
 ///
 /// The participation is walked BACKWARDS from the live holding: the units at instant `t`
 /// are today's units (free plus escrowed on the book) less every recorded flow after
@@ -422,7 +538,7 @@ pub async fn fund_nav_history(
 	to_unix: i64,
 	now_unix: i64,
 ) -> Result<FundNavHistoryView, DomainError> {
-	allocations_app::get_for(allocations, &service, caller, unrestricted).await?;
+	allocation_for_holder(allocations, ledger, &service, caller, unrestricted).await?;
 	let to_unix = if to_unix == 0 { now_unix } else { to_unix.min(now_unix) };
 	if from_unix < 0 || from_unix > to_unix {
 		return Err(DomainError::Validation("history window is empty — `from` must not be after `to`".into()));
@@ -523,7 +639,8 @@ fn participation_series(live_units: u128, flows: &[UnitFlow], pre_window: Option
 /// Gated on the allocation *existing* (any state — a closed product still gets marked so
 /// queued redemptions price correctly). Without this an AUM post would write a valuation
 /// history for a service no registry entry backs — the second way a phantom fund used to
-/// come into being.
+/// come into being. A reserved allocation refuses a mark outright: its price is computed
+/// from its holdings ([`nav_of`]), and a posted figure would be one nothing reads.
 pub async fn post_fund_valuation(
 	allocations: &dyn AllocationRegistry,
 	nav: &dyn NavMarks,
@@ -533,6 +650,7 @@ pub async fn post_fund_valuation(
 	posted_by: &str,
 	now_unix: i64,
 ) -> Result<Valuation, DomainError> {
+	refuse_mark_on_reserved(&service)?;
 	allocations_app::get(allocations, &service).await?;
 	let derived = Nav::from_aum(aum, issued_supply(ledger, &service).await?)?;
 	if let Some(prev) = nav.current(&service).await? {
@@ -571,6 +689,18 @@ pub async fn record_valuation(nav: &dyn NavMarks, ledger: &dyn Ledger, id: Valua
 	})
 }
 
+/// A reserved allocation (`fee`, `fund`) takes no mark: its NAV is the value of what it
+/// holds, computed by [`nav_of`] on every read. Shared by the direct post and the owners'
+/// override, which are the two ways a mark can be asked for.
+pub fn refuse_mark_on_reserved(service: &ServiceId) -> Result<(), DomainError> {
+	if service.is_reserved() {
+		return Err(DomainError::Validation(format!(
+			"'{service}' is a reserved allocation: its price is computed from what it holds and cannot be marked"
+		)));
+	}
+	Ok(())
+}
+
 /// The settled supply NAV is derived against — posted units only, unlike
 /// [`issued_units`], which also counts in-flight mints for the capacity gate.
 async fn issued_supply(ledger: &dyn Ledger, service: &ServiceId) -> Result<Shares, DomainError> {
@@ -587,20 +717,17 @@ fn move_guard_tripped(from: Nav, to: Nav, against: &str) -> DomainError {
 async fn build_position_view(ledger: &dyn Ledger, nav: &dyn NavMarks, user: UserId, service: ServiceId, cost_basis: Usdt) -> Result<PositionView, DomainError> {
 	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?.posted);
 	let units_in_orders = Shares::from_base_units(ledger.balance(&LedgerAccountKey::BookShares(service.clone(), user)).await?.posted);
-	let (price, nav_as_of) = match nav.current(&service).await? {
-		Some(v) => (v.nav, v.posted_at_unix),
-		None => (Nav::SEED, 0),
-	};
+	let quote = nav_of(nav, ledger, &service).await?;
 	let owned = units.checked_add(units_in_orders).ok_or_else(|| DomainError::Validation("position units overflow".into()))?;
-	let value = price.value(owned)?;
+	let value = quote.nav.value(owned)?;
 	Ok(PositionView {
 		service,
 		units,
 		units_in_orders,
-		nav: price,
+		nav: quote.nav,
 		value,
 		cost_basis,
-		nav_as_of,
+		nav_as_of: quote.posted_at_unix,
 	})
 }
 

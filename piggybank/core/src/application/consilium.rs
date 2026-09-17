@@ -243,6 +243,7 @@ pub async fn open_revenue_payout(ports: &ConsiliumPorts<'_>, initiator: UserId, 
 pub async fn open_valuation_override(ports: &ConsiliumPorts<'_>, initiator: UserId, terms: ValuationOverrideTerms, now: i64) -> Result<ConsiliumView, DomainError> {
 	require_governance_mail(ports.governance_mail_wired)?;
 	require_settled_roster(ports.consilia, ConsiliumKind::ValuationOverride, now).await?;
+	funds_app::refuse_mark_on_reserved(&terms.service)?;
 	allocations_app::get(ports.allocations, &terms.service).await?;
 	let units = Shares::from_base_units(ports.ledger.balance(&LedgerAccountKey::SharesOutstanding(terms.service.clone())).await?.posted);
 	Nav::from_aum(terms.aum, units)?;
