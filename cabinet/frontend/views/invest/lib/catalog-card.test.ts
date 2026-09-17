@@ -80,3 +80,8 @@ test("liquidity: cash-backed redeems at NAV, with the book as a second door when
   assert.equal(liquidity(product(), true), "navOrBook");
   assert.equal(liquidity(product({ allocation: null }), true), "navOrBook");
 });
+
+test("liquidity: an unread book is unknown for a cash-backed product, still the book for in-kind", () => {
+  assert.equal(liquidity(product(), undefined), undefined);
+  assert.equal(liquidity(product({}, { backing: "in_kind" }), undefined), "book");
+});

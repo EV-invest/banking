@@ -11,16 +11,25 @@
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 
+import { Skeleton } from "@evinvest/uikit";
+
 import type { FeePolicy, FundNav } from "@/shared/contracts";
 import { formatDay } from "@/shared/lib/datetime";
 import { pct } from "@/shared/lib/rate";
 import { type Liquidity } from "@/views/invest/lib/catalog-card";
 import { compactUnits } from "@/views/invest/lib/format";
 
-/** The wire's own words for the terms, or the absence of them. A policy that is not
- *  `configured` is an absence, not a zero: a "0% + 0%" line would read as a fee waived. */
-export function FeeHeadline({ policy }: { policy: FeePolicy | null }) {
+/**
+ * The wire's own words for the terms, or the absence of them. A policy that is not
+ * `configured` is an absence, not a zero: a "0% + 0%" line would read as a fee waived.
+ *
+ * `undefined` is "not read yet" and draws a skeleton — distinct from `null`, which is a
+ * read that answered with nothing. Collapsing the two printed "Not published yet" on every
+ * card's first frame, a false statement about a fee on a money surface.
+ */
+export function FeeHeadline({ policy }: { policy: FeePolicy | null | undefined }) {
   const t = useT();
+  if (policy === undefined) return <Skeleton className="inline-block h-3.5 w-32 align-middle" />;
   if (!policy?.configured) return <>{t("invest.facts.feeUnset")}</>;
   const words = { management: pct(policy.management_bps), performance: pct(policy.performance_bps), hurdle: pct(policy.hurdle_bps) };
   return <>{t(policy.hurdle_bps ? "invest.facts.feeHeadlineHurdle" : "invest.facts.feeHeadline", words)}</>;
@@ -49,7 +58,7 @@ export function FactRow({ label, children }: { label: string; children: React.Re
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="shrink-0 text-ink-soft">{label}</dt>
-      <dd className="text-right font-medium">{children}</dd>
+      <dd className="text-right font-medium tabular-nums">{children}</dd>
     </div>
   );
 }
@@ -59,7 +68,7 @@ export function FactRow({ label, children }: { label: string; children: React.Re
  * supply as rows — the card carries the date under its NAV figure and draws the supply
  * as `SupplyBar`, so those two are opted into by the page alone.
  */
-export function ProductFacts({ policy, nav, liquidity, extended, className }: { policy: FeePolicy | null; nav: FundNav | null; liquidity: Liquidity; extended?: boolean; className?: string }) {
+export function ProductFacts({ policy, nav, liquidity, extended, className }: { policy: FeePolicy | null | undefined; nav: FundNav | null; liquidity: Liquidity | undefined; extended?: boolean; className?: string }) {
   const t = useT();
   const locale = useLocale();
   return (
@@ -67,7 +76,9 @@ export function ProductFacts({ policy, nav, liquidity, extended, className }: { 
       <FactRow label={t("invest.facts.fees")}>
         <FeeHeadline policy={policy} />
       </FactRow>
-      <FactRow label={t("invest.facts.liquidity")}>{t(LIQUIDITY_KEY[liquidity])}</FactRow>
+      {/* Unread until the book policy answers: the line flips between "queued" and "or
+          trade on the book" otherwise, and a term that changes on screen reads as a lie. */}
+      <FactRow label={t("invest.facts.liquidity")}>{liquidity === undefined ? <Skeleton className="inline-block h-3.5 w-28 align-middle" /> : t(LIQUIDITY_KEY[liquidity])}</FactRow>
       {extended && (
         <>
           <FactRow label={t("invest.facts.lastValuation")}>

@@ -21,7 +21,7 @@ import type { Product } from "@/views/invest/lib/product";
 import { Note } from "@/views/invest/ui/atoms";
 import { FactRow, ProductFacts } from "@/views/invest/ui/product-facts";
 
-export function AboutProduct({ product, policy, nav, liquidity, inKind }: { product: Product; policy: FeePolicy | null; nav: FundNav | null; liquidity: Liquidity; inKind: boolean }) {
+export function AboutProduct({ product, policy, nav, liquidity, inKind }: { product: Product; policy: FeePolicy | null | undefined; nav: FundNav | null; liquidity: Liquidity | undefined; inKind: boolean }) {
   const t = useT();
   return (
     <Card className="h-fit">

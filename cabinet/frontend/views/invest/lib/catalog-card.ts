@@ -58,7 +58,8 @@ export function cardCta({ product, nav, bookOpen, gated }: CardInputs): CardCta 
  */
 export type Liquidity = "navQueued" | "navOrBook" | "book";
 
-export function liquidity(product: Product, bookOpen: boolean): Liquidity {
+export function liquidity(product: Product, bookOpen: boolean | undefined): Liquidity | undefined {
   if (isInKind(product)) return "book";
+  if (bookOpen === undefined) return undefined;
   return bookOpen ? "navOrBook" : "navQueued";
 }

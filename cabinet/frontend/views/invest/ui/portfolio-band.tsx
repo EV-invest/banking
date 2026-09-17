@@ -41,7 +41,7 @@ export function PortfolioBand({ invested, cost, funds, available, queued }: { in
             <span className="text-3xl font-semibold leading-none tabular-nums">{formatUsdt(fromBaseUnits(invested), locale)}</span>
             <span className="text-sm text-ink-soft">USDT</span>
             {!flat && (
-              <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", loss ? "bg-chart-4/15 text-chart-4" : "bg-positive/15 text-positive")}>
+              <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", loss ? "bg-accent-error/15 text-accent-error" : "bg-positive/15 text-positive")}>
                 {formatSignedUsdt(fromBaseUnits(pnl), locale)}
                 {pct !== null && ` · ${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`}
               </span>

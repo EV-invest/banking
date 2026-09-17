@@ -54,7 +54,8 @@ export function ProductView({ service }: { service: string }) {
   const accruedRead = useResource(accruedFeesResource, service);
   // Read here as well as in `TradeLink`: the liquidity line in "About" says whether the
   // book is a way out, and the same cached read answers both.
-  const bookOpen = useResource(bookPolicyResource, service).data?.book_open ?? false;
+  const bookRead = useResource(bookPolicyResource, service);
+  const bookOpen = bookRead.isLoading ? undefined : (bookRead.data?.book_open ?? false);
 
   // A 404 is an answer ("not registered", or not for this caller), not a failed read —
   // it gets the not-found copy below, never the transport's generic sentence.
@@ -69,6 +70,8 @@ export function ProductView({ service }: { service: string }) {
 
   const nav = navRead.data ?? null;
   const feePolicy = feeRead.data ?? null;
+  // Unread is not "no terms": the About block waits rather than saying so (`FeeHeadline`).
+  const aboutPolicy = feeRead.isLoading ? undefined : feePolicy;
   const accruedFees = accruedRead.data ?? null;
   const redemptions = (redemptionList.data?.redemptions ?? []).filter((r) => r.service === service);
 
@@ -124,7 +127,7 @@ export function ProductView({ service }: { service: string }) {
         </div>
 
         <div className="space-y-5">
-          <AboutProduct product={product} policy={feePolicy} nav={nav} liquidity={liquidity(product, bookOpen)} inKind={inKind} />
+          <AboutProduct product={product} policy={aboutPolicy} nav={nav} liquidity={liquidity(product, bookOpen)} inKind={inKind} />
           <SupplyCard nav={nav} />
           <FeeCard policy={feePolicy} accrued={held ? accruedFees : null} />
         </div>

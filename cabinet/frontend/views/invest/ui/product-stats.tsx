@@ -19,7 +19,7 @@ import { Stat } from "@/views/invest/ui/atoms";
 export function BackLink() {
   const t = useT();
   return (
-    <Link href="/invest" className="inline-flex items-center gap-1.5 text-sm text-ink-soft transition-colors hover:text-ink">
+    <Link href="/invest" className="inline-flex items-center gap-1.5 rounded-sm text-sm text-ink-soft outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
       <ArrowLeft className="size-4" />
       {t("invest.allProducts")}
     </Link>
@@ -41,7 +41,7 @@ export function HoldingStats({ position }: { position: Position }) {
         value={`${formatSignedUsdt(position.pnl, locale)} USDT`}
         tip="invest.position.pnl"
         emphasis
-        tone={loss && !flat ? "text-chart-4" : "text-positive"}
+        tone={loss && !flat ? "text-accent-error" : "text-positive"}
         icon={<TrendingUp className={cn("size-3.5", loss && !flat && "rotate-180")} />}
       />
     </div>
