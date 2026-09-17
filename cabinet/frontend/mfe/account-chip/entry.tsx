@@ -27,19 +27,37 @@ function ensureStylesheet() {
   document.head.appendChild(link);
 }
 
+// The host's say in the signed-out link (#392): where the visitor was headed and why. Read
+// at connect — the conductor sets attributes BEFORE it appends the element, because
+// `connectedCallback` is where a remote boots — and again on every change, since the same
+// host keeps them in sync with its own props for the life of the element.
+const ATTR_INTENT = "data-intent";
+const ATTR_RETURN_TO = "data-return-to";
+
 if (!customElements.get(TAG)) {
   customElements.define(
     TAG,
     class extends HTMLElement {
+      static observedAttributes = [ATTR_INTENT, ATTR_RETURN_TO];
       #root?: Root;
       connectedCallback() {
         ensureStylesheet();
         this.#root = createRoot(this);
-        this.#root.render(<AccountChip />);
+        this.#render();
+      }
+      attributeChangedCallback() {
+        // Fires before connect for attributes set on a detached element; the mount above
+        // renders those on its own.
+        this.#render();
       }
       disconnectedCallback() {
         this.#root?.unmount();
         this.#root = undefined;
+      }
+      #render() {
+        this.#root?.render(
+          <AccountChip intent={this.getAttribute(ATTR_INTENT)} returnTo={this.getAttribute(ATTR_RETURN_TO)} />,
+        );
       }
     },
   );

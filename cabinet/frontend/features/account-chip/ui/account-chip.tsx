@@ -14,6 +14,7 @@ import { documentLocale } from "@/shared/lib/locale-cookie";
 import { clearResources, useResource } from "@/shared/lib/resource";
 import { SESSION_UNAVAILABLE, useSession } from "@/shared/lib/use-session";
 
+import { signInHref } from "../lib/sign-in-href";
 import { clearIdentity, readIdentity, writeIdentity } from "../model/identity-cache";
 
 // The chip's three controls are hand-written so the bundle stays free of the uikit Button,
@@ -75,7 +76,20 @@ function chipTranslator(): Translate {
 // their portfolio, not their own name and address. On a cabinet page the home is one rail
 // click away and the chip is the identity affordance, so there it opens the profile. The
 // document's own pathname decides (`isCabinetPage`), read the same way the locale is.
-export function AccountChip({ className }: { className?: string }) {
+//
+// The host may also say where the visitor was going and why — `intent` and `returnTo`,
+// read off the custom element's data attributes by the MFE entry — and the signed-out
+// link carries them to the login page (`lib/sign-in-href.ts`). Nothing else in the chip
+// reads them.
+export type AccountChipProps = {
+  className?: string;
+  /** `data-intent` on the element: `signup` | `login`; anything else is ignored. */
+  intent?: string | null;
+  /** `data-return-to` on the element: a zone-relative path, same-origin checked. */
+  returnTo?: string | null;
+};
+
+export function AccountChip({ className, intent, returnTo }: AccountChipProps) {
   const session = useSession();
   // Read once, at mount: the optimistic identity from the last visit.
   const [identity] = useState(readIdentity);
@@ -106,7 +120,7 @@ export function AccountChip({ className }: { className?: string }) {
       <ChipSkeleton className={className} />
     );
   }
-  if (!session.authenticated) return <SignInCta className={className} />;
+  if (!session.authenticated) return <SignInCta className={className} intent={intent} returnTo={returnTo} />;
   // Confirmed session: trust the seeded name only if it belongs to THIS account, so a
   // same-tab account switch never paints (or re-persists) the previous user's name.
   const seedName = identity?.email === email ? identity.name : null;
@@ -162,7 +176,7 @@ function AuthedChip({
         href={chipHref()}
         className={cn("flex min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-ink/5", CHIP_FOCUS)}
       >
-        <span className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-accent-debug/15 text-xs font-semibold text-accent-debug">
+        <span className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-primary-ink/15 text-xs font-semibold text-primary-ink">
           {initialsOf(email)}
         </span>
         <div className="min-w-0">
@@ -173,7 +187,7 @@ function AuthedChip({
           )}
           {/* i18n-max: 12 — sits under the name inside the chip's `min-w-0` column, which
               is what the conductor's central nav is centred against. */}
-          <p className="flex items-center gap-1 text-xs font-medium text-accent-debug">
+          <p className="flex items-center gap-1 text-xs font-medium text-primary-ink">
             <BadgeCheck className="size-3 shrink-0" /> {t("ui.verified")}
           </p>
         </div>
@@ -201,17 +215,31 @@ function chipHref(): string {
 }
 
 // Signed-out (or BFF-unavailable) state — the sign-in CTA, labelled "Cabinet" (#399).
-// Styled to match the conductor's old InvestorPortalButton (uikit outline) without pulling
-// the uikit Button into the bundle. Links into the cabinet zone's sign-in.
-function SignInCta({ className }: { className?: string }) {
+//
+// Styled as a primary-ink outline pill by hand rather than as the uikit `Button`, and not
+// only to keep the Button (and the tailwind-merge behind its `cn`, ~37 KB) out of a bundle
+// the conductor injects on every public page: the kit's class strings live in
+// node_modules, which the Tailwind scan behind `mfe.css` never reads, so a uikit variant
+// would arrive here with its utilities missing from the sibling stylesheet. Neither system
+// variant is this pill anyway — `outline` is the neutral border, `link` is bare text.
+//
+// Not instrumented on purpose. The `cta_clicked` event for this link is captured by the
+// HOST — site_conductor's `CabinetEntryTracker`, a capture-phase listener over the slot —
+// before the hard navigation starts; the chip carries no PostHog client of its own (a
+// second one on every site page, plus a build-time key, for one event). `data-cta` is what
+// the host's tracker keys on, so a click is countable without the host having to know
+// this markup. If the chip ever fires its own event, the host side must stop, or the funnel
+// double-counts.
+function SignInCta({ className, intent, returnTo }: AccountChipProps) {
   const t = chipTranslator();
   return (
     // i18n-max: 20 — a fixed-height pill in the conductor's header row, `px-4` and no
     // truncation, sharing that row with the site nav.
     <a
-      href={cabinetPath(documentLocale(), "/login")}
+      href={signInHref(documentLocale(), { intent, returnTo })}
+      data-cta="cabinet"
       className={cn(
-        "inline-flex h-9 items-center justify-center rounded-md border border-accent-debug bg-transparent px-4 font-mono-tech text-xs tracking-wider text-accent-debug transition-all duration-300 hover:bg-primary hover:text-on-primary",
+        "inline-flex h-9 items-center justify-center rounded-md border border-primary-ink bg-transparent px-4 font-mono-tech text-xs tracking-wider text-primary-ink transition-all duration-300 hover:bg-primary hover:text-on-primary",
         CHIP_FOCUS,
         className,
       )}
