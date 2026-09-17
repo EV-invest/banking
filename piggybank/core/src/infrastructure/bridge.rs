@@ -42,6 +42,12 @@
 //!     fidelity until a build that understands it pulls it. Marking it applied instead is
 //!     how a tier downgrade or a freeze could be swallowed while the money plane keeps
 //!     running under rules the identity plane already revoked.
+//!
+//! What the channel proves about the peer — TLS, the pinned CA, the name the certificate
+//! must carry, the optional client identity — is built in [`endpoint`], once, for this
+//! consumer and the governance-mail relay alike.
+
+pub mod endpoint;
 
 use std::time::Duration;
 
