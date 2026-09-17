@@ -352,6 +352,14 @@ pub fn holder_grant_key(consilium: ConsiliumId) -> IdempotencyKey {
 pub async fn open_seed_capital(ports: &ConsiliumPorts<'_>, initiator: UserId, terms: SeedCapitalTerms, now: i64) -> Result<ConsiliumView, DomainError> {
 	require_governance_mail(ports.governance_mail_wired)?;
 	require_settled_roster(ports.consilia, ConsiliumKind::SeedCapital, now).await?;
+	// The seat is checked FIRST here, ahead of the gates below, and again by the domain
+	// at open: the gates answer different things about a reference and a person, and an
+	// administrator with no seat must not be able to probe the deposit log or a user's
+	// standing through the refusals of a proposal they could never make.
+	let owners = ports.consilia.owner_roster().await?;
+	if !owners.contains(&initiator) {
+		return Err(DomainError::Forbidden("only a fund owner may open a consilium".into()));
+	}
 	let (arrival, transfer) = balance_app::verify_arrival(ports.custody, ports.addresses, terms.network, &terms.tx_ref, Some(terms.amount)).await?;
 	if let Arrival::User(_) = arrival {
 		return Err(DomainError::Validation(format!(
@@ -366,7 +374,6 @@ pub async fn open_seed_capital(ports: &ConsiliumPorts<'_>, initiator: UserId, te
 	let fund = ServiceId::fund();
 	allocations_app::get(ports.allocations, &fund).await?.ensure_subscribable(AllocationAccess::Invest)?;
 	funds_app::dealing_nav(ports.nav, ports.ledger, &fund, now).await?;
-	let owners = ports.consilia.owner_roster().await?;
 	let terms = ConsiliumTerms::SeedCapital(terms);
 	let payload_hash = digest(&terms.canonical_bytes());
 	let mut consilium = Consilium::open(ConsiliumId::new(), terms, payload_hash, initiator, &owners, now)?;
