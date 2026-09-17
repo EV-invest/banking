@@ -92,8 +92,9 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
       </div>
       <CardContent className="flex flex-col gap-3 px-0 lg:gap-5 lg:px-6 xl:flex-1">
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 lg:order-2">
-          <Legend dot="bg-chart-3" label={t("dash.fundPerformance")} />
-          <Legend dot="bg-chart-2" label={t("dash.yourParticipation")} />
+          {/* Each line reads off its own axis, so the legend names the unit beside the name. */}
+          <Legend dot="bg-chart-3" label={t("dash.fundPerformance")} unit="%" />
+          <Legend dot="bg-chart-2" label={t("dash.yourParticipation")} unit="USDT" />
         </div>
         <PerfChart allocation={allocation} from={span.from} className="lg:order-1 xl:flex-1" />
       </CardContent>
@@ -101,11 +102,11 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
   );
 }
 
-function Legend({ dot, label }: { dot: string; label: string }) {
+function Legend({ dot, label, unit }: { dot: string; label: string; unit: string }) {
   return (
     <span className="flex items-center gap-2 text-xs font-medium text-ink-soft">
       <span className={cn("size-2 rounded-full", dot)} />
-      {label}
+      {label} ({unit})
     </span>
   );
 }

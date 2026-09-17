@@ -15,14 +15,13 @@ import { Button, Card, CardContent } from "@evinvest/uikit";
 import { cn } from "@/shared/lib/cn";
 import { Link } from "@/shared/ui/cabinet-link";
 import { StaggerItem } from "@/shared/ui/motion";
-import { formatSignedUsdt, formatUsdt, fromBaseUnits } from "@/views/invest/lib/format";
+import { formatSignedUsdt, formatUsdt, fromBaseUnits, valence } from "@/views/invest/lib/format";
 
 export function PortfolioBand({ invested, cost, funds, available, queued }: { invested: bigint; cost: bigint; funds: number; available: string | null; queued: number }) {
   const t = useT();
   const locale = useLocale();
   const pnl = invested - cost;
-  const loss = pnl < 0n;
-  const flat = pnl === 0n;
+  const trend = valence(pnl);
   // A percentage off a zero cost basis is not "0%", it is undefined — so it is omitted.
   const pct = cost > 0n ? Number((pnl * 10_000n) / cost) / 100 : null;
 
@@ -40,8 +39,8 @@ export function PortfolioBand({ invested, cost, funds, available, queued }: { in
           <div className="flex flex-wrap items-baseline gap-2.5">
             <span className="text-3xl font-semibold leading-none tabular-nums">{formatUsdt(fromBaseUnits(invested), locale)}</span>
             <span className="text-sm text-ink-soft">USDT</span>
-            {!flat && (
-              <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", loss ? "bg-accent-error/15 text-accent-error" : "bg-positive/15 text-positive")}>
+            {trend !== "flat" && (
+              <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", trend === "loss" ? "bg-accent-error/15 text-accent-error" : "bg-positive/15 text-positive")}>
                 {formatSignedUsdt(fromBaseUnits(pnl), locale)}
                 {pct !== null && ` · ${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`}
               </span>

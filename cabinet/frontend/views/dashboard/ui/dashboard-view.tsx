@@ -18,7 +18,7 @@ import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/moti
 import { TipAnchor } from "@/shared/tips";
 import { formatCount, STAT_STRIP, StatDivider, StatTile } from "@/shared/ui/stat-tile";
 import { CARD_FROM_LG, CARD_PAD, EMPTY_BOX } from "@/views/dashboard/lib/chrome";
-import { DASH_ADDRESS, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
+import { DASH_ADDRESS, formatSignedUsd, formatUsd, num, shortAddress, valence } from "@/views/dashboard/lib/format";
 import { GetStartedSection } from "@/views/dashboard/ui/get-started-section";
 import { PerfCard } from "@/views/dashboard/ui/perf-card";
 import { amountTone, kindBadge, kindLabel, kindMeta, networkLabel, stateLabel } from "@/views/operations/lib/format";
@@ -130,7 +130,7 @@ export function DashboardView() {
 
         {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
         <StaggerItem as={Card} className={cn(STAT_STRIP, CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
-          <StatTile label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={signedUsd} tone={pnlSum < 0 ? "loss" : pnlSum > 0 ? "gain" : undefined} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
+          <StatTile label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={signedUsd} tone={valence(pnlSum)} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
           <StatDivider />
           <StatTile label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
           <StatDivider />

@@ -5,15 +5,14 @@
 // the page (found, not found, loading) draws the same.
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { ArrowLeft, TrendingUp, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Minus, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react";
 
 import { Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import type { FundNav, Position } from "@/shared/contracts";
-import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
-import { formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
+import { formatSignedUsdt, formatUnits, formatUsdt, valence, valenceClass } from "@/views/invest/lib/format";
 import { Stat } from "@/views/invest/ui/atoms";
 
 export function BackLink() {
@@ -29,8 +28,9 @@ export function BackLink() {
 export function HoldingStats({ position }: { position: Position }) {
   const t = useT();
   const locale = useLocale();
-  const loss = isNegative(position.pnl);
-  const flat = isZero(position.pnl);
+  // Three tones, not two: a flat P&L is neither a gain nor a loss, and an upward arrow on
+  // "0.00" claims a gain that did not happen — the same rule as the dashboard's badge.
+  const trend = valence(position.pnl);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Stat label={t("invest.units")} value={formatUnits(position.units, locale)} tip="invest.position.units" />
@@ -41,8 +41,8 @@ export function HoldingStats({ position }: { position: Position }) {
         value={`${formatSignedUsdt(position.pnl, locale)} USDT`}
         tip="invest.position.pnl"
         emphasis
-        tone={loss && !flat ? "text-accent-error" : "text-positive"}
-        icon={<TrendingUp className={cn("size-3.5", loss && !flat && "rotate-180")} />}
+        tone={valenceClass(position.pnl)}
+        icon={trend === "loss" ? <TrendingDown className="size-3.5" /> : trend === "gain" ? <TrendingUp className="size-3.5" /> : <Minus className="size-3.5" />}
       />
     </div>
   );

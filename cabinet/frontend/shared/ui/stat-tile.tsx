@@ -3,6 +3,7 @@
 import { Card, Separator, Skeleton } from "@evinvest/uikit";
 
 import { cn } from "@/shared/lib/cn";
+import { type Valence, VALENCE_CLASS } from "@/shared/lib/money";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { AnimatedNumber } from "@/shared/ui/motion";
 
@@ -31,8 +32,12 @@ export function StatDivider() {
 //
 // `value: null` is "not here yet" and draws a skeleton; `unavailable` is "the read
 // failed" and draws a dash — a figure that could not be read must not render as a zero.
-export function StatTile({ label, value, format, tone, hint, tip, unavailable }: { label: string; value: number | null; format: (n: number) => string; tone?: "gain" | "loss"; hint: string; tip?: TipKey; unavailable?: boolean }) {
-  const valueClass = tone === "gain" ? "text-positive" : tone === "loss" ? "text-accent-error" : "text-ink";
+//
+// `tone` is the figure's valence (`valence()` from shared/lib/money): a gain and a loss take
+// the one pair every investor screen uses, and a flat figure — or a figure that has none,
+// like a count — stays in the plain ink.
+export function StatTile({ label, value, format, tone, hint, tip, unavailable }: { label: string; value: number | null; format: (n: number) => string; tone?: Valence; hint: string; tip?: TipKey; unavailable?: boolean }) {
+  const valueClass = VALENCE_CLASS[tone ?? "flat"];
   const hintClass = tone === "gain" ? "text-positive/80" : tone === "loss" ? "text-accent-error/80" : "text-ink-soft";
   return (
     <Card className="min-w-0 flex-1 gap-1 px-3.5 py-3 lg:min-w-30 lg:gap-1.5 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">

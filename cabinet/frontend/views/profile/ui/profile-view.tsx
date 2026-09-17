@@ -15,7 +15,7 @@ import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { formatDay } from "@/shared/lib/datetime";
-import { formatSignedUsd, formatUsd, num } from "@/shared/lib/money";
+import { formatSignedUsd, formatUsd, num, valence } from "@/shared/lib/money";
 import { useResource } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { CARD, InitialsAvatar, Pill } from "@/shared/ui/list-card";
@@ -146,7 +146,7 @@ export function ProfileView() {
         <StaggerItem as={Card} className={cn(STAT_STRIP, "rounded-none border-0 bg-transparent py-0 shadow-none lg:rounded-xl lg:border lg:bg-card lg:py-5 lg:shadow-sm")}>
           <StatTile label={t("dash.portfolioValue")} value={positions.isLoading ? null : value} format={usd} hint={t("profile.hintAtNav")} unavailable={posFailed} />
           <StatDivider />
-          <StatTile label={t("dash.unrealizedPnl")} value={positions.isLoading ? null : pnl} format={signedUsd} tone={pnl < 0 ? "loss" : pnl > 0 ? "gain" : undefined} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" unavailable={posFailed} />
+          <StatTile label={t("dash.unrealizedPnl")} value={positions.isLoading ? null : pnl} format={signedUsd} tone={valence(pnl)} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" unavailable={posFailed} />
           <StatDivider />
           <StatTile label={t("dash.available")} value={wallet.isLoading ? null : num(wallet.data?.balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" unavailable={walletFailed} />
           <StatDivider />

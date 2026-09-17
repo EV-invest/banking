@@ -11,7 +11,7 @@
 // already showed.
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { TrendingUp } from "lucide-react";
+import { TrendingDown, TrendingUp } from "lucide-react";
 
 import { Badge, Card, CardContent } from "@evinvest/uikit";
 
@@ -21,7 +21,7 @@ import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { cardCta, liquidity } from "@/views/invest/lib/catalog-card";
-import { formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
+import { formatSignedUsdt, formatUnits, formatUsdt, isZero, valence, valenceClass } from "@/views/invest/lib/format";
 import { isClosed, isInKind, isLocked, type Product } from "@/views/invest/lib/product";
 import { SupplyBar } from "@/views/invest/ui/atoms";
 import { BackingBadge } from "@/views/invest/ui/backing-badge";
@@ -46,8 +46,7 @@ export function ProductCard({ product, gated }: { product: Product; gated: boole
   // One badge slot, so a stale mark takes the place of "Open" rather than joining it: the
   // page's `ProductBadges` has room for both, the card's title row does not.
   const stale = nav?.stale ?? false;
-  const loss = held ? isNegative(held.pnl) : false;
-  const flat = held ? isZero(held.pnl) : true;
+  const trend = held ? valence(held.pnl) : "flat";
   // An unread book is a closed one for the CTA: "Details" is the honest offer until the
   // terminal is known to accept an order.
   const cta = cardCta({ product, nav, bookOpen: bookOpen ?? false, gated });
@@ -87,9 +86,9 @@ export function ProductCard({ product, gated }: { product: Product; gated: boole
               <CardStat label={t("invest.value")} value={formatUsdt(held.value, locale)} />
               <CardStat
                 label={t("invest.pnl")}
-                value={flat ? "0.00" : formatSignedUsdt(held.pnl, locale)}
-                tone={flat ? undefined : loss ? "text-accent-error" : "text-positive"}
-                icon={flat ? undefined : <TrendingUp className={cn("size-3.5", loss && "rotate-180")} />}
+                value={formatSignedUsdt(held.pnl, locale)}
+                tone={valenceClass(held.pnl)}
+                icon={trend === "loss" ? <TrendingDown className="size-3.5" /> : trend === "gain" ? <TrendingUp className="size-3.5" /> : undefined}
               />
             </>
           ) : (
