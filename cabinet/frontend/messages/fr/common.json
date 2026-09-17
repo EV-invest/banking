@@ -4343,6 +4343,10 @@
     "en": "Secondary",
     "t": "Navigation secondaire"
   },
+  "nav.account": {
+    "en": "Account",
+    "t": "Compte"
+  },
   "nav.allocations": {
     "en": "Allocations",
     "t": "Produits"

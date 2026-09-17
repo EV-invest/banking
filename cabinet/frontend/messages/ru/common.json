@@ -4343,6 +4343,10 @@
     "en": "Secondary",
     "t": "Дополнительная"
   },
+  "nav.account": {
+    "en": "Account",
+    "t": "Аккаунт"
+  },
   "nav.allocations": {
     "en": "Allocations",
     "t": "Продукты"

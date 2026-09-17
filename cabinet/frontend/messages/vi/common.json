@@ -4343,6 +4343,10 @@
     "en": "Secondary",
     "t": "Điều hướng phụ"
   },
+  "nav.account": {
+    "en": "Account",
+    "t": "Tài khoản"
+  },
   "nav.allocations": {
     "en": "Allocations",
     "t": "Phân bổ"
@@ -5253,10 +5257,11 @@
   },
   "settings.nav.documents": {
     "en": "Documents",
-    "t": "Tài liệu",
+    "t": "Tài liệu"
+  },
   "settings.inbox": {
     "en": "Inbox",
-    "t": "Hộp thư đến",
+    "t": "Hộp thư đến"
   },
   "settings.nav.personal": {
     "en": "Personal details",
