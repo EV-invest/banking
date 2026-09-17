@@ -66,7 +66,35 @@ impl ServiceId {
 	pub fn as_str(&self) -> &str {
 		&self.0
 	}
+
+	/// The **fee allocation** — the platform's earned money as a product of its own:
+	/// the fee class of every product (the units a 2-and-20 charge moves) plus the cash
+	/// those units settle into. Hidden, never listed, and held by people through units
+	/// like any other allocation (issue #245).
+	pub fn fee() -> Self {
+		Self(RESERVED_FEE.to_owned())
+	}
+
+	/// The **fund allocation** — the platform's own capital as a product of its own:
+	/// seed cash arrives as a subscription into it, and the people who put it in hold
+	/// its units. Hidden, never listed (issue #245).
+	pub fn fund() -> Self {
+		Self(RESERVED_FUND.to_owned())
+	}
+
+	/// Whether this slug is one the platform reserves for itself ([`Self::fee`],
+	/// [`Self::fund`]). An operator cannot register a product under a reserved slug —
+	/// the rows exist from migration `0044` — and only a reserved allocation may hold
+	/// units of another product ([`crate::issuance::UnitHolder::Allocation`]).
+	pub fn is_reserved(&self) -> bool {
+		self.0 == RESERVED_FEE || self.0 == RESERVED_FUND
+	}
 }
+
+/// The reserved slugs, spelled once. Their `service:<slug>` claim keys do not collide
+/// with the retired singleton keys `"fee"` and `"fund"` (`tb_accounts` keeps both).
+const RESERVED_FEE: &str = "fee";
+const RESERVED_FUND: &str = "fund";
 
 impl core::fmt::Display for ServiceId {
 	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -503,6 +531,27 @@ mod tests {
 		assert!(ServiceId::parse("").is_err());
 		assert!(ServiceId::parse("bad space").is_err());
 		assert!(ServiceId::parse("real-estate_1").is_ok());
+	}
+
+	#[test]
+	fn the_reserved_slugs_parse_like_any_other_and_key_their_own_claims() {
+		// `fee` and `fund` are ordinary slugs on the wire and in the registry — what sets
+		// them apart is the predicate, not the parser.
+		assert_eq!(ServiceId::parse("fee").unwrap(), ServiceId::fee());
+		assert_eq!(ServiceId::parse("fund").unwrap(), ServiceId::fund());
+		assert!(ServiceId::fee().is_reserved());
+		assert!(ServiceId::fund().is_reserved());
+		assert!(!ServiceId::parse("trading").unwrap().is_reserved());
+		assert!(!ServiceId::parse("fees").unwrap().is_reserved(), "reserved is exact, not a prefix");
+		// Their claims are `service:<slug>` accounts, distinct from the retired singletons
+		// that the same words used to name — both sets stay resolvable in `tb_accounts`.
+		assert_eq!(LedgerAccountKey::ServiceClaim(ServiceId::fee()).logical_key(), "service:fee");
+		assert_eq!(LedgerAccountKey::ServiceClaim(ServiceId::fund()).logical_key(), "service:fund");
+		#[allow(deprecated)]
+		{
+			assert_ne!(LedgerAccountKey::ServiceClaim(ServiceId::fee()).logical_key(), LedgerAccountKey::FeeRevenue.logical_key());
+			assert_ne!(LedgerAccountKey::ServiceClaim(ServiceId::fund()).logical_key(), LedgerAccountKey::Fund.logical_key());
+		}
 	}
 
 	#[test]
