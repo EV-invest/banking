@@ -1417,6 +1417,13 @@ async fn a_refused_payment_consilium_closes_its_order_and_its_mails_name_the_rec
 	let mail: serde_json::Value = serde_json::from_str(&outcome).unwrap();
 	assert_eq!(mail["outcome"], "REJECTED");
 	assert!(mail["destination"].as_str().unwrap().contains(&mask_email(&mailbox)), "{outcome}");
+	// The verdict over a payment stays the payment tuple: concierge renders exactly one
+	// description per outcome, and the fund-and-mark one belongs to a valuation override.
+	assert_eq!(mail["tier"], "internal", "{outcome}");
+	assert_eq!(mail["amount"], "10", "{outcome}");
+	assert_eq!(mail["reason"], "a referral bonus", "{outcome}");
+	assert_eq!(mail["fund"], "", "a payment verdict describes no fund: {outcome}");
+	assert!(matches!(mail["mark"].as_str(), None | Some("")), "a payment verdict records no mark: {outcome}");
 	let expired = h.payments.expire_due(now() + domain::payments::TTL_SECS + 1).await.unwrap();
 	assert_eq!(expired, 0, "the order was closed with the verdict, so nothing is left for the sweeper to expire");
 }
@@ -1703,4 +1710,89 @@ async fn a_valuation_override_is_the_only_way_past_the_move_guard_and_binds_its_
 	// The history read — the third kind must not break it either.
 	let history = consilium_app::list(h.consilia.as_ref(), 50).await.expect("a third kind must not break the history read");
 	assert!(history.iter().any(|view| view.consilium.id() == id));
+}
+
+/// The owners hear how a valuation-override consilium ended, and that a token burned on one
+/// of its seats, as a MARK — the fund line the fee-terms mails use and the AUM the mark
+/// records — and not as a payment (banking#340): the borrowed payment tuple announced
+/// "Payment …" over a number that moves no money, and concierge renders exactly one
+/// description per outcome, refusing a mark next to a tier. The fixed wording of what the
+/// override is for rides the verdict only; a burn notice is an alert about a brute-force
+/// attempt, not the request.
+#[tokio::test]
+async fn the_owners_are_mailed_the_verdict_and_the_burn_of_a_valuation_override_as_a_mark() {
+	let _guard = exclusive_governance().await;
+	let Some(h) = harness().await else {
+		eprintln!("DATABASE_URL unset — skipping the consilium suite");
+		return;
+	};
+	reset_governance(&h).await;
+	let roster = owners(&h, 3).await;
+	let service = marked_fund(&h, roster[0], "100").await;
+
+	// Refused by one peer: the verdict reaches the initiator and both seats.
+	let opened = consilium_app::open_valuation_override(&ports(&h), roster[0], override_terms(&service, "1000"), now())
+		.await
+		.unwrap();
+	let id = opened.consilium.id();
+	assert!(vote(&h, id, roster[1], VoteDecision::Reject).await.unwrap());
+	assert_eq!(state_of(&h, id).await, ConsiliumState::Rejected);
+	let outcomes = outcome_mails(&h, id, "payout_outcome").await;
+	assert_eq!(outcomes.len(), 3, "the initiator and every seat hear the verdict");
+	for mail in &outcomes {
+		assert_eq!(mail["outcome"], "REJECTED");
+		assert_mark_description(mail, &service, "Valuation beyond the NAV-move guard; executing records the mark regardless of the guard.");
+	}
+
+	// A token burned on the next override over the same fund: the whole roster is warned,
+	// over the same mark.
+	let opened = consilium_app::open_valuation_override(&ports(&h), roster[0], override_terms(&service, "1000"), now())
+		.await
+		.unwrap();
+	let id = opened.consilium.id();
+	let (token, _) = credentials(&h, id, roster[1]).await;
+	let audit = VoteAudit {
+		client_ip: "203.0.113.7".to_owned(),
+		user_agent: "itest".to_owned(),
+	};
+	for _ in 0..MAX_CODE_ATTEMPTS {
+		consilium_app::submit_decision(h.consilia.as_ref(), &token, "WRONGCODE1", VoteDecision::Approve, &audit, now())
+			.await
+			.unwrap_err();
+	}
+	let burns = outcome_mails(&h, id, "token_burned").await;
+	assert_eq!(burns.len(), 3, "the whole roster hears about a brute-force attempt");
+	for mail in &burns {
+		assert_eq!(mail["outcome"], "TOKEN_BURNED");
+		assert!(mail["detail"].as_str().unwrap().contains(&roster[1].to_string()), "the seat is named: {}", mail["detail"]);
+		assert_mark_description(mail, &service, "");
+	}
+	assert_eq!(state_of(&h, id).await, ConsiliumState::Open, "one burned token does not disarm the consilium");
+}
+
+/// The outcome mails of one kind queued for a consilium, as the worker will read them.
+async fn outcome_mails(h: &Harness, consilium: ConsiliumId, kind: &str) -> Vec<serde_json::Value> {
+	sqlx::query_scalar::<_, String>("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 AND kind = $2 ORDER BY user_id")
+		.bind(consilium.raw())
+		.bind(kind)
+		.fetch_all(&h.pool)
+		.await
+		.unwrap()
+		.iter()
+		.map(|payload| serde_json::from_str(payload).unwrap())
+		.collect()
+}
+
+/// What an outcome or burn mail over a valuation override says — the fund the fee-terms
+/// mails name it by, the AUM the mark records, and nothing of a payout's, a payment's or a
+/// fee change's. `reason` is the wording the mail is expected to carry: what the override
+/// is for on a verdict, none on a burn notice.
+fn assert_mark_description(mail: &serde_json::Value, service: &ServiceId, reason: &str) {
+	assert_eq!(mail["fund"], format!("Arbitrage seat ({service})"), "the title, and the slug it is known by: {mail}");
+	assert_eq!(mail["mark"], "AUM 1000 USDT", "the AUM the mark records: {mail}");
+	assert_eq!(mail["reason"], reason, "what the override is for rides the verdict, never the burn notice");
+	for empty in ["network", "address", "amount", "tier", "source", "destination"] {
+		assert_eq!(mail[empty], "", "a mark names no rail and no payment: {empty}");
+	}
+	assert!(mail["current"].is_null() && mail["proposed"].is_null(), "a mark proposes no fee terms: {mail}");
 }

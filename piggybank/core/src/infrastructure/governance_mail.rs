@@ -144,11 +144,7 @@ pub mod wired {
 						fund: outcome.fund.clone(),
 						current: outcome.current.as_ref().map(fee_terms),
 						proposed: outcome.proposed.as_ref().map(fee_terms),
-						// Empty is exactly today's behaviour: the relay refuses a mail that names both
-						// the payment tuple and a mark, and reads a lone `fund` as fee terms only while
-						// `mark` is empty. Carrying a valuation consilium's NAV mark through here is a
-						// separate fee-policy-stream task.
-						mark: String::new(),
+						mark: outcome.mark.clone(),
 					});
 				}
 				GovernanceMail::PaymentConsent(consent) => {

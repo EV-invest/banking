@@ -104,6 +104,7 @@ async fn a_queued_mail(pool: &PgPool) -> i64 {
 			fund: String::new(),
 			current: None,
 			proposed: None,
+			mark: String::new(),
 		})
 	})
 	.await
@@ -351,6 +352,7 @@ async fn a_fee_terms_outcome_reaches_the_relay_with_its_fund_and_terms() {
 			fund: "Arb desk (service_arb)".into(),
 			current: None,
 			proposed: Some(terms(300)),
+			mark: String::new(),
 		})
 	})
 	.await;
@@ -369,6 +371,7 @@ async fn a_fee_terms_outcome_reaches_the_relay_with_its_fund_and_terms() {
 			fund: "Arb desk (service_arb)".into(),
 			current: Some(terms(200)),
 			proposed: Some(terms(300)),
+			mark: String::new(),
 		})
 	})
 	.await;
@@ -402,6 +405,59 @@ async fn a_fee_terms_outcome_reaches_the_relay_with_its_fund_and_terms() {
 		.execute(&pool)
 		.await
 		.unwrap();
+}
+
+/// A verdict over a valuation override carries the NAV mark — the fund line and the AUM —
+/// through the queue and out to the relay as the mark description concierge v0.9.0 renders,
+/// with none of the payment tuple its invitation borrowed: the relay refuses a mark beside a
+/// payment, so a leaked `tier` or `destination` here is a mail nobody receives.
+#[tokio::test]
+async fn a_mark_outcome_reaches_the_relay_with_its_fund_and_mark() {
+	let _guard = QUEUE.lock().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping the mailer suite");
+		return;
+	};
+	quiet_queue(&pool).await;
+	let executed = a_queued(&pool, |consilium| {
+		GovernanceMail::PayoutOutcome(PayoutOutcome {
+			consilium_id: consilium.to_string(),
+			outcome: "EXECUTED".into(),
+			network: String::new(),
+			address: String::new(),
+			amount: String::new(),
+			detail: "the mark is recorded".into(),
+			tier: String::new(),
+			source: String::new(),
+			destination: String::new(),
+			reason: "Valuation beyond the NAV-move guard.".into(),
+			fund: "Arb desk (service_arb)".into(),
+			current: None,
+			proposed: None,
+			mark: "AUM 1000 USDT".into(),
+		})
+	})
+	.await;
+	let relay = Arc::new(KeepingRelay::default());
+	assert_eq!(ConsiliumMailer::new(pool.clone(), relay.clone()).drain().await.unwrap(), 1);
+
+	let seen = relay.seen.lock().unwrap().clone();
+	let GovernanceMail::PayoutOutcome(outcome) = &seen[0] else {
+		panic!("the outcome keeps its kind through the queue: {:?}", seen[0]);
+	};
+	assert_eq!(outcome.outcome, "EXECUTED");
+	assert_eq!(outcome.fund, "Arb desk (service_arb)");
+	assert_eq!(outcome.mark, "AUM 1000 USDT");
+	assert_eq!(outcome.reason, "Valuation beyond the NAV-move guard.");
+	assert!(outcome.current.is_none() && outcome.proposed.is_none(), "a mark proposes no fee terms");
+	assert!(
+		outcome.network.is_empty() && outcome.address.is_empty() && outcome.amount.is_empty() && outcome.tier.is_empty() && outcome.source.is_empty() && outcome.destination.is_empty(),
+		"one description, not two"
+	);
+
+	let (_, _, _, sent) = row(&pool, executed).await;
+	assert!(sent, "an accepted mail is marked sent");
+	sqlx::query("DELETE FROM consilium_mail WHERE id = $1").bind(executed).execute(&pool).await.unwrap();
 }
 
 /// A row queued by the worker as it was before the fee description existed — the payout

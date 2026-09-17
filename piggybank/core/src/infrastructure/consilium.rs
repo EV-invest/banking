@@ -329,7 +329,7 @@ pub(crate) fn clip_utf8(s: &str, max_bytes: usize) -> String {
 /// enough to get them to the approval page — and the page, which renders the real terms, is
 /// the truth. The consilium id stands in for `payment_id` (the field is required by shape
 /// and there is no order), and `tier` is `service`, the tier of the claim a mark reprices.
-// TODO(banking#232 follow-up): a dedicated `VALUATION_APPROVAL` mail kind in concierge.
+// TODO(EV-invest/concierge#94): a dedicated `VALUATION_APPROVAL` mail kind in concierge.
 fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &VoterCredential, approval_url_base: &str, detail: &SubjectDetail) -> GovernanceMail {
 	let approval_url = format!("{}/{}", approval_url_base.trim_end_matches('/'), credential.token);
 	match consilium.terms() {
@@ -417,9 +417,14 @@ const VALUATION_MAIL_REASON: &str = "Valuation beyond the NAV-move guard; execut
 /// The tier the borrowed template is told: the claim a mark reprices is the product's.
 const VALUATION_MAIL_TIER: &str = "service";
 
-/// The outcome shape for every mailed kind: the payout pair, the payment tuple, the same
-/// tuple the approval mail used for a valuation override, or the fee-terms description —
-/// the rest left empty; the renderer switches on which is filled, and refuses two.
+/// The outcome shape for every mailed kind: the payout pair, the payment tuple, the NAV
+/// mark (`fund` + `mark`) for a valuation override, or the fee-terms description — the
+/// rest left empty; the renderer switches on which is filled, and refuses two.
+///
+/// The verdict on a valuation override does NOT reuse the payment tuple its invitation
+/// borrowed: the outcome kind has a description of its own for a mark, and the relay would
+/// refuse a payment tuple and a mark side by side. The fund line is spelled the way the
+/// fee-terms mails spell it, so an owner reads both kinds of verdict on one product alike.
 fn outcome_of(consilium: &Consilium, outcome: String, detail: String, subject: &SubjectDetail) -> PayoutOutcome {
 	let base = PayoutOutcome {
 		consilium_id: consilium.id().to_string(),
@@ -435,6 +440,7 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, subject: &
 		fund: String::new(),
 		current: None,
 		proposed: None,
+		mark: String::new(),
 	};
 	match consilium.terms() {
 		ConsiliumTerms::RevenuePayout(payout) => PayoutOutcome {
@@ -452,10 +458,14 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, subject: &
 			..base
 		},
 		ConsiliumTerms::ValuationOverride(terms) => PayoutOutcome {
-			amount: terms.aum.to_decimal_string(),
-			tier: VALUATION_MAIL_TIER.to_owned(),
-			source: valuation_mail_source(terms, subject.end_detail()),
-			destination: format!("AUM {} USDT", terms.aum.to_decimal_string()),
+			fund: fee_policy_changes::fee_mail_fund(
+				match subject.end_detail() {
+					Some(EndDetail::ProductTitle(title)) => Some(title.as_str()),
+					Some(EndDetail::Mailbox(_)) | None => None,
+				},
+				&terms.service,
+			),
+			mark: format!("AUM {} USDT", terms.aum.to_decimal_string()),
 			reason: VALUATION_MAIL_REASON.to_owned(),
 			..base
 		},

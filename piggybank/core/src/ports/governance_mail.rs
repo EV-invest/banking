@@ -170,11 +170,12 @@ pub struct PayoutApproval {
 
 /// How a consilium ended, or why a token burned.
 ///
-/// ONE shape for three subjects, additively — the wire's `PayoutOutcomeMail` is the same:
+/// ONE shape for four subjects, additively — the wire's `PayoutOutcomeMail` is the same:
 /// `network` + `address` describe a payout, `tier` + `source` + `destination` + `reason`
 /// describe a payment, `fund` + `proposed` (+ `current`, `reason`) describe a change of fee
-/// terms, and the renderer switches on which description is filled. The payment and the
-/// fee fields default to empty so queue rows written before they existed still deserialize.
+/// terms, `fund` + `mark` (+ `reason`) describe a NAV mark, and the renderer switches on
+/// which description is filled — and refuses two. The payment, the fee and the mark fields
+/// default to empty so queue rows written before they existed still deserialize.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PayoutOutcome {
 	pub consilium_id: String,
@@ -193,17 +194,22 @@ pub struct PayoutOutcome {
 	pub destination: String,
 	#[serde(default)]
 	pub reason: String,
-	/// The product's display name, as [`FeePolicyApproval::fund`] spells it. Empty for a
-	/// payout and for a payment.
+	/// The product's display name, as [`FeePolicyApproval::fund`] spells it — for a change
+	/// of fee terms and for a NAV mark. Empty for a payout and for a payment.
 	#[serde(default)]
 	pub fund: String,
 	/// The terms in force when the change was proposed; `None` when the fund charged
-	/// nothing — and `None` for the other two subjects.
+	/// nothing — and `None` for the other three subjects.
 	#[serde(default)]
 	pub current: Option<FeePolicyTerms>,
-	/// The terms the consilium was over. Concierge refuses a `fund` without it.
+	/// The terms the consilium was over. Concierge refuses a `fund` without it — unless
+	/// `mark` is filled instead.
 	#[serde(default)]
 	pub proposed: Option<FeePolicyTerms>,
+	/// The value a valuation override records, spelled as an amount is (`AUM 1000 USDT`).
+	/// Concierge refuses it without a `fund`. Empty for the other three subjects.
+	#[serde(default)]
+	pub mark: String,
 }
 
 /// The consent invitation to the ONE investor whose claim a payment spends.
