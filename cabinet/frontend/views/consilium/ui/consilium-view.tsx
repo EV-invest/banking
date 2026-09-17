@@ -348,7 +348,7 @@ function Roster({
                   {i > 0 && <ItemSeparator />}
                   <Item size="sm" className="px-0">
                     <ItemMedia>
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-debug/15 text-xs font-semibold text-accent-debug">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-ink/15 text-xs font-semibold text-primary-ink">
                         {initialsOf(owner.email)}
                       </span>
                     </ItemMedia>

@@ -53,7 +53,7 @@ export function Note({ tone, children }: { tone: "amber" | "muted" | "accent"; c
         "rounded-lg border px-3 py-2 text-xs leading-relaxed",
         tone === "amber" && "border-accent-warn/30 bg-accent-warn/5 text-accent-warn",
         tone === "muted" && "border-border bg-ink/5 text-ink-soft",
-        tone === "accent" && "border-accent-debug/40 bg-accent-debug/10 text-ink",
+        tone === "accent" && "border-primary-ink/40 bg-primary-ink/10 text-ink",
       )}
     >
       {children}
@@ -88,7 +88,7 @@ export function SupplyBar({ issued, cap, className }: { issued: string | undefin
             cap really is nothing, and floor-to-1% would overstate it a millionfold —
             "has this fund started issuing?" is a question for the figure above, which is
             exact, not for a bar whose job is "how full is it?". */}
-        <div className={cn("h-full rounded-full", near ? "bg-accent-warn" : "bg-accent-debug")} style={{ width: `${fraction * 100}%` }} />
+        <div className={cn("h-full rounded-full", near ? "bg-accent-warn" : "bg-primary-ink")} style={{ width: `${fraction * 100}%` }} />
       </div>
       {full && <p className="text-xs text-accent-warn">{t("invest.fullyIssued")}</p>}
     </div>

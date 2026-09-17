@@ -206,7 +206,7 @@ function Row({ n, first, onOpen, locale, t }: { n: Notification; first: boolean;
   const unread = isUnread(n);
   const body = (
     <div className={cn("flex items-center gap-3.5 text-left", ROW_PAD, unread && "bg-ink/5")}>
-      <span aria-hidden className={cn("size-2 shrink-0 rounded-full", unread ? "bg-accent-debug" : "bg-transparent")} />
+      <span aria-hidden className={cn("size-2 shrink-0 rounded-full", unread ? "bg-primary-ink" : "bg-transparent")} />
       <div className="min-w-0 flex-1">
         {/* Read and unread titles share a step on the type scale, so the state is carried
             by weight and colour instead of the 1px that used to separate them. */}
@@ -237,8 +237,8 @@ function Row({ n, first, onOpen, locale, t }: { n: Notification; first: boolean;
 function EmptyState({ filter, t }: { filter: Filter; t: Translate }) {
   return (
     <div className="flex flex-col items-center px-10 py-16 text-center">
-      <span className="flex size-14 items-center justify-center rounded-xl bg-accent-debug/15">
-        <Bell className="size-6 text-accent-debug" />
+      <span className="flex size-14 items-center justify-center rounded-xl bg-primary-ink/15">
+        <Bell className="size-6 text-primary-ink" />
       </span>
       <p className="mt-5 text-base font-semibold text-ink">{t(filter === "unread" ? "notif.nothingUnread" : "notif.nothingYet")}</p>
       <p className="mt-2 max-w-108 text-sm text-ink-soft">{t(filter === "unread" ? "notif.allCaughtUp" : "notif.emptyHint")}</p>

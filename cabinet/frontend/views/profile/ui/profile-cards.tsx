@@ -24,7 +24,7 @@ import { formatPhone } from "@/views/settings/lib/contact";
 import { PERSONAL } from "@/views/settings/lib/sections";
 
 // The text links that lead out of a card — hand-written, so they carry their own focus ring.
-const TEXT_LINK = "shrink-0 rounded-sm text-xs font-medium text-accent-debug outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
+const TEXT_LINK = "shrink-0 rounded-sm text-xs font-medium text-primary-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
 
 // uikit's Empty draws a dashed frame but leaves the border width to the caller, and doubles
 // its padding at `md`; this one sits inside a card, not on a page of its own.

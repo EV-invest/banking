@@ -185,7 +185,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                     setAmount(opts?.withdrawable ?? "0");
                     setConfirming(null);
                   }}
-                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-accent-debug outline-none transition-colors hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring"
+                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-primary-ink outline-none transition-colors hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {t("ui.max")}
                 </button>

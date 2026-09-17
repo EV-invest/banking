@@ -387,7 +387,7 @@ function UnreadPill({ count, active }: { count: number; active: boolean }) {
       aria-label={t("notif.unreadCount", { n: count })}
       className={cn(
         "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-        active ? "bg-background text-ink" : "bg-accent-debug/15 text-accent-debug",
+        active ? "bg-background text-ink" : "bg-primary-ink/15 text-primary-ink",
       )}
     >
       {count > 99 ? "99+" : count}

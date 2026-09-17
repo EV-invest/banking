@@ -174,8 +174,8 @@ function EmptyState() {
   const t = useT();
   return (
     <div className={cn(WALLET_CARD, "flex flex-col items-center gap-3 px-6 py-12 text-center lg:max-w-100")}>
-      <span className="flex size-11 items-center justify-center rounded-xl bg-accent-debug/15">
-        <ArrowUpRight className="size-5 text-accent-debug" />
+      <span className="flex size-11 items-center justify-center rounded-xl bg-primary-ink/15">
+        <ArrowUpRight className="size-5 text-primary-ink" />
       </span>
       <p className="text-sm font-semibold text-ink">{t("wallet.noActivity")}</p>
       <p className="max-w-65 text-xs text-ink-soft">{t("wallet.noActivityHint")}</p>

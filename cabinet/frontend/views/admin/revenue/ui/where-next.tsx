@@ -32,7 +32,7 @@ function LinkCard({ href, icon, title, body }: { href: `/${string}`; icon: React
       <CardContent className="py-5">
         {/* The link is stretched over the whole card, so the hit target and the ring are the card. */}
         <Link href={href} className="flex items-start gap-3 outline-none after:absolute after:inset-0 after:rounded-xl">
-          <span className="mt-0.5 shrink-0 text-accent-debug">{icon}</span>
+          <span className="mt-0.5 shrink-0 text-primary-ink">{icon}</span>
           <span className="min-w-0 flex-1 space-y-1">
             <span className="block text-sm font-semibold text-ink">{title}</span>
             <span className="block text-xs leading-relaxed text-ink-soft">{body}</span>

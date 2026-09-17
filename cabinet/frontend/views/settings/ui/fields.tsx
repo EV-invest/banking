@@ -61,7 +61,7 @@ export function FieldSkeleton() {
 export function VerifiedTag() {
   const t = useT();
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent-debug">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary-ink">
       {/* i18n-max: 12 — sits beside a field label in a `justify-between` header row. */}
       <BadgeCheck className="size-3" /> {t("ui.verified")}
       {/* Verified means the address, not the person — the tip says so before anyone

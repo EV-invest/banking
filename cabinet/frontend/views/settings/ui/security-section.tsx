@@ -42,7 +42,7 @@ export function SecuritySection({
           {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-xs text-ink-soft">{formatEmail(email) || "—"}</p>}
         </div>
         {/* i18n-max: 12 — a `shrink-0` badge beside the truncated account email. */}
-        <Badge className="border-transparent bg-accent-debug/15 text-accent-debug">{t("settings.connected")}</Badge>
+        <Badge className="border-transparent bg-primary-ink/15 text-primary-ink">{t("settings.connected")}</Badge>
       </div>
       {/* The hint under the sign-in control, worded once: the tip catalog carries the same
           sentence under `settings.security.google-signin`, and rendering both would say it

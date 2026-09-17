@@ -82,7 +82,7 @@ export function BottomNavbar() {
         animate={{ x: `${Math.max(activeAt, 0) * 100}%`, opacity: onTab ? 1 : 0 }}
         transition={reduce ? { duration: 0 } : { duration: DUR.base, ease: EASE.out }}
       >
-        <span className="h-0.5 w-10 rounded-full bg-accent-debug" />
+        <span className="h-0.5 w-10 rounded-full bg-primary-ink" />
       </motion.span>
 
       {TABS.map((tab) => {
@@ -107,7 +107,7 @@ export function BottomNavbar() {
               // The offset is what earns its keep here: the active tab's fill is the same
               // teal as the ring, so without a gap the ring reads as the pill growing.
               "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-secondary",
-              isActive ? "text-accent-debug" : "text-ink-soft hover:text-ink",
+              isActive ? "text-primary-ink" : "text-ink-soft hover:text-ink",
             )}
           >
             {/* Account carries the two facts the rail spreads over two rows — the

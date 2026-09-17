@@ -144,7 +144,7 @@ export function OperationsView() {
   return (
     <Stagger step={SECTION_STAGGER} className="px-4 pb-8 pt-6 lg:px-8">
       <StaggerItem as="header" className="mb-6 space-y-1">
-        <p className="font-mono-tech text-xs uppercase tracking-widest text-accent-debug">{t("ui.operations")}</p>
+        <p className="font-mono-tech text-xs uppercase tracking-widest text-primary-ink">{t("ui.operations")}</p>
         <h1 className="text-2xl font-semibold text-ink">{t("ui.operations")}</h1>
         <p className="text-sm text-ink-soft">{t("ops.subtitle")}</p>
       </StaggerItem>
@@ -224,7 +224,7 @@ export function OperationsView() {
                     onClick={() => setFilter(value)}
                     className={cn(
                       "shrink-0 px-3",
-                      on && "bg-accent-debug/10 text-accent-debug hover:bg-accent-debug/15 hover:text-accent-debug",
+                      on && "bg-primary-ink/10 text-primary-ink hover:bg-primary-ink/15 hover:text-primary-ink",
                     )}
                   >
                     {t(FILTER_LABEL_KEYS[value])}

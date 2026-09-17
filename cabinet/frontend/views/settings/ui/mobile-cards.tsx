@@ -47,7 +47,7 @@ export function ProfileSummaryCard({ loading, name, email, verified }: { loading
         )}
         {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-xs text-ink-soft">{formatEmail(email) || t("auth.notSignedIn")}</span>}
         {/* Says where the tap goes: without it the card read as a header, not a destination. */}
-        <span className="text-xs font-medium text-accent-debug">{t("settings.viewProfile")}</span>
+        <span className="text-xs font-medium text-primary-ink">{t("settings.viewProfile")}</span>
       </div>
       <Chevron className="size-5" />
     </Link>

@@ -78,7 +78,7 @@ export function Chevron({ className }: { className?: string }) {
 }
 
 const PILL_TONE = {
-  positive: "bg-accent-debug/15 text-accent-debug",
+  positive: "bg-primary-ink/15 text-primary-ink",
   pending: "bg-accent-warn/15 text-accent-warn",
   neutral: "bg-ink/5 text-ink-soft",
   // The gain/loss pair (AGENTS.md § design), for a state that is a verdict rather than a wait.
