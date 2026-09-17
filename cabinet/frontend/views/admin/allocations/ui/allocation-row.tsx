@@ -72,7 +72,7 @@ export function AllocationRow({ row, busy, editing, onEdit, onSave, onToggle, on
         </TableCell>
       </TableRow>
       {editing && (
-        <TableRow className="bg-ink/[0.03] hover:bg-ink/[0.03]">
+        <TableRow data-state="selected">
           <TableCell colSpan={6} className="whitespace-normal px-5 py-4">
             <AllocationEditor row={row} busy={busy} onSave={onSave} />
           </TableCell>

@@ -3,7 +3,7 @@
 import { Boxes } from "lucide-react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Table, TableBody, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Table, TableBody, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import type { AllocationWrite } from "@/entities/admin/api/admin-client";
 import type { Allocation, AllocationAccessLevel } from "@/shared/contracts/admin";
@@ -69,6 +69,7 @@ export function AllocationsTable({
                     <Boxes />
                   </EmptyMedia>
                   <EmptyTitle>{t("admin.alloc.empty")}</EmptyTitle>
+                  <EmptyDescription>{t("admin.alloc.emptyHint")}</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             </div>

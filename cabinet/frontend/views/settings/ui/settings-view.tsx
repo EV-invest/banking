@@ -215,7 +215,7 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
           dirty ? (
             // i18n-max: 11 — a `shrink-0` Button in the app bar, beside the truncated title.
             <Button type="button" size="sm" onClick={save} disabled={saving} className="rounded-full font-semibold">
-              {saving && <Spinner className="size-3.5" aria-hidden />} {t("ui.save")}
+              {saving && <Spinner aria-hidden />} {t("ui.save")}
             </Button>
           ) : pushed ? undefined : (
             // The in-cabinet account chip, on mobile: the avatar is the way to the profile

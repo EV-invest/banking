@@ -93,7 +93,7 @@ export function TransferStakeAction({ allocation, holders }: { allocation: Alloc
               {t("ui.back")}
             </Button>
             <Button type="button" size="sm" className="flex-1" disabled={busy} onClick={send}>
-              {busy ? <Spinner className="size-3.5" aria-hidden /> : null}
+              {busy ? <Spinner aria-hidden /> : null}
               {t("admin.alloc.transfer.submit")}
             </Button>
           </div>

@@ -42,13 +42,15 @@ export function FeeTermsDiff({ from, to }: { from: FeeTermsLike | null | undefin
           </TableRow>
         </TableHeader>
         <TableBody>
+          {/* The kit's cells are nowrap; on the emailed approval page a French or Russian
+              label has to wrap inside a phone-width frame, not push it into a scroll. */}
           {rows.map((row) => {
             const moved = row.now !== row.next;
             return (
               <TableRow key={row.key}>
-                <TableCell className="px-3 text-ink-soft">{t(row.key)}</TableCell>
-                <TableCell className="px-3 tabular-nums text-ink-soft">{row.now ?? t("consilium.feePolicy.nothingCharged")}</TableCell>
-                <TableCell className={cn("px-3 tabular-nums", moved ? "font-semibold text-accent-warn" : "text-ink")}>{row.next}</TableCell>
+                <TableCell className="whitespace-normal px-3 text-ink-soft">{t(row.key)}</TableCell>
+                <TableCell className="whitespace-normal px-3 tabular-nums text-ink-soft">{row.now ?? t("consilium.feePolicy.nothingCharged")}</TableCell>
+                <TableCell className={cn("whitespace-normal px-3 tabular-nums", moved ? "font-semibold text-accent-warn" : "text-ink")}>{row.next}</TableCell>
               </TableRow>
             );
           })}

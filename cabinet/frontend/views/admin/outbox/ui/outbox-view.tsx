@@ -4,7 +4,7 @@ import { Inbox, KeyRound, RefreshCw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { unparkEvent } from "@/entities/admin/api/admin-client";
 import { parkedEventsResource } from "@/entities/admin/model/admin-resource";
@@ -111,12 +111,13 @@ export function OutboxView() {
           ) : parkedHint ? (
             <p className="text-sm text-ink-soft">{parkedHint}</p>
           ) : parked.length === 0 ? (
-            <Empty className="border">
+            <Empty className="border md:p-6">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <Inbox />
                 </EmptyMedia>
                 <EmptyTitle>{t("admin.outbox.noParkedEvents")}</EmptyTitle>
+                <EmptyDescription>{t("admin.outbox.noParkedEventsHint")}</EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : (
@@ -224,7 +225,7 @@ function ParkedActions({
             disabled={event.compensated || unparked || unparking !== null}
             onClick={onUnpark}
           >
-            {unparking === event.seq ? <Spinner className="size-3.5" aria-hidden /> : null}
+            {unparking === event.seq ? <Spinner aria-hidden /> : null}
             {t("admin.outbox.unpark")}
           </Button>
           <TipAnchor anchor="admin.outbox.parked.unpark" />

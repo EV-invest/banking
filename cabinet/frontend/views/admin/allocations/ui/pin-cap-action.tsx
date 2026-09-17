@@ -62,7 +62,7 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
               {t("ui.cancel")}
             </Button>
             <Button type="button" size="sm" className={cn("flex-1", TEAL_CTA)} disabled={busy} onClick={pin}>
-              {busy ? <Spinner className="size-3.5" aria-hidden /> : null}
+              {busy ? <Spinner aria-hidden /> : null}
               {t("admin.alloc.pinCap.submit")}
             </Button>
           </div>

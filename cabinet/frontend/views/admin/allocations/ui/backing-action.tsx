@@ -61,7 +61,7 @@ export function BackingAction({ allocation }: { allocation: Allocation }) {
               {t("ui.cancel")}
             </Button>
             <Button type="button" size="sm" className="flex-1" disabled={busy} onClick={flip}>
-              {busy ? <Spinner className="size-3.5" aria-hidden /> : null}
+              {busy ? <Spinner aria-hidden /> : null}
               {t(next === "cash" ? "admin.alloc.backing.markCash" : "admin.alloc.backing.markInKind")}
             </Button>
           </div>

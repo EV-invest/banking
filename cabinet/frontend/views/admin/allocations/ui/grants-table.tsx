@@ -64,7 +64,8 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
               <div className="flex items-center justify-end gap-2">
                 <span className="text-xs text-ink-soft">{ago(g.granted_at, t)}</span>
                 <Button type="button" variant="outline" size="sm" disabled={busyUserId === g.user_id} onClick={() => onRevoke(g.user_id)}>
-                  {busyUserId === g.user_id ? <Spinner className="size-3.5" aria-hidden /> : t("admin.alloc.grants.revoke")}
+                  {/* The spinner stands in for the label, so it keeps the kit's `role="status"` name. */}
+                  {busyUserId === g.user_id ? <Spinner /> : t("admin.alloc.grants.revoke")}
                 </Button>
               </div>
             </TableCell>

@@ -103,7 +103,7 @@ export function RetireAction({ allocation, holders }: { allocation: Allocation; 
               {t("ui.back")}
             </Button>
             <Button type="button" variant="destructive" size="sm" className="flex-1" disabled={busy} onClick={send}>
-              {busy ? <Spinner className="size-3.5" aria-hidden /> : null}
+              {busy ? <Spinner aria-hidden /> : null}
               {t("admin.alloc.retire.submit")}
             </Button>
           </div>

@@ -43,7 +43,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
       </TableCell>
       <TableCell className={cn(EDGE_CELL, "align-top text-sm font-medium tabular-nums")}>{formatExactUsdt(payment.amount, locale)}</TableCell>
       <TableCell className={cn(EDGE_CELL, "align-top text-xs")}>{tierLabel(payment.tier, t)}</TableCell>
-      <TableCell className={cn(EDGE_CELL, "align-top text-xs")}>
+      <TableCell className={cn(EDGE_CELL, "align-top whitespace-normal text-xs")}>
         <p>{requirementLabel(payment.requirement, t)}</p>
         {payment.consilium_id ? (
           <Link href="/consilium" className="rounded-md text-primary-ink underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">

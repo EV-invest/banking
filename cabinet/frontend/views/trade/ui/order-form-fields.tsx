@@ -107,7 +107,7 @@ export function OrderFormFields({
       </div>
 
       <OrderFormSubmit side={draft.side} disabled={disabled || problem !== null}>
-        {busy ? <Spinner aria-hidden /> : t(buying ? "trade.form.submitBuy" : "trade.form.submitSell")}
+        {busy ? <Spinner /> : t(buying ? "trade.form.submitBuy" : "trade.form.submitSell")}
       </OrderFormSubmit>
     </OrderForm>
   );

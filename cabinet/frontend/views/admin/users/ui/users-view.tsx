@@ -4,7 +4,7 @@ import { KeyRound, SearchX, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Badge, Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, FieldDescription, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Badge, Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, FieldDescription, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { revokeSessions, setKycLevel, type UserFilters } from "@/entities/admin/api/admin-client";
 import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
@@ -106,6 +106,7 @@ export function UsersView() {
                         <SearchX />
                       </EmptyMedia>
                       <EmptyTitle>{t("admin.users.noMatch")}</EmptyTitle>
+                      <EmptyDescription>{t("admin.users.noMatchHint")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 </div>
@@ -132,12 +133,14 @@ export function UsersView() {
                   <TableHeader>
                     {/* i18n-max: 8 per header — `table-fixed` sizes the columns from this
                         row, so a header that does not fit wraps instead of widening, and
-                        the three right-hand columns share what User leaves. */}
+                        the three right-hand columns share what User leaves. `whitespace-normal`
+                        on every head and cell is what lets them wrap at all: the kit's are
+                        nowrap, and under a fixed layout nowrap text overprints its neighbour. */}
                     <TableRow>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "w-1/2")}>{t("admin.col.user")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.users.role")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.users.kyc")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.status")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "w-1/2 whitespace-normal")}>{t("admin.col.user")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "whitespace-normal")}>{t("admin.users.role")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "whitespace-normal")}>{t("admin.users.kyc")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "whitespace-normal")}>{t("admin.col.status")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -158,7 +161,7 @@ export function UsersView() {
                             <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
                           </button>
                         </TableCell>
-                        <TableCell className={EDGE_CELL}>
+                        <TableCell className={cn(EDGE_CELL, "whitespace-normal")}>
                           {/* Stacked, not inline: `table-fixed` sizes this column from an
                               8-character header, so a chip beside the role would push the
                               label out of its own cell in every locale. */}
@@ -167,8 +170,8 @@ export function UsersView() {
                             {u.role_is_break_glass && <BreakGlassMark />}
                           </div>
                         </TableCell>
-                        <TableCell className={cn(EDGE_CELL, "text-ink-soft")}>{t("admin.users.kycLevelShort", { n: u.kyc_level })}</TableCell>
-                        <TableCell className={EDGE_CELL}>
+                        <TableCell className={cn(EDGE_CELL, "whitespace-normal text-ink-soft")}>{t("admin.users.kycLevelShort", { n: u.kyc_level })}</TableCell>
+                        <TableCell className={cn(EDGE_CELL, "whitespace-normal")}>
                           <StatusDot status={u.status} label={statusLabel(u.status, t)} />
                         </TableCell>
                       </TableRow>
@@ -379,7 +382,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
             onSave={(next) => run("kyc", () => setKycLevel(summary.user_id, next))}
           />
           <Button type="button" variant="outline" size="sm" className="mt-2 w-full border-accent-error/40 text-accent-error hover:bg-accent-error/10" disabled={busy === "revoke"} onClick={() => run("revoke", () => revokeSessions(summary.user_id))}>
-            {busy === "revoke" ? <Spinner className="size-3.5" aria-hidden /> : null}
+            {busy === "revoke" ? <Spinner aria-hidden /> : null}
             {t("admin.users.revokeAllSessions")}
           </Button>
           <p className="flex items-center gap-1.5 pt-1 text-xs text-ink-soft">
@@ -515,7 +518,7 @@ function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolea
           onSave(picked);
         }}
       >
-        {busy ? <Spinner className="size-3.5" aria-hidden /> : null}
+        {busy ? <Spinner aria-hidden /> : null}
         {t("ui.save")}
       </Button>
       {/* Below the control rather than instead of it, the way the owner seat's sentence sits

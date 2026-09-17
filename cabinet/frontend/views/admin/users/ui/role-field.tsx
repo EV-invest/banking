@@ -58,7 +58,7 @@ export function RoleField({ userId, role, busy, run }: RoleFieldProps) {
         <Select value={role} onValueChange={(next) => void run("role", () => setUserRole(userId, next))}>
           <SelectTrigger size="sm" className="border-border bg-secondary" disabled={working || seated}>
             <span className="flex items-center gap-1.5">
-              {working && <Spinner className="size-3" aria-hidden />}
+              {working && <Spinner aria-hidden />}
               {roleLabel(role, t)}
             </span>
           </SelectTrigger>

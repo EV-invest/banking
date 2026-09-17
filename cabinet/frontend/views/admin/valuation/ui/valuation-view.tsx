@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { failRedemption, setAllocationUnitCap, settleRedemption } from "@/entities/admin/api/admin-client";
 import { adminAllocationsResource, redemptionQueueResource } from "@/entities/admin/model/admin-resource";
@@ -247,6 +247,7 @@ export function ValuationView() {
                         <Inbox />
                       </EmptyMedia>
                       <EmptyTitle>{t("admin.valuation.queueEmpty")}</EmptyTitle>
+                      <EmptyDescription>{t("admin.valuation.queueEmptyHint")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 </div>

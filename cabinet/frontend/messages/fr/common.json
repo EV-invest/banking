@@ -172,8 +172,12 @@
     "t": "Plafond parts"
   },
   "admin.alloc.empty": {
-    "en": "No allocations registered yet — until one is, every subscription is refused.",
-    "t": "Aucune allocation inscrite pour l’instant — tant qu’il n’y en a pas, toute souscription est refusée."
+    "en": "No allocations registered yet",
+    "t": "Aucune allocation inscrite pour l’instant"
+  },
+  "admin.alloc.emptyHint": {
+    "en": "Until one is, every subscription is refused.",
+    "t": "Tant qu’il n’y en a pas, toute souscription est refusée."
   },
   "admin.alloc.field.icon": {
     "en": "Icon",
@@ -1196,8 +1200,12 @@
     "t": "Clé de signature indisponible — l’ingénierie a été alertée ; la réinjection échouera tant que la clé n’aura pas été renouvelée"
   },
   "admin.outbox.noParkedEvents": {
-    "en": "No parked events — the relay is clean.",
-    "t": "Aucun événement en quarantaine — le relais est sain."
+    "en": "No parked events",
+    "t": "Aucun événement en quarantaine"
+  },
+  "admin.outbox.noParkedEventsHint": {
+    "en": "The relay is clean.",
+    "t": "Le relais est sain."
   },
   "admin.outbox.parkedEvents": {
     "en": "Parked events",
@@ -1880,8 +1888,12 @@
     "t": "Lever la suspension"
   },
   "admin.users.noMatch": {
-    "en": "No users match these filters.",
-    "t": "Aucun utilisateur ne correspond à ces filtres."
+    "en": "No users match these filters",
+    "t": "Aucun utilisateur ne correspond à ces filtres"
+  },
+  "admin.users.noMatchHint": {
+    "en": "Loosen the search, role or status filter to see more accounts.",
+    "t": "Élargissez la recherche, le filtre de rôle ou de statut pour voir plus de comptes."
   },
   "admin.users.ownerSeatHeld": {
     "en": "This account holds an owner's seat, so its role cannot be changed here. A seat is given up by resigning, or taken by a removal the other owners vote through, in",
@@ -2104,8 +2116,12 @@
     "t": "Proposé aux propriétaires"
   },
   "admin.valuation.queueEmpty": {
-    "en": "The redemption queue is empty.",
-    "t": "La file de rachats est vide."
+    "en": "The redemption queue is empty",
+    "t": "La file de rachats est vide"
+  },
+  "admin.valuation.queueEmptyHint": {
+    "en": "A request appears here when an investor asks to redeem units.",
+    "t": "Une demande apparaît ici lorsqu’un investisseur demande à racheter des parts."
   },
   "admin.valuation.queueFootnote": {
     "en": "Settle pays at settle-time NAV once the fund claim is liquid; if the rail is short the payout queues until treasury tops up. Fail voids the request and refunds the units.",
@@ -2156,8 +2172,12 @@
     "t": "Confirmer le règlement"
   },
   "admin.withdrawals.empty": {
-    "en": "No withdrawals are awaiting action.",
-    "t": "Aucun retrait n’attend d’action."
+    "en": "No withdrawals awaiting action",
+    "t": "Aucun retrait n’attend d’action"
+  },
+  "admin.withdrawals.emptyHint": {
+    "en": "A withdrawal appears here once an investor asks for one.",
+    "t": "Un retrait apparaît ici dès qu’un investisseur en demande un."
   },
   "admin.withdrawals.failWarning": {
     "en": "Failing refunds the user. If the broadcast reached the chain this would double-pay — the hub refuses while a broadcast record exists, but verify on-chain first.",

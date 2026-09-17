@@ -4,7 +4,7 @@ import { Inbox, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Empty, EmptyHeader, EmptyMedia, EmptyTitle, Input, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Input, Skeleton, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
 
 import { dispatchWithdrawal, failWithdrawal, settleWithdrawal } from "@/entities/admin/api/admin-client";
 import { withdrawalQueueResource } from "@/entities/admin/model/admin-resource";
@@ -97,6 +97,7 @@ export function WithdrawalsView() {
                         <Inbox />
                       </EmptyMedia>
                       <EmptyTitle>{t("admin.withdrawals.empty")}</EmptyTitle>
+                      <EmptyDescription>{t("admin.withdrawals.emptyHint")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 </div>
@@ -255,7 +256,7 @@ function WithdrawalRow({
         </TableCell>
       </TableRow>
       {panel && (
-        <TableRow className="bg-ink/5 hover:bg-ink/5">
+        <TableRow data-state="selected">
           <TableCell colSpan={6} className={cn(EDGE_CELL, "whitespace-normal")}>
             {panel.kind === "settle" ? (
               <div className="flex items-center gap-3">
