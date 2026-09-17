@@ -382,7 +382,7 @@ pub async fn request_redemption(
 	now_unix: i64,
 ) -> Result<Redemption, DomainError> {
 	allocations_app::require_redeemable(ports.allocations, &service).await?;
-	refuse_recent_poster(ports.nav, &service, user, now_unix).await?;
+	refuse_recent_poster(ports.nav, ports.ledger, &service, user, now_unix).await?;
 	let holding = ports.ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?;
 	if Shares::from_base_units(holding.available()) < units {
 		return Err(DomainError::Validation("insufficient units to redeem".into()));
@@ -446,7 +446,7 @@ pub async fn settle_redemption(
 	}
 	// Checked at settle too, not only at request: a queued redemption can outlive a mark
 	// its owner posts later, and settle is where the cash is actually priced.
-	refuse_recent_poster(nav, existing.service(), existing.user(), now_unix).await?;
+	refuse_recent_poster(nav, ledger, existing.service(), existing.user(), now_unix).await?;
 	let price = dealing_nav(nav, ledger, existing.service(), now_unix).await?;
 	let redemption = redemptions.settle(id, price).await?;
 	relay.notify_one();
@@ -457,12 +457,35 @@ pub async fn settle_redemption(
 /// [`VALUATION_REDEEM_COOLDOWN_SECS`]. `posted_by` is compared as the string the direct
 /// RPC records — `claims.sub`, which `caller_id` parses as this same `UserId`, so the two
 /// spellings agree by construction (pinned by an integration test).
-async fn refuse_recent_poster(nav: &dyn NavMarks, service: &ServiceId, user: UserId, now_unix: i64) -> Result<(), DomainError> {
-	if nav.posted_by_since(service, &user.to_string(), now_unix.saturating_sub(VALUATION_REDEEM_COOLDOWN_SECS)).await? {
-		return Err(DomainError::Precondition(format!(
-			"you posted a valuation for this fund within the last {} days — redemption is refused until it ages out",
-			VALUATION_REDEEM_COOLDOWN_SECS / (24 * 60 * 60)
-		)));
+///
+/// A reserved allocation takes no mark of its own; its price is the marks of the products
+/// it holds units of (see [`nav_of`]). So the cooldown on it is the cooldown on EVERY one of
+/// those products (#245, H-3): a `fee` holder who marks a product up and redeems `fee` at
+/// once cashes out at the price they set, exactly what the cooldown exists to stop, and the
+/// same person settling the product's fee class into `fee` cash after their own mark is
+/// the same move one step earlier (M-1) — hence `pub(crate)`, for `fees::settle_fee_shares`.
+pub(crate) async fn refuse_recent_poster(nav: &dyn NavMarks, ledger: &dyn Ledger, service: &ServiceId, user: UserId, now_unix: i64) -> Result<(), DomainError> {
+	let since = now_unix.saturating_sub(VALUATION_REDEEM_COOLDOWN_SECS);
+	let subject = user.to_string();
+	let days = VALUATION_REDEEM_COOLDOWN_SECS / (24 * 60 * 60);
+	if !service.is_reserved() {
+		if nav.posted_by_since(service, &subject, since).await? {
+			return Err(DomainError::Precondition(format!(
+				"you posted a valuation for this fund within the last {days} days — redemption is refused until it ages out"
+			)));
+		}
+		return Ok(());
+	}
+	for (key, units) in ledger.share_holdings(&HoldingScope::Holder(UnitHolder::Allocation(service.clone()))).await? {
+		if units == 0 {
+			continue;
+		}
+		let Some((product, _)) = UnitHolder::of_holding(&key) else { continue };
+		if nav.posted_by_since(&product, &subject, since).await? {
+			return Err(DomainError::Precondition(format!(
+				"you posted a valuation for '{product}', which the '{service}' allocation holds, within the last {days} days — dealing in it is refused until the mark ages out"
+			)));
+		}
 	}
 	Ok(())
 }

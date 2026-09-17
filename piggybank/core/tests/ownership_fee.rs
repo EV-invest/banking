@@ -584,3 +584,70 @@ async fn a_reserved_allocation_takes_no_mark_and_no_fee_policy() {
 	}
 	assert_eq!(fund.posted_at_unix, 0, "cash only: never stale");
 }
+
+/// H-3 of the #245 security review. A reserved allocation takes no mark of its own: its
+/// price is the marks of the products it holds. So the redeem cooldown that binds a
+/// product's poster must bind them on `fee` too — otherwise a fee holder marks the product
+/// up and cashes their `fee` units out at the price they set, the very move the cooldown
+/// exists to stop. Someone who did not mark redeems as before, and the poster is free once
+/// the mark has aged out.
+#[tokio::test]
+async fn a_fee_holder_who_marked_a_product_cannot_redeem_fee_units_for_seven_days() {
+	let Some(h) = harness().await else { return };
+	let (investor, poster, bystander) = (UserId::new(), person(&h).await, person(&h).await);
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	fund_user(&h, investor, "1000").await;
+	subscribe(&h, investor, &service, "1000").await;
+	let fee_class = charge_a_year(&h, investor, &service).await;
+	assert!(fee_class > Shares::ZERO, "the fee allocation holds the product's fee class");
+	// Cash behind the allocation, so the one-unit redemptions below are covered and the
+	// only thing standing between the poster and their cash is the cooldown.
+	fund_fee_claim(&h, "100").await;
+	grant_fee_units(&h, poster, "10").await;
+	grant_fee_units(&h, bystander, "10").await;
+
+	// The poster marks the product under their own id — the direct RPC's writer.
+	let aum = cash_of(&h, LedgerAccountKey::ServiceClaim(service.clone())).await;
+	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), aum, &poster.to_string(), now_unix())
+		.await
+		.unwrap();
+
+	let err = funds_app::request_redemption(&fund_ports(&h), &h.reds, poster, ServiceId::fee(), shares("1"), now_unix())
+		.await
+		.expect_err("the poster's fee units are priced off their own mark");
+	assert!(
+		matches!(err, DomainError::Precondition(ref m) if m.contains("posted a valuation") && m.contains(service.as_str())),
+		"refused by the cooldown, naming the product: {err:?}"
+	);
+	assert!(h.reds.list_by_user(poster).await.unwrap().is_empty(), "refused, not queued");
+	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(ServiceId::fee(), poster)).await, shares("10"), "nothing was reserved");
+
+	// A holder who did not mark anything redeems as before — covered, so settled at once.
+	let redemption = funds_app::request_redemption(&fund_ports(&h), &h.reds, bystander, ServiceId::fee(), shares("1"), now_unix())
+		.await
+		.expect("the cooldown binds the poster, not the allocation");
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
+	assert_eq!(
+		h.reds.find_by_id(redemption.id()).await.unwrap().unwrap().state(),
+		domain::redemptions::RedemptionState::Completed
+	);
+
+	// Seven days on, the mark has aged out and the poster deals again.
+	sqlx::query("UPDATE fund_valuations SET posted_at = posted_at - interval '8 days' WHERE service = $1 AND posted_by = $2")
+		.bind(service.as_str())
+		.bind(poster.to_string())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	// The aged mark makes the product's price stale, which would refuse the deal for a
+	// different reason; a fresh mark by somebody else restores it without touching the
+	// poster's cooldown.
+	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), aum, "another-operator", now_unix())
+		.await
+		.unwrap();
+	funds_app::request_redemption(&fund_ports(&h), &h.reds, poster, ServiceId::fee(), shares("1"), now_unix())
+		.await
+		.expect("an aged-out mark no longer binds its poster");
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
+}
