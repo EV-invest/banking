@@ -14,6 +14,7 @@ import type { FundNav } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { StaggerItem } from "@/shared/ui/motion";
+import { PAGE_TITLE } from "@/shared/ui/page-frame";
 import { blockedReasonKey, isClosed, isInKind, isLocked, type Product } from "@/views/invest/lib/product";
 import { ProductBadges } from "@/views/invest/ui/atoms";
 import { InKindBadge } from "@/views/invest/ui/backing-badge";
@@ -36,7 +37,7 @@ export function ProductHeader({ product, nav, held, panel, onPanel }: { product:
           <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", productTone(product.service))}>
             <ProductIcon icon={product.icon} className="size-5" />
           </span>
-          <h1 className="text-3xl font-semibold">{product.title}</h1>
+          <h1 className={PAGE_TITLE}>{product.title}</h1>
           <ProductBadges closed={closed} locked={isLocked(product)} stale={stale} />
           {isInKind(product) && <InKindBadge />}
         </div>

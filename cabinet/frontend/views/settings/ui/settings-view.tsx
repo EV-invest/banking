@@ -21,7 +21,8 @@ import { useResource } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { InitialsAvatar } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
-import { Reveal, SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { Reveal, StaggerItem } from "@/shared/ui/motion";
+import { Eyebrow, PageFrame } from "@/shared/ui/page-frame";
 import { EDITABLE, type Form, formFrom } from "@/views/settings/lib/form";
 import { displayName, initialsOfName, truncateName } from "@/views/settings/lib/format";
 import { DEFAULT_SECTION, EDITING, pushableOf, type Section } from "@/views/settings/lib/sections";
@@ -209,134 +210,124 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
   );
   const personalProps = { loading, form, email, verified: !!profile?.email_verified, onChange: set, fieldErrors };
 
-  return (
+  const appBar = (
+    <MobileAppBar
+      title={t(pushed ? PUSHED_TITLE[pushed] : "nav.settings")}
+      onBack={pushed ? pop : undefined}
+      right={
+        dirty ? (
+          // i18n-max: 11 — a `shrink-0` Button in the app bar, beside the truncated title.
+          <Button type="button" size="sm" onClick={save} disabled={saving} className="rounded-full font-semibold">
+            {saving && <Spinner aria-hidden />} {t("ui.save")}
+          </Button>
+        ) : pushed ? undefined : (
+          // The in-cabinet account chip, on mobile: the avatar is the way to the profile
+          // here the same way the header chip is on desktop.
+          <Link href="/profile" aria-label={t("ui.profile")} className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <InitialsAvatar initials={initialsOfName(name, email)} className="size-8.5 text-sm" />
+          </Link>
+        )
+      }
+    />
+  );
+  // The desktop heading's action. Also while dirty on any other section: a language change
+  // followed by a glance at Security must not leave the edit hanging with nowhere to save.
+  const headingAction = (EDITING.includes(section) || dirty) && (
     <>
-      <MobileAppBar
-        title={t(pushed ? PUSHED_TITLE[pushed] : "nav.settings")}
-        onBack={pushed ? pop : undefined}
-        right={
-          dirty ? (
-            // i18n-max: 11 — a `shrink-0` Button in the app bar, beside the truncated title.
-            <Button type="button" size="sm" onClick={save} disabled={saving} className="rounded-full font-semibold">
-              {saving && <Spinner aria-hidden />} {t("ui.save")}
-            </Button>
-          ) : pushed ? undefined : (
-            // The in-cabinet account chip, on mobile: the avatar is the way to the profile
-            // here the same way the header chip is on desktop.
-            <Link href="/profile" aria-label={t("ui.profile")} className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <InitialsAvatar initials={initialsOfName(name, email)} className="size-8.5 text-sm" />
-            </Link>
-          )
-        }
-      />
+      {saved && (
+        // i18n-max: 11
+        <span className="inline-flex items-center gap-1 text-sm font-medium text-positive">
+          <Check className="size-4" /> {t("ui.saved")}
+        </span>
+      )}
+      {/* i18n-max: 20 */}
+      <Button type="button" onClick={save} disabled={loading || saving || !dirty} className="rounded-lg font-semibold">
+        {saving && <Spinner aria-hidden />} {t("ui.saveChanges")}
+      </Button>
+    </>
+  );
 
-      <Stagger delay={SECTION_STAGGER} step={SECTION_STAGGER} className="flex flex-col gap-4 px-5 pb-6 pt-4.5 lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
-        {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
-        <StaggerItem className="hidden items-center justify-between gap-4 lg:flex">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold text-ink">{t("nav.settings")}</h1>
-            <p className="text-sm text-ink-soft">{t("settings.subtitle")}</p>
-          </div>
-          {/* Also while dirty on any other section: a language change followed by a
-              glance at Security must not leave the edit hanging with nowhere to save. */}
-          {(EDITING.includes(section) || dirty) && (
-            // Both children are `shrink-0` beside a `min-w-0` heading column, so their
-            // combined width comes straight out of the page title.
-            <div className="flex shrink-0 items-center gap-3">
-              {saved && (
-                // i18n-max: 11
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-positive">
-                  <Check className="size-4" /> {t("ui.saved")}
-                </span>
-              )}
-              {/* i18n-max: 20 */}
-              <Button type="button" onClick={save} disabled={loading || saving || !dirty} className="rounded-lg font-semibold">
-                {saving && <Spinner aria-hidden />} {t("ui.saveChanges")}
-              </Button>
+  return (
+    <PageFrame title={t("nav.settings")} description={t("settings.subtitle")} actions={headingAction || undefined} appBar={appBar}>
+      {error && (
+        <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
+          {error}
+        </StaggerItem>
+      )}
+      {/* Not a section: "Saved" appears in answer to a click, long after the page
+          arrived, and belongs to the save rather than to the screen. */}
+      {saved && (
+        <p className="inline-flex items-center gap-1 text-sm font-medium text-positive lg:hidden">
+          <Check className="size-4" /> {t("ui.saved")}
+        </p>
+      )}
+
+      {/* ── Mobile (Figma cabinet/mobile/settings) ───────────────────────── */}
+      {/* Pushing a section replaces the whole stack, so the `key` remounts the reveal
+          and the new screen arrives instead of appearing. It repeats the column because
+          a wrapper that did not would collapse the gap between the root cards. On the
+          page's own first paint this reveal is nested inside the entrance above it and
+          fades without travelling — one movement, not two (see shared/ui/motion/entrance). */}
+      <StaggerItem className="lg:hidden">
+        <Reveal key={pushed ?? "root"} className="flex flex-col gap-5">
+          {pushed === "personal" ? (
+            <PersonalStack {...personalProps} />
+          ) : pushed === "sessions" ? (
+            sessionsPanel(false)
+          ) : pushed === "notifications" ? (
+            <NotificationsSection />
+          ) : pushed === "documents" ? (
+            <DocumentsSection />
+          ) : (
+            <>
+              <MobileGroup label={t("settings.group.cabinet")}>
+                <PreferencesCard loading={loading} form={form} fieldErrors={fieldErrors} onChange={set} />
+                <MobileNotificationsCard onOpen={() => select("notifications")} />
+              </MobileGroup>
+              <MobileGroup label={t("ui.profile")}>
+                <ProfileSummaryCard loading={loading} name={name} email={email} verified={!!profile?.email_verified} />
+                <PersonalDetailsCard onOpen={() => select("personal")} />
+                <MobileSecurityCard loading={loading} email={email} sessions={sessions} onOpenSessions={() => select("sessions")} />
+              </MobileGroup>
+              <MobileGroup label={t("settings.group.help")}>
+                <MobileHelpCard onOpen={() => select("documents")} />
+              </MobileGroup>
+              {/* Last on the screen, under no eyebrow: leaving is not a setting of any group. */}
+              <SignOutButton />
+            </>
+          )}
+        </Reveal>
+      </StaggerItem>
+
+      {/* ── Desktop (Figma cabinet/settings) ─────────────────────────────── */}
+      <StaggerItem className="hidden gap-6 lg:flex">
+        <SettingsRail section={section} onSelect={select} />
+
+        {/* Keyed on the section, so choosing one from the rail brings its pane in
+            rather than swapping it under the cursor. The rail beside it does not
+            remount, which is the point — the marker slides, the pane arrives. */}
+        <Reveal key={section} className="min-w-0 flex-1">
+          {section === "preferences" && <PreferencesSection loading={loading} form={form} onChange={set} fieldErrors={fieldErrors} />}
+          {section === "notifications" && (
+            <div>
+              {/* The section itself is shared with the mobile pushed screen, where the
+                  app bar titles it — the header is the desktop's alone. */}
+              <SectionHeader title={t("nav.notifications")} sub={t("settings.notificationsSub")} />
+              <NotificationsSection />
             </div>
           )}
-        </StaggerItem>
-
-        {error && (
-          <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
-            {error}
-          </StaggerItem>
-        )}
-        {/* Not a section: "Saved" appears in answer to a click, long after the page
-            arrived, and belongs to the save rather than to the screen. */}
-        {saved && (
-          <p className="inline-flex items-center gap-1 text-sm font-medium text-positive lg:hidden">
-            <Check className="size-4" /> {t("ui.saved")}
-          </p>
-        )}
-
-        {/* ── Mobile (Figma cabinet/mobile/settings) ───────────────────────── */}
-        {/* Pushing a section replaces the whole stack, so the `key` remounts the reveal
-            and the new screen arrives instead of appearing. It repeats the column because
-            a wrapper that did not would collapse the gap between the root cards. On the
-            page's own first paint this reveal is nested inside the entrance above it and
-            fades without travelling — one movement, not two (see shared/ui/motion/entrance). */}
-        <StaggerItem className="lg:hidden">
-          <Reveal key={pushed ?? "root"} className="flex flex-col gap-5">
-            {pushed === "personal" ? (
-              <PersonalStack {...personalProps} />
-            ) : pushed === "sessions" ? (
-              sessionsPanel(false)
-            ) : pushed === "notifications" ? (
-              <NotificationsSection />
-            ) : pushed === "documents" ? (
+          {section === "personal" && <PersonalSection {...personalProps} />}
+          {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => select("sessions")} />}
+          {section === "sessions" && sessionsPanel(true)}
+          {section === "documents" && (
+            <div>
+              <SectionHeader title={t("settings.documents.title")} sub={t("settings.documents.sub")} />
               <DocumentsSection />
-            ) : (
-              <>
-                <MobileGroup label={t("settings.group.cabinet")}>
-                  <PreferencesCard loading={loading} form={form} fieldErrors={fieldErrors} onChange={set} />
-                  <MobileNotificationsCard onOpen={() => select("notifications")} />
-                </MobileGroup>
-                <MobileGroup label={t("ui.profile")}>
-                  <ProfileSummaryCard loading={loading} name={name} email={email} verified={!!profile?.email_verified} />
-                  <PersonalDetailsCard onOpen={() => select("personal")} />
-                  <MobileSecurityCard loading={loading} email={email} sessions={sessions} onOpenSessions={() => select("sessions")} />
-                </MobileGroup>
-                <MobileGroup label={t("settings.group.help")}>
-                  <MobileHelpCard onOpen={() => select("documents")} />
-                </MobileGroup>
-                {/* Last on the screen, under no eyebrow: leaving is not a setting of any group. */}
-                <SignOutButton />
-              </>
-            )}
-          </Reveal>
-        </StaggerItem>
-
-        {/* ── Desktop (Figma cabinet/settings) ─────────────────────────────── */}
-        <StaggerItem className="hidden gap-6 lg:flex">
-          <SettingsRail section={section} onSelect={select} />
-
-          {/* Keyed on the section, so choosing one from the rail brings its pane in
-              rather than swapping it under the cursor. The rail beside it does not
-              remount, which is the point — the marker slides, the pane arrives. */}
-          <Reveal key={section} className="min-w-0 flex-1">
-            {section === "preferences" && <PreferencesSection loading={loading} form={form} onChange={set} fieldErrors={fieldErrors} />}
-            {section === "notifications" && (
-              <div>
-                {/* The section itself is shared with the mobile pushed screen, where the
-                    app bar titles it — the header is the desktop's alone. */}
-                <SectionHeader title={t("nav.notifications")} sub={t("settings.notificationsSub")} />
-                <NotificationsSection />
-              </div>
-            )}
-            {section === "personal" && <PersonalSection {...personalProps} />}
-            {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => select("sessions")} />}
-            {section === "sessions" && sessionsPanel(true)}
-            {section === "documents" && (
-              <div>
-                <SectionHeader title={t("settings.documents.title")} sub={t("settings.documents.sub")} />
-                <DocumentsSection />
-              </div>
-            )}
-          </Reveal>
-        </StaggerItem>
-      </Stagger>
-    </>
+            </div>
+          )}
+        </Reveal>
+      </StaggerItem>
+    </PageFrame>
   );
 }
 
@@ -352,7 +343,7 @@ const PUSHED_TITLE = {
 function MobileGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-4">
-      <p className="px-1 text-xs font-semibold uppercase tracking-widest text-ink-soft">{label}</p>
+      <Eyebrow className="px-1">{label}</Eyebrow>
       {children}
     </div>
   );

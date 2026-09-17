@@ -19,7 +19,8 @@ import { isUnread, toDate } from "@/shared/contracts/notifications";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
-import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { StaggerItem } from "@/shared/ui/motion";
+import { PageFrame } from "@/shared/ui/page-frame";
 
 const CARD = "rounded-xl border border-border bg-card";
 // The filter pills and the rows are hand-written rather than uikit Buttons, so the keyboard
@@ -129,20 +130,19 @@ export function NotificationsView() {
   }
 
   return (
-    <Stagger step={SECTION_STAGGER} className="mx-auto w-full max-w-282 px-4 py-6 sm:px-6 lg:px-8">
-      <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold text-ink">{t("nav.notifications")}</h1>
-          <p className="mt-1 text-sm text-ink-soft">{t("notif.subtitle")}</p>
-        </div>
+    <PageFrame
+      title={t("nav.notifications")}
+      description={t("notif.subtitle")}
+      actions={
         <Button type="button" variant="outline" onClick={markAll} disabled={busy || unread === 0}>
           {t("notif.markAllRead")}
         </Button>
-      </StaggerItem>
-
+      }
+    >
       {/* `inline-flex` on the bar itself, so the item that carries it has to stay inline
-          too — a block wrapper would stretch the pill pair across the page. */}
-      <StaggerItem className="mt-5 inline-flex gap-0.5 rounded-lg border border-border/60 bg-secondary p-1">
+          too — a block wrapper would stretch the pill pair across the page; `self-start`
+          keeps the column from doing the same. */}
+      <StaggerItem className="inline-flex gap-0.5 self-start rounded-lg border border-border/60 bg-secondary p-1">
         {(["all", "unread"] as const).map((f) => (
           <button
             key={f}
@@ -162,12 +162,12 @@ export function NotificationsView() {
       </StaggerItem>
 
       {error && (
-        <StaggerItem as="p" className="mt-4 rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
+        <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
           {error}
         </StaggerItem>
       )}
 
-      <StaggerItem className={cn("mt-4 overflow-hidden", CARD)}>
+      <StaggerItem className={cn("overflow-hidden", CARD)}>
         {items === null ? (
           <ul>
             {[0, 1, 2].map((i) => (
@@ -192,13 +192,13 @@ export function NotificationsView() {
       </StaggerItem>
 
       {nextCursor && items && items.length > 0 && (
-        <StaggerItem className="mt-4 flex justify-center">
+        <StaggerItem className="flex justify-center">
           <Button type="button" variant="outline" onClick={loadMore} disabled={busy}>
             {busy ? t("ui.loading") : t("notif.loadOlder")}
           </Button>
         </StaggerItem>
       )}
-    </Stagger>
+    </PageFrame>
   );
 }
 

@@ -46,7 +46,8 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { useIsCompact } from "@/shared/lib/use-is-compact";
-import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { Settled, StaggerItem } from "@/shared/ui/motion";
+import { Eyebrow, PageFrame } from "@/shared/ui/page-frame";
 import { ResourceError } from "@/shared/ui/resource-error";
 import {
   amountTone,
@@ -142,14 +143,8 @@ export function OperationsView() {
   const groups = useMemo(() => groupByDay(settled, t, locale), [settled, t, locale]);
 
   return (
-    <Stagger step={SECTION_STAGGER} className="px-4 pb-8 pt-6 lg:px-8">
-      <StaggerItem as="header" className="mb-6 space-y-1">
-        <p className="font-mono-tech text-xs uppercase tracking-widest text-primary-ink">{t("ui.operations")}</p>
-        <h1 className="text-2xl font-semibold text-ink">{t("ui.operations")}</h1>
-        <p className="text-sm text-ink-soft">{t("ops.subtitle")}</p>
-      </StaggerItem>
-
-      {error && <ResourceError variant="alert" title={t("err.opsLoad")} message={error} className="mb-6" />}
+    <PageFrame title={t("ui.operations")} description={t("ops.subtitle")}>
+      {error && <ResourceError variant="alert" title={t("err.opsLoad")} message={error} />}
 
       {/* The timeline is one section — the filter bar and the table it filters arrive
           together, because a bar that lands before the rows invites a click that has
@@ -252,7 +247,7 @@ export function OperationsView() {
                 {pending.length > 0 && <InProgress operations={pending} titleOf={titleOf} />}
                 {groups.map((group) => (
                   <section key={group.label} className="space-y-2">
-                    <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-ink-soft">{group.label}</h2>
+                    <Eyebrow as="h2" className="px-1">{group.label}</Eyebrow>
                     <Card>
                       {/* The rows carry the inset instead of the card, so a hover (and the separator
                           between rows) reaches the card's edges rather than stopping 24px short. */}
@@ -279,7 +274,7 @@ export function OperationsView() {
         )}
         </Settled>
       </StaggerItem>
-    </Stagger>
+    </PageFrame>
   );
 }
 

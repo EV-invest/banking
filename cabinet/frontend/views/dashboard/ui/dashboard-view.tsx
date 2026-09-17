@@ -14,8 +14,9 @@ import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
-import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor } from "@/shared/tips";
+import { PageFrame } from "@/shared/ui/page-frame";
 import { formatCount, STAT_STRIP, StatDivider, StatTile } from "@/shared/ui/stat-tile";
 import { CARD_FROM_LG, CARD_PAD, EMPTY_BOX } from "@/views/dashboard/lib/chrome";
 import { DASH_ADDRESS, formatSignedUsd, formatUsd, num, shortAddress, valence } from "@/views/dashboard/lib/format";
@@ -88,8 +89,8 @@ export function DashboardView() {
   // sidebar track is a fixed 360px with no matching step on the spacing scale, so it
   // rides in as a custom property instead of an arbitrary class.
   //
-  // The grid is also the entrance: `Stagger` renders this same element, and each
-  // section below is a `StaggerItem` rendered as the element it already was, so the
+  // The grid is also the entrance: the frame's `Stagger` renders this same element, and
+  // each section below is a `StaggerItem` rendered as the element it already was, so the
   // placement classes stay on the grid items that carry them. The sequence follows
   // DOM order — which on mobile is reading order, and on desktop is close enough
   // that no section arrives before the one above it.
@@ -101,31 +102,28 @@ export function DashboardView() {
           an account with a step still to do, the path takes the top slot and the hero — a
           zero over an empty plot — reads second. Once the path is done it is one quiet line. */}
       <GetStartedSection className="mx-4 mt-5 lg:mx-8 lg:mt-6" />
-      <Stagger
-        step={SECTION_STAGGER}
-        className="grid grid-cols-1 gap-4 px-4 pb-6 pt-5 lg:gap-6 lg:px-8 lg:pb-7 lg:pt-6 xl:grid-cols-(--dash-columns) xl:items-start"
-        style={{ "--dash-columns": "minmax(0, 1fr) 360px" } as CSSProperties}
-      >
-        {/* topbar — desktop only; on mobile the shell app bar plus the hero label carry the page */}
-        <StaggerItem className="hidden items-center justify-between gap-4 lg:flex xl:col-span-2 xl:row-start-1">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-2xl font-semibold leading-tight text-ink">{t("dash.portfolio")}</h1>
-            <p className="text-sm text-ink-soft">{t("dash.portfolioSub")}</p>
-          </div>
-          {/* Shortcuts to the same two actions the Move money card offers, so they stay
-              outline: one solid accent per screen, and that one belongs to the card that
-              explains what it does. Two filled teal CTAs for the same destination read as
-              loud rather than emphatic. */}
-          <div className="flex shrink-0 gap-2.5">
+      <PageFrame
+        title={t("dash.portfolio")}
+        description={t("dash.portfolioSub")}
+        // Shortcuts to the same two actions the Move money card offers, so they stay
+        // outline: one solid accent per screen, and that one belongs to the card that
+        // explains what it does. Two filled teal CTAs for the same destination read as
+        // loud rather than emphatic.
+        actions={
+          <>
             <Button asChild variant="outline">
               <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
             </Button>
-          </div>
-        </StaggerItem>
-
+          </>
+        }
+        // Desktop only: on mobile the shell app bar plus the hero label carry the page.
+        headingClassName="hidden lg:flex xl:col-span-2 xl:row-start-1"
+        className="grid grid-cols-1 xl:grid-cols-(--dash-columns) xl:items-start"
+        style={{ "--dash-columns": "minmax(0, 1fr) 360px" } as CSSProperties}
+      >
         <PerfCard value={balance?.total} loading={walletLoading} allTimePct={allTimePct} allocation={allocation} className="lg:order-1 xl:col-start-1 xl:row-span-2 xl:row-start-2" />
 
         {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
@@ -194,7 +192,7 @@ export function DashboardView() {
             )}
           </CardContent>
         </StaggerItem>
-      </Stagger>
+      </PageFrame>
     </>
   );
 }

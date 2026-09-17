@@ -12,6 +12,7 @@ import { Card, CardContent, Skeleton } from "@evinvest/uikit";
 import type { FundNav, Position } from "@/shared/contracts";
 import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
+import { Eyebrow, PageFrame } from "@/shared/ui/page-frame";
 import { formatSignedUsdt, formatUnits, formatUsdt, valence, valenceClass } from "@/views/invest/lib/format";
 import { Stat } from "@/views/invest/ui/atoms";
 
@@ -56,10 +57,10 @@ export function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: bo
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-4 py-6">
         <div className="space-y-1">
-          <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-ink-soft">
+          <Eyebrow className="flex items-center gap-1.5">
             {t("invest.navPerUnit")}
             <TipAnchor anchor="invest.position.nav" />
-          </p>
+          </Eyebrow>
           <p className="text-2xl font-semibold tabular-nums">{nav ? `${formatUsdt(nav.nav, locale)} USDT` : "—"}</p>
         </div>
         <p className="max-w-sm text-sm text-ink-soft">{t(unmarked ? "invest.notYetValuedHint" : "invest.noUnitsInFund")}</p>
@@ -70,11 +71,11 @@ export function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: bo
 
 export function ProductLoading() {
   return (
-    <div className="container max-w-4xl space-y-6 py-12">
+    <PageFrame>
       <Skeleton className="h-10 w-64" />
       <Skeleton className="h-40 w-full" />
       <Skeleton className="h-32 w-full" />
-    </div>
+    </PageFrame>
   );
 }
 
@@ -83,7 +84,7 @@ export function ProductLoading() {
 export function ProductMissing({ service, error }: { service: string; error: string | null }) {
   const t = useT();
   return (
-    <div className="container max-w-4xl space-y-6 py-12">
+    <PageFrame>
       <BackLink />
       <Card>
         <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-ink-soft">
@@ -92,6 +93,6 @@ export function ProductMissing({ service, error }: { service: string; error: str
           <p className="max-w-sm text-xs">{t("invest.notRegisteredHint")}</p>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

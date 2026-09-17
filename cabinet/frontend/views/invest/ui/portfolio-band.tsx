@@ -15,6 +15,7 @@ import { Button, Card, CardContent } from "@evinvest/uikit";
 import { cn } from "@/shared/lib/cn";
 import { Link } from "@/shared/ui/cabinet-link";
 import { StaggerItem } from "@/shared/ui/motion";
+import { Eyebrow } from "@/shared/ui/page-frame";
 import { formatSignedUsdt, formatUsdt, fromBaseUnits, valence } from "@/views/invest/lib/format";
 
 export function PortfolioBand({ invested, cost, funds, available, queued }: { invested: bigint; cost: bigint; funds: number; available: string | null; queued: number }) {
@@ -35,7 +36,7 @@ export function PortfolioBand({ invested, cost, funds, available, queued }: { in
           this way the desktop state is the unclassed default and nothing competes. */}
       <CardContent className="flex py-5 max-md:flex-col max-md:gap-6 md:items-center">
         <div className="space-y-1.5 md:flex-1">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary-ink">{t("invest.investedValue")}</p>
+          <Eyebrow tone="accent">{t("invest.investedValue")}</Eyebrow>
           <div className="flex flex-wrap items-baseline gap-2.5">
             <span className="text-3xl font-semibold leading-none tabular-nums">{formatUsdt(fromBaseUnits(invested), locale)}</span>
             <span className="text-sm text-ink-soft">USDT</span>

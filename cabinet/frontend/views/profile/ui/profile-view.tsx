@@ -20,7 +20,8 @@ import { useResource } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { CARD, InitialsAvatar, Pill } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
-import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { StaggerItem } from "@/shared/ui/motion";
+import { PageFrame } from "@/shared/ui/page-frame";
 import { formatCount, STAT_STRIP, StatDivider, StatTile } from "@/shared/ui/stat-tile";
 import { seconds } from "@/views/operations/lib/format";
 import { displayName, enumLabel, initialsOfName, statusTone, truncateName } from "@/views/profile/lib/format";
@@ -99,83 +100,70 @@ export function ProfileView() {
   const security = <SecurityCard loading={loading} email={email} sessions={sessionList.data} sessionsFailed={!sessionList.data && !!sessionList.error} />;
 
   return (
-    <>
-      <MobileAppBar title={t("ui.profile")} backHref="/settings" />
-
-      <Stagger delay={SECTION_STAGGER} step={SECTION_STAGGER} className="flex flex-col gap-4 px-5 pb-6 pt-4.5 lg:gap-5 lg:px-8 lg:pb-8 lg:pt-6">
-        {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
-        <StaggerItem className="hidden items-center justify-between gap-4 lg:flex">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold text-ink">{t("ui.profile")}</h1>
-            <p className="text-sm text-ink-soft">{t("profile.subtitle")}</p>
-          </div>
-          {edit("shrink-0")}
+    <PageFrame title={t("ui.profile")} description={t("profile.subtitle")} actions={edit("shrink-0")} appBar={<MobileAppBar title={t("ui.profile")} backHref="/settings" />}>
+      {error && (
+        <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
+          {error}
         </StaggerItem>
+      )}
 
-        {error && (
-          <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
-            {error}
-          </StaggerItem>
-        )}
-
-        {/* card-Hero — centred on mobile (Figma 503:274), a wide chip on desktop (489:258). */}
-        <StaggerItem className={cn(CARD, "flex flex-col items-center gap-3 px-5 pb-5.5 pt-6 lg:flex-row lg:gap-5 lg:px-6 lg:py-5.5")}>
-          <InitialsAvatar initials={initialsOfName(name, email)} className="size-16 text-2xl lg:text-xl" />
-          <div className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center lg:items-start lg:text-left">
-            <div className="flex min-w-0 flex-col items-center gap-1 lg:flex-row lg:items-baseline lg:gap-3">
-              {loading ? <Skeleton className="h-6 w-40" /> : <p className="truncate text-lg font-semibold text-ink lg:text-xl">{name || t("ui.account")}</p>}
-              {loading ? <Skeleton className="h-4 w-48" /> : <p className="truncate text-sm text-ink-soft">{email || t("auth.notSignedIn")}</p>}
+      {/* card-Hero — centred on mobile (Figma 503:274), a wide chip on desktop (489:258). */}
+      <StaggerItem className={cn(CARD, "flex flex-col items-center gap-3 px-5 pb-5.5 pt-6 lg:flex-row lg:gap-5 lg:px-6 lg:py-5.5")}>
+        <InitialsAvatar initials={initialsOfName(name, email)} className="size-16 text-2xl lg:text-xl" />
+        <div className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center lg:items-start lg:text-left">
+          <div className="flex min-w-0 flex-col items-center gap-1 lg:flex-row lg:items-baseline lg:gap-3">
+            {loading ? <Skeleton className="h-6 w-40" /> : <p className="truncate text-lg font-semibold text-ink lg:text-xl">{name || t("ui.account")}</p>}
+            {loading ? <Skeleton className="h-4 w-48" /> : <p className="truncate text-sm text-ink-soft">{email || t("auth.notSignedIn")}</p>}
+          </div>
+          {!loading && (
+            // i18n-max: 12 per Pill — they sit beside the truncated display name.
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+              {profile?.email_verified && <Pill tone="success" icon={BadgeCheck}>{t("ui.verified")}</Pill>}
+              {profile?.status && <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill>}
+              {profile?.kyc_level !== undefined && <Pill tone="neutral">{t("profile.kycLevelPill", { n: profile.kyc_level })}</Pill>}
+              {profile?.role && <Pill tone="neutral">{enumLabel("admin.role", profile.role, t)}</Pill>}
             </div>
-            {!loading && (
-              // i18n-max: 12 per Pill — they sit beside the truncated display name.
-              <div className="mt-1 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-                {profile?.email_verified && <Pill tone="success" icon={BadgeCheck}>{t("ui.verified")}</Pill>}
-                {profile?.status && <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill>}
-                {profile?.kyc_level !== undefined && <Pill tone="neutral">{t("profile.kycLevelPill", { n: profile.kyc_level })}</Pill>}
-                {profile?.role && <Pill tone="neutral">{enumLabel("admin.role", profile.role, t)}</Pill>}
-              </div>
-            )}
-            {oldest > 0 && <p className="mt-1 text-xs text-ink-soft">{t("profile.activeSince", { date: formatDay(String(oldest), locale) })}</p>}
-          </div>
-          {/* Mobile puts the action in the hero; desktop has it in the page heading. */}
-          {edit("w-full lg:hidden")}
-        </StaggerItem>
+          )}
+          {oldest > 0 && <p className="mt-1 text-xs text-ink-soft">{t("profile.activeSince", { date: formatDay(String(oldest), locale) })}</p>}
+        </div>
+        {/* Mobile puts the action in the hero; desktop has it in the page heading. */}
+        {edit("w-full lg:hidden")}
+      </StaggerItem>
 
-        {/* Stat strip — the same tiles and arrangement as Home, so a figure reads the
-            same on both screens: a 2×2 card grid on mobile, one divided strip from `lg`. */}
-        <StaggerItem as={Card} className={cn(STAT_STRIP, "rounded-none border-0 bg-transparent py-0 shadow-none lg:rounded-xl lg:border lg:bg-card lg:py-5 lg:shadow-sm")}>
-          <StatTile label={t("dash.portfolioValue")} value={positions.isLoading ? null : value} format={usd} hint={t("profile.hintAtNav")} unavailable={posFailed} />
-          <StatDivider />
-          <StatTile label={t("dash.unrealizedPnl")} value={positions.isLoading ? null : pnl} format={signedUsd} tone={valence(pnl)} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" unavailable={posFailed} />
-          <StatDivider />
-          <StatTile label={t("dash.available")} value={wallet.isLoading ? null : num(wallet.data?.balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" unavailable={walletFailed} />
-          <StatDivider />
-          <StatTile label={t("dash.activeStrategies")} value={positions.isLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} unavailable={posFailed} />
-        </StaggerItem>
+      {/* Stat strip — the same tiles and arrangement as Home, so a figure reads the
+          same on both screens: a 2×2 card grid on mobile, one divided strip from `lg`. */}
+      <StaggerItem as={Card} className={cn(STAT_STRIP, "rounded-none border-0 bg-transparent py-0 shadow-none lg:rounded-xl lg:border lg:bg-card lg:py-5 lg:shadow-sm")}>
+        <StatTile label={t("dash.portfolioValue")} value={positions.isLoading ? null : value} format={usd} hint={t("profile.hintAtNav")} unavailable={posFailed} />
+        <StatDivider />
+        <StatTile label={t("dash.unrealizedPnl")} value={positions.isLoading ? null : pnl} format={signedUsd} tone={valence(pnl)} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" unavailable={posFailed} />
+        <StatDivider />
+        <StatTile label={t("dash.available")} value={wallet.isLoading ? null : num(wallet.data?.balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" unavailable={walletFailed} />
+        <StatDivider />
+        <StatTile label={t("dash.activeStrategies")} value={positions.isLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} unavailable={posFailed} />
+      </StaggerItem>
 
-        {/* ── Mobile (Figma cabinet/mobile/profile) ────────────────────────── */}
-        {/* One item per viewport block rather than per card: the four cards are the same
-            elements rendered into both blocks, and giving each a place in the sequence
-            would have them animating twice over. */}
-        <StaggerItem className="flex flex-col gap-4 lg:hidden">
-          {verification}
+      {/* ── Mobile (Figma cabinet/mobile/profile) ────────────────────────── */}
+      {/* One item per viewport block rather than per card: the four cards are the same
+          elements rendered into both blocks, and giving each a place in the sequence
+          would have them animating twice over. */}
+      <StaggerItem className="flex flex-col gap-4 lg:hidden">
+        {verification}
+        {personal}
+        {activity}
+        {security}
+      </StaggerItem>
+
+      {/* ── Desktop (Figma cabinet/profile) ──────────────────────────────── */}
+      <StaggerItem className="hidden items-start gap-5 lg:flex">
+        <div className="flex min-w-0 flex-1 flex-col gap-5">
           {personal}
           {activity}
+        </div>
+        <div className="flex w-97 shrink-0 flex-col gap-5">
+          {verification}
           {security}
-        </StaggerItem>
-
-        {/* ── Desktop (Figma cabinet/profile) ──────────────────────────────── */}
-        <StaggerItem className="hidden items-start gap-5 lg:flex">
-          <div className="flex min-w-0 flex-1 flex-col gap-5">
-            {personal}
-            {activity}
-          </div>
-          <div className="flex w-97 shrink-0 flex-col gap-5">
-            {verification}
-            {security}
-          </div>
-        </StaggerItem>
-      </Stagger>
-    </>
+        </div>
+      </StaggerItem>
+    </PageFrame>
   );
 }

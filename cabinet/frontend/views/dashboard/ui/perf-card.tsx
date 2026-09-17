@@ -15,6 +15,7 @@ import { HISTORY_RANGES, type HistoryRange, rangeFrom } from "@/entities/fund/li
 import { cn } from "@/shared/lib/cn";
 import { AnimatedNumber, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor } from "@/shared/tips";
+import { Eyebrow } from "@/shared/ui/page-frame";
 import { CARD_FROM_LG } from "@/views/dashboard/lib/chrome";
 import { formatPct, formatUsd, num } from "@/views/dashboard/lib/format";
 import { PerfChart } from "@/views/dashboard/ui/perf-chart";
@@ -57,10 +58,10 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
     <StaggerItem as={Card} className={cn("flex-1 gap-4 lg:gap-5 xl:h-full", CARD_FROM_LG, className)}>
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
         <div className="flex min-w-0 flex-col gap-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-primary-ink">
+          <Eyebrow tone="accent" className="flex items-center gap-1.5">
             {t("dash.portfolioValue")}
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
-          </p>
+          </Eyebrow>
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
             {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={usd} /></p>}
             {allTimePct !== null && (

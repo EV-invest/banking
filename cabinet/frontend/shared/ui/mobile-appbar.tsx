@@ -40,7 +40,7 @@ export function MobileAppBar({
     // The transform this animates is the element's own, which `position: sticky`
     // resolves after; it is an ancestor's transform that would break it, and this bar
     // has no positioned descendants to lose either.
-    <Reveal as="header" className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-secondary px-5 pb-3.5 pt-4 lg:hidden">
+    <Reveal as="header" className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-secondary px-4 pb-3.5 pt-4 lg:hidden">
       {backHref ? (
         <Link href={backHref} aria-label={t("ui.back")} className={cn("-ml-1 flex size-6 shrink-0 items-center justify-center text-ink", BACK_FOCUS)}>
           <ChevronLeft className="size-6" />
