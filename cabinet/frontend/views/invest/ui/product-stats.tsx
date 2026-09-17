@@ -13,8 +13,8 @@ import type { FundNav, Position } from "@/shared/contracts";
 import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
 import { Eyebrow, PageFrame } from "@/shared/ui/page-frame";
-import { formatSignedUsdt, formatUnits, formatUsdt, valence, valenceClass } from "@/views/invest/lib/format";
-import { Stat } from "@/views/invest/ui/atoms";
+import { StatTile } from "@/shared/ui/stat-tile";
+import { formatSignedUsdt, formatUnits, formatUsdt, valence } from "@/views/invest/lib/format";
 
 export function BackLink() {
   const t = useT();
@@ -34,15 +34,16 @@ export function HoldingStats({ position }: { position: Position }) {
   const trend = valence(position.pnl);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Stat label={t("invest.units")} value={formatUnits(position.units, locale)} tip="invest.position.units" />
-      <Stat label={t("invest.nav")} value={formatUsdt(position.nav, locale)} tip="invest.position.nav" />
-      <Stat label={t("invest.value")} value={`${formatUsdt(position.value, locale)} USDT`} emphasis tip="invest.position.value" />
-      <Stat
+      <StatTile variant="box" label={t("invest.units")} value={formatUnits(position.units, locale)} tip="invest.position.units" />
+      <StatTile variant="box" label={t("invest.nav")} value={formatUsdt(position.nav, locale)} tip="invest.position.nav" />
+      <StatTile variant="box" label={t("invest.value")} value={`${formatUsdt(position.value, locale)} USDT`} emphasis tip="invest.position.value" />
+      <StatTile
+        variant="box"
         label={t("invest.pnl")}
         value={`${formatSignedUsdt(position.pnl, locale)} USDT`}
         tip="invest.position.pnl"
         emphasis
-        tone={valenceClass(position.pnl)}
+        tone={trend}
         icon={trend === "loss" ? <TrendingDown className="size-3.5" /> : trend === "gain" ? <TrendingUp className="size-3.5" /> : <Minus className="size-3.5" />}
       />
     </div>

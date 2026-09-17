@@ -8,10 +8,10 @@
 
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Badge, Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Badge, Card, CardContent, Skeleton, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
 import { useCallback, useState } from "react";
 
-import { HISTORY_RANGES, type HistoryRange, rangeFrom } from "@/entities/fund/lib/nav-series";
+import { HISTORY_RANGES, type HistoryRange, isHistoryRange, rangeFrom } from "@/entities/fund/lib/nav-series";
 import { cn } from "@/shared/lib/cn";
 import { AnimatedNumber, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor } from "@/shared/tips";
@@ -73,23 +73,26 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
             )}
           </div>
         </div>
-        {/* Hand-written segmented control — uikit has no equivalent, so it carries its own focus ring. */}
-        <div role="group" aria-label={t("dash.rangeLabel")} className="grid shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-secondary p-1 lg:flex">
+        {/* The kit's segmented control, as a `group` of `aria-pressed` buttons — a filter
+            over one plot, not tabs over panels. Controlled, and a press on the active range
+            (which the kit reports as "") is ignored: one range is always selected. */}
+        <ToggleGroup
+          role="group"
+          aria-label={t("dash.rangeLabel")}
+          value={span.range}
+          onValueChange={(r) => isHistoryRange(r) && setSpan({ range: r, from: rangeFrom(r, Date.now()) })}
+          className="grid w-full shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-secondary p-1 lg:flex lg:w-fit"
+        >
           {HISTORY_RANGES.map((r) => (
-            <button
+            <ToggleGroupItem
               key={r}
-              type="button"
-              aria-pressed={r === span.range}
-              onClick={() => setSpan({ range: r, from: rangeFrom(r, Date.now()) })}
-              className={cn(
-                "rounded-md py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:px-3 lg:py-1.5 lg:text-xs",
-                r === span.range ? "bg-primary/15 font-semibold text-primary-ink" : "font-medium text-ink-soft hover:text-ink",
-              )}
+              value={r}
+              className="h-9 rounded-md text-sm text-ink-soft first:rounded-md last:rounded-md hover:bg-transparent hover:text-ink data-[state=on]:bg-primary/15 data-[state=on]:font-semibold data-[state=on]:text-primary-ink lg:h-7 lg:px-3 lg:text-xs"
             >
               {t(RANGE_LABEL_KEYS[r])}
-            </button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
       </div>
       <CardContent className="flex flex-col gap-3 px-0 lg:gap-5 lg:px-6 xl:flex-1">
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 lg:order-2">
