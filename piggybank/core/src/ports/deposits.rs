@@ -1,6 +1,7 @@
-//! The deposit-log port — the control-plane record behind every on-chain arrival, a
-//! user's deposit and the fund's own capital alike (the latter is a `Party::Piggybank`
-//! deposit; there is no separate capital command since issue #234).
+//! The deposit-log port — the control-plane record behind every on-chain arrival. A
+//! seed of the platform's capital is a deposit here too, to the person who sent it
+//! (there is no separate capital fact since issue #234, and no fund-owned party since
+//! #245); their subscription into the `fund` allocation is a separate aggregate.
 //!
 //! These are the aggregate-less standalone [`LedgerEvent`](domain::balance::LedgerEvent)
 //! facts (see [`domain::balance`]) — there is no aggregate to hang a `Repository`

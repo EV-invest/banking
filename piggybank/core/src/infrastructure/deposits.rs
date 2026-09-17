@@ -1,5 +1,5 @@
 //! Postgres adapter for the [`Deposits`] port — the aggregate-less on-chain arrival
-//! facts (a user's deposit, the fund's own capital) and their outbox events.
+//! facts (a user's deposit, a seed booked to its depositor) and their outbox events.
 //!
 //! The write opens one transaction (the ACID point): the `deposits` gate row and the
 //! outbox event commit together or not at all, so the relay can never move money for

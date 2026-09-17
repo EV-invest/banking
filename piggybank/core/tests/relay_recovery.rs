@@ -177,8 +177,6 @@ async fn a_parked_event_is_not_dispatched_and_reconciliation_surfaces_it() {
 /// age is surfaced (alert-only — never auto-voided, per the cardinal rule), while a
 /// `queued` withdrawal past the max age is auto-cancelled (safe — never broadcast).
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
@@ -191,8 +189,8 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	// Seed the rail so the request auto-dispatches to `processing`.
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("100"))
+	// Fund the rail (a stranger's deposit) so the request auto-dispatches to `processing`.
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -348,8 +346,6 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 /// may have landed on-chain) must PARK, not void — the clearing reservation stays
 /// locked for the operator instead of refunding a user who may also be paid on-chain.
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn a_fail_void_parks_when_a_broadcast_row_exists() {
 	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
@@ -360,9 +356,9 @@ async fn a_fail_void_parks_when_a_broadcast_row_exists() {
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	// Seed the rail so the request auto-dispatches to `processing` (fail is only legal
+	// Fund the rail (a stranger's deposit) so the request auto-dispatches to `processing` (fail is only legal
 	// from there — the shape of a real broadcast-then-operator-fail incident).
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -698,8 +694,6 @@ impl Custody for RefusingCustody {
 /// for a human) parks the Dispatched event exactly once, and the park reason — what
 /// `ListParkedEvents` shows the operator — carries the custodian's activity id verbatim.
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn a_custody_refusal_parks_the_broadcast_once_and_names_the_activity_in_last_error() {
 	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
@@ -711,8 +705,8 @@ async fn a_custody_refusal_parks_the_broadcast_once_and_names_the_activity_in_la
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	// Seed the rail so the request auto-dispatches to `processing` (a Dispatched row exists).
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("100"))
+	// Fund the rail (a stranger's deposit) so the request auto-dispatches to `processing` (a Dispatched row exists).
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
