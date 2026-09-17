@@ -158,6 +158,25 @@ async fn issue(h: &Harness, service: &ServiceId, holder: UnitHolder, units: &str
 	.await
 }
 
+/// The owners' mint into a RESERVED allocation — the door a holder-grant consilium's
+/// execution and the data migration use; the operator's `issue_units` refuses it.
+async fn grant(h: &Harness, service: &ServiceId, holder: UnitHolder, units: &str, cost_basis: Option<&str>, key: &str) -> Result<UnitIssuanceRecord, DomainError> {
+	issuance_app::grant_units(
+		&fund_ports(h),
+		&h.issuances,
+		&h.users,
+		issuance_app::IssueUnitsRequest {
+			service: service.clone(),
+			holder,
+			units: shares(units),
+			cost_basis: cost_basis.map(usdt),
+			idempotency_key: IdempotencyKey::parse(key).unwrap(),
+		},
+		now_unix(),
+	)
+	.await
+}
+
 /// The fee allocation as an in-kind holder — the product's fee class (#245). What the
 /// company holder used to be in these scenarios: a holder with no `users` row and no
 /// position, minted the 80 % of a product registered against an owned asset.
@@ -770,19 +789,27 @@ async fn the_fee_allocation_holds_a_products_fee_class_and_nothing_holds_a_reser
 	// held by anything but a person; and, in phase 1, the fund allocation holds nothing.
 	let err = issue(&h, &service, UnitHolder::Allocation(unique_service()), "1", None, "product-holds").await.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("not a reserved allocation")), "got {err:?}");
-	let err = issue(&h, &ServiceId::fee(), fee.clone(), "1", None, "fee-holds-fee").await.unwrap_err();
+	let err = grant(&h, &ServiceId::fee(), fee.clone(), "1", None, "fee-holds-fee").await.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("held by people")), "got {err:?}");
-	let err = issue(&h, &ServiceId::fund(), fee, "1", None, "fee-holds-fund").await.unwrap_err();
+	let err = grant(&h, &ServiceId::fund(), fee, "1", None, "fee-holds-fund").await.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("held by people")), "got {err:?}");
 	let err = issue(&h, &service, UnitHolder::Allocation(ServiceId::fund()), "1", None, "fund-holds").await.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("no unit account")), "got {err:?}");
-	// A person may hold the reserved allocations — migration 0044 registered them, hidden.
+	// A person may hold the reserved allocations — migration 0044 registered them, hidden —
+	// but only the owners seat them: the operator's mint is refused outright, and a
+	// product is not granted.
 	let owner = provisioned_user(&h).await;
+	let err = issue(&h, &ServiceId::fee(), UnitHolder::User(owner), "10", Some("10"), "operator-seeds-holder")
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(ref m) if m.contains("holder grant")), "got {err:?}");
+	let err = grant(&h, &service, UnitHolder::User(owner), "10", Some("10"), "grant-a-product").await.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("not a reserved allocation")), "got {err:?}");
 	for reserved in [ServiceId::fee(), ServiceId::fund()] {
 		let row = h.allocations.find(&reserved).await.unwrap().expect("0044 wrote the reserved row");
 		assert_eq!(row.access(), AllocationAccess::Hidden);
 		assert_eq!(row.state(), AllocationState::Open);
-		issue(&h, &reserved, UnitHolder::User(owner), "10", Some("10"), "seed-holder").await.unwrap();
+		grant(&h, &reserved, UnitHolder::User(owner), "10", Some("10"), "seed-holder").await.unwrap();
 	}
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(ServiceId::fee(), owner)).await, shares("10"));

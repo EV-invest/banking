@@ -280,10 +280,11 @@ async fn charge_a_year(h: &Harness, investor: UserId, service: &ServiceId) -> Sh
 	assessment.charge().charged_units
 }
 
-/// Mint `units` of the `fee` allocation to `holder` — what the data migration and a
-/// `HolderGrant` do — priced at the allocation's own computed NAV.
+/// Mint `units` of the `fee` allocation to `holder` — through the door the data migration
+/// and an executed `HolderGrant` use (the operator's `issue_units` refuses a reserved
+/// allocation) — priced at the allocation's own computed NAV.
 async fn grant_fee_units(h: &Harness, holder: UserId, units: &str) {
-	issuance_app::issue_units(
+	issuance_app::grant_units(
 		&fund_ports(h),
 		&h.issuances,
 		&h.users,

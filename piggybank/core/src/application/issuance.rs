@@ -18,6 +18,15 @@
 //! retired with the company holder itself (#245): the RPC answers `FAILED_PRECONDITION`,
 //! and the rows it wrote stay readable.
 //!
+//! **The reserved allocations are not the operator's to mint.** `fee` and `fund` are the
+//! platform's own money, held by people (#245); a unit of either dilutes every holder
+//! already there, and who holds the owners' money is the owners' call, not one
+//! administrator's. [`issue_units`] and [`retire_units`] therefore refuse a reserved
+//! `service` outright, and the one door that mints reserved units — [`grant_units`] — is
+//! reached only as the effect of an executed holder-grant consilium (and by the one-off
+//! data migration that seats the first holders). A holder LEAVES a reserved allocation by
+//! redemption at its NAV, never by an operator's burn.
+//!
 //! A mint also flips the product's backing to `in_kind` (see
 //! [`AllocationBacking`](domain::allocations::AllocationBacking)): the units it creates
 //! have no cash in the fund's claim, so the redeem path has to know before the first
@@ -122,7 +131,54 @@ pub struct UnitHolding {
 /// operator undoes that with one command, and nothing was at risk in between. The
 /// reverse (a mint recorded on a product still `cash`) would let the next redemption
 /// price units the fund cannot pay for, which is the failure this flag exists to stop.
+///
+/// A reserved allocation is refused before any of that (see the module header): its
+/// units come only through [`grant_units`].
 pub async fn issue_units(
+	ports: &FundPorts<'_>,
+	issuances: &dyn UnitIssuanceRepository,
+	users: &dyn UserRepository,
+	request: IssueUnitsRequest,
+	now_unix: i64,
+) -> Result<UnitIssuanceRecord, DomainError> {
+	if request.service.is_reserved() {
+		return Err(DomainError::Forbidden(format!(
+			"'{}' is a reserved allocation: its units are granted by the owners' consilium (a holder grant), never issued by hand",
+			request.service
+		)));
+	}
+	mint(ports, issuances, users, request, now_unix).await
+}
+
+/// Mint units of a RESERVED allocation to a person — the effect of an executed
+/// holder-grant consilium, and the door the one-off data migration seats the first
+/// holders through. Everything [`issue_units`] checks is checked here too (the key, the
+/// holder graph, the registry row, a fresh NAV, the cap); what differs is who may reach
+/// it: no RPC does, and the consilium's execution path arrives with an idempotency key
+/// derived from the consilium, so a retried execution finds its own row.
+///
+/// The backing stays `cash`, deliberately (see [`mint`]): a reserved allocation's units
+/// are backed by the cash on its own claim, and its holders are paid out of exactly that.
+pub async fn grant_units(
+	ports: &FundPorts<'_>,
+	issuances: &dyn UnitIssuanceRepository,
+	users: &dyn UserRepository,
+	request: IssueUnitsRequest,
+	now_unix: i64,
+) -> Result<UnitIssuanceRecord, DomainError> {
+	if !request.service.is_reserved() {
+		return Err(DomainError::Validation(format!(
+			"'{}' is a product, not a reserved allocation: its units are issued, not granted",
+			request.service
+		)));
+	}
+	mint(ports, issuances, users, request, now_unix).await
+}
+
+/// The shared body of [`issue_units`] and [`grant_units`], once the target has been
+/// admitted: the key, the holder graph, the registry row, the holder, a fresh NAV, the
+/// cap, the backing flip (products only) and the record.
+async fn mint(
 	ports: &FundPorts<'_>,
 	issuances: &dyn UnitIssuanceRepository,
 	users: &dyn UserRepository,
@@ -181,6 +237,9 @@ pub async fn issue_units(
 /// resting on the book or reserved by a redemption are spoken for and stay. No cap
 /// check: supply only shrinks. The holder's account is debit-normal with the
 /// non-negative flag, so an over-retire that races the read parks.
+///
+/// A reserved allocation is refused: its holders are people holding the platform's own
+/// money, and they leave by redeeming at NAV — an operator has no burn over them.
 pub async fn retire_units(
 	ports: &FundPorts<'_>,
 	issuances: &dyn UnitIssuanceRepository,
@@ -188,6 +247,12 @@ pub async fn retire_units(
 	request: RetireUnitsRequest,
 	now_unix: i64,
 ) -> Result<UnitIssuanceRecord, DomainError> {
+	if request.service.is_reserved() {
+		return Err(DomainError::Forbidden(format!(
+			"'{}' is a reserved allocation: a holder leaves it by redeeming at NAV, never by an operator's burn",
+			request.service
+		)));
+	}
 	let identity = RequestIdentity {
 		service: &request.service,
 		holder: &request.holder,
