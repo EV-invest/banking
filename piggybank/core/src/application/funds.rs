@@ -364,6 +364,8 @@ pub async fn fund_nav_view(
 	let allocation = allocations_app::get_for(allocations, &service, caller, unrestricted).await?.allocation;
 	let balance = ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?;
 	let units_outstanding = Shares::from_base_units(balance.posted);
+	// The retired company stake is still shown until the data migration zeroes it (C-2 drops the field).
+	#[allow(deprecated)]
 	let company_units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::CompanyShares(service.clone())).await?.posted);
 	let remaining_capacity = allocation.remaining_capacity(Shares::from_base_units(balance.posted.saturating_add(balance.pending)));
 	let (unit_cap, current) = (allocation.unit_cap(), nav.current(&service).await?);

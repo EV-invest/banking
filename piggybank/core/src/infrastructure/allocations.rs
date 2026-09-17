@@ -426,3 +426,29 @@ impl AllocationRegistry for PgAllocations {
 		rows.into_iter().map(AllocationForCallerRow::into_record).collect()
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use domain::{
+		allocations::{FEE_ALLOCATION_ID, FUND_ALLOCATION_ID, reserved_allocation_id},
+		balance::ServiceId,
+	};
+	use uuid::Uuid;
+
+	/// The reserved registry rows are written by migration `0044` with fixed ids, and the
+	/// domain spells the same ids as literals (it has no v5 feature). Three things must
+	/// agree: the literal, its derivation, and the bytes in the migration — a drift in any
+	/// one would make the hub look up a row the migration never wrote.
+	#[test]
+	fn the_reserved_allocation_ids_are_derived_from_their_slugs_and_written_by_0044() {
+		const MIGRATION: &str = include_str!("../../migrations/0044_ownership_expand.sql");
+		for (service, id) in [(ServiceId::fee(), FEE_ALLOCATION_ID), (ServiceId::fund(), FUND_ALLOCATION_ID)] {
+			let derived = Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("evbanking:allocation:{service}").as_bytes());
+			assert_eq!(id.raw(), derived, "{service}: the literal is not uuid5(OID, evbanking:allocation:{service})");
+			assert_eq!(reserved_allocation_id(&service), Some(id));
+			let row = format!("('{}', '{service}',", id.raw());
+			assert!(MIGRATION.contains(&row), "0044 does not insert {service} under {}", id.raw());
+		}
+		assert!(MIGRATION.contains("ON CONFLICT (service) DO NOTHING"), "the reserved rows must be idempotent on re-run");
+	}
+}

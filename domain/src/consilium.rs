@@ -318,6 +318,8 @@ impl ConsiliumTerms {
 	/// The claim this consilium spends from. Drives both the per-source "one open request"
 	/// index and the advisory lock the execution path takes, so two consilia over DIFFERENT
 	/// claims no longer block each other while two over the SAME claim still do.
+	// `RevenuePayout` spends the retired fee claim: open consilia replay until C-4.
+	#[allow(deprecated)]
 	pub fn source_claim(&self) -> LedgerAccountKey {
 		match self {
 			Self::RevenuePayout(_) => LedgerAccountKey::FeeRevenue,
@@ -1318,14 +1320,14 @@ mod tests {
 		assert!(c.executed_withdrawal_id().is_none() && c.executed_payment_id().is_none());
 	}
 
-	/// A payment subject over the fund's own pooled capital — the §3 case that needs a quorum.
+	/// A payment subject over the fund allocation's capital — the §3 case that needs a quorum.
 	fn payment_subject() -> crate::payments::PaymentSubject {
 		use crate::payments::{PaymentDestination, PaymentReason, PaymentSubject, PaymentTerms};
 		PaymentSubject {
 			payment_id: crate::payments::PaymentId::from_raw(uuid::Uuid::from_u128(0x9e17)),
 			terms: PaymentTerms::new(
-				crate::balance::Party::Piggybank,
-				PaymentDestination::Internal(crate::balance::Party::Revenue),
+				crate::balance::Party::Service(crate::balance::ServiceId::fund()),
+				PaymentDestination::Internal(crate::balance::Party::Service(crate::balance::ServiceId::fee())),
 				Usdt::parse_decimal("250").unwrap(),
 				PaymentReason::new("settle the quarterly management fee").unwrap(),
 			)
@@ -1340,7 +1342,7 @@ mod tests {
 		// NOT `FeeRevenue`. The per-source "one open request" index keys on this, so a payment
 		// out of the fund's pooled capital must not queue behind a revenue payout — and must
 		// queue behind another payment that spends the same claim.
-		assert_eq!(terms.source_claim(), LedgerAccountKey::Fund);
+		assert_eq!(terms.source_claim(), LedgerAccountKey::ServiceClaim(crate::balance::ServiceId::fund()));
 	}
 
 	/// A fee-policy subject tightening the house terms past the envelope — the case that
@@ -1379,6 +1381,8 @@ mod tests {
 	}
 
 	#[test]
+	// The revenue payout spends the retired fee claim until C-4 folds it into a payment.
+	#[allow(deprecated)]
 	fn wrapping_payout_terms_leaves_the_hashed_bytes_untouched() {
 		// The enum is a container, not a second encoding layer: `payload_hash` for every
 		// consilium that already exists was taken over the inner encoding, so the wrapper

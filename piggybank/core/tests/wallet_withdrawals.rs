@@ -175,6 +175,8 @@ async fn deposit(h: &Harness, user: UserId, network: Network, amount: &str) {
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn withdraw_reserves_then_settles_and_retains_fee() {
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
@@ -224,6 +226,8 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 /// withdrawal net must be representable at 6 decimals, and the ledger legs still move canonical
 /// 18-dp `Usdt` (the ledger never sees the chain's precision).
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn withdraw_on_polygon_reserves_then_settles_and_retains_fee() {
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
@@ -408,6 +412,8 @@ async fn a_frozen_user_cannot_request_a_withdrawal() {
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
@@ -628,6 +634,8 @@ async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
 /// queued while the treasury is short on-chain, and a second sweep no-ops (the state is
 /// no longer `queued`; dispatch itself is idempotent).
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
@@ -691,6 +699,8 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 /// Lifting the freeze lets the very next sweep dispatch it — proving the freeze was the only
 /// thing holding an otherwise-dispatchable withdrawal.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
@@ -752,6 +762,8 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 /// top-up. TRC20 keeps this test's rows off the rails the other dispatcher test tops
 /// up, and the ~50 on-chain cap keeps any parallel test's huge queued grosses out.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
 	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
@@ -829,6 +841,8 @@ async fn deposit_address_is_stable_per_user_and_network() {
 /// it, which is what proves the tier was the only thing holding an otherwise-dispatchable
 /// withdrawal.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn the_dispatcher_skips_a_queued_withdrawal_whose_owner_lost_their_tier() {
 	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };

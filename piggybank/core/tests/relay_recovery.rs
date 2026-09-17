@@ -177,6 +177,8 @@ async fn a_parked_event_is_not_dispatched_and_reconciliation_surfaces_it() {
 /// age is surfaced (alert-only — never auto-voided, per the cardinal rule), while a
 /// `queued` withdrawal past the max age is auto-cancelled (safe — never broadcast).
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
@@ -346,6 +348,8 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 /// may have landed on-chain) must PARK, not void — the clearing reservation stays
 /// locked for the operator instead of refunding a user who may also be paid on-chain.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_fail_void_parks_when_a_broadcast_row_exists() {
 	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };
@@ -690,6 +694,8 @@ impl Custody for RefusingCustody {
 /// for a human) parks the Dispatched event exactly once, and the park reason — what
 /// `ListParkedEvents` shows the operator — carries the custodian's activity id verbatim.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_custody_refusal_parks_the_broadcast_once_and_names_the_activity_in_last_error() {
 	let _serial = common::outbox_serial().await;
 	let Some(h) = harness().await else { return };

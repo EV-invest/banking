@@ -905,6 +905,8 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 	}
 }
 
+// Replays `CapitalSeeded` onto the retired fund claim (no producer; C-3 reshapes seed).
+#[allow(deprecated)]
 fn plan_balance(event: LedgerEvent, event_tid: u128, reference: u128) -> PlannedOp {
 	match event {
 		LedgerEvent::Deposited { party, network, amount } => PlannedOp {
@@ -1048,6 +1050,8 @@ fn plan_issuance(event: IssuanceEvent, aggregate_id: Uuid, reference: u128) -> R
 ///   all, and neither party can end up with both or neither.
 /// - **OrderReleased** → hand the unspent escrow back: `Dr UserShares / Cr BookShares`
 ///   or `Dr BookCash / Cr UserClaim`.
+// The taker fee still lands on the retired fee claim until C-2/C-4 retarget it to `service:fee`.
+#[allow(deprecated)]
 fn plan_book(event: BookEvent, aggregate_id: Uuid, reference: u128) -> PlannedOp {
 	match event {
 		BookEvent::OrderPlaced { service, user, locked, .. } => {
@@ -1235,6 +1239,8 @@ fn void_burn(aggregate_id: Uuid, user: UserId, service: domain::balance::Service
 ///   their value. Same ordering rule as a redemption settle, for the same reason — the
 ///   payout leg is liquidity-gated in the pre-check above, so a short fund parks the
 ///   whole event with nothing applied instead of burning units it cannot pay for.
+// The settlement still credits the retired fee claim; C-2 (fee in-kind) retargets it.
+#[allow(deprecated)]
 fn plan_fee(event: FeeEvent, aggregate_id: Uuid, event_tid: u128, reference: u128) -> Vec<PlannedOp> {
 	match event {
 		FeeEvent::Charged { user, service, units, .. } => vec![PlannedOp {
@@ -1386,6 +1392,8 @@ fn plan_payment(event: PaymentEvent, aggregate_id: Uuid, reference: u128) -> Vec
 /// point of one saga rather than two. TigerBeetle's non-negative flag on `fee` is
 /// therefore the same last-line backstop against paying out more than the fund earned
 /// that it is against over-spending a user's claim.
+// The withdrawal fee still lands on the retired fee claim until C-4 retargets it.
+#[allow(deprecated)]
 fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) -> Result<Vec<PlannedOp>, String> {
 	Ok(match event {
 		WithdrawalEvent::Requested { source, amount, .. } => vec![PlannedOp {
@@ -1633,6 +1641,8 @@ mod tests {
 	// ONE linked chain, and the fee leg comes off the taker's side — a taking seller pays
 	// it out of the claim the cash leg just credited, a taking buyer out of the escrow.
 	#[test]
+	// Pins the taker fee onto the retired fee claim until C-2 moves it.
+	#[allow(deprecated)]
 	fn a_trade_is_one_linked_chain_with_the_fee_on_the_takers_side() {
 		let (buyer, seller) = (UserId::new(), UserId::new());
 		let service = ServiceId::parse("service_arb").unwrap();
@@ -1729,6 +1739,8 @@ mod tests {
 	// has not yet contributed, and TigerBeetle's non-negative flag would park a settlement
 	// whose money was perfectly available.
 	#[test]
+	// A payment between the retired singletons: the leg shape is what is under test.
+	#[allow(deprecated)]
 	fn a_settled_payment_posts_its_reservation_before_it_moves_the_money() {
 		let aggregate_id = Uuid::new_v4();
 		let user = UserId::new();
@@ -1759,6 +1771,8 @@ mod tests {
 	// a failed withdrawal issues — and names that reservation as its pending, or the release
 	// would void a transfer that does not exist and leave the amount locked for good.
 	#[test]
+	// Same: a retired source, the void shape under test.
+	#[allow(deprecated)]
 	fn a_released_payment_voids_the_reservation_its_approval_raised() {
 		let aggregate_id = Uuid::new_v4();
 		let event = PaymentEvent::Released {

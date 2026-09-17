@@ -1,26 +1,34 @@
-//! `balance` bounded context — the fund's money, and where it sits.
+//! `balance` bounded context — the platform's money, and where it sits.
 //!
-//! The fund ("piggybank") holds all value. Two views, both authoritative in
-//! TigerBeetle (the data plane); this context is the **pure, wasm-safe** model of
-//! the chart of accounts and the parties — no I/O, no `tigerbeetle` types leak in.
+//! The platform ("piggybank") custodies all value; **every unit of it has a holder** — a
+//! person, directly through their claim, or through units of an allocation whose holders
+//! are people (issue #245). Two views, both authoritative in TigerBeetle (the data
+//! plane); this context is the **pure, wasm-safe** model of the chart of accounts and
+//! the parties — no I/O, no `tigerbeetle` types leak in.
 //!
 //! - **Custody / treasury** (debit-normal): where value physically is — a crypto
 //!   wallet per [`Network`] (the per-rail liquidity), plus a mocked bank account.
-//!   Assets the fund holds. This is the **only** layer where network lives.
-//! - **Claims** (credit-normal, **network-agnostic**): whose value it is — the
-//!   fund's own capital (`Fund`), a user's claim (`UserClaim`), a service's funds
-//!   (`ServiceClaim`), retained fees (`FeeRevenue`), and queued-withdrawal funds
+//!   Assets the platform holds. This is the **only** layer where network lives.
+//! - **Claims** (credit-normal, **network-agnostic**): whose value it is — a user's
+//!   claim (`UserClaim`), an allocation's pooled funds (`ServiceClaim`, the reserved
+//!   `fee` and `fund` allocations included), and queued-withdrawal funds
 //!   (`WithdrawalClearing`). USDT is one fungible pool, so a user has ONE claim, not
-//!   one per chain.
+//!   one per chain. There is no claim without an owner: the platform's own capital is
+//!   the `fund` allocation's claim, its earnings the `fee` allocation's, and both are
+//!   held by people through units.
 //!
 //! A management/performance fee never touches either layer while it is being charged:
-//! it moves *units* on the Share ledger, from the holder's `UserShares` to the
-//! manager's `FeeShares`. Only the periodic bulk settlement of accumulated fee units
-//! crosses into cash (`Dr ServiceClaim / Cr FeeRevenue`).
+//! it moves *units* on the Share ledger, from the holder's `UserShares` to the product's
+//! fee class, `FeeShares` — the units the `fee` allocation holds in that product. Only
+//! the periodic bulk settlement of accumulated fee units crosses into cash (today still
+//! `Dr ServiceClaim / Cr FeeRevenue`, retargeted to the `fee` allocation's claim by the
+//! fee in-kind step of #245).
 //!
-//! The company's own stake in a product is a third kind of unit holder, `CompanyShares`:
-//! units issued **in kind** (no cash leg) by an operator, so a product registered against
-//! an existing asset can start life with the company holding its share of the supply.
+//! **Retired accounts.** `Fund` (code 1), `FeeRevenue` (40) and `CompanyShares` (63)
+//! were claims and holdings with nobody behind them. Their variants, keys and codes
+//! stay — `tb_accounts` resolves by them, the outbox and event log carry the parties
+//! that map to them, and the data migration debits them — but nothing new is opened on
+//! them, and the codes are never reused (TigerBeetle history).
 //!
 //! The secondary market (the allocation **book**) adds two escrow accounts: `BookShares`
 //! holds a holder's units while a sell order rests, `BookCash` holds a user's USDT while a
@@ -125,20 +133,31 @@ pub struct ValuationTag;
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "id", rename_all = "snake_case")]
 pub enum Party {
-	/// The fund itself — its own unrestricted capital, and the custodian that holds
-	/// user/service value. The only owner under which a user may revoke.
+	/// The fund itself — its own unrestricted capital on the retired `Fund` claim.
+	///
+	/// Retired (#245): the platform's capital is the `fund` allocation
+	/// (`Service(ServiceId::fund())`). The variant stays because its serde tag
+	/// (`{"kind":"piggybank"}`) sits in the outbox and the event log and in-flight
+	/// payments are still open on the `fund` claim — mapping it onto the allocation
+	/// here would strand their completion.
+	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
 	Piggybank,
 	User(UserId),
+	/// An allocation's pooled money — a product's, or one of the platform's own
+	/// ([`ServiceId::fee`], [`ServiceId::fund`]).
 	Service(ServiceId),
-	/// The fund's **earned** money — retained withdrawal fees plus the settled 2-and-20
-	/// ([`crate::fees`]), all of which lands in the single `fee` claim. Distinct from
-	/// [`Party::Piggybank`] (seed capital) precisely because the two answer different
-	/// questions: what the fund earned, versus what the fund put in.
+	/// The fund's **earned** money on the retired `FeeRevenue` claim.
+	///
+	/// Retired (#245): earnings are the `fee` allocation (`Service(ServiceId::fee())`).
+	/// Kept for the same reason as [`Party::Piggybank`].
+	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
 	Revenue,
 }
 
 impl Party {
 	/// The discriminator stored in an `*_kind` column.
+	// The retired kinds are still the persistence vocabulary of the rows that hold them.
+	#[allow(deprecated)]
 	pub fn kind_str(&self) -> &'static str {
 		match self {
 			Self::Piggybank => "piggybank",
@@ -148,7 +167,8 @@ impl Party {
 		}
 	}
 
-	/// The identity stored in an `*_id` column (`None` for the singleton claims).
+	/// The identity stored in an `*_id` column (`None` for the retired singleton claims).
+	#[allow(deprecated)]
 	pub fn id_str(&self) -> Option<String> {
 		match self {
 			Self::Piggybank | Self::Revenue => None,
@@ -157,7 +177,9 @@ impl Party {
 		}
 	}
 
-	/// Reconstruct from the `(kind, id)` column pair (persistence adapter).
+	/// Reconstruct from the `(kind, id)` column pair (persistence adapter). The retired
+	/// kinds still read: stored rows and queued events name them.
+	#[allow(deprecated)]
 	pub fn from_parts(kind: &str, id: Option<&str>) -> Result<Self, DomainError> {
 		match (kind, id) {
 			("piggybank", _) => Ok(Self::Piggybank),
@@ -171,9 +193,11 @@ impl Party {
 		}
 	}
 
-	/// The network-agnostic, credit-normal claim account that holds this party's value
-	/// (the fund's own capital for `Piggybank`). The relay credits/debits this when
-	/// moving the party's money; network rides on the custody side of the transfer.
+	/// The network-agnostic, credit-normal claim account that holds this party's value.
+	/// The relay credits/debits this when moving the party's money; network rides on the
+	/// custody side of the transfer. The retired parties keep their retired claims, so a
+	/// replayed or in-flight move lands where its counterpart did.
+	#[allow(deprecated)]
 	pub fn claim_key(&self) -> LedgerAccountKey {
 		match self {
 			Self::Piggybank => LedgerAccountKey::Fund,
@@ -197,8 +221,10 @@ pub enum LedgerEvent {
 	///
 	/// No producer any more (issue #234 removed the free-amount `SeedCapital`); the variant
 	/// stays so historical outbox events and their TigerBeetle transfers can still be read,
-	/// replayed and reconciled. New capital arrives as [`Deposited`](Self::Deposited) with
-	/// `party: Piggybank`, proven against the chain like any other arrival.
+	/// replayed and reconciled. New capital arrives as [`Deposited`](Self::Deposited) —
+	/// today still with the retired `party: Piggybank`, proven against the chain like any
+	/// other arrival; the seed step of #245 makes it a deposit to the depositor and a
+	/// subscription into the `fund` allocation.
 	CapitalSeeded { network: Network, amount: Usdt },
 }
 
@@ -231,18 +257,27 @@ impl Ledger {
 }
 
 /// Account type (TigerBeetle `code`).
+///
+/// Codes are immutable on the accounts that carry them and part of TigerBeetle's
+/// history, so a retired code is **reserved forever, never reused**: `1`, `40` and `63`
+/// still name the retired accounts until the data migration empties them, and a new
+/// account kind takes a fresh number (`retired_codes_are_never_derived_by_a_live_key`
+/// guards the derivation).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AccountCode {
+	/// Retired (#245) — reserved, never reuse. The `fund` singleton claim.
 	Fund,
 	CryptoWallet,
 	BankCustody,
 	UserClaim,
 	ServiceClaim,
+	/// Retired (#245) — reserved, never reuse. The `fee` singleton claim.
 	FeeRevenue,
 	WithdrawalClearing,
 	UserShares,
 	SharesOutstanding,
 	FeeShares,
+	/// Retired (#245) — reserved, never reuse. The company's in-kind stake.
 	CompanyShares,
 	BookShares,
 	BookCash,
@@ -331,6 +366,10 @@ pub enum TransferCode {
 	/// `SharesOutstanding` never moves, so it is neither a [`Self::UnitIssue`] (which
 	/// grows supply) nor a [`Self::BookFill`] (which is paid for) — reconciliation must
 	/// be able to read a company stake shrinking with nothing minted or sold.
+	///
+	/// Retired with the company holder (#245): no producer; the code stays so posted
+	/// transfers and an undrained outbox row keep their meaning.
+	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
 	CompanyStakeTransfer,
 	/// In-kind units retired: `Dr SharesOutstanding / Cr <holder shares>` — supply
 	/// shrinks, no cash moves. The mirror of [`Self::UnitIssue`], and its own code rather
@@ -342,6 +381,8 @@ pub enum TransferCode {
 }
 
 impl TransferCode {
+	// The retired code is still forensic vocabulary for the transfers that carry it.
+	#[allow(deprecated)]
 	pub const fn code(self) -> u16 {
 		match self {
 			Self::SeedCapital => 1,
@@ -380,15 +421,27 @@ impl TransferCode {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LedgerAccountKey {
 	/// The fund's own unrestricted capital (credit-normal, network-agnostic claim).
+	///
+	/// Retired (#245): the platform's capital is the `fund` allocation's
+	/// `ServiceClaim`. The key (`"fund"`, code 1) stays resolvable so pending transfers
+	/// complete and the data migration can debit it.
+	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
 	Fund,
 	/// The fund's on-chain custody wallet for a rail (debit-normal asset). The only
 	/// network-bearing account — per-rail liquidity (the treasury layer).
 	CryptoWallet(Network),
 	/// A user's single, network-agnostic claim (credit-normal). One account per user.
 	UserClaim(UserId),
-	/// A service's owned funds (credit-normal, network-agnostic).
+	/// An allocation's pooled funds (credit-normal, network-agnostic) — a product's, or
+	/// the reserved `fee` / `fund` allocation's (`service:fee`, `service:fund`).
 	ServiceClaim(ServiceId),
 	/// The fund's retained withdrawal-fee revenue (credit-normal, network-agnostic).
+	///
+	/// Retired (#245): earnings are the `fee` allocation's `ServiceClaim`. The key
+	/// (`"fee"`, code 40) stays resolvable for the same reasons as [`Self::Fund`]; the fee
+	/// settlement, the taker fee and the withdrawal fee still credit it until the fee
+	/// in-kind step retargets them.
+	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
 	FeeRevenue,
 	/// Funds reserved for queued/in-flight withdrawals, not yet sent on-chain
 	/// (credit-normal, network-agnostic). Decoupled from any rail, so a withdrawal can
@@ -402,17 +455,26 @@ pub enum LedgerAccountKey {
 	/// units (its debits) rejected atomically by TigerBeetle — the over-redeem backstop.
 	UserShares(ServiceId, UserId),
 	/// A fund's total units in circulation (credit-normal, Share ledger). One per
-	/// service. `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + Σ_user
-	/// BookShares(svc, user) + FeeShares(svc) + CompanyShares(svc)` by construction.
+	/// service. By construction:
+	///
+	/// `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + Σ_user BookShares(svc, user)
+	/// + Σ_{h reserved} shares_holder(svc, h) + CompanyShares(svc)`
+	///
+	/// where `shares_holder(svc, fee)` is `FeeShares(svc)` (the only allocation holding in
+	/// phase 1) and `CompanyShares` is the retired company stake — zero once the data
+	/// migration has moved it. Every term is a person's holding or an allocation's whose
+	/// holders are people, so the supply always adds up to owners.
 	SharesOutstanding(ServiceId),
-	/// The manager's accumulated fee units in a fund (debit-normal, Share ledger). One per
-	/// service — a holder of units exactly like a user, which is the point: a management or
-	/// performance fee is charged by moving units *between holders*
-	/// (`Dr FeeShares / Cr UserShares`), never by moving cash and never by minting. Supply
-	/// is untouched, so NAV per unit does not move and no other investor pays for the
-	/// charge; and because no value leaves custody, charging a fee costs no chain fee at
-	/// all. The balance is converted to cash in one bulk settlement per period
-	/// ([`crate::fees::FeeSettlement`]).
+	/// The product's fee class: the units the `fee` allocation holds in a fund
+	/// (debit-normal, Share ledger). One per service — a holder of units exactly like a
+	/// user, which is the point: a management or performance fee is charged by moving
+	/// units *between holders* (`Dr FeeShares / Cr UserShares`), never by moving cash and
+	/// never by minting. Supply is untouched, so NAV per unit does not move and no other
+	/// investor pays for the charge; and because no value leaves custody, charging a fee
+	/// costs no chain fee at all. The balance is converted to cash in one bulk settlement
+	/// per period ([`crate::fees::FeeSettlement`]). It is
+	/// [`UnitHolder::Allocation(fee)`](crate::issuance::UnitHolder::Allocation)'s
+	/// `shares_key` in every product.
 	FeeShares(ServiceId),
 	/// The company's own stake in a fund (debit-normal, Share ledger). One per service —
 	/// a holder of units exactly like a user or the fee account, minted by an operator's
@@ -421,6 +483,11 @@ pub enum LedgerAccountKey {
 	/// the supply was never bought with cash through a subscription. It counts toward the
 	/// unit cap and dilutes NAV like any other holding; it has no cost-basis projection,
 	/// because there is no investor to report P&L to.
+	///
+	/// Retired (#245): the company holds nothing; a product's own stake goes to people or
+	/// to the `fee` allocation. The key (`shares_company:<svc>`, code 63) stays resolvable
+	/// so replayed legs post and the data migration can debit it.
+	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
 	CompanyShares(ServiceId),
 	/// A user's units committed to resting sell orders on a fund's book (debit-normal,
 	/// Share ledger). One per `(service, user)`. A sell order moves its size here
@@ -439,7 +506,9 @@ pub enum LedgerAccountKey {
 }
 
 impl LedgerAccountKey {
-	/// Stable string key for the `tb_accounts` id-map (and the idempotent create).
+	/// Stable string key for the `tb_accounts` id-map (and the idempotent create). The
+	/// retired keys keep their strings: the map rows exist and must keep resolving.
+	#[allow(deprecated)]
 	pub fn logical_key(&self) -> String {
 		match self {
 			Self::Fund => "fund".to_owned(),
@@ -458,6 +527,7 @@ impl LedgerAccountKey {
 		}
 	}
 
+	#[allow(deprecated)]
 	pub fn ledger(&self) -> Ledger {
 		match self {
 			Self::BankCustody => Ledger::UsdMock,
@@ -466,6 +536,7 @@ impl LedgerAccountKey {
 		}
 	}
 
+	#[allow(deprecated)]
 	pub fn account_code(&self) -> AccountCode {
 		match self {
 			Self::Fund => AccountCode::Fund,
@@ -487,6 +558,7 @@ impl LedgerAccountKey {
 	/// Custody (wallet/bank) and every unit holding — the book's unit escrow included —
 	/// are debit-normal; every claim (the book's cash escrow included) and the
 	/// units-outstanding contra are credit-normal.
+	#[allow(deprecated)]
 	pub fn normal(&self) -> Normal {
 		match self {
 			Self::CryptoWallet(_) | Self::BankCustody | Self::UserShares(..) | Self::FeeShares(_) | Self::CompanyShares(_) | Self::BookShares(..) => Normal::Debit,
@@ -539,40 +611,64 @@ mod tests {
 	#[test]
 	fn party_round_trips_through_columns() {
 		let uid = UserId::new();
-		for party in [Party::Piggybank, Party::User(uid), Party::Service(ServiceId::parse("trading").unwrap()), Party::Revenue] {
+		for party in [
+			Party::User(uid),
+			Party::Service(ServiceId::parse("trading").unwrap()),
+			Party::Service(ServiceId::fee()),
+			Party::Service(ServiceId::fund()),
+		] {
 			let back = Party::from_parts(party.kind_str(), party.id_str().as_deref()).unwrap();
 			assert_eq!(party, back);
 		}
 	}
 
 	#[test]
-	fn revenue_is_the_fee_claim() {
-		// The whole reason `Revenue` is a party and not a second type: it maps to a claim
-		// like every other end of a money move.
-		assert_eq!(Party::Revenue.claim_key(), LedgerAccountKey::FeeRevenue);
-		assert_eq!(Party::Revenue.kind_str(), "revenue");
-		assert_eq!(Party::Revenue.id_str(), None);
+	#[allow(deprecated)]
+	fn the_retired_parties_still_read_and_keep_their_claims() {
+		// The serde tags `{"kind":"piggybank"}` / `{"kind":"revenue"}` sit in the outbox and
+		// the event log, and pending transfers are open on the `fund` and `fee` claims:
+		// the retired parties must round-trip and must map to the SAME accounts they
+		// always did — not onto the reserved allocations' claims, which would strand an
+		// in-flight completion on an account nobody credited.
+		for (party, kind, claim, successor) in [
+			(Party::Piggybank, "piggybank", LedgerAccountKey::Fund, ServiceId::fund()),
+			(Party::Revenue, "revenue", LedgerAccountKey::FeeRevenue, ServiceId::fee()),
+		] {
+			assert_eq!(party.kind_str(), kind);
+			assert_eq!(party.id_str(), None);
+			assert_eq!(Party::from_parts(kind, None).unwrap(), party);
+			assert_eq!(party.claim_key(), claim);
+			assert_ne!(party.claim_key().logical_key(), Party::Service(successor).claim_key().logical_key());
+		}
+		assert_eq!(serde_json::to_string(&Party::Piggybank).unwrap(), r#"{"kind":"piggybank"}"#);
+		assert_eq!(serde_json::from_str::<Party>(r#"{"kind":"revenue"}"#).unwrap(), Party::Revenue);
 	}
 
 	#[test]
 	fn party_serializes_self_describing() {
 		let json = serde_json::to_string(&Party::Service(ServiceId::parse("trading").unwrap())).unwrap();
 		assert_eq!(json, r#"{"kind":"service","id":"trading"}"#);
-		assert_eq!(serde_json::to_string(&Party::Piggybank).unwrap(), r#"{"kind":"piggybank"}"#);
+		assert_eq!(serde_json::to_string(&Party::Service(ServiceId::fee())).unwrap(), r#"{"kind":"service","id":"fee"}"#);
 	}
 
 	#[test]
+	#[allow(deprecated)]
 	fn account_keys_and_sides() {
 		let uid = UserId::from_raw(uuid::Uuid::nil());
 		assert_eq!(LedgerAccountKey::UserClaim(uid).logical_key(), "user:00000000-0000-0000-0000-000000000000");
 		assert_eq!(LedgerAccountKey::CryptoWallet(Network::Bep20).logical_key(), "wallet:bep20");
-		assert_eq!(LedgerAccountKey::FeeRevenue.logical_key(), "fee");
 		assert_eq!(LedgerAccountKey::WithdrawalClearing.logical_key(), "clearing");
-		assert_eq!(LedgerAccountKey::Fund.normal(), Normal::Credit);
+		assert_eq!(LedgerAccountKey::ServiceClaim(ServiceId::fund()).normal(), Normal::Credit);
 		assert_eq!(LedgerAccountKey::CryptoWallet(Network::Ton).normal(), Normal::Debit);
 		assert_eq!(LedgerAccountKey::UserClaim(uid).network(), None);
 		assert_eq!(LedgerAccountKey::CryptoWallet(Network::Ton).network(), Some(Network::Ton));
 		assert_eq!(LedgerAccountKey::BankCustody.ledger(), Ledger::UsdMock);
+		assert_eq!(LedgerAccountKey::ServiceClaim(ServiceId::fee()).ledger(), Ledger::Usdt);
+		// The retired singletons keep the exact strings, sides and ledgers `tb_accounts`
+		// holds for them — a drift here would make the id-map refuse the next ensure.
+		assert_eq!(LedgerAccountKey::FeeRevenue.logical_key(), "fee");
+		assert_eq!(LedgerAccountKey::Fund.logical_key(), "fund");
+		assert_eq!(LedgerAccountKey::Fund.normal(), Normal::Credit);
 		assert_eq!(LedgerAccountKey::Fund.ledger(), Ledger::Usdt);
 	}
 
@@ -592,10 +688,15 @@ mod tests {
 		assert_eq!(user_shares.logical_key(), "shares:trading:00000000-0000-0000-0000-000000000000");
 		assert_eq!(outstanding.logical_key(), "shares_outstanding:trading");
 		assert_eq!(user_shares.network(), None);
+		// A person's holding in a reserved allocation is keyed like any other product's.
+		assert_eq!(
+			LedgerAccountKey::UserShares(ServiceId::fee(), uid).logical_key(),
+			"shares:fee:00000000-0000-0000-0000-000000000000"
+		);
 	}
 
 	#[test]
-	fn the_fee_holder_is_a_unit_holder_like_any_other() {
+	fn the_fee_class_is_a_unit_holder_like_any_other() {
 		let fee = LedgerAccountKey::FeeShares(ServiceId::parse("trading").unwrap());
 		// Same ledger and same side as a user's holding — a clawback is a plain
 		// holder-to-holder unit transfer, so supply (and therefore NAV) never moves.
@@ -604,22 +705,53 @@ mod tests {
 		assert_eq!(fee.account_code(), AccountCode::FeeShares);
 		assert_eq!(fee.logical_key(), "shares_fee:trading");
 		assert_eq!(fee.network(), None);
-		// Distinct from the cash-side fee revenue it is eventually settled into.
-		assert_ne!(fee.ledger(), LedgerAccountKey::FeeRevenue.ledger());
+		// Distinct from the cash-side claim it is eventually settled into.
+		assert_ne!(fee.ledger(), LedgerAccountKey::ServiceClaim(ServiceId::fee()).ledger());
 	}
 
 	#[test]
-	fn the_company_stake_is_a_unit_holder_like_any_other() {
+	#[allow(deprecated)]
+	fn the_retired_company_stake_keeps_its_account() {
 		let company = LedgerAccountKey::CompanyShares(ServiceId::parse("service_arb").unwrap());
-		// Same ledger and side as a user's holding, so an in-kind issuance is a plain mint
-		// against supply and the invariant `outstanding == Σ holders` keeps holding.
+		// Still a holding on the Share ledger: a replayed mint posts there, and the data
+		// migration debits it. Its own account, never aliased onto the fee class or a user's.
 		assert_eq!(company.ledger(), Ledger::Share);
 		assert_eq!(company.normal(), Normal::Debit);
 		assert_eq!(company.account_code(), AccountCode::CompanyShares);
 		assert_eq!(company.logical_key(), "shares_company:service_arb");
 		assert_eq!(company.network(), None);
-		// Its own account, never aliased onto the fee holder or a user's.
 		assert_ne!(company.logical_key(), LedgerAccountKey::FeeShares(ServiceId::parse("service_arb").unwrap()).logical_key());
+	}
+
+	#[test]
+	fn retired_codes_are_never_derived_by_a_live_key() {
+		// Codes 1, 40 and 63 belong to the retired accounts and to TigerBeetle's history.
+		// Every key a live path can build must derive something else — reusing one would
+		// let a new account wear a retired account's forensic identity.
+		const RETIRED: [u16; 3] = [AccountCode::Fund.code(), AccountCode::FeeRevenue.code(), AccountCode::CompanyShares.code()];
+		assert_eq!(RETIRED, [1, 40, 63]);
+		let uid = UserId::from_raw(uuid::Uuid::nil());
+		let svc = ServiceId::parse("trading").unwrap();
+		let live = [
+			LedgerAccountKey::CryptoWallet(Network::Bep20),
+			LedgerAccountKey::BankCustody,
+			LedgerAccountKey::UserClaim(uid),
+			LedgerAccountKey::ServiceClaim(svc.clone()),
+			LedgerAccountKey::ServiceClaim(ServiceId::fee()),
+			LedgerAccountKey::ServiceClaim(ServiceId::fund()),
+			LedgerAccountKey::WithdrawalClearing,
+			LedgerAccountKey::UserShares(svc.clone(), uid),
+			LedgerAccountKey::UserShares(ServiceId::fee(), uid),
+			LedgerAccountKey::SharesOutstanding(svc.clone()),
+			LedgerAccountKey::FeeShares(svc.clone()),
+			LedgerAccountKey::BookShares(svc, uid),
+			LedgerAccountKey::BookCash(uid),
+		];
+		for key in live {
+			assert!(!RETIRED.contains(&key.account_code().code()), "{key:?} derives a retired code");
+			assert!(!matches!(key.logical_key().as_str(), "fund" | "fee"), "{key:?} derives a retired logical key");
+			assert!(!key.logical_key().starts_with("shares_company:"), "{key:?} derives a retired logical key");
+		}
 	}
 
 	#[test]
@@ -647,6 +779,9 @@ mod tests {
 	}
 
 	#[test]
+	// The retired codes are IN the set on purpose: reserved forever, so a newcomer that
+	// picks one collides here.
+	#[allow(deprecated)]
 	fn every_account_and_transfer_code_is_unique() {
 		let account_codes = [
 			AccountCode::Fund,
