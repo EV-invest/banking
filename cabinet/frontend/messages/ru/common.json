@@ -4344,8 +4344,8 @@
     "t": "Оповещения"
   },
   "nav.operations": {
-    "en": "Operations",
-    "t": "Операции"
+    "en": "Activity",
+    "t": "Активность"
   },
   "nav.outbox": {
     "en": "Outbox",
@@ -6580,8 +6580,8 @@
     "t": "Нет"
   },
   "ui.operations": {
-    "en": "Operations",
-    "t": "Операции"
+    "en": "Activity",
+    "t": "Активность"
   },
   "ui.profile": {
     "en": "Profile",

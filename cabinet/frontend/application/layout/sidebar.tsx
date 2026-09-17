@@ -45,7 +45,7 @@ const FUND: NavItem[] = [
   // and with one marker per section it would mean two markers at once.
   { href: "/invest", label: "Invest", key: "nav.invest", icon: LineChart, active: (p) => p === "/invest" },
   { href: "/wallet", label: "Wallet", key: "nav.wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
-  { href: "/operations", label: "Operations", key: "nav.operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
+  { href: "/operations", label: "Activity", key: "nav.operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
 ];
 
 // PRODUCTS is the open allocation registry, not a fixed list: a fund appears in the rail

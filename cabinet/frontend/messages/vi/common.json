@@ -4344,8 +4344,8 @@
     "t": "Thông báo"
   },
   "nav.operations": {
-    "en": "Operations",
-    "t": "Giao dịch"
+    "en": "Activity",
+    "t": "Hoạt động"
   },
   "nav.outbox": {
     "en": "Outbox",
@@ -6580,8 +6580,8 @@
     "t": "Không có"
   },
   "ui.operations": {
-    "en": "Operations",
-    "t": "Giao dịch"
+    "en": "Activity",
+    "t": "Hoạt động"
   },
   "ui.profile": {
     "en": "Profile",
