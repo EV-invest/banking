@@ -16,6 +16,7 @@ import { StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { NetworkMark } from "@/shared/ui/icons/networks";
 import { formatUsdt, railMeta } from "@/views/wallet/lib/format";
+import { useFirstDepositSignal } from "@/views/wallet/model/use-first-deposit-signal";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
 // The wallet landing surface (Figma `cabinet/wallet` + `cabinet/mobile/wallet`): one balance
@@ -24,6 +25,7 @@ import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } f
 // straight into the right screen with the rail preselected.
 export function WalletOverviewView() {
   const t = useT();
+  useFirstDepositSignal();
   const locale = useLocale();
   // The same cached balance Home, Deposit, Withdraw and Invest read, so arriving here from
   // any of them shows the figure immediately and refreshes it behind the number. A failed

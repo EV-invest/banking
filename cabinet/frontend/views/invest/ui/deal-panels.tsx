@@ -9,16 +9,20 @@
 // and anything else showing a figure a deal touched — refreshes itself. A callback per
 // panel was the same job done once per call site, which is the version that goes stale.
 
+import { useAnalytics } from "@evinvest/analytics/react";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { ArrowDownToLine, Clock, Loader2, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Button, Input } from "@evinvest/uikit";
 
-import { cancelRedemption, submitRedeem, submitSubscribe } from "@/entities/fund/model/fund-resource";
+import { hasHoldings } from "@/entities/fund/lib/holdings";
+import { cancelRedemption, positionsResource, submitRedeem, submitSubscribe } from "@/entities/fund/model/fund-resource";
+import { ACTIVATION, once } from "@/shared/analytics";
 import type { FundNav, Position, Redemption } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
+import { cachedSession } from "@/shared/lib/session";
 import { TipAnchor } from "@/shared/tips";
 import { Panel, PanelPresence } from "@/shared/ui/motion";
 import { formatUnits, formatUsdt, fromBaseUnits, toBaseUnits } from "@/views/invest/lib/format";
@@ -33,6 +37,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [done, setDone] = useState<{ units?: string; nav?: string } | null>(null);
+  const capture = useAnalytics();
 
   // Exact preview, floored the same way the hub floors it — so "0 units" is visible here
   // instead of arriving as a rejection.
@@ -43,14 +48,28 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
   const headroom = nav ? toBaseUnits(nav.remaining_capacity) : null;
   const overCap = preview !== null && headroom !== null && preview > headroom;
 
+  // `first_subscription`: an accepted subscription by an account that held no units. The
+  // positions are what `/invest/<service>` warms on the way in, so "unread" is rare and is
+  // counted as "none" — flagged, rather than losing the step. Keyed by user per browser so
+  // a retry, or a second tab, does not repeat it.
+  const recordFirstSubscription = (held: boolean | null) => {
+    if (held === true) return;
+    const userId = cachedSession()?.user?.userId ?? "anon";
+    if (once(`${ACTIVATION.firstSubscription}:${userId}`, "browser")) capture(ACTIVATION.firstSubscription, { service, holdings_known: held !== null });
+  };
+
   const submit = async () => {
     setSubmitting(true);
     setError(null);
     setDone(null);
+    // Read BEFORE the submit: the mutation refreshes the positions, and afterwards the
+    // holding this subscription just opened would be the "previous" one.
+    const held = hasHoldings(positionsResource.peek());
     try {
       const receipt = await submitSubscribe({ service, amount });
       setDone({ units: receipt.units, nav: receipt.nav });
       setAmount("");
+      recordFirstSubscription(held);
     } catch (e) {
       // The error itself: `errorMessage` resolves its `code` in the reader's locale.
       setError(e);

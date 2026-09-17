@@ -19,6 +19,7 @@
 import { useEffect } from "react";
 
 import type { KycCase } from "@/features/kyc/api/kyc-contract";
+import { useKycCompletedSignal } from "@/features/kyc/model/kyc-signals";
 import { kycStatusResource } from "@/features/kyc/model/kyc-status-resource";
 import { canStartVerification, kycLevel } from "@/entities/user/lib/kyc";
 import { profileResource } from "@/entities/user/model/profile-resource";
@@ -59,11 +60,14 @@ export function useKycStatus(): KycGate {
     if (planeLevel !== null && profileLevel !== null && planeLevel !== profileLevel) profileResource.invalidate();
   }, [planeLevel, profileLevel]);
 
+  const loading = (statusLoading && status === undefined) || (profileLoading && profile === undefined);
+  useKycCompletedSignal(level, loading);
+
   return {
     level,
     runningCase,
     canStart: canStartVerification(level, runningCase),
     known,
-    loading: (statusLoading && status === undefined) || (profileLoading && profile === undefined),
+    loading,
   };
 }

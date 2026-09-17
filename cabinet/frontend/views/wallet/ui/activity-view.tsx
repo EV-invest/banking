@@ -15,6 +15,7 @@ import { NetworkMark } from "@/shared/ui/icons/networks";
 import { StaggerItem } from "@/shared/ui/motion";
 import { STATE_ICONS, stateLabel } from "@/views/operations/lib/format";
 import { formatUsdt, networkLabel, railMeta, shortAddress } from "@/views/wallet/lib/format";
+import { useFirstDepositSignal } from "@/views/wallet/model/use-first-deposit-signal";
 import { WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
@@ -52,6 +53,7 @@ interface Entry {
 
 export function ActivityView() {
   const t = useT();
+  useFirstDepositSignal();
   const locale = useLocale();
   const [cancelError, setCancelError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);

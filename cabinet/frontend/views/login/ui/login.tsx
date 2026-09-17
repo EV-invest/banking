@@ -4,6 +4,7 @@ import { Logo } from "@/shared/ui/logo";
 import { loginHref } from "@/features/auth/lib/return-to";
 import { messagesFor } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
+import { LoginViewSignal } from "@/views/login/ui/login-view-signal";
 
 // The `?error=` values the shell's auth callback redirects with, mapped to catalogue keys.
 const ERROR_KEYS: Record<string, string> = {
@@ -31,6 +32,7 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
 
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))]">
+      <LoginViewSignal hasReturnTo={returnTo !== undefined} hasError={message !== null} />
       {/* Brand panel — locked to the brand palette (white on navy, the fixed teal washes),
           so it deliberately does not follow the app's ink token. */}
       <aside className="relative hidden w-150 shrink-0 flex-col justify-between overflow-hidden bg-brand p-16 lg:flex">
