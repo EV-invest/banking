@@ -12,7 +12,8 @@
 //! `UserShares` into `BookShares`, a buy moves its worst-case cash (`size × price`, plus
 //! the taker fee it might owe) from `UserClaim` into `BookCash`. A fill is one linked
 //! TigerBeetle batch — units out of the seller's escrow into the buyer's holding, cash out
-//! of the buyer's escrow into the seller's claim, the taker's fee into `FeeRevenue` —
+//! of the buyer's escrow into the seller's claim, the taker's fee into the `fee`
+//! allocation's claim —
 //! delivery versus payment, all or nothing. Whatever the escrow still holds when the
 //! order reaches a terminal state is released back. Those facts are the [`BookEvent`]s
 //! the relay posts; this module only decides them.
@@ -31,7 +32,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
 	allocations::AllocationBacking,
-	balance::ServiceId,
+	balance::{Party, ServiceId},
 	error::DomainError,
 	money::{Nav, SCALE, Shares, Usdt, mul_div_floor},
 	users::UserId,
@@ -1000,9 +1001,13 @@ pub enum BookEvent {
 	},
 	/// Two orders traded. The relay posts one linked batch: `size` units `Dr
 	/// UserShares(buyer) / Cr BookShares(seller)`, `notional` cash `Dr BookCash(buyer) /
-	/// Cr UserClaim(seller)`, and `fee` from the taker into `FeeRevenue` — then adds the
+	/// Cr UserClaim(seller)`, and `fee` from the taker into `payee`'s claim — then adds the
 	/// buyer's cost basis and reduces the seller's. `nav` is the fund's mark at the time,
 	/// carried so the buyer's high-water mark blends the accounting price, not the quote.
+	///
+	/// `payee` is the `fee` allocation (#245); a payload written before the field existed
+	/// defaults to the retired revenue claim it was planned against, so a redelivered
+	/// legacy trade re-plans to the same linked chain.
 	TradeExecuted {
 		trade_id: TradeId,
 		service: ServiceId,
@@ -1016,6 +1021,8 @@ pub enum BookEvent {
 		notional: Usdt,
 		fee: Usdt,
 		nav: Nav,
+		#[serde(default = "Party::legacy_fee_payee")]
+		payee: Party,
 	},
 	/// An order reached a terminal state with something left in escrow; the relay hands
 	/// it back (`Dr UserShares / Cr BookShares` or `Dr BookCash / Cr UserClaim`).
@@ -1428,6 +1435,7 @@ mod tests {
 				notional: usdt("3"),
 				fee: usdt("0.003"),
 				nav: Nav::SEED,
+				payee: Party::fee_payee(),
 			},
 			BookEvent::OrderReleased {
 				order_id: OrderId::new(),

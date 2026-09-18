@@ -233,7 +233,9 @@ pub(crate) fn fund_nav_to_proto(view: &funds_app::FundNavView) -> pb::FundNav {
 		stale: view.stale,
 		unit_cap: view.unit_cap.to_decimal_string(),
 		remaining_capacity: view.remaining_capacity.to_decimal_string(),
-		company_units: view.company_units.to_decimal_string(),
+		// The company holds nothing any more (#245); the wire field stays until the
+		// contract step drops it, and reads as the zero it is about to become.
+		company_units: Shares::ZERO.to_decimal_string(),
 	}
 }
 

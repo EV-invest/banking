@@ -15,7 +15,7 @@ use std::{
 use async_trait::async_trait;
 use domain::{
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party},
+	balance::{LedgerAccountKey, Party, ServiceId},
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
@@ -175,14 +175,12 @@ async fn deposit(h: &Harness, user: UserId, network: Network, amount: &str) {
 }
 
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn withdraw_reserves_then_settles_and_retains_fee() {
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	let network = Network::Bep20;
 	let claim = LedgerAccountKey::UserClaim(user);
-	let fee_account = LedgerAccountKey::FeeRevenue;
+	let fee_account = LedgerAccountKey::ServiceClaim(ServiceId::fee());
 
 	deposit(&h, user, network, "100").await;
 	let fee_before = bal(&h, &fee_account).await.posted;
@@ -216,8 +214,9 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 	let settled = bal(&h, &claim).await;
 	assert_eq!(settled.posted, usdt("50"), "the gross left the user's claim");
 	assert_eq!(settled.locked, Usdt::ZERO, "nothing remains reserved");
-	// FeeRevenue is now a network-agnostic singleton shared across (parallel) tests, so
-	// assert this withdrawal credited *at least* its fee — concurrent tests only add more.
+	// The fee allocation's claim is one network-agnostic account shared across (parallel)
+	// tests, so assert this withdrawal credited *at least* its fee — concurrent tests only
+	// add more.
 	assert!(bal(&h, &fee_account).await.posted.checked_sub(fee_before).unwrap() >= usdt("1"), "the fee was retained");
 }
 
@@ -226,14 +225,12 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 /// withdrawal net must be representable at 6 decimals, and the ledger legs still move canonical
 /// 18-dp `Usdt` (the ledger never sees the chain's precision).
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn withdraw_on_polygon_reserves_then_settles_and_retains_fee() {
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	let network = Network::Polygon;
 	let claim = LedgerAccountKey::UserClaim(user);
-	let fee_account = LedgerAccountKey::FeeRevenue;
+	let fee_account = LedgerAccountKey::ServiceClaim(ServiceId::fee());
 
 	deposit(&h, user, network, "100").await;
 	let fee_before = bal(&h, &fee_account).await.posted;

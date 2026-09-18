@@ -17,8 +17,9 @@
 use async_trait::async_trait;
 use domain::{
 	architecture::Gateway,
-	balance::{LedgerAccountKey, TransferCode},
+	balance::{LedgerAccountKey, ServiceId, TransferCode},
 	error::DomainError,
+	issuance::UnitHolder,
 };
 use thiserror::Error;
 
@@ -59,6 +60,15 @@ pub trait Ledger: Gateway {
 	/// (idempotent); pending-not-found ⇒ [`LedgerError::Retryable`].
 	async fn complete(&self, completion: &PendingCompletion) -> Result<(), LedgerError>;
 
+	/// Every unit holding on the Share ledger inside `scope`, with its **posted** balance
+	/// in raw base units — the accounts a product's supply is held on, or the accounts
+	/// one holder's units sit in across every product. Read straight from TigerBeetle
+	/// (the authoritative store) over the `tb_accounts` map, so a cap table and the
+	/// `fee` allocation's price are sums of what is, never of what a projection thinks.
+	/// Zero-balance holdings are included; the caller decides whether an emptied
+	/// account still counts as a holder.
+	async fn share_holdings(&self, scope: &HoldingScope) -> Result<Vec<(LedgerAccountKey, u128)>, LedgerError>;
+
 	/// The cash plane's global posted invariant, summed straight from TigerBeetle (the
 	/// authoritative store): total custody (`wallet:<net>` debit-normal assets) vs total
 	/// claims (`fund`/`user`/`service`/`fee`/`clearing` credit-normal). By construction
@@ -66,6 +76,32 @@ pub trait Ledger: Gateway {
 	/// the design ever diverge. Returns raw 18-dp USDT base units.
 	async fn cash_invariant(&self) -> Result<CashInvariant, LedgerError>;
 }
+/// Which unit holdings a [`Ledger::share_holdings`] scan returns. The membership rule is
+/// the domain's ([`UnitHolder::of_holding`]): a holding is a product's `UserShares`,
+/// `BookShares` (a user's units resting in a sell are still theirs), `FeeShares` (the
+/// `fee` allocation's) or — until the data migration moves it — the retired company
+/// stake. Supply (`SharesOutstanding`) and every cash account are never holdings.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum HoldingScope {
+	/// Every holder's account in one product — the cap table.
+	Product(ServiceId),
+	/// One holder's account in every product — what an allocation owns, priced.
+	Holder(UnitHolder),
+}
+
+impl HoldingScope {
+	/// Whether `key` is a holding inside this scope.
+	pub fn admits(&self, key: &LedgerAccountKey) -> bool {
+		let Some((service, holder)) = UnitHolder::of_holding(key) else {
+			return false;
+		};
+		match self {
+			Self::Product(product) => &service == product,
+			Self::Holder(wanted) => &holder == wanted,
+		}
+	}
+}
+
 /// The reconciliation read of the cash plane's global double-entry invariant: the summed
 /// posted custody side and claims side. They must be equal (`balanced()`).
 #[derive(Clone, Copy, Debug)]

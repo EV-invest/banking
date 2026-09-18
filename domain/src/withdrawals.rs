@@ -32,7 +32,7 @@ use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-	balance::LedgerAccountKey,
+	balance::{LedgerAccountKey, Party},
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::UserId,
@@ -60,9 +60,11 @@ pub struct WithdrawalTag;
 pub enum WithdrawalSource {
 	/// An investor's own unified claim (`user:<uuid>`).
 	User(UserId),
-	/// The fund's earned revenue (`fee`) — retained withdrawal fees plus the settled
-	/// 2-and-20 ([`crate::fees::FeeEvent::SharesSettled`]). NOT `fund` (seed capital),
-	/// NOT a client claim.
+	/// The retired revenue claim (`fee`, code 40) — what retained withdrawal fees and the
+	/// settled 2-and-20 used to land on. Nothing credits it any more: every fee is the
+	/// `fee` allocation's (`service:fee`, #245), and a payout out of that allocation is
+	/// the payments step's concern. This source spends the legacy balance until then and
+	/// replays what was queued against it. NOT `fund` (seed capital), NOT a client claim.
 	Revenue,
 }
 
@@ -326,6 +328,7 @@ impl Withdrawal {
 			amount: self.amount,
 			fee: self.fee,
 			tx_ref,
+			payee: Party::fee_payee(),
 		});
 		Ok(())
 	}
@@ -464,7 +467,11 @@ pub enum WithdrawalEvent {
 		fee: Usdt,
 	},
 	/// Confirmed on-chain (relay: post the clearing pending, then move net→`wallet:<net>`
-	/// and fee→`fee`).
+	/// and the retained fee→`payee`'s claim).
+	///
+	/// `payee` is the `fee` allocation (#245). A payload written before the field existed
+	/// defaults to the retired revenue claim it was planned against, so a settle parked
+	/// or half-applied before the upgrade re-plans to the same fee leg.
 	Settled {
 		withdrawal_id: WithdrawalId,
 		#[serde(alias = "user")]
@@ -473,6 +480,8 @@ pub enum WithdrawalEvent {
 		amount: Usdt,
 		fee: Usdt,
 		tx_ref: TxRef,
+		#[serde(default = "Party::legacy_fee_payee")]
+		payee: Party,
 	},
 	/// Broadcast confirmed not to have landed — void the clearing reservation (refund).
 	Failed {

@@ -23,6 +23,8 @@
 //! have no cash in the fund's claim, so the redeem path has to know before the first
 //! holder asks to be paid out of it.
 
+use std::collections::HashMap;
+
 use domain::{
 	allocations::{AllocationBacking, AllocationState},
 	balance::{LedgerAccountKey, ServiceId},
@@ -40,7 +42,7 @@ use crate::{
 		UnitIssuanceRepository, UserRepository,
 		allocations::AllocationRegistry,
 		issuance::{IssueOutcome, UnitIssuanceRecord},
-		ledger::Ledger,
+		ledger::{HoldingScope, Ledger},
 	},
 };
 
@@ -65,10 +67,11 @@ pub struct RetireUnitsRequest {
 	pub force: bool,
 }
 
-/// A fund's issued supply broken down by who holds it. `investor_units` is derived
-/// (`outstanding − company − fee`) rather than summed over holders: the ledger keeps
-/// one account per investor and reading them all to answer a three-line summary would
-/// be a scan the invariant already makes unnecessary.
+/// A fund's issued supply and who holds it — the cap table, every line read from the
+/// ledger (issue #245: every unit has a holder, and the table is a sum of what is, not
+/// a remainder). A person's line is their free units plus the units resting in their
+/// sell orders; the `fee` allocation's line is the product's fee class. Holders with
+/// nothing left are not listed.
 ///
 /// `queued_units` is the one figure not read from the ledger: mints recorded but not yet
 /// posted by the relay. The settled supply is what `ensure_capacity` reads, so an
@@ -77,10 +80,17 @@ pub struct RetireUnitsRequest {
 pub struct UnitHoldersView {
 	pub service: ServiceId,
 	pub units_outstanding: Shares,
-	pub company_units: Shares,
-	pub fee_units: Shares,
-	pub investor_units: Shares,
+	/// Largest holding first; ties broken by the holder's stored identity, so the table
+	/// reads the same on every refresh.
+	pub holders: Vec<UnitHolding>,
 	pub queued_units: Shares,
+}
+
+/// One line of the cap table.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnitHolding {
+	pub holder: UnitHolder,
+	pub units: Shares,
 }
 
 /// Mint `request.units` of `request.service` to `request.holder` with no cash leg.
@@ -134,7 +144,7 @@ pub async fn issue_units(
 	request.holder.ensure_may_hold(&request.service)?;
 	let allocation = allocations_app::get(ports.allocations, &request.service).await?;
 	require_holder(ports.allocations, users, &request.holder).await?;
-	let price = funds_app::dealing_nav(ports.nav, &request.service, now_unix).await?;
+	let price = funds_app::dealing_nav(ports.nav, ports.ledger, &request.service, now_unix).await?;
 	allocation.ensure_capacity(funds_app::issued_units(ports.ledger, &request.service).await?, request.units)?;
 	let issuance = UnitIssuance::issue(
 		UnitIssuanceId::new(),
@@ -197,7 +207,7 @@ pub async fn retire_units(
 		)));
 	}
 	require_holder(ports.allocations, users, &request.holder).await?;
-	let price = funds_app::dealing_nav(ports.nav, &request.service, now_unix).await?;
+	let price = funds_app::dealing_nav(ports.nav, ports.ledger, &request.service, now_unix).await?;
 	let held = Shares::from_base_units(ports.ledger.balance(&request.holder.shares_key(&request.service)?).await?.available());
 	if held < request.units {
 		return Err(DomainError::Validation(format!(
@@ -277,32 +287,48 @@ impl RequestIdentity<'_> {
 	}
 }
 
-/// The settled supply of `service` by holder class, plus the mints still in flight.
-/// Gated on the allocation existing, like the NAV view: a cap table for a product no
-/// registry entry backs is a cap table for a fund that does not exist.
+/// The settled supply of `service` and every holder of it, plus the mints still in
+/// flight. Gated on the allocation existing, like the NAV view: a cap table for a
+/// product no registry entry backs is a cap table for a fund that does not exist.
+///
+/// The holders are summed from the ledger's holding accounts (the retired company stake
+/// among them, as its own line, until the data migration moves it). The sum is read at
+/// one instant per account, so it can differ from `units_outstanding` by a mint landing
+/// mid-scan — a read-only view over a moving ledger reports both figures and lets the
+/// reader compare, rather than failing or inventing a remainder.
 pub async fn unit_holders(allocations: &dyn AllocationRegistry, ledger: &dyn Ledger, issuances: &dyn UnitIssuanceRepository, service: ServiceId) -> Result<UnitHoldersView, DomainError> {
 	allocations_app::get(allocations, &service).await?;
-	let outstanding = posted_units(ledger, &LedgerAccountKey::SharesOutstanding(service.clone())).await?;
-	// The retired company account is still read: its balance is what the data migration
-	// moves, and the cap table must show it until then (C-2 reshapes this view).
-	#[allow(deprecated)]
-	let company = posted_units(ledger, &LedgerAccountKey::CompanyShares(service.clone())).await?;
-	let fee = posted_units(ledger, &LedgerAccountKey::FeeShares(service.clone())).await?;
+	let outstanding = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
 	let queued = issuances.queued_mint_units(&service).await?;
-	// Saturating rather than checked: the invariant makes a negative remainder impossible,
-	// and a scan of three accounts that are read at three instants must not fail a
-	// read-only view over a mint landing between two of them.
-	let investor = outstanding.checked_sub(company).and_then(|rest| rest.checked_sub(fee)).unwrap_or(Shares::ZERO);
+	let mut by_holder: HashMap<UnitHolder, Shares> = HashMap::new();
+	for (key, units) in ledger.share_holdings(&HoldingScope::Product(service.clone())).await? {
+		if units == 0 {
+			continue;
+		}
+		let Some((_, holder)) = UnitHolder::of_holding(&key) else { continue };
+		let line = by_holder.entry(holder).or_insert(Shares::ZERO);
+		*line = line
+			.checked_add(Shares::from_base_units(units))
+			.ok_or_else(|| DomainError::Repository("a holder's units overflow".into()))?;
+	}
+	let mut holders: Vec<UnitHolding> = by_holder.into_iter().map(|(holder, units)| UnitHolding { holder, units }).collect();
+	holders.sort_by(|a, b| b.units.cmp(&a.units).then_with(|| holder_identity(&a.holder).cmp(&holder_identity(&b.holder))));
 	Ok(UnitHoldersView {
 		service,
 		units_outstanding: outstanding,
-		company_units: company,
-		fee_units: fee,
-		investor_units: investor,
+		holders,
 		queued_units: queued,
 	})
 }
 
-async fn posted_units(ledger: &dyn Ledger, key: &LedgerAccountKey) -> Result<Shares, DomainError> {
-	Ok(Shares::from_base_units(ledger.balance(key).await?.posted))
+/// The holder as its columns spell it — the tie-breaker of the cap table's order.
+fn holder_identity(holder: &UnitHolder) -> (&'static str, String) {
+	(
+		holder.kind_str(),
+		holder
+			.user_id()
+			.map(|u| u.to_string())
+			.or_else(|| holder.service_id().map(ToString::to_string))
+			.unwrap_or_default(),
+	)
 }

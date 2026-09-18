@@ -317,7 +317,10 @@ pub struct RevenueRail {
 /// users' derived addresses, which the hot wallet cannot spend. A treasury read failure
 /// degrades to the TB view (best-effort, like the treasury screen) — a flaky node
 /// must not blank the page.
-// Revenue is still the retired fee claim until C-2 moves earnings into the `fee` allocation.
+// Still the retired revenue claim, deliberately: new earnings land on `service:fee` (#245,
+// fee in-kind), but the payout this screen offers (`WithdrawalSource::Revenue`) still
+// spends THIS account until C-4 moves it — a view of the successor would offer an amount
+// the payout cannot draw. C-4 retargets both together.
 #[allow(deprecated)]
 pub async fn fund_revenue(ledger: &dyn Ledger, custody: &dyn Custody, configured: &[Network]) -> Result<FundRevenue, DomainError> {
 	let claim = ledger.balance(&LedgerAccountKey::FeeRevenue).await?;
