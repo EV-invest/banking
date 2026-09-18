@@ -242,10 +242,10 @@ pub enum LedgerEvent {
 	///
 	/// No producer any more (issue #234 removed the free-amount `SeedCapital`); the variant
 	/// stays so historical outbox events and their TigerBeetle transfers can still be read,
-	/// replayed and reconciled. New capital arrives as [`Deposited`](Self::Deposited) —
-	/// today still with the retired `party: Piggybank`, proven against the chain like any
-	/// other arrival; the seed step of #245 makes it a deposit to the depositor and a
-	/// subscription into the `fund` allocation.
+	/// replayed and reconciled. New capital is a chain-proven [`Deposited`](Self::Deposited)
+	/// to the person who sent it, followed by their subscription into the `fund`
+	/// allocation (#245) — the retired `Fund` claim is never credited again.
+	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
 	CapitalSeeded { network: Network, amount: Usdt },
 }
 

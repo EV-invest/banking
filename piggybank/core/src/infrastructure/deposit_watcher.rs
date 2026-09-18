@@ -20,6 +20,12 @@
 //! (`RecordDeposit`). Skipping is the lesser evil: retrying the pruned window forever wedges
 //! the rail and loses every deposit AFTER the gap too.
 //!
+//! USDT arriving at the rail's **treasury** hot wallet from outside is watched but never
+//! credited (#245): the chain names the wallet, not the person, and every claim needs a
+//! holder. It is reported at `error!` with a counter (`telemetry`) — and by the treasury
+//! drift watch as a surplus until an operator attributes it with `SeedCapital`, which
+//! books it as that person's deposit and their subscription into `fund`.
+//!
 //! Generic over the EVM rail — one instance per chain (BEP20, Polygon), keyed by
 //! `config.network`; the raw log value is scaled into canonical base units via
 //! [`Usdt::from_onchain`], so a 6-dp rail (Polygon) and an 18-dp rail (BEP20) credit correctly.
@@ -58,6 +64,7 @@ use crate::{
 		deposits::PgDeposits,
 		evm_rpc::{TRANSFER_TOPIC, address_from_topic, hex_to_u64, word_to_u128},
 		rails::repo,
+		telemetry,
 	},
 };
 
@@ -132,9 +139,9 @@ pub struct DepositWatcher {
 	/// a free tier's cap is static, and re-probing it would reintroduce the failed call
 	/// this narrowing exists to avoid.
 	block_range: AtomicU64,
-	/// Resolves the rail's treasury + gas-station addresses so an operator's out-of-band
-	/// top-up of the hot wallet becomes a ledger fact instead of invisible money. `None`
-	/// leaves the watcher user-deposits-only — the pre-existing behaviour, and what an
+	/// Resolves the rail's treasury + gas-station addresses so an out-of-band arrival on
+	/// the hot wallet is seen and reported (never credited — see the module doc) and the
+	/// sweep is told apart from it. `None` leaves the watcher user-deposits-only — what an
 	/// unwired rail gets.
 	custody: Option<Arc<ChainCustody>>,
 }
@@ -263,8 +270,6 @@ impl DepositWatcher {
 	/// loses every deposit after the gap as well. A backfill asked for a window
 	/// its endpoint no longer has gets the error back instead: the operator chose that window
 	/// deliberately, and "done, credited 0" would be a lie.
-	// A treasury arrival still credits the retired fund party until C-3 rewires the watchers.
-	#[allow(deprecated)]
 	pub async fn scan_range(&self, from: u64, to: u64, cursor: CursorPolicy) -> Result<ScanSummary, WatcherError> {
 		let network = self.config.network;
 		let mut summary = ScanSummary {
@@ -329,19 +334,25 @@ impl DepositWatcher {
 			};
 			for log in &logs {
 				let Some(transfer) = decode_transfer(log) else { continue };
-				let credited = if let Some(&user) = watched.get(&transfer.to) {
-					self.credit(Party::User(user), network, &transfer).await?
-				} else if treasury.as_deref() == Some(transfer.to.as_str()) && is_external_source(&transfer.from, &watched, gas_station.as_deref(), treasury.as_deref()) {
-					self.credit(Party::Piggybank, network, &transfer).await?
-				} else {
-					false
-				};
-				if credited {
-					summary.credited += 1;
+				match recipient_of(&transfer, &watched, treasury.as_deref(), gas_station.as_deref()) {
+					Recipient::User(user) =>
+						if self.credit(user, network, &transfer).await? {
+							summary.credited += 1;
+						},
+					Recipient::UnattributedTreasury => {
+						let amount = Usdt::from_onchain(network, transfer.value).map_err(|e| WatcherError::Decode(e.to_string()))?;
+						if !amount.is_zero() {
+							telemetry::note_unattributed_treasury_inflow(network.as_str(), &transfer.tx_hash, &transfer.from, &amount.to_decimal_string());
+						}
+					}
+					Recipient::NotOurs => {}
 				}
 			}
 			// Advance only after the chunk's deposits are recorded. A crash between recording
 			// and this update re-scans the chunk; `record_deposit` is idempotent by tx_ref.
+			// An unattributed treasury arrival advances the cursor exactly like a credit: it
+			// was reported once, and re-reading the chunk forever would only repeat the
+			// report while crediting nothing.
 			if matches!(cursor, CursorPolicy::Advance) {
 				self.set_cursor(network, chunk_end).await?;
 			}
@@ -354,23 +365,16 @@ impl DepositWatcher {
 		Ok(summary)
 	}
 
-	// Same: "capital" is still spelled with the retired party until C-3.
-	#[allow(deprecated)]
-	async fn credit(&self, party: Party, network: Network, transfer: &Transfer) -> Result<bool, WatcherError> {
+	async fn credit(&self, user: UserId, network: Network, transfer: &Transfer) -> Result<bool, WatcherError> {
 		let amount = Usdt::from_onchain(network, transfer.value).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {
 			return Ok(false); // a legal but meaningless zero-value Transfer — not a deposit.
 		}
 		let tx_ref = TxRef::parse(&transfer.tx_ref()).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let is_capital = matches!(party, Party::Piggybank);
-		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, party, network, amount)
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
-		if newly && is_capital {
-			// Worth its own line at INFO: this is the fund's own money entering the rail, and
-			// the operator who sent it has no other confirmation that it landed in the ledger.
-			info!(network = %network, tx = %transfer.tx_hash, from = %transfer.from, "deposit watcher: credited an out-of-band treasury top-up as fund capital");
-		} else if newly {
+		if newly {
 			info!(tx = %transfer.tx_hash, "deposit watcher: credited on-chain USDT deposit");
 		}
 		Ok(newly)
@@ -555,15 +559,40 @@ impl DepositWatcher {
 	}
 }
 
+/// Who a scanned transfer is for — the one decision the scan makes per log, pure so it
+/// is provable without a chain.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Recipient {
+	/// Landed on this user's derived deposit address: credit them.
+	User(UserId),
+	/// Landed on the treasury from outside every wallet we control. NOT credited (#245):
+	/// the chain names the wallet, not the person, and a claim needs a holder — reported
+	/// for the operator to attribute by hand (`SeedCapital`).
+	UnattributedTreasury,
+	/// The sweep consolidating our own funds, or an address that is not ours.
+	NotOurs,
+}
+
+fn recipient_of(transfer: &Transfer, watched: &HashMap<String, UserId>, treasury: Option<&str>, gas_station: Option<&str>) -> Recipient {
+	if let Some(&user) = watched.get(&transfer.to) {
+		Recipient::User(user)
+	} else if treasury == Some(transfer.to.as_str()) && is_external_source(&transfer.from, watched, gas_station, treasury) {
+		Recipient::UnattributedTreasury
+	} else {
+		Recipient::NotOurs
+	}
+}
+
 /// Is USDT arriving at the treasury NEW money, or our own funds being consolidated?
 ///
-/// This is the whole safety argument for crediting the treasury at all. The sweep moves USDT
-/// **from a user's derived deposit address to the treasury**, and that dollar is already on the
-/// ledger — `wallet:<net>` counts it from the moment the deposit was credited, whichever of our
-/// addresses it physically sits on. Crediting it again on arrival would post a second
-/// `Dr wallet:<net> / Cr fund` for one dollar and break the global `sum(custody) == sum(claims)`
-/// invariant, in the direction that invents capital out of nothing. Sweeps are not an edge case —
-/// they are the steady state, so this predicate runs before every capital credit.
+/// This is what keeps the sweep out of the incident log. The sweep moves USDT **from a
+/// user's derived deposit address to the treasury**, and that dollar is already on the
+/// ledger — `wallet:<net>` counts it from the moment the deposit was credited, whichever of
+/// our addresses it physically sits on. Reporting it as an unattributed arrival would ask an
+/// operator to seed a dollar that is already behind a user's claim, and a seed of it would
+/// break the global `sum(custody) == sum(claims)` invariant in the direction that invents
+/// money out of nothing. Sweeps are not an edge case — they are the steady state, so this
+/// predicate runs before every treasury report.
 ///
 /// Only a source outside every wallet we control is genuinely new money: not a derived deposit
 /// address, not the gas station, and not the treasury paying itself.
@@ -787,8 +816,55 @@ mod tests {
 		assert!(!is_external_source(gas_station, &watched, Some(gas_station), Some(treasury)));
 		// The treasury paying itself is not an injection.
 		assert!(!is_external_source(treasury, &watched, Some(gas_station), Some(treasury)));
-		// An outside wallet — the operator funding the rail. This is the one we credit.
+		// An outside wallet — the operator funding the rail. This is the one arrival that
+		// is new money, and the one the scan reports rather than credits.
 		assert!(is_external_source("0x1347378b1d0eb69d3462e09b3dfa2fe28ebe74ec", &watched, Some(gas_station), Some(treasury)));
+	}
+
+	/// The per-log decision (#245): a user's address credits the user; an outside sender
+	/// reaching the treasury is NOT a credit but an unattributed inflow for the operator to
+	/// seed by hand; the sweep and strangers' addresses are nobody's business. Pinned here
+	/// because the credit path and the report path diverge on exactly this value, and a
+	/// treasury arrival quietly becoming a credit again would put a dollar on a claim with
+	/// no holder.
+	#[test]
+	fn a_treasury_arrival_is_reported_and_a_users_is_credited() {
+		let deposit_address = "0x024da544a76714a3812096e9ef84d40b2c8863e8";
+		let gas_station = "0x7ec1d5446115c39aab004146255ca62f97ca0514";
+		let treasury = "0x7303d8dcd615548d8f46b059d1bd31a8b6a3389d";
+		let outsider = "0x1347378b1d0eb69d3462e09b3dfa2fe28ebe74ec";
+		let user = UserId::from_raw(uuid::Uuid::nil());
+		let watched: HashMap<String, UserId> = [(deposit_address.to_string(), user)].into_iter().collect();
+		let transfer = |from: &str, to: &str| Transfer {
+			tx_hash: "0xabc".to_owned(),
+			log_index: 0,
+			from: from.to_owned(),
+			to: to.to_owned(),
+			value: 1,
+		};
+
+		assert_eq!(
+			recipient_of(&transfer(outsider, deposit_address), &watched, Some(treasury), Some(gas_station)),
+			Recipient::User(user)
+		);
+		assert_eq!(
+			recipient_of(&transfer(outsider, treasury), &watched, Some(treasury), Some(gas_station)),
+			Recipient::UnattributedTreasury
+		);
+		// The sweep: a user's address paying into the treasury is money already on the ledger.
+		assert_eq!(
+			recipient_of(&transfer(deposit_address, treasury), &watched, Some(treasury), Some(gas_station)),
+			Recipient::NotOurs
+		);
+		assert_eq!(recipient_of(&transfer(outsider, outsider), &watched, Some(treasury), Some(gas_station)), Recipient::NotOurs);
+		// A rail with no treasury view reports nothing and credits nothing for the treasury.
+		assert_eq!(recipient_of(&transfer(outsider, treasury), &watched, None, None), Recipient::NotOurs);
+
+		// The report is a counter as well as a line: one per arrival, so a dashboard can
+		// alert on "there is a SeedCapital owed" without grepping logs.
+		let before = telemetry::unattributed_treasury_inflows();
+		telemetry::note_unattributed_treasury_inflow("bep20", "0xabc", outsider, "1");
+		assert_eq!(telemetry::unattributed_treasury_inflows(), before + 1);
 	}
 
 	/// A rail whose gas station could not be resolved this cycle must still refuse to count a
