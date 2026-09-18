@@ -435,7 +435,8 @@ impl ConsiliumTerms {
 	/// The claim this consilium spends from. Drives both the per-source "one open request"
 	/// index and the advisory lock the execution path takes, so two consilia over DIFFERENT
 	/// claims no longer block each other while two over the SAME claim still do.
-	// `RevenuePayout` spends the retired fee claim: open consilia replay until C-4.
+	// `RevenuePayout` spends the retired fee claim: replay-only until the contract
+	// migration (C-9).
 	#[allow(deprecated)]
 	pub fn source_claim(&self) -> LedgerAccountKey {
 		match self {
@@ -1667,7 +1668,8 @@ mod tests {
 	}
 
 	#[test]
-	// The revenue payout spends the retired fee claim until C-4 folds it into a payment.
+	// The revenue payout spends the retired fee claim: replay-only until the contract
+	// migration (C-9).
 	#[allow(deprecated)]
 	fn wrapping_payout_terms_leaves_the_hashed_bytes_untouched() {
 		// The enum is a container, not a second encoding layer: `payload_hash` for every

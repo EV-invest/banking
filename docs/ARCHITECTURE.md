@@ -73,7 +73,7 @@ dependency of `domain` — so `domain` stays wasm-safe for service frontends.
 
 | Context       | Owns                                                    | Authoritative store        |
 | ------------- | ------------------------------------------------------- | -------------------------- |
-| `balance`       | the bank's own capital (company money) + the treasury/deposit reads | TigerBeetle              |
+| `balance`       | the chart of accounts and the parties; the treasury/deposit reads. The platform's own money is the reserved `fee` / `fund` allocations, held by people through units (#245) — there is no company-owned claim | TigerBeetle              |
 | `users`         | investor accounts and their investments                 | Postgres + TigerBeetle     |
 | `withdrawals`   | user withdrawals to chain (accept-and-queue saga)       | Postgres + TigerBeetle     |
 | `subscriptions` | buying fund units at NAV (the service currency, mint)   | Postgres + TigerBeetle     |
@@ -337,8 +337,12 @@ is a **hard prerequisite** for any cross-plane token-trust: it must land **first
 
 **Money model.** Cash lives in TigerBeetle on one USDT ledger, in **two layers**:
 **treasury/custody** (debit-normal wallets, **per rail**) and **claims** (credit-normal
-`fund`/`user`/`service`/`fee`/`clearing`, **network-agnostic** — one fungible balance per
-party). The invariant is **global**: `sum(custody) == sum(claims)`; a deposit is a single
+`user:<id>` / `service:<id>` / `clearing` / `book_cash`, **network-agnostic** — one
+fungible balance per party). Every claim has a holder (#245): a person's directly, or an
+allocation's whose units people hold — the platform's own capital and earnings are the
+reserved `fund` and `fee` allocations (`service:fund`, `service:fee`), and the old
+singleton `fund` / `fee` claims are retired, replay-only until the ownership data
+migration empties them. The invariant is **global**: `sum(custody) == sum(claims)`; a deposit is a single
 `Dr wallet:<net> / Cr claim` transfer (no external account). Network lives only at the
 custody + transaction edges. Per-rail liquidity is a treasury concern: a withdrawal on a
 short rail is **accepted and queued** (reserved against a `clearing` account, decoupled

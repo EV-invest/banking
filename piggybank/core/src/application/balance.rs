@@ -133,7 +133,8 @@ pub struct TreasuryPorts<'a> {
 /// Record an on-chain deposit, **idempotent by `tx_ref`** (see [`Deposits::record`]).
 /// Returns `true` if newly recorded, `false` for a duplicate; the relay is nudged
 /// only when a new event was committed.
-// The retired parties are refused by name until C-4/C-9 remove them from the type.
+// The retired parties are refused by name until the contract migration (C-9) removes
+// them from the type.
 #[allow(deprecated)]
 pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError> {
 	if amount.is_zero() {

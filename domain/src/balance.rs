@@ -402,7 +402,8 @@ pub enum TransferCode {
 	/// (`Dr BookCash(buyer) / Cr UserClaim(seller)`) — posted linked, so a fill is
 	/// delivery-versus-payment or nothing.
 	BookFill,
-	/// The taker's fee on a trade, into `FeeRevenue`, in the same linked batch as the fill.
+	/// The taker's fee on a trade, into the event's `payee` (`service:fee`), in the same
+	/// linked batch as the fill.
 	BookFee,
 	/// Part of the company's in-kind stake handed to a named holder: `Dr UserShares /
 	/// Cr CompanyShares`, a move *between holders* like a fee clawback in reverse.
@@ -489,9 +490,9 @@ pub enum LedgerAccountKey {
 	/// The fund's retained withdrawal-fee revenue (credit-normal, network-agnostic).
 	///
 	/// Retired (#245): earnings are the `fee` allocation's `ServiceClaim`. The key
-	/// (`"fee"`, code 40) stays resolvable for the same reasons as [`Self::Fund`]; the fee
-	/// settlement, the taker fee and the withdrawal fee still credit it until the fee
-	/// in-kind step retargets them.
+	/// (`"fee"`, code 40) stays resolvable for the same reasons as [`Self::Fund`]; no
+	/// producer credits it any more — a pre-#245 payload replays to it through
+	/// [`Party::legacy_fee_payee`].
 	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
 	FeeRevenue,
 	/// Funds reserved for queued/in-flight withdrawals, not yet sent on-chain

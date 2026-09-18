@@ -10,9 +10,9 @@ default for one reason: it does not swell with a mark the operator posted, so th
 operator earns stays independent of the input the operator supplies.
 
 **Performance, 20% of the gain by default.** A share of profit above a **per-investor
-high-water mark**, crystallized at the end of a period (annual by default) and again when
-an investor redeems. Optionally the gain must first clear a **hurdle** accruing at
-`hurdle_bps` p.a. over the mark.
+high-water mark**, crystallized at the end of a period (annual by default); crystallizing
+again when an investor redeems is modelled but not wired (§ "Still open"). Optionally the
+gain must first clear a **hurdle** accruing at `hurdle_bps` p.a. over the mark.
 
 A product with no policy row charges nothing. The fee is opt-in per product, so it can
 never appear on a fund whose prospectus did not promise it — and "no policy" is a different
@@ -34,7 +34,11 @@ exactly why the mark lives here and not in a contract.
 ## Why the fee is taken in units, never in cash
 
 A charge claws back units: `Dr FeeShares / Cr UserShares` on the share ledger. No USDT
-moves. Three properties follow, and they are the reason for the design.
+moves. `FeeShares(svc)` is the product's **fee class** — the units the reserved `fee`
+allocation holds in that product (`UnitHolder::Allocation(fee)`, #245). The `fee`
+allocation is itself held by people through `fee` units, so a charge is owned the moment
+it is taken: their NAV (`funds::nav_of`, computed, never posted) already carries the class
+at the product's mark. Three properties follow, and they are the reason for the design.
 
 1. **No chain fee, ever.** Nothing leaves custody when a fee is charged, so the fund pays no
    gas per investor per period. The manager converts an accumulated unit balance to cash
@@ -145,10 +149,30 @@ operator — some of its reads answer, the management calls do not — and is ou
 ## Settlement
 
 `SettleFeeShares` is the one operation in the plane that moves cash. It runs once per period
-for a whole fund rather than once per investor — the entire point of collecting in units. It
-is Read-First gated on the fund's claim covering the payout and **refuses** when short
-rather than queueing: nobody is waiting on it, and a fee that cannot be paid today keeps
-accumulating as units at no cost.
+for a whole fund rather than once per investor — the entire point of collecting in units.
+The product buys its fee class back at the **day's dealing NAV**: `Dr SharesOutstanding /
+Cr FeeShares` burns the class, `Dr service:<svc> / Cr service:fee` pays the `fee`
+allocation (`Party::fee_payee()`, carried on the `SharesSettled` event; a payload written
+before #245 replays to the retired revenue claim it was planned against). The `fee`
+holders' NAV does not move — units of the product left, cash of the same value arrived
+(`tests/ownership_fee.rs`). It is Read-First gated on the fund's claim covering the payout
+**plus** what the product's queued redemptions would cost at the same NAV, and **refuses**
+when short rather than queueing: nobody is waiting on it, and a fee that cannot be paid
+today keeps accumulating as units at no cost. The settler is bound by the redeem cooldown
+(`refuse_recent_poster`): within `VALUATION_REDEEM_COOLDOWN_SECS` (7 days) of their own
+mark on the product the settlement is refused, because converting one's own mark into the
+`fee` holders' cash is the same move the cooldown stops one step later.
+
+Every other fee the platform charges — the retained withdrawal fee, the book's taker fee —
+credits the same `service:fee`. A reserved allocation (`fee`, `fund`) charges no fee of its
+own (`ScheduleFeePolicy` refuses it), takes no mark, and its holders exit only by
+redemption: `Redeem` on `fee` is priced by its computed NAV (cash on `service:fee` plus
+every product's fee class at that product's NAV, over the `fee` supply), paid out of
+`service:fee`, and **refused rather than queued** when the cash cannot cover it — the
+holder settles fee units into cash first, or redeems fewer. The cooldown on a `fee`
+redemption is the cooldown on every product `fee` holds a class in. There is no other
+road out: the pre-#245 revenue payout is history only (`piggybank/core/PATTERNS.md`
+§ "Revenue payout — retired").
 
 ## Changing the terms
 

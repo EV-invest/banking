@@ -40,19 +40,36 @@ ledger (`= 2`):
 | Layer | Accounts (`code`) | Normal | Non-negative flag | Network? |
 | --- | --- | --- | --- | --- |
 | **Treasury / custody** (assets) | `wallet:<net>` (10), `bank` (11) | debit (`debits − credits`) | `CreditsMustNotExceedDebits` | **per-rail** |
-| **Claims** (equity/liab) | `fund` (1), `user:<uuid>` (20), `service:<id>` (30), `fee` (40), `clearing` (50) | credit (`credits − debits`) | `DebitsMustNotExceedCredits` | **network-agnostic** |
+| **Claims** (equity/liab) | `user:<uuid>` (20), `service:<id>` (30 — a product's, or the reserved `service:fee` / `service:fund`), `clearing` (50), `book_cash:<uuid>` (65) | credit (`credits − debits`) | `DebitsMustNotExceedCredits` | **network-agnostic** |
+| **Retired claims** (#245) | `fund` (1), `fee` (40) | credit | as above | replay-only: resolvable in `tb_accounts`, never credited by a new producer; emptied by `piggybank migrate-ownership`; the codes are never reused |
 
 A deposit is one balanced transfer **`Dr wallet:<net> / Cr <claim>`** (textbook Dr Cash
 / Cr customer-deposit) — there is no "external world" account. The flags are set **once
 at account create** (immutable in TB) and are the last-line backstop against an
 over-spent claim or negative custody.
 
+**Every claim has a holder (#245).** There is no platform-owned money: a claim is a
+person's (`user:<uuid>`), or an allocation's (`service:<id>`) whose units people hold. The
+platform's own capital is the reserved **`fund`** allocation and its earnings the reserved
+**`fee`** allocation (`ServiceId::fee()` / `ServiceId::fund()`, `domain/src/balance.rs`;
+registry rows from migration `0044`, `hidden`, `open`, `cash`) — see
+[Reserved allocations](#reserved-allocations--fee-and-fund-245). The old singletons
+`Party::Piggybank` / `Party::Revenue`, `LedgerAccountKey::Fund` / `FeeRevenue` /
+`CompanyShares`, `UnitHolder::Company`, `IssuanceSource::Company`,
+`TransferCode::CompanyStakeTransfer`, `LedgerEvent::CapitalSeeded` and
+`WithdrawalSource::Revenue` are `#[deprecated]` and **replay-only**: their serde tags sit
+in the outbox and the event log and pending transfers are open on their accounts, so the
+variants and the keys stay until the contract migration (C-9) removes them; a fee-bearing
+payload written before #245 carries no `payee` and defaults to the retired claim
+(`Party::legacy_fee_payee`) so a redelivery recomputes the same legs. On the wire a
+`Party` is `user | service` only; the retired kinds are refused by name.
+
 A **third ledger** holds the **service currency** — fund units (`Ledger::Share`, `= 3`),
 see [Fund shares](#fund-shares--the-service-currency). It is independent: a unit transfer
 can never touch a cash account, so the two planes can't imbalance each other.
 
 **Two layers, network only at the edges (load-bearing).** USDT is one fungible pool, so a
-user/service/fund/fee has **one** claim, not one per chain — network lives **only** in the
+user or an allocation has **one** claim, not one per chain — network lives **only** in the
 treasury (`wallet:<net>`) and on deposit/withdrawal *transactions*. The invariant is
 therefore **global**: `sum(custody) == sum(claims)` (a deposit grows both sides;
 allocate/revoke are claim→claim, net-zero on each sum; a withdrawal drops both by `net`).
@@ -124,6 +141,82 @@ every service already carrying subscriptions/redemptions/positions/valuations as
 without that backfill the gate would retroactively lock existing investors out of
 `Redeem`.
 
+### Reserved allocations — `fee` and `fund` (#245)
+
+The platform's own money is two ordinary allocations that people hold through units.
+`ServiceId::fee()` / `ServiceId::fund()` (`domain/src/balance.rs`) are reserved slugs:
+`Allocation::register` refuses them, migration `0044` wrote the two rows (fixed ids
+`FEE_ALLOCATION_ID` / `FUND_ALLOCATION_ID`, `open`, `hidden`, `cash`), and
+`ServiceId::is_reserved` is the one predicate every gate below reads.
+
+- **Not an operator's to manage.** Every registry write — details, cap, open/close,
+  access, backing, grant/revoke — runs `allocations_app::refuse_on_reserved` first
+  (`Forbidden`): a single `AllocationManage` holder can neither let themselves in nor lock
+  the holders out. `IssueUnits` / `RetireUnits` refuse a reserved `service` (`Forbidden`),
+  and `Subscribe` refuses it too — units of `fee`/`fund` are never bought.
+- **Holders are seated by the owners.** `issuance::grant_units` is the only door into a
+  reserved supply, reached only by an executed `holder_grant` consilium
+  (`ConsiliumService.OpenHolderGrant`, [`docs/CONSILIUM.md`](../../docs/CONSILIUM.md)
+  § "Holder grant and seed capital") and by the data migration; a holder must be an
+  active, mirrored user. The mint does **not** flip the backing to `in_kind` — a reserved
+  allocation's units are backed by the cash on its own claim, and flipping it would refuse
+  the one exit its holders have.
+- **The holder graph is `reserved → product`, one hop** (`UnitHolder::ensure_may_hold`,
+  `domain/src/issuance.rs`): a user may hold anything; an allocation may hold units only
+  when it is reserved and the product is not, so nothing holds a reserved allocation but
+  people, and every unit bottoms out at a person within two hops. In phase 1 `fee` is the
+  only allocation holder — its holding of a product **is** the product's fee class, the
+  physical `FeeShares(svc)` account (`UnitHolder::Allocation(fee).shares_key`); `fund`
+  holds no product units (its capital is cash on `service:fund`), so an issuance naming it
+  as holder is refused rather than aliased. `IssueUnits` refuses an allocation holder
+  outright: a fee class is minted by the fee accrual, never by hand.
+- **NAV is derived, never posted** (`application/funds.rs::nav_of`): for a reserved
+  allocation the price is `(cash on its claim + Σ product units it holds × that product's
+  NAV) / its own supply`, the seed NAV while the supply is zero; `posted_at` is the
+  **oldest** mark among the products it holds (as fresh as its stalest input). `PostFundValuation`,
+  `OpenValuationOverride` and `ScheduleFeePolicy` refuse a reserved slug
+  (`refuse_mark_on_reserved`; a reserved allocation charges no fee).
+- **A holder leaves by redemption at NAV**, priced by `nav_of` and paid out of the
+  allocation's own claim like any product — but a shortfall is **refused, never queued**
+  (`request_redemption`): nobody tops a reserved allocation up on request, its cash grows
+  only as products settle their fee classes or a seed lands. The redeem cooldown on a
+  reserved allocation is the cooldown on **every product it holds** (`refuse_recent_poster`
+  walks `share_holdings(Holder(Allocation(svc)))`): a `fee` holder who marks a product up
+  cannot cash `fee` out at that mark for `VALUATION_REDEEM_COOLDOWN_SECS`.
+- **Cash leaves a reserved claim two ways only:** a holder's redemption, or a payment order
+  out of `service:fee` / `service:fund` that the owners' consilium approved
+  (`PaymentsService.OpenPayment`, L2/L3 — an external destination is refused for any
+  allocation source). Holders read their position through `allocation_for_holder`: the
+  catalog never lists a hidden allocation, but whoever holds units of one reads its title
+  and price like any other position.
+- **Seed capital** is a chain-proven arrival on a rail's treasury booked as the
+  **depositor's** deposit (`Dr wallet:<net> / Cr user:<depositor>`) followed by their
+  subscription into `fund` at its NAV (`application/balance.rs::seed_fund_capital`, priced
+  and gated by `funds::price_fund_seed` — `require_subscribable`'s access gate and the
+  Read-First balance check are the two gates deliberately absent). The RPC `SeedCapital`
+  writes nothing: it opens a `seed_capital` consilium and only its execution reaches
+  `seed_fund_capital`. The subscription id is `seed_subscription_id(tx_ref)`, so the
+  deposit gate and the mint share one idempotency key.
+- **The treasury read** (`application/balance.rs::treasury`, `GetTreasury`) is
+  `Treasury { rails, bank, total_custody, held_by_users, allocations[], retired,
+  reserved_for_withdrawals }`: `held_by_users` is Σ `user:<id>` read through the same
+  `cash_invariant` scan reconciliation asserts with, `allocations[]` is every registry row
+  (the hidden `fee`/`fund` included) as `AllocationTreasury { service, title, access,
+  claim {posted, reserved, available}, units_outstanding, nav, holders[] }`, and nothing is
+  a remainder — the pre-#245 `held_for_clients = custody − fund − fee` is gone (wire fields
+  4..6 reserved). `retired` (what is still on the retired `fund`/`fee` claims) is read for
+  the operator's before/after snapshot and logged as a `warn!` by the RPC while non-zero;
+  it is not on the wire. `GetFundRevenue` is the same `AllocationTreasury` for the one
+  slug `fee` (`fee_allocation`), not a second computation.
+- **Migration path.** Expand (`0044` registry rows + `holder_service`, `0045` consilium
+  kinds) → the one-off data command `piggybank migrate-ownership` moving the retired
+  `fund`/`fee` claims onto `service:fund`/`service:fee` and minting the owners' holder table
+  in one linked chain per allocation
+  ([`docs/RUNBOOK-ownership-migration.md`](../../docs/RUNBOOK-ownership-migration.md)) →
+  contract (C-9, not yet written: drop the retired variants, keys and `company` rows).
+  Until the data migration runs, `GetTreasury` warns while the retired claims hold cash and
+  reconciliation reports `fee` as **unheld value** (below).
+
 ## Fund shares — the service currency (`domain::subscriptions`, `domain::redemptions`, `FundsService`)
 
 A client invests by **subscribing** cash into a fund (a `ServiceId`) and receiving
@@ -136,10 +229,13 @@ above, which is a different thing entirely: a product's listing, not a holding).
 **Units ledger (`Ledger::Share`, `= 3`).** `UserShares(service, user)` (60, debit-normal,
 `shares:<svc>:<uuid>`) is a holder's units; `SharesOutstanding(service)` (61, credit-normal,
 `shares_outstanding:<svc>`) is the fund's units in circulation. Per-service invariant
-`SharesOutstanding(svc) == Σ_user UserShares(svc, user) + Σ_user BookShares(svc, user) + FeeShares(svc) + CompanyShares(svc)`,
-by construction (the extra holders are introduced under [Fees](#fees--2-and-20-domainfees-feesservice-feesweeper),
-[In-kind issuance](#in-kind-issuance--the-companys-stake-domainissuance-allocationsserviceissueunits) and
-[The book](#the-book--holders-trading-units-with-each-other-domainbook-bookservice)). **Mint**
+`SharesOutstanding(svc) == Σ_user UserShares(svc, user) + Σ_user BookShares(svc, user) + FeeShares(svc)`,
+by construction (the extra holders are introduced under [Fees](#fees--2-and-20-domainfees-feesservice-feesweeper)
+and [The book](#the-book--holders-trading-units-with-each-other-domainbook-bookservice);
+`FeeShares` is the `fee` allocation's holding, so every term is a person's or an
+allocation's whose holders are people). The retired `CompanyShares(svc)` (63) is a fourth
+term only until `migrate-ownership` empties it — see
+[In-kind issuance](#in-kind-issuance--units-with-no-cash-leg-domainissuance-allocationsserviceissueunits). **Mint**
 `Dr UserShares / Cr SharesOutstanding`; **burn** `Dr SharesOutstanding / Cr UserShares`.
 A burn that exceeds the holder's minted units is rejected **by TigerBeetle's flag — even as
 a pending reserve** (this is the over-redeem backstop; the PG row-lock only serializes).
@@ -216,39 +312,47 @@ overstated basis. The auto-settle inside `Redeem` degrades that `Conflict` to re
 returning the redemption's actual state (queued, or a raced terminal) instead of an error. The
 per-investor `high_water_mark` column reserved here is now live — see [Fees](#fees--2-and-20-domainfees-feesservice-feesweeper).
 
-## In-kind issuance — the company's stake (`domain::issuance`, `AllocationsService.IssueUnits`)
+## In-kind issuance — units with no cash leg (`domain::issuance`, `AllocationsService.IssueUnits`)
 
 A subscription is cash-for-units. It has no honest shape for a product registered against
-an asset that **already has owners**: `service_arb` is valued at $16 250 with 80 % of the
-units the company's and 20 % a named investor's, and nobody wires cash into a fund claim
-to make that true. `IssueUnits` (`AllocationManage`) is the second supply path: a mint
-**with no cash leg**, to a `UnitHolder` that is a user or **the company itself**, at a
-cost basis the operator states (`units × NAV` when they do not — the same figure a
-subscription for those units would have cost at the mark). It lives on the registry
-service, not `FundsService`, because it is a decision about who holds what, made by the
-operator who sizes the product, not an investor dealing at NAV.
+an asset that **already has owners**: `service_arb` is valued at $16 250 with its units
+held by named people who own the asset, and nobody wires cash into a fund claim to make
+that true. `IssueUnits` (`AllocationManage`) is the second supply path: a mint **with no
+cash leg**, to a `UnitHolder` that is a **user** (the only holder an operator may name —
+see below), at a cost basis the operator states (`units × NAV` when they do not — the same
+figure a subscription for those units would have cost at the mark). It lives on the
+registry service, not `FundsService`, because it is a decision about who holds what, made
+by the operator who sizes the product, not an investor dealing at NAV.
 
-**A third unit holder.** `CompanyShares(service)` (63, debit-normal,
-`shares_company:<svc>`) is a holder exactly like a user or the fee account, so the
-Share-ledger invariant becomes `SharesOutstanding == Σ UserShares + FeeShares +
-CompanyShares` and the issued units count against the allocation's cap as any mint does.
-The company is a holder in its own right rather than a user with a well-known id: it has no
-`users` row, no `fund_positions` projection and no P&L, and a synthetic user would drag
-every investor-facing read into special-casing one UUID. `ListUnitHolders` reports the
-split — `company_units`, `fee_units`, `investor_units = outstanding − company − fee` —
-read straight from TB — plus `queued_units`, the `mint` rows still `queued` in
-`unit_issuances`, because `ensure_capacity` reads the settled supply and an operator
-pinning the cap to it while a mint is in flight pins it below where the supply is about
-to land; `FundNav.company_units` shows an investor the company's share on the card. The mint posts under its own `TransferCode::UnitIssue` (47), not `ShareMint`,
-so supply growth the fund's cash never paid for is distinguishable from a subscription's
-on the Share ledger alone.
+**Who holds (#245).** `UnitHolder` is `User(id)` or `Allocation(svc)` — a reserved
+allocation holding a product's units, which in phase 1 is `fee` holding the product's fee
+class (`FeeShares(svc)`, 62). `IssueUnits` refuses an allocation holder (`Forbidden`: a
+fee class is minted by the fee accrual, never by hand) and refuses a reserved `service`
+(its units come only through a holder-grant consilium, `issuance::grant_units`). The
+**company is no holder any more**: `UnitHolder::Company` / `IssuanceSource::Company` and
+the `CompanyShares(svc)` account (63, `shares_company:<svc>`) are `#[deprecated]`,
+replay-only — the constructors refuse them (`ensure_may_hold`), the rows and payloads that
+carry `company` keep reading, and the account is what `migrate-ownership` debits
+(`--company keep|retire`). `ListUnitHolders` is the cap table read straight from the Share
+ledger (`ownership_app::allocation_ownership`): `units_outstanding` and `holders[]` —
+`{holder: {kind: user | allocation, id}, units}`, largest first, a person's line being
+their free units plus the units resting in their sell orders, the `fee` line the product's
+fee class, the retired company stake as its own line until the migration moves it — plus
+`queued_units`, the `mint` rows still `queued` in `unit_issuances`, because
+`ensure_capacity` reads the settled supply and an operator pinning the cap to it while a
+mint is in flight pins it below where the supply is about to land. (The pre-#245
+three-class summary `company_units` / `fee_units` / `investor_units` and
+`FundNav.company_units` are reserved fields on the wire.) The mint posts under its own
+`TransferCode::UnitIssue` (47), not `ShareMint`, so supply growth the fund's cash never
+paid for is distinguishable from a subscription's on the Share ledger alone.
 
 **Same path as a subscription, minus the cash.** The use case (`application::issuance`)
 resolves the allocation (registered in **any** state — a product is normally seeded before
 it opens, and a closed one may still need its cap table corrected; access is not consulted,
-this is an operator command), requires a user holder to **exist** (units minted to a UUID
-nobody can sign in as are units nobody can redeem — the DB reference on
-`unit_issuances.holder_id` backs the same rule), prices at the fresh dealing NAV (the mark
+this is an operator command), requires a user holder to **exist and be active**
+(`require_holder`: units minted to a UUID nobody can sign in as, or to a frozen account,
+are units nobody can redeem — the DB reference on `unit_issuances.holder_id` backs the
+first half), prices at the fresh dealing NAV (the mark
 is recorded on the row and blended into the holder's high-water mark, so a stale one is
 refused as it is for a subscription), and runs `ensure_capacity` against the ledger's
 issued supply — an operator sizing a product below what they mean to issue raises the cap
@@ -270,35 +374,29 @@ when the insert landed. A repeat asking for the same holder and units returns th
 stands now; the same key for a **different** request is `Conflict` → ALREADY_EXISTS — the
 retry is what the key exists for, the reuse is the mistake it has to catch.
 
-**The service_arb recipe.** Register → `IssueUnits` 20 % to the investor and 80 % to the
-company at the seed NAV with the agreed bases → `PostFundValuation` at the asset's value
-(NAV needs units outstanding, so the issuance comes first) → `SetAllocationUnitCap` to
-exactly the issued supply (`remaining_capacity == 0`, so no subscription and no further
-issuance fits) → open. The investor can still redeem: every gate here keeps the exit open.
+**The service_arb recipe.** Register → `IssueUnits` to each named holder at the seed NAV
+with the agreed bases → `PostFundValuation` at the asset's value (NAV needs units
+outstanding, so the issuance comes first) → `SetAllocationUnitCap` to exactly the issued
+supply (`remaining_capacity == 0`, so no subscription and no further issuance fits) →
+open. The investor can still redeem: every gate here keeps the exit open.
 
-**Out of the company's stake (`TransferCompanyStake`).** The 80 % seeded to the company
-turned out to belong to a named person. There was no road back out of `CompanyShares`:
-the company has no user, so no book order and no escrow, and minting the person a copy of
-what the company holds would inflate supply and break the cap table. `TransferCompanyStake`
-(`AllocationManage`) is the same `unit_issuances` row with `source = 'company'` (migration
-`0038`; a mint is `'mint'`), the same gates (registry in any state, user exists, fresh
-NAV, defaulted `units × NAV` basis, the `(service, idempotency_key)` retry contract in the
-**same** key space — a mint's key reused for a hand-over is `Conflict`) minus the cap, plus
-a Read-First that `CompanyShares(svc).available() ≥ units` (`Validation` otherwise). The
-relay posts `Dr UserShares / Cr CompanyShares` under `TransferCode::CompanyStakeTransfer`
-(52) with its own transfer id (`tid(issuance, "issue:transfer")`) — a move *between
-holders* like a fee clawback in reverse, so `SharesOutstanding` and NAV do not move and
-`ListUnitHolders` shows the shift (company −, investors +). `CompanyShares` is debit-normal
-with the non-negative flag, so an over-transfer that races the read parks. The recipient's
-`fund_positions` projection is the one a mint gets (basis added, high-water mark blended
-at the mark); the company has none to reduce. It is a variant of the issuance aggregate,
-not a second one, because from the recipient's side it *is* an issuance — units they did
-not pay cash for — and the console lists mints and hand-overs as one history
-(`UnitIssuance.source` on the wire).
+**Retired: the company's stake and `TransferCompanyStake` (#245).** Until #245 the
+company itself was a holder (`CompanyShares(svc)`, 63) and `TransferCompanyStake` handed
+part of its stake to a named person as a `unit_issuances` row with `source = 'company'`
+(migration `0038`), posted `Dr UserShares / Cr CompanyShares` under
+`TransferCode::CompanyStakeTransfer` (52, `tid(issuance, "issue:transfer")`) — a move
+*between holders*, supply and NAV unchanged. The RPC is gone from the contract; the
+variants, the code and the account key stay `#[deprecated]` so those rows and any
+undrained outbox payload keep reading and replaying, `IssuanceSource::parse` still admits
+`'company'`, and `UnitHolder::of_holding` still attributes the retired account so the cap
+table and reconciliation can see it until `migrate-ownership` empties it. A product's own
+stake now goes to people (`IssueUnits`) or is the `fee` allocation's fee class.
 
 **Retiring units (`RetireUnits`).** The mint's mirror: units burnt out of a holder's
-account — a user's or the company's — with no cash leg, for units that should never have
-been minted or that stand for an asset the holder no longer owns. Same `unit_issuances`
+account — a user's, or the `fee` allocation's fee class in a product — with no cash leg,
+for units that should never have been minted or that stand for an asset the holder no
+longer owns. A reserved `service` is refused (`Forbidden`): its holders leave by
+redemption at NAV, never by an operator's burn. Same `unit_issuances`
 row with `source = 'retire'` (migration `0039` widens the CHECK), `units` **positive** —
 every row carries the magnitude and the source carries the direction, so the 0034 digit
 CHECK never learns a sign and the console reads one history of mints, hand-overs and
@@ -317,7 +415,7 @@ transfer id (`tid(issuance, "issue:retire")`); the holder's debit-normal account
 non-negative flag parks an over-retire that races the read. The `applied` stamp is the
 same; for a user holder the projection runs the **seller's** side of a trade — `units −=`,
 `cost_basis` shed pro rata and clamped at zero — and the high-water mark is untouched,
-because nothing was realised at any price. The company has no projection to reduce.
+because nothing was realised at any price. An allocation holder has no projection to reduce.
 
 **Backing — cash vs in_kind.** Every unit a subscription mints has cash behind it: the
 investor's claim moved into the fund's, and a redemption pays that cash back out. Units
@@ -329,7 +427,9 @@ orthogonal to state and access. The **first in-kind mint flips a `cash` product 
 `in_kind`** inside `issue_units`, after every gate and before the row is written
 (idempotent; the order is deliberate — a flip with no mint behind it is one operator
 command to undo, a mint on a product still `cash` lets the next redemption price units
-the fund cannot pay for); `TransferCompanyStake` and `RetireUnits` leave it alone.
+the fund cannot pay for); `RetireUnits` leaves it alone, and so does a holder grant into a
+reserved allocation — `fee` / `fund` stay `cash`, because their units are backed by the
+cash on their own claim and a holder is paid out of exactly that (`issuance::mint`).
 Nothing automatic ever flips it back: an operator declares the fund holds cash for the
 units with `SetAllocationBacking` (`AllocationManage`, idempotent, either value, audited
 as `BackingChanged`). The redeem gate (`allocations_app::require_redeemable`) now runs
@@ -363,7 +463,7 @@ cancelling never is. The policy — `book_open`, `taker_fee_bps`, `price_tick` (
 `allow_unbacked_trading` (default `false`) — is set by `AllocationManage`.
 
 **Unbacked trading acknowledgement.** On an `in_kind` product (see
-[In-kind issuance](#in-kind-issuance--the-companys-stake-domainissuance-allocationsserviceissueunits))
+[In-kind issuance](#in-kind-issuance--units-with-no-cash-leg-domainissuance-allocationsserviceissueunits))
 a redemption is refused and the book is the holders' only exit — which makes the book the
 place a buyer pays cash for a claim on an asset the fund holds no cash for, one they cannot
 redeem. That is a decision an operator makes knowingly, so the policy carries
@@ -390,8 +490,8 @@ committed: `BookShares(service, user)` (64, debit-normal, Share ledger,
 locks its **worst case** — notional at the limit plus the taker fee on it, `Dr UserClaim
 / Cr BookCash` (the claim's flag does the same). `BookCash` is a claim like any other, so
 the global `sum(custody) == sum(claims)` does not move on a lock; the Share-ledger
-invariant becomes `SharesOutstanding(svc) == Σ UserShares + Σ BookShares + FeeShares +
-CompanyShares`. A holder's position reports the escrowed units as `units_in_orders`
+invariant becomes `SharesOutstanding(svc) == Σ UserShares + Σ BookShares + FeeShares`
+(plus the retired `CompanyShares` until the data migration). A holder's position reports the escrowed units as `units_in_orders`
 (still theirs, still valued, not free to redeem or sell twice), and the wallet reports the
 escrowed cash as `in_orders` — `BookCash` is a second account of the same user, so
 without that figure `available` would simply drop by the reserve with nothing on the
@@ -403,8 +503,10 @@ moves money between two of its terms, never out of it.
 chain ([`Ledger::post_linked`], `LedgerAction::PostLinked`): `Dr UserShares(buyer) / Cr
 BookShares(seller)` for the units, `Dr BookCash(buyer) / Cr UserClaim(seller)` for the
 cash (`BookFill`), and — when the taker owes one — the fee out of the taker's side into
-`FeeRevenue` (`BookFee`; a taking seller pays it out of the claim the cash leg just
-credited, because linked legs see each other's effect). The chain is idempotent on its
+the event's `payee`, the `fee` allocation's claim `service:fee` (`BookFee`;
+`Party::fee_payee()`, carried on the event so a payload written before #245 replays to the
+retired `FeeRevenue` claim it was planned against; a taking seller pays it out of the claim
+the cash leg just credited, because linked legs see each other's effect). The chain is idempotent on its
 first leg's id: it applies atomically, so the first id existing means every leg did. Fills
 land at the **maker's** price; whatever the escrow did not spend when the order reaches a
 terminal state — a buy filled below its limit, an IOC remainder, a maker's unused fee
@@ -516,7 +618,11 @@ of their **capital** on the first crystallization.
 
 A charge is one posted transfer on the **Share** ledger: `Dr FeeShares(svc) / Cr
 UserShares(svc, user)` (`TransferCode::FeeClawback`). `FeeShares` (code 62,
-debit-normal, `shares_fee:<svc>`) is a holder of units exactly like a user. Three
+debit-normal, `shares_fee:<svc>`) is a holder of units exactly like a user — it is the
+product's **fee class**, the units the reserved `fee` allocation holds in that product
+(`UnitHolder::Allocation(fee).shares_key(svc)`, #245), so the `fee` allocation's own
+holders own the charge through their `fee` units and its NAV carries the class at the
+product's mark before a single dollar settles. Three
 properties follow, and each is pinned by a test in
 [`tests/fee_policy.rs`](tests/fee_policy.rs):
 
@@ -530,8 +636,9 @@ properties follow, and each is pinned by a test in
 - **Nobody else pays.** `SharesOutstanding` does not move (a transfer *between holders*,
   not a mint), so NAV per unit is unchanged. This is what makes the per-investor mark
   honest rather than a dilution everyone shares. The Share-ledger invariant becomes
-  `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc)` (plus
-  `CompanyShares(svc)` once the company holds an in-kind stake — see above).
+  `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + Σ_user BookShares(svc, user) +
+  FeeShares(svc)` (plus the retired `CompanyShares(svc)` until the data migration — see
+  above).
 
 What cannot be collected — the holder's units are locked by a queued redemption or
 escrowed by a resting sell order on the book, or the charge floors below one base unit of
@@ -600,14 +707,27 @@ prices and collects, so it gets the same guard as an investor's own dealing.
 ### Settlement — the one moment a fee becomes cash
 
 `SettleFeeShares` (operator, `AllocationManage`) converts a fund's accumulated fee units
-in one bulk operation. Two posted legs, **burn-first** like a redemption settle: post
-`Dr SharesOutstanding / Cr FeeShares` (`ShareBurn`), then `Dr ServiceClaim / Cr
-FeeRevenue` (`FeeSettle`). The payout leg joins `redeem_payout` in the relay's
-settle-time liquidity pre-check, so a fund short of cash parks the whole event with
-nothing applied rather than burning units it cannot pay for. The application layer
-**refuses** rather than queueing when the claim is short: unlike an investor's
-redemption nobody is waiting on this, and unconverted fee units keep accumulating at no
-cost.
+in one bulk operation, priced at the **product's dealing NAV of the day**. Two posted
+legs, **burn-first** like a redemption settle: post `Dr SharesOutstanding / Cr FeeShares`
+(`ShareBurn`), then `Dr ServiceClaim(svc) / Cr <payee>` (`FeeSettle`) — the payee is the
+`fee` allocation's claim `service:fee` (`Party::fee_payee()`, carried on the
+`SharesSettled` event; a pre-#245 payload defaults to the retired `FeeRevenue` claim so a
+redelivery recomputes the same legs). The product buys its fee class back from the `fee`
+allocation: the class shrinks, `fee`'s cash grows by the same value, and its NAV does not
+move — the settle only changes *what* stands behind the `fee` units, not how much. The
+payout leg joins `redeem_payout` in the relay's settle-time liquidity pre-check, so a
+fund short of cash parks the whole event with nothing applied rather than burning units
+it cannot pay for. The application layer **refuses** rather than queueing when the claim
+is short — after reserving what the product's queued redemptions would cost at the same
+NAV (`queued_redemption_cash`) — because unlike an investor's redemption nobody is waiting
+on this, and unconverted fee units keep accumulating at no cost. The settler is bound by
+the redeem cooldown (`refuse_recent_poster`, `application/fees.rs::settle_fee_shares`):
+within `VALUATION_REDEEM_COOLDOWN_SECS` of their own mark on the product the settlement is
+refused, because converting one's own mark into the `fee` holders' cash is the same move
+the cooldown stops one step later. The same fee is retained on every user withdrawal
+(`WithdrawFee`) and charged to a taker on the book (`BookFee`) — every fee producer
+credits `service:fee`, and the only ways cash leaves it are a `fee` holder's redemption at
+`fee`'s derived NAV and an owners' payment order out of it (§ Reserved allocations).
 
 ### The sweeper
 
@@ -631,7 +751,7 @@ leaving the mark for the units that stay) is modelled and unit-tested but **not 
 in v1: only `Trigger::Period` runs. Wiring it at *request* time would double-charge the
 same gain if the redemption were cancelled and re-requested, and over-charging an
 investor is the worst failure this feature has. The correct hook is the redemption
-**settle**, netting the fee from the payout (`Dr service / Cr fee` beside the existing
+**settle**, netting the fee from the payout (`Dr service / Cr service:fee` beside the existing
 `Dr service / Cr user`, mirroring the withdrawal settle's fee leg) — where it is
 terminal, idempotent, and cannot be replayed. Until then an investor who redeems shortly
 before a period end escapes the performance fee on that period's gain.
@@ -678,7 +798,7 @@ acceptance and the clearing reserve must not depend on a flaky chain node.
 | --- | --- | --- |
 | `Requested` | `Queued` | reserve `Dr user:<uuid> / Cr clearing` (gross) — no rail touched |
 | `Dispatched` | `Processing` | `Custody::broadcast` the net on-chain |
-| `Settled` (N confs) | `Completed` | **post** the clearing pending, then `Dr clearing / Cr wallet:<net>` (net) + `Dr clearing / Cr fee` (fee) |
+| `Settled` (N confs) | `Completed` | **post** the clearing pending, then `Dr clearing / Cr wallet:<net>` (net) + `Dr clearing / Cr service:fee` (the retained fee, to the event's `payee` — the `fee` allocation) |
 | `Failed` (never landed) | `Failed` | **void** the clearing pending — refund in full |
 | `Cancelled` (still queued) | `Cancelled` | **void** the clearing pending — refund in full |
 
@@ -705,9 +825,9 @@ runbook for a stuck/parked withdrawal is
 [`docs/RUNBOOK-withdrawals.md`](../../docs/RUNBOOK-withdrawals.md). The fee leg is omitted when the fee is zero (TB rejects a
 zero-amount transfer); the policy enforces `min_withdrawal > fee` and the net must be
 representable at the chain's precision (no dust leaves). The global invariant holds at
-settle: `user` falls by `gross`, `wallet:<net>` by `net`, `fee` rises by `fee`, and
-`clearing` nets back to zero — so `sum(custody)` and `sum(claims)` both fall by exactly
-`net`.
+settle: `user` falls by `gross`, `wallet:<net>` by `net`, `service:fee` rises by `fee`,
+and `clearing` nets back to zero — so `sum(custody)` and `sum(claims)` both fall by
+exactly `net`.
 
 **Custody is a separate trust domain.** [`Custody`] is the hub's only ask of the signing
 service ("broadcast this *already-reserved* withdrawal, idempotently by id"); the hub never
@@ -742,35 +862,35 @@ without a restart, and a halt parks the withdrawal exactly like a window refusal
 (operator SQL in [`docs/RUNBOOK-withdrawals.md`](../../docs/RUNBOOK-withdrawals.md)
 §Spend brake).
 
-### Revenue payout — the same saga, sourced from the fund
+### Revenue payout — retired (#245); how earnings leave now
 
-The fund earns money in two places: the **retained fee** on every user withdrawal, and the
-settled 2-and-20 (§Fees → *Settlement*). Both land in one claim, `fee`. Paying that money
-out is the same claim → chain direction a user withdrawal is, so it is the **same saga**,
-not a parallel one: `Withdrawal` names its origin with [`WithdrawalSource`] instead of
-assuming a user, and the queue, the chain watchers, the dispatcher, the reaper and
-reconciliation cover payouts with no new machinery.
+The platform earns money in three places — the **retained fee** on every user withdrawal,
+the book's **taker fee**, and the settled 2-and-20 (§Fees → *Settlement*) — and all of it
+lands on one claim, the `fee` allocation's `service:fee`, held by people through `fee`
+units. There is no "pay the fund out" path any more. Cash leaves `service:fee` in exactly
+two ways: a **holder's redemption** of `fee` units at `fee`'s derived NAV onto their own
+`user:<uuid>` claim (from where they withdraw under their own gates), or a **payment
+order** out of `service:fee` that the owners' consilium approved (`PaymentsService`, L2/L3
+only — an external destination from any allocation source is refused at open,
+`application/payments.rs`). A payment out of the `fee` allocation is not KYC-gated: there
+is no user behind `Party::Service(fee)`, and the floor applies when the recipient tries to
+take the money out.
 
-`RequestRevenuePayout` (Admin/Owner, `authz::RevenuePayout`) Read-First checks the **`fee`
-claim's** available balance and reserves the gross as `Dr fee / Cr clearing`. Two
-consequences worth stating plainly, because both are load-bearing:
-
-* **Client money and seed capital are unreachable from here.** They are different ledger
-  accounts (`user:<uuid>`, `fund:<net>`), so the cap is not a filter someone could forget
-  to apply — it is the `fee` claim's own balance, with TigerBeetle's non-negative flag as
-  the backstop underneath.
-* **A payout charges no fee.** The fee claim is *where* fees are retained; charging one
-  would credit the money straight back to the account it was just debited from.
-
-A payout has no owner in the identity plane — the fund is not a user — so the gates that
-read a user's control-plane flags simply do not apply: the dispatch policy's per-owner
-arms are behind `if let Some(owner)`, so there is no row to read and nothing to fail
-closed on. The kill-switch still applies, because it pauses outflows, not users. Everything else is
-identical, **including the cardinal rule**: once a payout's broadcast may have reached the
-chain, failing it double-pays.
-
-Old outbox payloads spell the field `user` and hold a bare UUID. `WithdrawalSource`'s
-string form reads those unchanged, so a row parked before this landed still drains after it.
+**Retired, replay-only.** Until #245 `RequestRevenuePayout` / `OpenRevenuePayout` moved the
+retired `fee` (code 40) claim to an external wallet through this same saga, with
+`WithdrawalSource::Revenue` reserving `Dr fee / Cr clearing` and paying no fee. Both RPCs
+are gone from the contract; `open_revenue_payout` refuses; `ConsiliumKind::RevenuePayout`
+(history only) and `WithdrawalSource::Revenue` (`#[deprecated]`) stay so a consilium approved before the
+retirement still executes (`execute_revenue_payout`) and a payout row queued against the
+retired claim still dispatches, settles, fails or is cancelled: `CancelRevenuePayout` and
+`ListRevenuePayouts` are **history only** (a cancel refunds the retired claim; nothing
+opens a new payout). Such a row has no owner in the identity plane — the dispatch policy's
+per-owner arms are behind `let Some(owner) = withdrawal.user()` (`require_dispatchable`),
+the kill-switch still applies, and the
+cardinal rule is unchanged: once its broadcast may have reached the chain, failing it
+double-pays. Old outbox payloads spell the field `user` and hold a bare UUID;
+`WithdrawalSource`'s string form reads those unchanged, so a row parked before the source
+existed still drains after it.
 
 ## Operations — the activity timeline (`OperationsService`)
 
@@ -956,8 +1076,10 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
 | `PostFundValuation` | operator | `require_permission` (RBAC matrix) | allocation registered ∧ units outstanding > 0 ∧ NAV move ≤ threshold vs the previous mark ∧ vs the rolling-window anchor — **no override**; beyond it: `ConsiliumService.OpenValuationOverride` (same `ValuationPost` permission, initiator must hold an owner seat, owners' quorum executes the mark) |
 | `Redeem` / `SettleRedemption` (cooldown) | the user / operator | as above | the redeeming user posted **no** mark for this fund within `VALUATION_REDEEM_COOLDOWN_SECS` (`failed_precondition` otherwise; checked at request and again at settle) |
-| `IssueUnits` / `ListUnitHolders` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | (issue) allocation registered ∧ user holder exists ∧ fresh NAV ∧ issued + units ≤ cap; idempotent by `(service, idempotency_key)` |
-| `TransferCompanyStake` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | allocation registered (any state) ∧ user exists ∧ fresh NAV ∧ `CompanyShares.available ≥ units` (TB flag backstop); no cap (supply unchanged); idempotent by `(service, idempotency_key)`, shared with `IssueUnits` |
+| `IssueUnits` / `RetireUnits` / `ListUnitHolders` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | `service` not reserved ∧ holder is a user (`Forbidden` otherwise) ∧ allocation registered (any state) ∧ user holder exists and is active ∧ fresh NAV ∧ (issue) issued + units ≤ cap / (retire) `closed` unless `force` ∧ holder's available units ≥ units; idempotent by `(service, idempotency_key)`, one key space for mints and retirements |
+| `RegisterAllocation` / `UpdateAllocation` / `SetAllocationState` / `SetAllocationUnitCap` / `SetAllocationAccess` / `SetAllocationBacking` / `Grant`/`RevokeAllocationAccess` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | `service` not reserved (`refuse_on_reserved` → `Forbidden`; a reserved slug cannot be registered either) |
+| `OpenHolderGrant` | an owner (`RevenuePayout` — the owner-surface permission the name stayed on — admits to the door; `Consilium::open` refuses a non-owner) | `require_permission` (RBAC matrix) | terms name a reserved allocation ∧ units > 0 ∧ grantee is an active mirrored user ∧ `fee`/`fund` prices fresh; executed by the owners' quorum through `issuance::grant_units` (cap ∧ fresh NAV re-checked at execution, idempotent by `holder-grant:<consilium>`) |
+| `SettleFeeShares` | operator (`AllocationManage`) | `require_permission` (RBAC matrix) | `0 < units ≤ FeeShares.available` ∧ the settler posted **no** mark for the product within `VALUATION_REDEEM_COOLDOWN_SECS` ∧ fresh NAV ∧ `service:<svc>.available ≥ cash + queued redemptions at that NAV` |
 | `PlaceOrder` | the user | `sub == user`, `is_access`, **not frozen**, **not read-only** | allocation visible ∧ `invest` (state ignored) ∧ `book_open` ∧ on tick/lot ∧ free units / claim ≥ escrow (TB flag backstop → `rejected`); idempotent by `client_order_id` |
 | `CancelOrder` | the user | `sub == user`, `is_access` | owns it ∧ state is resting (idempotent on cancelled) |
 | `ListOpenOrders` / `ListOrderHistory` / `ListUserTrades` | the user | `sub == user` | — |
@@ -1079,8 +1201,10 @@ refusals stay distinguishable at the wire — an unconfigured rail is `Ok(None)`
 cannot fund you"), an unverified caller is `Forbidden`/`permission_denied` ("finish
 verification") — because the cabinet has to pick a different screen for each. `GetWallet`
 stays fully readable at tier 0 (a user's own balance is never hidden from them) but serves
-no address on any rail. A **revenue payout is not gated**: it pays the fund's own earned
-revenue out of the `fee` claim and has no user behind it to verify.
+no address on any rail. A **payment out of the `fee` allocation is not gated**: there is no
+user behind `Party::Service(fee)` to verify (its holders own it through units), the owners'
+quorum stands in front of it instead, and the floor applies to the recipient when they try
+to take the money out, not when it arrives (`tests/kyc_gating.rs`).
 
 **The switch (`KYC_GATE_ENABLED`).** The verification floor is the one of the two deposit
 gates that can be turned off — it guards a rule the platform chose, where the rail gate
@@ -1114,12 +1238,32 @@ TB always wins; the jobs run as `join!` branches of the composition root next to
 relay, on the relay's dedicated pool.
 
 [`reconciliation`](src/infrastructure/reconciliation.rs) (`Reconciliation::scan`) asserts
-and **alerts** (Sentry-shipped `error!`, no auto-write) on: the **global** posted
-`sum(custody) == sum(claims)` on the USDT ledger (read straight from TB via
-`Ledger::cash_invariant`); `clearing`'s reserved (pending + posted) balance vs the gross of
-every `queued`/`processing` withdrawal in Postgres; and a scan of every `outbox.parked_at`
-row (with its `last_error` and `compensated_at`). The `last_error` column on a
-parked row is the first place to look when money didn't move.
+and **alerts** (Sentry-shipped `error!`, no auto-write) on four things:
+
+1. the **global** posted `sum(custody) == sum(claims)` on the USDT ledger, read straight
+   from TB via `Ledger::cash_invariant` with the claims broken down by whose they are
+   (`CashSide`: `Σ user + Σ service + clearing + Σ book_cash + retired == Σ custody`).
+   `claims` is the whole credit side, so the check cannot be fooled by an account the
+   breakdown does not know: what the named parts leave over (`CashInvariant::unclassified`)
+   is its own alert. The retired `fund`/`fee` singletons count as claims — what is on them
+   until `migrate-ownership` runs is legitimate, not drift;
+2. `clearing`'s reserved (pending + posted) balance vs the gross of every
+   `queued`/`processing` withdrawal in Postgres;
+3. **every unit at a holder, per allocation** (#245): for each registry row, the hidden
+   `fee`/`fund` included, `Σ holder units == SharesOutstanding` off the Share ledger
+   (`ownership_app::allocation_ownership`; a mismatch is re-read once before it is
+   alerted, so a mint landing mid-scan is not a finding). Beside it, **value without a
+   holder** — cash or product units on an allocation with no units outstanding
+   (`AllocationOwnership::is_unheld`) — is a `warn!` plus a counter
+   (`telemetry::note_unheld_allocation_value`), **not** an alert: it is the expected
+   state of `fee` between the first ownership release and the data migration that seats
+   its holders, and should be zero everywhere after;
+4. a scan of every `outbox.parked_at` row (with its `last_error` and `compensated_at`).
+   The `last_error` column on a parked row is the first place to look when money didn't
+   move.
+
+`ReconReport::clean` is (1) balanced and fully classified, (2) equal, (3) no drift, (4) no
+parked rows; unheld value does not make a report unclean.
 
 [`treasury_drift`](src/infrastructure/treasury_drift.rs) (`TreasuryDrift::scan_once`) is the
 **per-rail** counterpart, hourly and alert-only. The invariant above relates two TigerBeetle
@@ -1139,21 +1283,34 @@ rail and `0` is precisely where `ensure_treasury_funded` starts parking. Exhaust
 `error!`, thin-but-working a `warn!`. Nothing else looked at the native balance before this:
 the first symptom of an empty treasury was a user's withdrawal parking.
 
-Out-of-band arrivals are **credited automatically**: each deposit watcher also watches its
-rail's treasury and records an arrival as `Party::Piggybank` (`Dr wallet:<net> / Cr fund`),
-idempotent by the same `tx_ref` machinery as a user deposit. The sweep moves USDT from a
-derived address INTO the treasury and that dollar is already in `wallet:<net>`, so a credit
-only fires when the sender is outside every wallet we control — see `is_external_source` in
-both watchers. `RecordDeposit` (admin, `CapitalManage`) is the manual path for anything the
-watchers could not see, and `SeedCapital` is the same verification with one extra assertion
-— "this is the fund's own money": it refuses a transfer that landed on a user's deposit
-address instead of crediting that user, so an operator who meant capital and got a deposit
-finds out. Both are chain-proven and idempotent by the chain `tx_ref`; neither accepts an
-amount from the caller (the free-amount, no-dedup `SeedCapital` was removed in #234). Since
-#245 `SeedCapital` books nothing itself: the chain proves a dollar reached the treasury and
-not whose it is, so the RPC opens a `seed_capital` consilium (`docs/CONSILIUM.md` § "Seed
-capital") and the deposit plus the depositor's `fund` subscription are written by its
-execution — never by the administrator who named the reference.
+Out-of-band arrivals on a rail's **treasury** are **not credited** (#245). Each deposit
+watcher also watches its rail's treasury hot wallet, and a USDT transfer that lands there
+from outside every wallet we control (the sweep from a derived address is money already in
+`wallet:<net>`, so it is excluded — `recipient_of` in `deposit_watcher`,
+`report_treasury_arrival` in `ton_deposit_watcher`) is reported, not booked: a claim needs
+a holder and the treasury is nobody's, so the watcher fires a Sentry-shipped `error!` with
+rail, hash, sender and amount and bumps the process-lifetime counter
+`unattributed_treasury_inflows` (`telemetry::note_unattributed_treasury_inflow`); the EVM
+scan advances its cursor like a credit (re-reading the chunk forever would only repeat the
+report), the TON scan dedupes by hash across its lookback. The `treasury_drift` watch
+reports the same dollar as a **surplus** on every scan until it is attributed, so the
+counter is the number to alert on and each increment is a pending `SeedCapital`. The
+retired `Party::Piggybank` credit (`Dr wallet:<net> / Cr fund`) has no producer;
+`record_deposit` refuses it by name, as it refuses `Party::Revenue`.
+
+`RecordDeposit` (admin, `CapitalManage`) is the manual path for a **user's** arrival the
+watchers could not see: the reference is read back from the chain and the amount and the
+credited party are taken from what is there (`record_verified_arrival`); a transfer that
+landed on the treasury is refused and pointed at `SeedCapital`. `SeedCapital` (admin,
+`CapitalManage` admits to the door; the caller must hold an owner seat) is the opposite
+verdict on the same evidence (`verify_arrival`): the transfer must have reached the
+treasury from outside, one that landed on a user's deposit address is that user's deposit
+and is refused, `expected_amount` is **required** and asserted against the chain, and the
+RPC books **nothing** — it opens a `seed_capital` consilium ([`docs/CONSILIUM.md`](../../docs/CONSILIUM.md)
+§ "Holder grant and seed capital") over `{tx_ref, network, amount, depositor}` and only
+its execution writes the depositor's deposit and their `fund` subscription
+(`balance::seed_fund_capital`, idempotent by `tx_ref`). Neither accepts an amount from the
+caller as a credit (the free-amount, no-dedup `SeedCapital` was removed in #234).
 
 The EVM deposit scan ([`deposit_watcher`](src/infrastructure/deposit_watcher.rs)) degrades
 rather than wedges when its `eth_getLogs` endpoint refuses it. A window refused for **width**
@@ -1211,7 +1368,9 @@ shared between binaries and a parallel runner (nextest, two `cargo test --test �
 side) cannot race for it. `pool()` hands each test its own pool on that clone;
 `database_url()` returns the clone's URL for the two suites that size their own pool;
 `seeded_ledger()` connects to `TIGERBEETLE_ADDRESS` / `TIGERBEETLE_CLUSTER_ID` (default
-`127.0.0.1:3033`, cluster `0`) and seeds the singleton accounts. Clones are not dropped at
+`127.0.0.1:3033`, cluster `0`) and seeds the singleton accounts (`ledger::seed_singletons`:
+the per-rail wallets, `clearing`, `bank` — not the retired `fund`/`fee` claims, which boot
+no longer creates either). Clones are not dropped at
 exit (a test binary has no end-of-process hook); the next run of the same binary replaces
 its clone. Locally:
 
@@ -1255,23 +1414,22 @@ raising no clawback event — and a backwards clock charging nothing);
 TigerBeetle (an unregistered service refused *before* any money moves, a draft taking
 nothing, a closed allocation still redeeming, double registration as a conflict, the
 catalog's listed/unlisted split, and allocation events staying out of the outbox), and the
-in-kind issuance (units landing on a user and on the company with no cash leg and
-`ListUnitHolders` / `FundNav.company_units` reporting the split, the idempotency key
-returning the same row and minting once while refusing a different request, the
-defaulted `units × NAV` basis, the registry/holder/cap gates, the 20/80 recipe ending at
-`remaining_capacity == 0` with the investor still able to redeem, and the event reaching
-the relay as its own kind) and the hand-over out of the company's stake (the 13 000
-moving company → user with `SharesOutstanding` unchanged and `ListUnitHolders` showing
-the shift, the recipient's basis and mark, the shared key space refusing a mint's key
-and returning a repeat, more than the company holds refused before anything is written,
-and an unregistered service refused), the retirement (units burnt out of an investor and
-the company on a closed product with the supply, `ListUnitHolders` and the investor's
+in-kind issuance (units landing on a user with no cash leg and `ListUnitHolders` reporting
+the cap table, the idempotency key returning the same row and minting once while refusing
+a different request, the defaulted `units × NAV` basis, the registry/holder/cap gates, the
+recipe ending at `remaining_capacity == 0` with the investor still able to redeem, and the
+event reaching the relay as its own kind), the retirement of the company holder (a
+company issuance and the stake transfer refused, a `company` row written before the
+retirement still reading and replaying), the reserved allocations (not an operator's to
+manage or buy into; `fee` holding a product's fee class and nothing but people holding a
+reserved one), the retirement (units burnt out of an investor and out of the asset's
+owner — both people — on a closed product with the supply, `ListUnitHolders` and the investor's
 `fund_positions` units and basis shrinking and the mark untouched, a live product refusing
 without `force` and burning with it, the shared key space returning a repeat and refusing
 a mint's key, more than the holder has **available** refused before anything is written —
 including units a queued redemption has reserved — and the widened `source` CHECK), and
 the backing (a registration landing on `cash`, the first mint flipping it to `in_kind`
-with one `BackingChanged` fact and a second mint or a hand-over leaving none, the
+with one `BackingChanged` fact and a second mint leaving none, the
 operator's `set_backing` idempotent and the next mint flipping again, `Redeem` refused as
 a precondition on an `in_kind` product before any redemption is recorded and passing
 once the operator declares cash — on a closed product too — and a row written by the
@@ -1291,7 +1449,7 @@ refused admin dispatch and the `Dispatcher::sweep` both-gates flow, driven by a 
 policy — a tier revoked after acceptance stops the sweep, the admin dispatch is refused
 under read-only, under a freeze and at tier 0, and a withdrawal whose owner row is gone
 fails closed). `piggybank/core/tests/book.rs` hits real Postgres + TigerBeetle for the book: a crossing
-limit buy settling delivery-versus-payment with the taker's fee on `FeeRevenue`, both cost
+limit buy settling delivery-versus-payment with the taker's fee on `service:fee`, both cost
 bases and `units_in_orders` moving, supply untouched; a buy below its limit getting the
 price improvement back; a partial fill leaving the maker resting; an IOC releasing its
 remainder; post-only and self-trade refused with nothing written; a market order priced off
@@ -1323,8 +1481,23 @@ TigerBeetle: tier 0 is refused a deposit address **without the address gateway b
 at all** (a call counter, since a gate placed after the port would look identical from the
 return value while having already minted the key), tier 0 cannot withdraw *with a funded
 claim* (so the refusal is the gate, not insolvency), tier 1 does both, the unconfigured-rail
-`None` stays distinguishable from the unverified `Forbidden`, and a revenue payout — funded
-end to end by two settled user withdrawals' retained fees — is never gated.
+`None` stays distinguishable from the unverified `Forbidden`, and a payment out of the
+`fee` allocation to a tier-0 investor is never gated. The ownership suites (#245) —
+`piggybank/core/tests/ownership_fee.rs` (settled fee cash and a retained withdrawal fee
+landing on `service:fee` and raising the `fee` holders' derived NAV, nothing new on the
+retired revenue claim, a hidden allocation's holder reading their position with its title
+and price, a reserved allocation taking no mark and no fee policy),
+`piggybank/core/tests/treasury_ownership.rs` (the treasury listing every allocation with
+its holders, the hidden ones included; `held_by_users` a sum of user claims and not a
+remainder; unheld value reported, not swallowed; per-allocation units reconciling after a
+grant, a redemption and a fee charge), `piggybank/core/tests/seed_capital_proof.rs` (a
+transfer to a user address is not seed capital, an external treasury arrival seeds the
+depositor once per reference, an admin cannot seed onto themselves without a quorum,
+`RecordDeposit` refuses the treasury and points at the seed) and
+`piggybank/core/tests/migrate_ownership.rs` (the data command seating the holders and
+emptying the retired claims exactly once, a bad holder table refused before anything
+moves, a company stake refused under `--company keep` and burnt under `retire`) — hit
+real Postgres + TigerBeetle too.
 `piggybank/core/tests/relay_recovery.rs`
 proves a parked event lands in the distinct `parked_at` state (never marked dispatched),
 stays queryable, and is surfaced by `Reconciliation::scan`; that `Reaper::sweep` alerts on
