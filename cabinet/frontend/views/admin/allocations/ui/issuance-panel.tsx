@@ -11,7 +11,7 @@ import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Alert, AlertDescription, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { issueUnits, type IssueUnitsBody } from "@/entities/admin/api/admin-client";
 import { unitHoldersResource } from "@/entities/admin/model/admin-resource";
@@ -66,9 +66,10 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
         <PanelHeader allocation={allocation} onClose={onClose} />
 
         {error && (
-          <p className="flex items-center gap-2 text-xs text-accent-error">
-            <TriangleAlert className="size-3.5" /> {error}
-          </p>
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         <div className="space-y-2">

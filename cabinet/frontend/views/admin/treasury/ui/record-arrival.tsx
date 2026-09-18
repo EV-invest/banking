@@ -1,22 +1,19 @@
 "use client";
 
-import { TriangleAlert } from "lucide-react";
-import { useCallback, useState } from "react";
+import { CheckCircle2, TriangleAlert } from "lucide-react";
+import { useCallback, useId, useState } from "react";
 
 import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input, Spinner } from "@evinvest/uikit";
+import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, Field, FieldLabel, Input, Spinner } from "@evinvest/uikit";
 
 import { recordTreasuryDeposit, type RecordedArrival } from "@/entities/admin/api/admin-client";
 import type { RailLiquidity } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
-import { cn } from "@/shared/lib/cn";
 import { StaggerItem } from "@/shared/ui/motion";
 import { RichMessage } from "@/shared/ui/rich-message";
 import { formatUsdt } from "@/views/admin/lib/format";
 import { RailSelect, watchedRails } from "@/views/admin/treasury/ui/rail-select";
-
-const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 /** Funding a treasury hot wallet directly moves real USDT while writing nothing to the
  *  ledger: the rail's custody figure doesn't move and the dispatch gate (`min(TB rail,
@@ -30,6 +27,7 @@ const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 export function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefined; onRecorded: () => void }) {
   const t = useT();
   const locale = useLocale();
+  const id = useId();
   const [network, setNetwork] = useState("");
   const [txRef, setTxRef] = useState("");
   const [amount, setAmount] = useState("");
@@ -59,15 +57,15 @@ export function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | 
           <p className="max-w-3xl text-sm text-ink-soft">{t("admin.treasury.recordArrivalIntro")}</p>
           <div className="grid gap-4 md:grid-cols-3">
             <RailSelect value={network} options={watchedRails(rails)} onChange={setNetwork} />
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm text-ink-soft">{t("admin.treasury.expectedAmount")}</span>
-              <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder={t("admin.treasury.placeholder.any")} className="w-full" />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm text-ink-soft">{t("admin.treasury.onchainRef")}</span>
+            <Field>
+              <FieldLabel htmlFor={`${id}-amount`}>{t("admin.treasury.expectedAmount")}</FieldLabel>
+              <Input id={`${id}-amount`} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder={t("admin.treasury.placeholder.any")} className="tabular-nums" />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${id}-ref`}>{t("admin.treasury.onchainRef")}</FieldLabel>
               {/* A format literal, not prose — it reads the same in every locale. */}
-              <Input value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="0xhash:logIndex" className="w-full" />
-            </label>
+              <Input id={`${id}-ref`} value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="0xhash:logIndex" spellCheck={false} className="font-mono-tech" />
+            </Field>
           </div>
 
           {/* The two reference formats are code, so they ride in as ICU arguments and the
@@ -84,18 +82,26 @@ export function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | 
           </p>
 
           {state.error && (
-            <p className="flex items-center gap-2 text-sm text-accent-error">
-              <TriangleAlert className="size-4 shrink-0" /> {state.error}
-            </p>
+            <Alert variant="destructive">
+              <TriangleAlert className="size-4" />
+              <AlertDescription>{state.error}</AlertDescription>
+            </Alert>
           )}
           {state.result?.recorded && (
-            <p className="text-sm text-positive">
-              {t("admin.treasury.recorded", { amount: `${formatUsdt(state.result.amount, locale)} USDT`, party: partyLabel(state.result, t) })}
-            </p>
+            <Alert role="status" variant="success">
+              <CheckCircle2 className="size-4" />
+              <AlertTitle>{t("admin.treasury.recordedTitle")}</AlertTitle>
+              <AlertDescription>{t("admin.treasury.recorded", { amount: `${formatUsdt(state.result.amount, locale)} USDT`, party: partyLabel(state.result, t) })}</AlertDescription>
+            </Alert>
           )}
-          {state.result && !state.result.recorded && <p className="text-sm text-accent-warn">{t("admin.treasury.alreadyRecorded")}</p>}
+          {state.result && !state.result.recorded && (
+            // A successful no-op, not a failure — so neither the success nor the error tone.
+            <Alert role="status">
+              <AlertDescription>{t("admin.treasury.alreadyRecorded")}</AlertDescription>
+            </Alert>
+          )}
 
-          <Button type="button" className={cn("ml-auto flex", TEAL_CTA)} disabled={state.busy || !network || !txRef.trim()} onClick={submit}>
+          <Button type="button" className="ml-auto flex" disabled={state.busy || !network || !txRef.trim()} onClick={submit}>
             {state.busy ? <Spinner aria-hidden /> : null}
             {t("admin.treasury.recordArrivalSubmit")}
           </Button>

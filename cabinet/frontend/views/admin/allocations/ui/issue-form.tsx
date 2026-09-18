@@ -4,20 +4,18 @@
 // company is not a holder, and the reserved `fee` / `fund` allocations are seated by the
 // owners' consilium, so the picker is the whole of "who".
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Input, Spinner } from "@evinvest/uikit";
+import { Button, Field, FieldDescription, FieldError, FieldLabel, Input, Spinner } from "@evinvest/uikit";
 
 import type { IssueUnitsBody } from "@/entities/admin/api/admin-client";
-import { cn } from "@/shared/lib/cn";
 import { EMPTY_ISSUE_DRAFT, afterIssued, issueDraftProblem, issueUnitsBody, submissionKeyFor, type IssueDraft, type SubmissionKey } from "@/views/admin/allocations/lib/issuance";
 import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
 
-const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
-
 export function IssueForm({ service, busy, onSubmit }: { service: string; busy: boolean; onSubmit: (body: IssueUnitsBody, holderLabel: string) => Promise<boolean> }) {
   const t = useT();
+  const id = useId();
   const [draft, setDraft] = useState<IssueDraft>(EMPTY_ISSUE_DRAFT);
   // Read and written only inside the submit handler, never during render: the key must
   // survive a failed attempt without triggering one, which is exactly what a ref is for.
@@ -28,6 +26,8 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
   // units have no message of their own, while a malformed figure is flagged at its field.
   const reason = problem === "holder" ? "admin.alloc.issue.reason.holder" : problem === "units" && draft.units.trim() === "" ? "admin.alloc.issue.reason.units" : null;
   const pickedUser: PickedUser | null = draft.holder ? { userId: draft.holder.userId, email: draft.holder.label } : null;
+  const unitsProblem = problem === "units" && draft.units.trim() !== "";
+  const basisProblem = problem === "costBasis";
 
   const submit = async () => {
     const key = submissionKeyFor(submission.current, service, draft);
@@ -45,24 +45,23 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       <div className="grid gap-2.5">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.holder")}</span>
-          <UserPicker value={pickedUser} onPick={(u) => setDraft((d) => ({ ...d, holder: { userId: u.userId, label: u.email || u.userId } }))} />
-        </div>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.units")}</span>
-          <Input inputMode="decimal" value={draft.units} onChange={(e) => setDraft((d) => ({ ...d, units: e.target.value }))} className="w-full tabular-nums" />
-          {problem === "units" && draft.units.trim() !== "" && <span className="text-xs text-accent-error">{t("admin.alloc.issue.problem.units")}</span>}
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.costBasis")}</span>
-          <Input inputMode="decimal" value={draft.costBasis} onChange={(e) => setDraft((d) => ({ ...d, costBasis: e.target.value }))} className="w-full tabular-nums" />
-          <span className={cn("text-xs", problem === "costBasis" ? "text-accent-error" : "text-ink-soft")}>
-            {t(problem === "costBasis" ? "admin.alloc.issue.problem.costBasis" : "admin.alloc.issue.costBasisHint")}
-          </span>
-        </label>
+        <Field>
+          {/* No `htmlFor`: the picker's trigger sits behind a popover, so it is named by reference. */}
+          <FieldLabel id={`${id}-holder`}>{t("admin.alloc.issue.field.holder")}</FieldLabel>
+          <UserPicker value={pickedUser} onPick={(u) => setDraft((d) => ({ ...d, holder: { userId: u.userId, label: u.email || u.userId } }))} labelledBy={`${id}-holder`} />
+        </Field>
+        <Field data-invalid={unitsProblem || undefined}>
+          <FieldLabel htmlFor={`${id}-units`}>{t("admin.alloc.issue.field.units")}</FieldLabel>
+          <Input id={`${id}-units`} inputMode="decimal" value={draft.units} onChange={(e) => setDraft((d) => ({ ...d, units: e.target.value }))} aria-invalid={unitsProblem || undefined} aria-describedby={unitsProblem ? `${id}-units-error` : undefined} className="tabular-nums" />
+          {unitsProblem && <FieldError id={`${id}-units-error`}>{t("admin.alloc.issue.problem.units")}</FieldError>}
+        </Field>
+        <Field data-invalid={basisProblem || undefined}>
+          <FieldLabel htmlFor={`${id}-basis`}>{t("admin.alloc.issue.field.costBasis")}</FieldLabel>
+          <Input id={`${id}-basis`} inputMode="decimal" value={draft.costBasis} onChange={(e) => setDraft((d) => ({ ...d, costBasis: e.target.value }))} aria-invalid={basisProblem || undefined} aria-describedby={`${id}-basis-hint`} className="tabular-nums" />
+          {basisProblem ? <FieldError id={`${id}-basis-hint`}>{t("admin.alloc.issue.problem.costBasis")}</FieldError> : <FieldDescription id={`${id}-basis-hint`}>{t("admin.alloc.issue.costBasisHint")}</FieldDescription>}
+        </Field>
       </div>
-      <Button type="button" className={cn("w-full", TEAL_CTA)} disabled={busy || problem !== null} onClick={submit}>
+      <Button type="button" className="w-full" disabled={busy || problem !== null} onClick={submit}>
         {busy ? <Spinner aria-hidden /> : null}
         {t("admin.alloc.issue.submit")}
       </Button>

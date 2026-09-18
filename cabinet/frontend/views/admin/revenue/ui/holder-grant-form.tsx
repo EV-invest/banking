@@ -7,23 +7,21 @@
 // above follows when the relay posts it.
 
 import { Loader2, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Input } from "@evinvest/uikit";
+import { Alert, AlertDescription, Button, Field, FieldError, FieldLabel, Input } from "@evinvest/uikit";
 
 import { openHolderGrant } from "@/entities/governance/model/governance-resource";
 import type { Consilium } from "@/shared/contracts/governance";
 import { errorMessage } from "@/shared/lib/api-client";
-import { cn } from "@/shared/lib/cn";
 import { isPositiveWireDecimal } from "@/shared/lib/money";
 import { ConsiliumOpened } from "@/views/admin/ui/consilium-opened";
 import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
 
-const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
-
 export function HolderGrantForm({ allocation }: { allocation: "fee" | "fund" }) {
   const t = useT();
+  const id = useId();
   const [holder, setHolder] = useState<PickedUser | null>(null);
   const [units, setUnits] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,23 +51,25 @@ export function HolderGrantForm({ allocation }: { allocation: "fee" | "fund" }) 
     <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       <p className="text-xs text-ink-soft">{t("admin.revenue.grant.intro")}</p>
       <div className="grid gap-2.5">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.holder")}</span>
-          <UserPicker value={holder} onPick={setHolder} />
-        </div>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.units")}</span>
-          <Input inputMode="decimal" value={units} onChange={(e) => setUnits(e.target.value)} className="w-full tabular-nums" />
-          {unitsProblem && <span className="text-xs text-accent-error">{t("admin.alloc.issue.problem.units")}</span>}
-        </label>
+        <Field>
+          {/* No `htmlFor`: the picker's trigger sits behind a popover, so it is named by reference. */}
+          <FieldLabel id={`${id}-holder`}>{t("admin.alloc.issue.field.holder")}</FieldLabel>
+          <UserPicker value={holder} onPick={setHolder} labelledBy={`${id}-holder`} />
+        </Field>
+        <Field data-invalid={unitsProblem || undefined}>
+          <FieldLabel htmlFor={`${id}-units`}>{t("admin.alloc.issue.field.units")}</FieldLabel>
+          <Input id={`${id}-units`} inputMode="decimal" value={units} onChange={(e) => setUnits(e.target.value)} aria-invalid={unitsProblem || undefined} aria-describedby={unitsProblem ? `${id}-units-error` : undefined} className="tabular-nums" />
+          {unitsProblem && <FieldError id={`${id}-units-error`}>{t("admin.alloc.issue.problem.units")}</FieldError>}
+        </Field>
       </div>
       {error && (
-        <p className="flex items-center gap-2 text-xs text-accent-error">
-          <TriangleAlert className="size-3.5 shrink-0" /> {error}
-        </p>
+        <Alert variant="destructive">
+          <TriangleAlert className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {opened && <ConsiliumOpened consiliumId={opened.id} body={t("admin.revenue.grant.opened")} onDismiss={() => setOpened(null)} />}
-      <Button type="button" className={cn("w-full", TEAL_CTA)} disabled={busy || !sendable} onClick={() => void submit()}>
+      <Button type="button" className="w-full" disabled={busy || !sendable} onClick={() => void submit()}>
         {busy ? <Loader2 className="size-4 animate-spin" /> : null}
         {t("admin.revenue.grant.submit")}
       </Button>

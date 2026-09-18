@@ -13,7 +13,7 @@ import { Flame, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Spinner } from "@evinvest/uikit";
+import { Alert, AlertDescription, Button, Spinner } from "@evinvest/uikit";
 
 import { retireUnits } from "@/entities/admin/api/admin-client";
 import type { Allocation } from "@/shared/contracts/admin";
@@ -111,9 +111,10 @@ export function RetireAction({ allocation }: { allocation: Allocation }) {
       )}
       {last && <IssuanceResult outcome={last} kind="retire" />}
       {error && (
-        <p className="flex items-center gap-2 text-xs text-accent-error">
-          <TriangleAlert className="size-3.5" /> {error}
-        </p>
+        <Alert variant="destructive">
+          <TriangleAlert className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
     </div>
   );

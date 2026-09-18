@@ -8,16 +8,15 @@
 // balance without a holder.
 
 import { Loader2, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input } from "@evinvest/uikit";
+import { Alert, AlertDescription, Button, Card, CardContent, Field, FieldDescription, FieldError, FieldLabel, Input } from "@evinvest/uikit";
 
 import { proposeSeedCapital } from "@/entities/admin/api/admin-client";
 import type { RailLiquidity, SeedCapitalProposal } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
-import { cn } from "@/shared/lib/cn";
 import { isPositiveWireDecimal } from "@/shared/lib/money";
 import { revalidateTag } from "@/shared/lib/resource";
 import { StaggerItem } from "@/shared/ui/motion";
@@ -25,10 +24,9 @@ import { RailSelect, watchedRails } from "@/views/admin/treasury/ui/rail-select"
 import { ConsiliumOpened } from "@/views/admin/ui/consilium-opened";
 import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
 
-const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
-
 export function SeedCapitalForm({ rails }: { rails: RailLiquidity[] | undefined }) {
   const t = useT();
+  const id = useId();
   const [network, setNetwork] = useState("");
   const [txRef, setTxRef] = useState("");
   const [amount, setAmount] = useState("");
@@ -39,6 +37,7 @@ export function SeedCapitalForm({ rails }: { rails: RailLiquidity[] | undefined 
 
   // The amount is what the owners approve, so unlike the arrival form it is required —
   // and checked as the decimal the plane parses, not as a `Number`.
+  const amountProblem = amount.trim() !== "" && !isPositiveWireDecimal(amount);
   const sendable = Boolean(network) && txRef.trim().length > 0 && isPositiveWireDecimal(amount);
 
   const submit = async () => {
@@ -72,31 +71,33 @@ export function SeedCapitalForm({ rails }: { rails: RailLiquidity[] | undefined 
           <p className="max-w-3xl text-sm text-ink-soft">{t("admin.treasury.seed.intro")}</p>
           <div className="grid gap-4 md:grid-cols-2">
             <RailSelect value={network} options={watchedRails(rails)} onChange={setNetwork} />
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm text-ink-soft">{t("admin.treasury.onchainRef")}</span>
+            <Field>
+              <FieldLabel htmlFor={`${id}-ref`}>{t("admin.treasury.onchainRef")}</FieldLabel>
               {/* A format literal, not prose — it reads the same in every locale. */}
-              <Input value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="0xhash:logIndex" className="w-full" />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm text-ink-soft">{t("admin.treasury.seed.amount")}</span>
-              <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className="w-full tabular-nums" />
-              {amount.trim() !== "" && !isPositiveWireDecimal(amount) && <span className="text-xs text-accent-error">{t("admin.treasury.seed.amountProblem")}</span>}
-            </label>
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm text-ink-soft">{t("admin.treasury.seed.depositor")}</span>
-              <UserPicker value={depositor} onPick={setDepositor} />
-              <span className="text-xs text-ink-soft">{t("admin.treasury.seed.depositorHint")}</span>
-            </div>
+              <Input id={`${id}-ref`} value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="0xhash:logIndex" spellCheck={false} className="font-mono-tech" />
+            </Field>
+            <Field data-invalid={amountProblem || undefined}>
+              <FieldLabel htmlFor={`${id}-amount`}>{t("admin.treasury.seed.amount")}</FieldLabel>
+              <Input id={`${id}-amount`} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" aria-invalid={amountProblem || undefined} aria-describedby={amountProblem ? `${id}-amount-error` : undefined} className="tabular-nums" />
+              {amountProblem && <FieldError id={`${id}-amount-error`}>{t("admin.treasury.seed.amountProblem")}</FieldError>}
+            </Field>
+            <Field>
+              {/* No `htmlFor`: the picker's trigger sits behind a popover, so it is named by reference. */}
+              <FieldLabel id={`${id}-depositor`}>{t("admin.treasury.seed.depositor")}</FieldLabel>
+              <UserPicker value={depositor} onPick={setDepositor} labelledBy={`${id}-depositor`} />
+              <FieldDescription>{t("admin.treasury.seed.depositorHint")}</FieldDescription>
+            </Field>
           </div>
 
           {error && (
-            <p className="flex items-center gap-2 text-sm text-accent-error">
-              <TriangleAlert className="size-4 shrink-0" /> {error}
-            </p>
+            <Alert variant="destructive">
+              <TriangleAlert className="size-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
           {opened && <ConsiliumOpened consiliumId={opened.consilium_id} body={t("admin.treasury.seed.opened")} onDismiss={() => setOpened(null)} />}
 
-          <Button type="button" className={cn("ml-auto flex", TEAL_CTA)} disabled={busy || !sendable} onClick={() => void submit()}>
+          <Button type="button" className="ml-auto flex" disabled={busy || !sendable} onClick={() => void submit()}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
             {t("admin.treasury.seed.submit")}
           </Button>

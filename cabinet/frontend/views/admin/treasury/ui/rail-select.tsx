@@ -5,8 +5,10 @@
 // actually reported with a treasury address are offered: an address minted for a rail
 // nothing watches is exactly the mistake these forms exist to prevent.
 
+import { useId } from "react";
+
 import { useT } from "@evinvest/i18n/react";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@evinvest/uikit";
+import { Field, FieldLabel, Select, SelectContent, SelectItem, SelectTrigger } from "@evinvest/uikit";
 
 import type { RailLiquidity } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
@@ -20,11 +22,12 @@ export function watchedRails(rails: RailLiquidity[] | undefined): RailLiquidity[
 
 export function RailSelect({ value, options, onChange }: { value: string; options: RailLiquidity[]; onChange: (network: string) => void }) {
   const t = useT();
+  const id = useId();
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-sm text-ink-soft">{t("admin.rail")}</span>
+    <Field>
+      <FieldLabel htmlFor={id}>{t("admin.rail")}</FieldLabel>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-full border-border bg-secondary" disabled={options.length === 0}>
+        <SelectTrigger id={id} className="w-full border-border bg-secondary" disabled={options.length === 0}>
           {/* The placeholder is trigger text, not a selectable item — "Select a rail…"
               is not a rail. */}
           <span className={cn("flex min-w-0 items-center gap-1.5", !value && "text-ink-soft")}>
@@ -41,6 +44,6 @@ export function RailSelect({ value, options, onChange }: { value: string; option
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </Field>
   );
 }

@@ -21,7 +21,9 @@ export interface PickedUser {
   email: string;
 }
 
-export function UserPicker({ value, onPick }: { value: PickedUser | null; onPick: (user: PickedUser) => void }) {
+/** `labelledBy` is the id of the `FieldLabel` above the picker: the trigger is a button
+ *  a `htmlFor` cannot reach through the popover, so the caption names it by reference. */
+export function UserPicker({ value, onPick, labelledBy }: { value: PickedUser | null; onPick: (user: PickedUser) => void; labelledBy?: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -33,7 +35,7 @@ export function UserPicker({ value, onPick }: { value: PickedUser | null; onPick
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
+        <Button type="button" variant="outline" role="combobox" aria-expanded={open} aria-labelledby={labelledBy} className="w-full justify-between font-normal">
           <span className="min-w-0 truncate">{value ? value.email || value.userId : t("admin.alloc.grants.pickUser")}</span>
           <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
         </Button>
