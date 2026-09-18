@@ -21,7 +21,7 @@ export function HoldersTable({ holders, outstanding, queued = "0" }: { holders: 
   const t = useT();
   const locale = useLocale();
 
-  if (shareBps(outstanding, outstanding) === 0) {
+  if (isZero(outstanding)) {
     return (
       <Empty className="border">
         <EmptyHeader>
@@ -74,7 +74,7 @@ function HolderLine({ line, outstanding }: { line: UnitHolding; outstanding: str
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-3">
         <dt className="flex min-w-0 items-center gap-1.5 text-ink-soft" title={line.holder.id}>
-          {person ? <User className="size-3.5 shrink-0" aria-label={t("admin.holder.person")} /> : <Layers className="size-3.5 shrink-0" aria-label={t("admin.holder.allocation")} />}
+          <HolderMark person={person} />
           {/* A person is their plane id here — the cap table carries no email, and the
               directory is where a name lives — so it reads as an identifier, not prose. */}
           <span className={person ? "truncate font-mono-tech text-xs" : "truncate"}>{holderLabel(line.holder, t)}</span>
@@ -87,4 +87,12 @@ function HolderLine({ line, outstanding }: { line: UnitHolding; outstanding: str
       <Progress value={bps / 100} className="h-1.5" aria-hidden />
     </div>
   );
+}
+
+/** The kind of holder, as an icon that assistive tech reads as the word: `role="img"`
+ *  is what makes a lucide `<svg>`'s `aria-label` announced at all. Shared with the
+ *  treasury's holders cell so a person and an allocation look the same on both. */
+export function HolderMark({ person }: { person: boolean }) {
+  const t = useT();
+  return person ? <User className="size-3.5 shrink-0" role="img" aria-label={t("admin.holder.person")} /> : <Layers className="size-3.5 shrink-0" role="img" aria-label={t("admin.holder.allocation")} />;
 }

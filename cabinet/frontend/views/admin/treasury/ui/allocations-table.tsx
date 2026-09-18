@@ -8,18 +8,17 @@
 import { Layers } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
 
-import type { AllocationTreasury, UnitHolding } from "@/shared/contracts/admin";
+import type { AllocationTreasury } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { formatNav, formatUnits, formatUsd } from "@/shared/lib/money";
 import { hasUnixStamp } from "@/shared/lib/unix-stamp";
+import { Link } from "@/shared/ui/cabinet-link";
 import { Settled } from "@/shared/ui/motion";
 import { accessLabel, accessTone } from "@/views/admin/lib/access";
-import { ago, holderLabel } from "@/views/admin/lib/format";
-
-/** Holders shown inline before the rest fold into a count — a product can have hundreds. */
-const SHOWN_HOLDERS = 3;
+import { ago } from "@/views/admin/lib/format";
+import { HoldersCell } from "@/views/admin/treasury/ui/holders-cell";
 
 export function TreasuryAllocations({ allocations }: { allocations: AllocationTreasury[] | null }) {
   const t = useT();
@@ -37,6 +36,12 @@ export function TreasuryAllocations({ allocations }: { allocations: AllocationTr
                   <EmptyTitle>{t("admin.treasury.allocations.empty")}</EmptyTitle>
                   <EmptyDescription>{t("admin.treasury.allocations.emptyHint")}</EmptyDescription>
                 </EmptyHeader>
+                <EmptyContent>
+                  {/* The action that produces a row: a product exists once it is registered. */}
+                  <Button asChild variant="outline">
+                    <Link href="/admin/allocations">{t("nav.allocations")}</Link>
+                  </Button>
+                </EmptyContent>
               </Empty>
             </div>
           ) : (
@@ -96,26 +101,5 @@ function AllocationRow({ allocation: a }: { allocation: AllocationTreasury }) {
         <HoldersCell holders={a.holders} />
       </td>
     </tr>
-  );
-}
-
-function HoldersCell({ holders }: { holders: UnitHolding[] }) {
-  const t = useT();
-  const locale = useLocale();
-  if (holders.length === 0) return <span className="text-xs text-ink-soft">{t("admin.treasury.allocations.noHolders")}</span>;
-  const shown = holders.slice(0, SHOWN_HOLDERS);
-  const rest = holders.length - shown.length;
-  return (
-    <ul className="space-y-0.5 text-xs">
-      {shown.map((line) => (
-        <li key={`${line.holder.kind}:${line.holder.id}`} className="flex items-baseline gap-1.5 tabular-nums" title={line.holder.id}>
-          {/* A person is their plane id (the directory has the name); the `fee` allocation
-              holding a product's fee class is named, and never looked up as a person. */}
-          <span className={cn("max-w-40 truncate", line.holder.kind === "user" ? "font-mono-tech" : "font-medium")}>{holderLabel(line.holder, t)}</span>
-          <span className="text-ink-soft">{formatUnits(line.units, locale)}</span>
-        </li>
-      ))}
-      {rest > 0 && <li className="text-ink-soft">{t("admin.treasury.allocations.moreHolders", { n: rest })}</li>}
-    </ul>
   );
 }

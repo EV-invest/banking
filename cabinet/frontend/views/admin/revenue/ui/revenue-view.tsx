@@ -63,7 +63,8 @@ export function RevenueView() {
     <AdminScreen className="space-y-8">
       <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.revenue")} subtitle={t("admin.revenue.subtitle")} />
 
-      {error && <ResourceError message={error} />}
+      {/* The action error has no retry — the cancel is re-clickable; the read's does. */}
+      {actionError ? <ResourceError message={actionError} /> : error && <ResourceError message={error} onRetry={() => void revenue.refresh()} retrying={revenue.isValidating} />}
 
       <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.revenue.earned")}</p>
@@ -74,9 +75,14 @@ export function RevenueView() {
       <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.alloc.holders.title")}</p>
         <div className="grid gap-4 lg:grid-cols-2">
-          <Settled loading={!fee && !failed} skeleton={<Skeleton className="h-24 w-full" />}>
-            {fee && <HoldersTable holders={fee.holders} outstanding={fee.units_outstanding} />}
-          </Settled>
+          {failed ? (
+            // A read that failed is not an empty cap table: the column says so, with the retry.
+            <ResourceError error={revenue.error} onRetry={() => void revenue.refresh()} retrying={revenue.isValidating} />
+          ) : (
+            <Settled loading={!fee} skeleton={<Skeleton className="h-24 w-full" />}>
+              {fee && <HoldersTable holders={fee.holders} outstanding={fee.units_outstanding} />}
+            </Settled>
+          )}
           <HolderGrantForm allocation="fee" />
         </div>
       </StaggerItem>
