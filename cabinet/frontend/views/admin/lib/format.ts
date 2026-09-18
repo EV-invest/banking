@@ -10,6 +10,7 @@
 import type { Translate } from "@evinvest/i18n";
 
 import type { UnitHolderRef } from "@/shared/contracts/admin";
+import { reservedAllocationLabel } from "@/shared/lib/reserved-allocation";
 
 /** `formatAmount` is a decimal amount → grouped display with no currency symbol; the
  *  admin tables spell the unit out in the header instead. */
@@ -180,23 +181,11 @@ export function railLabel(network: string, t: Translate): string {
   return key ? t(key) : network;
 }
 
-// The reserved allocations (#245) — the platform's own money, hidden from the catalog.
-// Named here so the treasury and the cap table title them the same way, and so a
-// `holder.kind === "allocation"` line is never looked up as a person.
-const RESERVED_ALLOCATION_KEYS: Record<string, string> = {
-  fee: "admin.holder.allocation.fee",
-  fund: "admin.holder.allocation.fund",
-};
-
 /** A holder of units as a reader sees it: a person by the id the plane stored (the cap
  *  table carries no email — the directory does), or the allocation holding a product's
- *  fee class by its name. An allocation the hub reserves later falls back to its slug. */
+ *  fee class by its name (`shared/lib/reserved-allocation.ts`). */
 export function holderLabel(holder: UnitHolderRef, t: Translate): string {
-  if (holder.kind === "allocation") {
-    const key = RESERVED_ALLOCATION_KEYS[holder.id];
-    return key ? t(key) : holder.id;
-  }
-  return holder.id;
+  return holder.kind === "allocation" ? reservedAllocationLabel(holder.id, t) : holder.id;
 }
 
 /** Tailwind token classes for a lifecycle/health status pill. */

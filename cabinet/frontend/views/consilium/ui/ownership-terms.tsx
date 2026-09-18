@@ -13,12 +13,7 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 import type { HolderGrantTerms, SeedCapitalTerms } from "@/shared/contracts/governance";
 import { formatExactUsdt, formatUnits } from "@/shared/lib/money";
 import { networkLabel } from "@/shared/lib/rail";
-
-/** The reserved allocations by name; one the hub reserves later falls back to its slug. */
-export function reservedAllocationLabel(allocation: string, t: Translate): string {
-  if (allocation === "fee" || allocation === "fund") return t(`consilium.holderGrant.allocation.${allocation}`);
-  return allocation;
-}
+import { reservedAllocationLabel } from "@/shared/lib/reserved-allocation";
 
 export function HolderGrantTermsBlock({ terms }: { terms: HolderGrantTerms }) {
   const t = useT();
