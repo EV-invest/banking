@@ -379,6 +379,19 @@ impl UnitIssuance {
 		Self::record(id, service, holder, IssuanceSource::Retire, units, nav, cost_basis, idempotency_key)
 	}
 
+	/// A mint recorded after its leg has already posted — the ownership data migration's
+	/// door (#245): it seats the reserved allocations' first holders by posting the mints
+	/// to the ledger itself, in one linked chain with the cash it moves, so the row it
+	/// then writes is born `Applied` and raises no event (there is no leg left for the
+	/// relay to post). The gates are [`Self::issue`]'s: positive units, a holder the
+	/// graph admits; the cost basis is `units × nav`.
+	pub fn applied_mint(id: UnitIssuanceId, service: ServiceId, holder: UnitHolder, units: Shares, nav: Nav, idempotency_key: IdempotencyKey) -> Result<Self, DomainError> {
+		let mut issuance = Self::record(id, service, holder, IssuanceSource::Mint, units, nav, None, idempotency_key)?;
+		issuance.state = IssuanceState::Applied;
+		issuance.pending.clear();
+		Ok(issuance)
+	}
+
 	// One private constructor behind two typed doors; a builder would only rename the
 	// same eight facts.
 	#[allow(clippy::too_many_arguments)]

@@ -82,12 +82,13 @@ fn main() -> color_eyre::Result<()> {
 	color_eyre::install()?;
 	dotenvy::dotenv().ok();
 
+	let command = Command::from_args(std::env::args().skip(1))?;
 	// The deploy contract, straight out of the image: the gitops preflight runs
 	// this against the built image and diffs it with the cluster Secret's keys,
 	// so a missing variable is caught before the rollout, not as a
 	// CrashLoopBackOff after it.
-	if let Some(profile) = print_required_vars_for() {
-		for var in config::AppConfig::required_var_names(&profile) {
+	if let Command::PrintRequiredVars(profile) = &command {
+		for var in config::AppConfig::required_var_names(profile) {
 			println!("{var}");
 		}
 		return Ok(());
@@ -114,11 +115,12 @@ fn main() -> color_eyre::Result<()> {
 	// Held for the process lifetime — dropping flushes OTel logs/traces.
 	let _otel_guard = init_tracing(&config.app_env);
 
-	tokio::runtime::Builder::new_multi_thread()
-		.enable_all()
-		.build()
-		.context("failed to build tokio runtime")?
-		.block_on(run(config))
+	let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().context("failed to build tokio runtime")?;
+	match command {
+		Command::Serve => runtime.block_on(run(config)),
+		Command::MigrateOwnership(args) => runtime.block_on(migrate_ownership(config, args)),
+		Command::PrintRequiredVars(_) => unreachable!("answered before the runtime was built"),
+	}
 }
 
 async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
@@ -780,20 +782,178 @@ async fn run_or_idle(shutdown: CancellationToken, task: Option<impl Future<Outpu
 	}
 }
 
-/// `--print-required-vars[=PROFILE]` (default `production`). Hand-rolled: this
-/// binary has no other CLI surface, and a whole arg parser for one flag is not
-/// worth the dependency.
-fn print_required_vars_for() -> Option<String> {
-	const FLAG: &str = "--print-required-vars";
+/// What the binary was asked to do. Hand-rolled: two flags and one subcommand are not
+/// worth an argument-parser dependency.
+enum Command {
+	/// No arguments: serve.
+	Serve,
+	/// `--print-required-vars[=PROFILE]` (default `production`).
+	PrintRequiredVars(String),
+	/// `migrate-ownership --holders <path.json> [--dry-run] [--yes] [--company keep|retire]`
+	/// — the one-off ownership data migration (#245), run by an operator inside the pod.
+	MigrateOwnership(MigrateArgs),
+}
 
-	let mut args = std::env::args().skip(1);
-	let arg = args.next()?;
-	match arg.split_once('=') {
-		Some((FLAG, profile)) => Some(profile.to_string()),
-		Some(_) => None,
-		None if arg == FLAG => Some(args.next().unwrap_or_else(|| "production".to_string())),
-		None => None,
+struct MigrateArgs {
+	holders: std::path::PathBuf,
+	dry_run: bool,
+	yes: bool,
+	company: String,
+}
+
+impl Command {
+	fn from_args(mut args: impl Iterator<Item = String>) -> color_eyre::Result<Self> {
+		const FLAG: &str = "--print-required-vars";
+		const MIGRATE: &str = "migrate-ownership";
+
+		let Some(arg) = args.next() else {
+			return Ok(Self::Serve);
+		};
+		match arg.split_once('=') {
+			Some((FLAG, profile)) => return Ok(Self::PrintRequiredVars(profile.to_string())),
+			Some(_) => return Ok(Self::Serve),
+			None => {}
+		}
+		if arg == FLAG {
+			return Ok(Self::PrintRequiredVars(args.next().unwrap_or_else(|| "production".to_string())));
+		}
+		if arg != MIGRATE {
+			return Ok(Self::Serve);
+		}
+		let mut migrate = MigrateArgs {
+			holders: std::path::PathBuf::new(),
+			dry_run: false,
+			yes: false,
+			company: "keep".to_string(),
+		};
+		while let Some(flag) = args.next() {
+			match flag.as_str() {
+				"--holders" => migrate.holders = args.next().ok_or_else(|| eyre!("--holders needs a path"))?.into(),
+				"--dry-run" => migrate.dry_run = true,
+				"--yes" => migrate.yes = true,
+				"--company" => migrate.company = args.next().ok_or_else(|| eyre!("--company needs 'keep' or 'retire'"))?,
+				other =>
+					return Err(eyre!(
+						"unknown argument '{other}' — usage: piggybank {MIGRATE} --holders <path.json> [--dry-run] [--yes] [--company keep|retire]"
+					)),
+			}
+		}
+		ensure!(!migrate.holders.as_os_str().is_empty(), "--holders <path.json> is required");
+		Ok(Self::MigrateOwnership(migrate))
 	}
+}
+
+/// The `migrate-ownership` command: the same Postgres and TigerBeetle the server uses,
+/// nothing else — no gRPC, no relay, no watchers. Prints the plan; a dry run stops
+/// there; otherwise asks for `yes` (or `--yes`), applies it and reconciles. The schema is
+/// the server's — migrated when the pod booted — and this command never alters it.
+///
+/// Exit 1 with the findings printed when the read-back after the run is not what the
+/// migration promised: the movements are on the ledger by then and cannot be rolled
+/// back, so the operator inspects rather than retries blindly.
+async fn migrate_ownership(config: config::AppConfig, args: MigrateArgs) -> color_eyre::Result<()> {
+	use piggybank_core::application::migrate_ownership as migrate_app;
+
+	let raw = std::fs::read_to_string(&args.holders).with_context(|| format!("reading the holder table at {}", args.holders.display()))?;
+	let table = migrate_app::HolderTable::parse_json(&raw)?;
+	let company = migrate_app::CompanyStake::parse(&args.company)?;
+
+	let pool = db::connect_sized(&config.database_url, 4).await.context("failed to connect to the database")?;
+	let tigerbeetle_cluster_id: u128 = config.tigerbeetle_cluster_id.parse().context("TIGERBEETLE_CLUSTER_ID must be an integer")?;
+	let tigerbeetle = Arc::new(TigerBeetle::connect(tigerbeetle_cluster_id, &config.tigerbeetle_address).context("failed to connect to TigerBeetle")?);
+	let ledger: Arc<dyn Ledger> = Arc::new(TbLedger::new(tigerbeetle, pool.clone()));
+	let allocations: Arc<dyn AllocationRegistry> = Arc::new(PgAllocations::new(pool.clone()));
+	let users = PgUsers::new(pool.clone());
+	let nav = PgNav::new(pool.clone());
+	let issuances = PgUnitIssuances::new(pool.clone());
+	let ports = migrate_app::MigrationPorts {
+		ledger: ledger.as_ref(),
+		allocations: allocations.as_ref(),
+		users: &users,
+		nav: &nav,
+		issuances: &issuances,
+	};
+	let now_unix = i64::try_from(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs())?;
+
+	let plan = migrate_app::plan(&ports, &table, company, now_unix).await?;
+	println!("=== migrate-ownership: plan ===");
+	print!("{plan}");
+	println!("=== ledger before ===");
+	print!("{}", migrate_app::read_after(&ports).await?);
+	if plan.is_noop() {
+		println!("nothing to do: every step is already applied");
+	}
+	if args.dry_run {
+		println!("dry run: nothing was written");
+		return Ok(());
+	}
+	if !args.yes && !confirmed().await? {
+		println!("not confirmed: nothing was written");
+		return Ok(());
+	}
+
+	let report = migrate_app::run(&ports, &plan).await?;
+	println!("=== applied ===");
+	for (name, outcome) in [("fund", &report.fund), ("fee", &report.fee)] {
+		println!(
+			"  {name}: chain {} · rows written {} · rows already present {}",
+			if outcome.chain_posted { "posted" } else { "not posted (already applied or nothing to move)" },
+			outcome.rows_written,
+			outcome.rows_already_present
+		);
+	}
+	for product in &report.company_retired {
+		println!("  company stake of '{product}' retired");
+	}
+	println!("=== ledger after ===");
+	print!("{}", report.after);
+
+	// The same scan the server runs every minute, once, so the operator sees what the
+	// dashboards will: the cash invariant, per-allocation supply, value nobody holds.
+	let recon = Reconciliation::new(pool, ledger, allocations).scan().await.context("reconciliation scan after the run")?;
+	let mut findings = report.after.findings();
+	if recon.custody != recon.claims {
+		findings.push(format!("cash invariant broken: custody {} != claims {}", recon.custody, recon.claims));
+	}
+	if recon.unclassified_claims != 0 {
+		findings.push(format!("{} base units of claims on accounts of no known kind", recon.unclassified_claims));
+	}
+	for service in &recon.units_drift {
+		findings.push(format!("supply drift on '{service}'"));
+	}
+	for service in recon.unheld.iter().filter(|s| s.is_reserved()) {
+		findings.push(format!("'{service}' holds value nobody holds units of"));
+	}
+	println!("=== reconciliation ===");
+	println!(
+		"  custody {} · claims {} · unclassified {} · supply drift {:?} · unheld {:?} · parked outbox rows {}",
+		recon.custody, recon.claims, recon.unclassified_claims, recon.units_drift, recon.unheld, recon.parked_rows
+	);
+	if findings.is_empty() {
+		println!("migration complete: retired claims empty, every unit of fee/fund at a holder");
+		return Ok(());
+	}
+	for finding in &findings {
+		println!("  FINDING: {finding}");
+	}
+	Err(eyre!(
+		"the ledger after the run is not what the migration promised ({} finding(s) above); the movements are posted and cannot be rolled back — inspect before doing anything else",
+		findings.len()
+	))
+}
+
+/// `yes` on stdin, and nothing else, applies the plan. Read off the runtime: stdin is a
+/// blocking read and the operator may take a while.
+async fn confirmed() -> color_eyre::Result<bool> {
+	println!("type 'yes' to apply this plan (anything else aborts):");
+	let line = tokio::task::spawn_blocking(|| {
+		let mut line = String::new();
+		std::io::stdin().read_line(&mut line).map(|_| line)
+	})
+	.await
+	.context("stdin reader panicked")?
+	.context("reading the confirmation from stdin")?;
+	Ok(line.trim() == "yes")
 }
 
 /// Resolve on the first of `SIGINT` (ctrl_c), `SIGTERM`, or a peer cancelling `shutdown`,
@@ -886,4 +1046,40 @@ fn init_tracing(environment: &str) -> Option<ev::otel::Telemetry> {
 		.with(otel_layers)
 		.init();
 	otel_guard
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn parse(args: &[&str]) -> color_eyre::Result<Command> {
+		Command::from_args(args.iter().map(|a| (*a).to_string()))
+	}
+
+	// The flag that was here first keeps every spelling it had; the subcommand takes its
+	// own flags and refuses a stray one, so a typo cannot fall through to `serve`.
+	#[test]
+	fn the_command_line_is_serve_the_preflight_flag_or_the_migration() {
+		assert!(matches!(parse(&[]).unwrap(), Command::Serve));
+		assert!(matches!(parse(&["--print-required-vars"]).unwrap(), Command::PrintRequiredVars(p) if p == "production"));
+		assert!(matches!(parse(&["--print-required-vars=dev"]).unwrap(), Command::PrintRequiredVars(p) if p == "dev"));
+		assert!(matches!(parse(&["--print-required-vars", "dev"]).unwrap(), Command::PrintRequiredVars(p) if p == "dev"));
+
+		let Command::MigrateOwnership(args) = parse(&["migrate-ownership", "--holders", "/tmp/h.json", "--dry-run"]).unwrap() else {
+			panic!("the subcommand")
+		};
+		assert_eq!(args.holders, std::path::PathBuf::from("/tmp/h.json"));
+		assert!(args.dry_run && !args.yes);
+		assert_eq!(args.company, "keep");
+
+		let Command::MigrateOwnership(args) = parse(&["migrate-ownership", "--yes", "--company", "retire", "--holders", "h.json"]).unwrap() else {
+			panic!("the subcommand")
+		};
+		assert!(args.yes && !args.dry_run);
+		assert_eq!(args.company, "retire");
+
+		assert!(parse(&["migrate-ownership"]).is_err(), "the holder table is required");
+		assert!(parse(&["migrate-ownership", "--holders"]).is_err(), "a flag without its value");
+		assert!(parse(&["migrate-ownership", "--holders", "h.json", "--force"]).is_err(), "an unknown flag");
+	}
 }

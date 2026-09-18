@@ -40,6 +40,13 @@ pub trait Ledger: Gateway {
 	/// guard must be skipped, not re-checked against the post-outflow balance.
 	async fn transfer_exists(&self, id: u128) -> Result<bool, LedgerError>;
 
+	/// The amount the transfer with this (deterministic, caller-assigned) id moved, or
+	/// `None` when no such transfer exists. What the ownership data migration reads back
+	/// to record a mint it posted but did not get to write the row for: the ledger is the
+	/// authoritative store, so the row says what the ledger says, never what a re-run
+	/// would have computed.
+	async fn transfer_amount(&self, id: u128) -> Result<Option<u128>, LedgerError>;
+
 	/// Apply a posted transfer with an explicit amount. Ensures both accounts exist
 	/// first. Idempotent on the transfer `id` (a re-submit returns `Exists` ⇒ ok).
 	async fn post(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError>;
