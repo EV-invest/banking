@@ -17,7 +17,7 @@
 use async_trait::async_trait;
 use domain::{
 	architecture::Gateway,
-	balance::{LedgerAccountKey, ServiceId, TransferCode},
+	balance::{AccountCode, LedgerAccountKey, ServiceId, TransferCode},
 	error::DomainError,
 	issuance::UnitHolder,
 };
@@ -71,10 +71,52 @@ pub trait Ledger: Gateway {
 
 	/// The cash plane's global posted invariant, summed straight from TigerBeetle (the
 	/// authoritative store): total custody (`wallet:<net>` debit-normal assets) vs total
-	/// claims (`fund`/`user`/`service`/`fee`/`clearing` credit-normal). By construction
-	/// `custody == claims` always holds; reconciliation asserts it and alerts if TB and
-	/// the design ever diverge. Returns raw 18-dp USDT base units.
+	/// claims (every credit-normal account on the USDT ledger), the claims broken down by
+	/// [`CashSide`] so a reader can say WHOSE the custody is. By construction `custody ==
+	/// claims` always holds; reconciliation asserts it and alerts if TB and the design
+	/// ever diverge. Returns raw 18-dp USDT base units.
 	async fn cash_invariant(&self) -> Result<CashInvariant, LedgerError>;
+}
+
+/// Which side of the cash invariant a USDT-ledger account counts on, by its kind — the
+/// domain's chart of accounts read as a conservation statement. The claims sides are
+/// the answer to "who is owed the custody": people directly, allocations (whose holders
+/// are people), the withdrawal transit, the book's cash escrow, and — until the data
+/// migration empties them — the retired singleton claims (#245).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CashSide {
+	/// `wallet:<net>` — the asset side.
+	Custody,
+	/// `user:<id>` — a person's own claim.
+	UserClaims,
+	/// `service:<svc>` — an allocation's claim, a product's or a reserved one's.
+	ServiceClaims,
+	/// `clearing` — in flight between a claim and a rail.
+	Clearing,
+	/// `book_cash:<user>` — a person's cash resting in a buy order.
+	BookCash,
+	/// The retired `fund` (code 1) and `fee` (code 40) claims: legitimate balances
+	/// until the ownership data migration moves them onto the reserved allocations,
+	/// and zero after.
+	RetiredClaims,
+}
+
+impl CashSide {
+	/// The side an account of kind `code` counts on; `None` for a kind that is not on
+	/// the USDT ledger at all (custody in the mocked bank, every unit account).
+	// The retired kinds are still rows in the map: a scan reads them back as what they are.
+	#[allow(deprecated)]
+	pub fn of(code: AccountCode) -> Option<Self> {
+		match code {
+			AccountCode::CryptoWallet => Some(Self::Custody),
+			AccountCode::UserClaim => Some(Self::UserClaims),
+			AccountCode::ServiceClaim => Some(Self::ServiceClaims),
+			AccountCode::WithdrawalClearing => Some(Self::Clearing),
+			AccountCode::BookCash => Some(Self::BookCash),
+			AccountCode::Fund | AccountCode::FeeRevenue => Some(Self::RetiredClaims),
+			AccountCode::BankCustody | AccountCode::UserShares | AccountCode::SharesOutstanding | AccountCode::FeeShares | AccountCode::CompanyShares | AccountCode::BookShares => None,
+		}
+	}
 }
 /// Which unit holdings a [`Ledger::share_holdings`] scan returns. The membership rule is
 /// the domain's ([`UnitHolder::of_holding`]): a holding is a product's `UserShares`,
@@ -104,15 +146,42 @@ impl HoldingScope {
 
 /// The reconciliation read of the cash plane's global double-entry invariant: the summed
 /// posted custody side and claims side. They must be equal (`balanced()`).
-#[derive(Clone, Copy, Debug)]
+///
+/// `claims` is the whole credit side — every non-custody account on the USDT ledger,
+/// whatever its kind — so the conservation check cannot be fooled by an account the
+/// breakdown does not know. The named parts say whose the custody is; what they leave
+/// over ([`Self::unclassified`]) is value on an account of no known kind, which is its
+/// own finding.
+#[derive(Clone, Copy, Debug, Default)]
 pub struct CashInvariant {
 	pub custody: u128,
 	pub claims: u128,
+	/// Σ `user:<id>` — held by people directly.
+	pub user_claims: u128,
+	/// Σ `service:<svc>` — held by allocations, whose units people hold.
+	pub service_claims: u128,
+	/// `clearing` — the posted withdrawal transit.
+	pub clearing: u128,
+	/// Σ `book_cash:<user>` — resting in buy orders.
+	pub book_cash: u128,
+	/// The retired `fund` + `fee` singleton claims (#245).
+	pub retired_claims: u128,
 }
 
 impl CashInvariant {
 	pub fn balanced(self) -> bool {
 		self.custody == self.claims
+	}
+
+	/// Claims on accounts of a kind the breakdown does not name — zero on a ledger that
+	/// only the chart of accounts has ever written to.
+	pub fn unclassified(self) -> u128 {
+		self.claims
+			.saturating_sub(self.user_claims)
+			.saturating_sub(self.service_claims)
+			.saturating_sub(self.clearing)
+			.saturating_sub(self.book_cash)
+			.saturating_sub(self.retired_claims)
 	}
 }
 /// Failure modes the relay and query handlers must distinguish — most importantly
@@ -211,4 +280,60 @@ pub struct PendingCompletion {
 	pub amount: u128,
 	pub code: TransferCode,
 	pub reference: u128,
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	// Every kind on the USDT ledger has a side, and the retired singletons count as
+	// CLAIMS: what is on `fund` (1) and `fee` (40) until the ownership data migration is
+	// legitimate, so leaving them out would read as drift on every production scan
+	// between the first release and the migration. A kind on another ledger has none.
+	#[test]
+	#[allow(deprecated)]
+	fn every_usdt_ledger_kind_has_a_side_and_the_retired_claims_are_claims() {
+		use domain::{balance::Ledger as Plane, money::Network, users::UserId};
+		let user = UserId::new();
+		let keys = [
+			LedgerAccountKey::Fund,
+			LedgerAccountKey::CryptoWallet(Network::Bep20),
+			LedgerAccountKey::BankCustody,
+			LedgerAccountKey::UserClaim(user),
+			LedgerAccountKey::ServiceClaim(ServiceId::fee()),
+			LedgerAccountKey::FeeRevenue,
+			LedgerAccountKey::WithdrawalClearing,
+			LedgerAccountKey::UserShares(ServiceId::fee(), user),
+			LedgerAccountKey::SharesOutstanding(ServiceId::fee()),
+			LedgerAccountKey::FeeShares(ServiceId::fee()),
+			LedgerAccountKey::CompanyShares(ServiceId::fee()),
+			LedgerAccountKey::BookShares(ServiceId::fee(), user),
+			LedgerAccountKey::BookCash(user),
+		];
+		for key in keys {
+			let side = CashSide::of(key.account_code());
+			assert_eq!(side.is_some(), key.ledger() == Plane::Usdt, "{}: a side iff on the USDT ledger", key.logical_key());
+		}
+		assert_eq!(CashSide::of(AccountCode::Fund), Some(CashSide::RetiredClaims));
+		assert_eq!(CashSide::of(AccountCode::FeeRevenue), Some(CashSide::RetiredClaims));
+		assert_eq!(CashSide::of(AccountCode::CryptoWallet), Some(CashSide::Custody));
+	}
+
+	// The named parts never exceed the whole, and what they leave over is the value on
+	// accounts the chart of accounts does not know — zero on a ledger only it wrote to.
+	#[test]
+	fn the_unclassified_remainder_is_what_the_named_parts_leave_over() {
+		let inv = CashInvariant {
+			custody: 100,
+			claims: 100,
+			user_claims: 60,
+			service_claims: 25,
+			clearing: 5,
+			book_cash: 3,
+			retired_claims: 7,
+		};
+		assert!(inv.balanced());
+		assert_eq!(inv.unclassified(), 0);
+		assert_eq!(CashInvariant { retired_claims: 0, ..inv }.unclassified(), 7, "7 on an account of no known kind");
+	}
 }

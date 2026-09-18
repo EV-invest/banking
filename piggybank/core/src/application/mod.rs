@@ -39,6 +39,9 @@
 //! [`book`] is the secondary market: holders trading an allocation's units with each
 //! other. It gates on the registry's access axis but not its lifecycle, escrows what an
 //! order commits through the relay, and settles each fill delivery-versus-payment.
+//! [`ownership`] is the read of who holds an allocation — its claim, its supply and its
+//! holders, summed from the ledger — behind the cap table, the treasury and the
+//! reconciliation's "every unit at a holder" checks.
 
 pub mod allocations;
 pub mod auth_sync;
@@ -50,6 +53,7 @@ pub mod fees;
 pub mod funds;
 pub mod issuance;
 pub mod operations;
+pub mod ownership;
 pub mod payments;
 pub mod users;
 pub mod wallet;

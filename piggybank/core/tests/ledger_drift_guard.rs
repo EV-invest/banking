@@ -91,3 +91,38 @@ async fn a_matching_derivation_passes_the_guard() {
 		panic!("a matching derivation must not trip the drift guard: {msg}");
 	}
 }
+
+/// The retired `fund` (code 1) and `fee` (code 40) keys (#245) keep their persisted
+/// derivation — same ledger, code and flags as the day they were created — so a
+/// production map that still holds them passes the guard: the treasury reads what the
+/// data migration has yet to move off them, the reconciliation counts them as claims,
+/// and the migration's own debit resolves them. A drifted derivation for either would
+/// park all three on the first touch after the deploy.
+#[tokio::test]
+#[allow(deprecated)]
+async fn the_retired_claim_keys_still_pass_the_guard() {
+	let Some(pool) = pool().await else {
+		eprintln!("DATABASE_URL unset — skipping ledger drift-guard test");
+		return;
+	};
+
+	for key in [LedgerAccountKey::Fund, LedgerAccountKey::FeeRevenue] {
+		let logical_key = key.logical_key();
+		let id = Uuid::new_v4().as_u128().to_be_bytes();
+		// The row as production has it: credit-normal claim flags (2) on ledger 1.
+		sqlx::query("INSERT INTO tb_accounts (logical_key, tb_account_id, ledger, code, network, flags) VALUES ($1, $2, 1, $3, NULL, 2) ON CONFLICT (logical_key) DO NOTHING")
+			.bind(&logical_key)
+			.bind(&id[..])
+			.bind(key.account_code().code() as i32)
+			.execute(&pool)
+			.await
+			.expect("seed the retired id-map row");
+	}
+
+	let ledger = ledger(pool);
+	for key in [LedgerAccountKey::Fund, LedgerAccountKey::FeeRevenue] {
+		if let Err(LedgerError::Conflict(msg)) = ledger.ensure_account(&key).await {
+			panic!("the retired key {} must not trip the drift guard: {msg}", key.logical_key());
+		}
+	}
+}
