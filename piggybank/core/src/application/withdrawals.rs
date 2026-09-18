@@ -213,6 +213,9 @@ fn require_configured(configured: &[Network], network: Network) -> Result<(), Do
 /// [`open_withdrawal`] does, through the same code, so the answer cannot drift from what
 /// execution will actually do. It is a *pre*-check, not a guarantee: revenue can still fall
 /// between here and execution, which is what `ExecutionFailed` exists for.
+// The pre-check of the retired payout — kept beside `request_revenue_payout` for the
+// same replay reason, and reachable from nothing that opens a new consilium.
+#[allow(deprecated)]
 pub async fn check_revenue_payout(ledger: &dyn Ledger, configured: &[Network], network: Network, address: WalletAddress, amount: Usdt) -> Result<(), DomainError> {
 	require_configured(configured, network)?;
 	let source = WithdrawalSource::Revenue;
@@ -239,22 +242,24 @@ async fn require_solvent(ledger: &dyn Ledger, source: WithdrawalSource, amount: 
 	Ok(())
 }
 
-/// The fund pays **its own earned revenue** out to `address` — the admin/owner payout.
+/// The fund pays **its own earned revenue** out to `address` — the RETIRED admin/owner
+/// payout (#245), reachable only from the execution of a revenue-payout consilium that
+/// was already open when the kind was retired. No new one opens: earnings are the `fee`
+/// allocation's, and cash leaves it by a holder's redemption onto their own claim.
 ///
-/// Identical to a user withdrawal but for the claim it debits: `fee`, which holds what
-/// the fund earned (retained withdrawal fees, plus any fee accrual crediting the same
-/// account). Client money (`user:*`/`service:*`) and the fund's seed capital (`fund`)
-/// are different accounts and are unreachable from here — not by a filter that could be
-/// forgotten, but because [`WithdrawalSource::Revenue`] names exactly one account and
-/// TigerBeetle's non-negative flag on it is the backstop.
+/// Identical to a user withdrawal but for the claim it debits: the retired `fee` claim
+/// (code 40). Client money (`user:*`/`service:*`) and the fund's capital are different
+/// accounts and are unreachable from here — not by a filter that could be forgotten, but
+/// because [`WithdrawalSource::Revenue`] names exactly one account and TigerBeetle's
+/// non-negative flag on it is the backstop.
 ///
 /// Deliberately NOT gated on `configured` rails alone doing the work: like a user
 /// withdrawal, an underfunded rail queues rather than refusing (the dispatcher ships it
 /// on the next top-up), so a payout is never lost to a transient treasury dip.
 /// `id` is supplied by the caller so a consilium can derive it deterministically
 /// (`uuid_v5(consilium_id, "consilium:revenue-payout")`) and have a retried execution
-/// re-create the same row instead of a second payout. The ad-hoc admin path passes a fresh
-/// [`WithdrawalId::new`].
+/// re-create the same row instead of a second payout.
+#[allow(deprecated)]
 pub async fn request_revenue_payout(
 	ports: &WithdrawalPorts<'_>,
 	configured: &[Network],
@@ -265,21 +270,6 @@ pub async fn request_revenue_payout(
 ) -> Result<Withdrawal, DomainError> {
 	require_configured(configured, network)?;
 	open_withdrawal(ports, id, WithdrawalSource::Revenue, network, address, amount, true).await
-}
-
-/// [`request_revenue_payout`], left `Queued` for the dispatcher regardless of liquidity —
-/// the revenue-sourced twin of [`queue_withdrawal`], so every withdrawal a payment order
-/// creates leaves through the one funnel that re-reads the outflow policy at dispatch.
-pub async fn queue_revenue_payout(
-	ports: &WithdrawalPorts<'_>,
-	configured: &[Network],
-	id: WithdrawalId,
-	network: Network,
-	address: WalletAddress,
-	amount: Usdt,
-) -> Result<Withdrawal, DomainError> {
-	require_configured(configured, network)?;
-	open_withdrawal(ports, id, WithdrawalSource::Revenue, network, address, amount, false).await
 }
 
 /// The shared body of every request path: validate the shape, Read-First the **source's**

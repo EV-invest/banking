@@ -1,11 +1,13 @@
-//! `consilium` bounded context — multi-owner authorization for the fund paying its OWN
-//! earned revenue out.
+//! `consilium` bounded context — multi-owner authorization over the platform's OWN money:
+//! a payment out of a reserved allocation, a NAV mark past the move guard, a change of fee
+//! terms, a new holder of the `fee`/`fund` allocations, the attribution of a treasury
+//! arrival as somebody's seed of `fund` ([`ConsiliumTerms`]).
 //!
 //! A consilium is an **authorization artifact**, not a money move. It reserves nothing,
-//! queues nothing and refunds nothing; on approval it opens an ordinary revenue payout
-//! through the existing withdrawal path. That separation is deliberate — see
-//! `docs/CONSILIUM.md` — and it is why this aggregate adds no state to
-//! [`crate::withdrawals::WithdrawalState`] and touches no claim.
+//! queues nothing and refunds nothing; on approval it carries its subject through the
+//! ordinary path that subject already has (an order's approval, an issuance, a mark). That
+//! separation is deliberate — see `docs/CONSILIUM.md` — and it is why this aggregate adds
+//! no state to any money aggregate and touches no claim.
 //!
 //! **Quorum.** `threshold = floor(N / 2) + 1` where `N` is the owner count at open. The
 //! initiator is counted in the denominator but casts no vote: were opening a request to
@@ -28,9 +30,11 @@ use crate::{
 	error::DomainError,
 	fees::{FeePolicyChangeId, FeePolicySubject},
 	hex32,
-	money::{Network, Usdt, WalletAddress},
+	issuance::UnitIssuanceId,
+	money::{Network, Shares, TxRef, Usdt, WalletAddress},
 	payments::{PaymentId, PaymentSubject},
 	push_field,
+	subscriptions::SubscriptionId,
 	users::UserId,
 	withdrawals::WithdrawalId,
 };
@@ -79,6 +83,16 @@ pub enum ConsiliumKind {
 	/// (`docs/FEES.md` § "Changing the terms"). Not a money move: carrying it schedules the
 	/// change; the sweeper promotes it once the holders' notice period has run.
 	FeePolicy,
+	/// Units of a reserved allocation (`fee`, `fund`) minted to a person — the owners
+	/// seating a new holder of the platform's own money (#245). Not a cash move, but it
+	/// dilutes every existing holder pro rata, so it is theirs to decide.
+	/// `0045_consilium_holder_grant.sql` widens the CHECK in this same commit.
+	HolderGrant,
+	/// A chain-proven arrival on the treasury booked as a named person's deposit and their
+	/// subscription into `fund` (#245). The chain proves the dollar arrived, not whose it
+	/// is: attributing it seats a holder of the platform's capital, so it is the owners'
+	/// call rather than the first administrator's to claim it. `0045` widens the CHECK.
+	SeedCapital,
 }
 
 impl ConsiliumKind {
@@ -88,6 +102,8 @@ impl ConsiliumKind {
 			Self::Payment => "payment",
 			Self::ValuationOverride => "valuation_override",
 			Self::FeePolicy => "fee_policy",
+			Self::HolderGrant => "holder_grant",
+			Self::SeedCapital => "seed_capital",
 		}
 	}
 
@@ -100,6 +116,8 @@ impl ConsiliumKind {
 			Self::Payment => "payment",
 			Self::ValuationOverride => "valuation-override",
 			Self::FeePolicy => "fee-policy",
+			Self::HolderGrant => "holder-grant",
+			Self::SeedCapital => "seed-capital",
 		}
 	}
 
@@ -109,6 +127,8 @@ impl ConsiliumKind {
 			"payment" => Ok(Self::Payment),
 			"valuation_override" => Ok(Self::ValuationOverride),
 			"fee_policy" => Ok(Self::FeePolicy),
+			"holder_grant" => Ok(Self::HolderGrant),
+			"seed_capital" => Ok(Self::SeedCapital),
 			other => Err(DomainError::Validation(format!("unknown consilium kind: {other}"))),
 		}
 	}
@@ -267,6 +287,94 @@ impl ValuationOverrideTerms {
 	}
 }
 
+/// The immutable subject of a holder-grant consilium: mint `units` of the reserved
+/// `allocation` to `user`. The units are frozen, not a cash figure — what they are worth
+/// is the allocation's NAV at execution, derived from what it holds over the live supply,
+/// exactly as a subscription is priced at its own moment.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct HolderGrantTerms {
+	pub allocation: ServiceId,
+	pub user: UserId,
+	pub units: Shares,
+}
+
+impl HolderGrantTerms {
+	/// The domain-separation prefix — see [`RevenuePayoutTerms::DOMAIN`]. FROZEN for the
+	/// same reason.
+	pub const DOMAIN: &'static [u8] = b"banking.v1.HolderGrantTerms\x00";
+
+	/// Only a reserved allocation is granted this way: a product's units are bought with
+	/// cash or issued by its operator, and the owners' quorum has no say over them. Zero
+	/// units is not a grant.
+	pub fn new(allocation: ServiceId, user: UserId, units: Shares) -> Result<Self, DomainError> {
+		if !allocation.is_reserved() {
+			return Err(DomainError::Validation(format!(
+				"'{allocation}' is not a reserved allocation: a holder grant seats holders of the fee and fund allocations only"
+			)));
+		}
+		if units.is_zero() {
+			return Err(DomainError::Validation("a holder grant must mint a positive number of units".into()));
+		}
+		Ok(Self { allocation, user, units })
+	}
+
+	/// The bytes the payload hash is taken over: the prefix, the length-prefixed
+	/// allocation and user, the units' base units big-endian.
+	pub fn canonical_bytes(&self) -> Vec<u8> {
+		let mut out = Vec::with_capacity(Self::DOMAIN.len() + 96);
+		out.extend_from_slice(Self::DOMAIN);
+		push_field(&mut out, self.allocation.as_str().as_bytes());
+		push_field(&mut out, self.user.to_string().as_bytes());
+		out.extend_from_slice(&self.units.base_units().to_be_bytes());
+		out
+	}
+}
+
+/// The immutable subject of a seed-capital consilium: the transfer `tx_ref` names on
+/// `network`, which the chain must report as exactly `amount` USDT landing on the treasury
+/// from outside, is `depositor`'s — booked as their deposit and subscribed into `fund` at
+/// its price when the quorum executes.
+///
+/// The amount is frozen INTO the terms, unlike a subscription's units: the owners are
+/// approving "this dollar is this person's", and a reference that turns out to name a
+/// different transfer must fail the signature rather than seat the person with whatever
+/// the chain says. The units are not frozen — they are what the cash buys at execution,
+/// as every subscription is priced at its own moment.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct SeedCapitalTerms {
+	pub tx_ref: TxRef,
+	pub network: Network,
+	pub amount: Usdt,
+	pub depositor: UserId,
+}
+
+impl SeedCapitalTerms {
+	/// The domain-separation prefix — see [`RevenuePayoutTerms::DOMAIN`]. FROZEN for the
+	/// same reason.
+	pub const DOMAIN: &'static [u8] = b"banking.v1.SeedCapitalTerms\x00";
+
+	/// Zero is not a seed: the chain never reports a zero transfer, and terms the chain can
+	/// never match would sit open for 72 hours before failing.
+	pub fn new(tx_ref: TxRef, network: Network, amount: Usdt, depositor: UserId) -> Result<Self, DomainError> {
+		if amount.is_zero() {
+			return Err(DomainError::Validation("a seed must name the positive amount the chain reports".into()));
+		}
+		Ok(Self { tx_ref, network, amount, depositor })
+	}
+
+	/// The bytes the payload hash is taken over: the prefix, the length-prefixed reference,
+	/// network and depositor, the amount's base units big-endian.
+	pub fn canonical_bytes(&self) -> Vec<u8> {
+		let mut out = Vec::with_capacity(Self::DOMAIN.len() + 128);
+		out.extend_from_slice(Self::DOMAIN);
+		push_field(&mut out, self.tx_ref.as_str().as_bytes());
+		push_field(&mut out, self.network.as_str().as_bytes());
+		push_field(&mut out, self.depositor.to_string().as_bytes());
+		out.extend_from_slice(&self.amount.base_units().to_be_bytes());
+		out
+	}
+}
+
 /// What a consilium is deciding, by value.
 ///
 /// It exists so a second governance subject is a variant here rather than a parallel
@@ -286,6 +394,11 @@ pub enum ConsiliumTerms {
 	/// The fee-policy change this quorum authorizes. The CHANGE'S id is inside the hashed
 	/// subject for the same reason the payment's is.
 	FeePolicy(FeePolicySubject),
+	/// Units of a reserved allocation for a person — see [`HolderGrantTerms`].
+	HolderGrant(HolderGrantTerms),
+	/// A treasury arrival attributed to a person as their seed of `fund` — see
+	/// [`SeedCapitalTerms`].
+	SeedCapital(SeedCapitalTerms),
 }
 
 impl ConsiliumTerms {
@@ -295,6 +408,8 @@ impl ConsiliumTerms {
 			Self::Payment(_) => ConsiliumKind::Payment,
 			Self::ValuationOverride(_) => ConsiliumKind::ValuationOverride,
 			Self::FeePolicy(_) => ConsiliumKind::FeePolicy,
+			Self::HolderGrant(_) => ConsiliumKind::HolderGrant,
+			Self::SeedCapital(_) => ConsiliumKind::SeedCapital,
 		}
 	}
 
@@ -312,6 +427,8 @@ impl ConsiliumTerms {
 			Self::Payment(subject) => subject.canonical_bytes(),
 			Self::ValuationOverride(terms) => terms.canonical_bytes(),
 			Self::FeePolicy(subject) => subject.canonical_bytes(),
+			Self::HolderGrant(terms) => terms.canonical_bytes(),
+			Self::SeedCapital(terms) => terms.canonical_bytes(),
 		}
 	}
 
@@ -338,6 +455,17 @@ impl ConsiliumTerms {
 			// "one open request" index on it yields exactly one open fee-policy consilium per
 			// product — without blocking a payout or a payment over some other claim.
 			Self::FeePolicy(subject) => LedgerAccountKey::FeeShares(subject.service.clone()),
+			// A grant moves no cash either, but it reprices the allocation's every unit — the
+			// same claim a payment out of `service:fee` spends and a redemption is paid from.
+			// Keying on it yields one open grant per reserved allocation, and it queues behind
+			// (or blocks) a payment out of that claim rather than racing it: the owners must
+			// not be voting on who holds the money and on a drain of it at once.
+			Self::HolderGrant(terms) => LedgerAccountKey::ServiceClaim(terms.allocation.clone()),
+			// A seed is a subscription into `fund`: it reprices nothing, but it seats a holder
+			// of that claim and adds cash to it, so it takes the same slot a grant of `fund`
+			// units or a payment out of `service:fund` takes — one open seed at a time, never
+			// while the owners are also deciding who holds the fund or what leaves it.
+			Self::SeedCapital(_) => LedgerAccountKey::ServiceClaim(ServiceId::fund()),
 		}
 	}
 }
@@ -366,6 +494,18 @@ impl From<FeePolicySubject> for ConsiliumTerms {
 	}
 }
 
+impl From<HolderGrantTerms> for ConsiliumTerms {
+	fn from(terms: HolderGrantTerms) -> Self {
+		Self::HolderGrant(terms)
+	}
+}
+
+impl From<SeedCapitalTerms> for ConsiliumTerms {
+	fn from(terms: SeedCapitalTerms) -> Self {
+		Self::SeedCapital(terms)
+	}
+}
+
 /// What an executed consilium produced — an identity, never the machinery behind it.
 ///
 /// The aggregate records WHICH artifact its approval was spent on and nothing more; how one
@@ -383,6 +523,14 @@ pub enum ConsiliumEffect {
 	/// The fee-policy change this quorum scheduled. Promoting it into the live terms once
 	/// the notice period has run is the fee sweeper's business.
 	FeePolicy(FeePolicyChangeId),
+	/// The in-kind issuance a holder-grant quorum minted. The record, not the units: the
+	/// relay posts them, as it posts every issuance.
+	Issuance(UnitIssuanceId),
+	/// The `fund` subscription a seed-capital quorum opened for the depositor. The
+	/// subscription and not the deposit, because the deposit is keyed by the chain
+	/// reference and has no id of its own, while the subscription is derived from that
+	/// same reference and is the fact that seats the holder.
+	Subscription(SubscriptionId),
 }
 
 impl From<WithdrawalId> for ConsiliumEffect {
@@ -406,6 +554,18 @@ impl From<ValuationId> for ConsiliumEffect {
 impl From<FeePolicyChangeId> for ConsiliumEffect {
 	fn from(id: FeePolicyChangeId) -> Self {
 		Self::FeePolicy(id)
+	}
+}
+
+impl From<UnitIssuanceId> for ConsiliumEffect {
+	fn from(id: UnitIssuanceId) -> Self {
+		Self::Issuance(id)
+	}
+}
+
+impl From<SubscriptionId> for ConsiliumEffect {
+	fn from(id: SubscriptionId) -> Self {
+		Self::Subscription(id)
 	}
 }
 
@@ -800,17 +960,17 @@ impl Consilium {
 		// leave the column blank on a row that did execute.
 		match effect {
 			ConsiliumEffect::Withdrawal(id) => Some(id),
-			ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) => None,
+			ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Issuance(_) | ConsiliumEffect::Subscription(_) => None,
 		}
 	}
 
 	/// The executed effect NARROWED to a payment order — the `executed_payment_id` column's
 	/// projection, and another leg of `consilium_execution_is_recorded`'s
-	/// `num_nonnulls(...) = 1`: exactly one of the four accessors answers on an executed row.
+	/// `num_nonnulls(...) = 1`: exactly one of the six accessors answers on an executed row.
 	pub fn executed_payment_id(&self) -> Option<PaymentId> {
 		match self.executed? {
 			ConsiliumEffect::Payment(id) => Some(id),
-			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) => None,
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Issuance(_) | ConsiliumEffect::Subscription(_) => None,
 		}
 	}
 
@@ -819,7 +979,7 @@ impl Consilium {
 	pub fn executed_valuation_id(&self) -> Option<ValuationId> {
 		match self.executed? {
 			ConsiliumEffect::Valuation(id) => Some(id),
-			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::FeePolicy(_) => None,
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Issuance(_) | ConsiliumEffect::Subscription(_) => None,
 		}
 	}
 
@@ -828,7 +988,25 @@ impl Consilium {
 	pub fn executed_fee_policy_change_id(&self) -> Option<FeePolicyChangeId> {
 		match self.executed? {
 			ConsiliumEffect::FeePolicy(id) => Some(id),
-			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) => None,
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::Issuance(_) | ConsiliumEffect::Subscription(_) => None,
+		}
+	}
+
+	/// The executed effect NARROWED to an in-kind issuance — the `executed_issuance_id`
+	/// column's projection, the fifth leg.
+	pub fn executed_issuance_id(&self) -> Option<UnitIssuanceId> {
+		match self.executed? {
+			ConsiliumEffect::Issuance(id) => Some(id),
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Subscription(_) => None,
+		}
+	}
+
+	/// The executed effect NARROWED to a `fund` subscription — the `executed_subscription_id`
+	/// column's projection, the sixth leg.
+	pub fn executed_subscription_id(&self) -> Option<SubscriptionId> {
+		match self.executed? {
+			ConsiliumEffect::Subscription(id) => Some(id),
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) | ConsiliumEffect::Issuance(_) => None,
 		}
 	}
 
@@ -986,11 +1164,13 @@ mod tests {
 			refusal(terms()),
 			"a payout consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached"
 		);
-		let by_kind: [(ConsiliumTerms, &str); 4] = [
+		let by_kind: [(ConsiliumTerms, &str); 6] = [
 			(terms(), "a payout consilium"),
 			(ConsiliumTerms::Payment(payment_subject()), "a payment consilium"),
 			(ConsiliumTerms::ValuationOverride(valuation_override("16250")), "a valuation-override consilium"),
 			(ConsiliumTerms::FeePolicy(fee_policy_subject()), "a fee-policy consilium"),
+			(ConsiliumTerms::HolderGrant(holder_grant("1000")), "a holder-grant consilium"),
+			(ConsiliumTerms::SeedCapital(seed_capital("250")), "a seed-capital consilium"),
 		];
 		for (kind_terms, want_noun) in by_kind {
 			let kind = kind_terms.kind();
@@ -1284,6 +1464,112 @@ mod tests {
 			ConsiliumTerms::ValuationOverride(mark).canonical_bytes(),
 			ConsiliumTerms::Payment(payment_subject()).canonical_bytes()
 		);
+		// And the fifth: a grant of units opens with its own frozen prefix too.
+		let grant = holder_grant("1000");
+		assert!(grant.canonical_bytes().starts_with(HolderGrantTerms::DOMAIN));
+		assert_eq!(HolderGrantTerms::DOMAIN, b"banking.v1.HolderGrantTerms\x00");
+		assert_ne!(ConsiliumTerms::HolderGrant(grant.clone()).canonical_bytes(), payout.canonical_bytes());
+		assert_ne!(
+			ConsiliumTerms::HolderGrant(grant).canonical_bytes(),
+			ConsiliumTerms::ValuationOverride(valuation_override("250")).canonical_bytes()
+		);
+	}
+
+	/// Units of the `fee` allocation for one person.
+	fn holder_grant(units: &str) -> HolderGrantTerms {
+		HolderGrantTerms::new(ServiceId::fee(), UserId::from_raw(uuid::Uuid::from_u128(7)), Shares::parse_decimal(units).unwrap()).unwrap()
+	}
+
+	fn seed_capital(amount: &str) -> SeedCapitalTerms {
+		SeedCapitalTerms::new(
+			TxRef::parse("0xabc").unwrap(),
+			Network::Bep20,
+			Usdt::parse_decimal(amount).unwrap(),
+			UserId::from_raw(uuid::Uuid::from_u128(7)),
+		)
+		.unwrap()
+	}
+
+	#[test]
+	fn a_seed_binds_the_reference_the_amount_and_the_person_and_spends_the_funds_claim() {
+		let terms = ConsiliumTerms::SeedCapital(seed_capital("250"));
+		assert_eq!(terms.kind(), ConsiliumKind::SeedCapital);
+		assert_eq!(ConsiliumKind::SeedCapital.as_str(), "seed_capital");
+		assert_eq!(ConsiliumKind::parse("seed_capital").unwrap(), ConsiliumKind::SeedCapital);
+		// Its own frozen prefix, so a seed approval is a signature over nothing else.
+		assert!(terms.canonical_bytes().starts_with(SeedCapitalTerms::DOMAIN));
+		assert_eq!(SeedCapitalTerms::DOMAIN, b"banking.v1.SeedCapitalTerms\x00");
+		assert_ne!(terms.canonical_bytes(), ConsiliumTerms::HolderGrant(holder_grant("250")).canonical_bytes());
+		// Every field is under the signature: another reference, rail, person or amount is
+		// another request.
+		let base = seed_capital("250");
+		let variants = [
+			SeedCapitalTerms {
+				tx_ref: TxRef::parse("0xabd").unwrap(),
+				..base.clone()
+			},
+			SeedCapitalTerms {
+				network: Network::Trc20,
+				..base.clone()
+			},
+			SeedCapitalTerms {
+				depositor: UserId::from_raw(uuid::Uuid::from_u128(8)),
+				..base.clone()
+			},
+			seed_capital("250.000001"),
+		];
+		for other in variants {
+			assert_ne!(base.canonical_bytes(), other.canonical_bytes(), "{other:?}");
+		}
+		assert_eq!(base.canonical_bytes(), seed_capital("250").canonical_bytes());
+		// Zero is refused at construction, not after a vote.
+		assert!(SeedCapitalTerms::new(TxRef::parse("0xabc").unwrap(), Network::Bep20, Usdt::ZERO, UserId::from_raw(uuid::Uuid::from_u128(7))).is_err());
+		// One open seed per platform, in the fund allocation's slot.
+		assert_eq!(terms.source_claim(), LedgerAccountKey::ServiceClaim(ServiceId::fund()));
+		// The effect narrows to the subscription column and to no other.
+		let roster = owners(3);
+		let mut c = Consilium::open(ConsiliumId::new(), terms, [2u8; 32], roster[0], &roster, NOW).unwrap();
+		c.record_vote(roster[1], VoteDecision::Approve, NOW).unwrap();
+		c.record_vote(roster[2], VoteDecision::Approve, NOW).unwrap();
+		let subscription = SubscriptionId::new();
+		c.mark_executed(ConsiliumEffect::Subscription(subscription), NOW).unwrap();
+		assert_eq!(c.executed_subscription_id(), Some(subscription));
+		assert!(c.executed_issuance_id().is_none() && c.executed_withdrawal_id().is_none() && c.executed_payment_id().is_none());
+		assert!(c.executed_valuation_id().is_none() && c.executed_fee_policy_change_id().is_none());
+	}
+
+	#[test]
+	fn a_holder_grant_names_a_reserved_allocation_only_and_spends_its_claim() {
+		let terms = ConsiliumTerms::HolderGrant(holder_grant("1000"));
+		assert_eq!(terms.kind(), ConsiliumKind::HolderGrant);
+		assert_eq!(ConsiliumKind::HolderGrant.as_str(), "holder_grant");
+		assert_eq!(ConsiliumKind::parse("holder_grant").unwrap(), ConsiliumKind::HolderGrant);
+		// One open grant per reserved allocation, serialized against a payment out of it.
+		assert_eq!(terms.source_claim(), LedgerAccountKey::ServiceClaim(ServiceId::fee()));
+		// Every field is in the digest: a different grantee, allocation or size is a
+		// different signature.
+		let other_user = HolderGrantTerms::new(ServiceId::fee(), UserId::from_raw(uuid::Uuid::from_u128(8)), Shares::parse_decimal("1000").unwrap()).unwrap();
+		let other_allocation = HolderGrantTerms::new(ServiceId::fund(), UserId::from_raw(uuid::Uuid::from_u128(7)), Shares::parse_decimal("1000").unwrap()).unwrap();
+		assert_ne!(terms.canonical_bytes(), ConsiliumTerms::HolderGrant(other_user).canonical_bytes());
+		assert_ne!(terms.canonical_bytes(), ConsiliumTerms::HolderGrant(other_allocation).canonical_bytes());
+		assert_ne!(terms.canonical_bytes(), ConsiliumTerms::HolderGrant(holder_grant("1001")).canonical_bytes());
+		// A product is not granted; nor is nothing.
+		let user = UserId::from_raw(uuid::Uuid::from_u128(7));
+		assert!(HolderGrantTerms::new(ServiceId::parse("svc-arb").unwrap(), user, Shares::parse_decimal("1").unwrap()).is_err());
+		assert!(HolderGrantTerms::new(ServiceId::fee(), user, Shares::ZERO).is_err());
+
+		// Its effect is an issuance, and only the issuance column answers for it.
+		let roster = owners(3);
+		let mut c = Consilium::open(ConsiliumId::new(), terms, [9u8; 32], roster[0], &roster, NOW).unwrap();
+		c.record_vote(roster[1], VoteDecision::Approve, NOW + 1).unwrap();
+		c.record_vote(roster[2], VoteDecision::Approve, NOW + 2).unwrap();
+		let issuance = UnitIssuanceId::new();
+		c.mark_executed(ConsiliumEffect::Issuance(issuance), NOW + 3).unwrap();
+		assert_eq!(c.executed_issuance_id(), Some(issuance));
+		assert_eq!(c.executed_withdrawal_id(), None);
+		assert_eq!(c.executed_payment_id(), None);
+		assert_eq!(c.executed_valuation_id(), None);
+		assert_eq!(c.executed_fee_policy_change_id(), None);
 	}
 
 	/// A NAV mark past the move guard on one fund.
