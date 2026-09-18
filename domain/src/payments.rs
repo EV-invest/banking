@@ -33,15 +33,18 @@
 //!
 //! # Authorization is a function of the SOURCE
 //!
-//! > Every payment whose source is fund-owned (`Piggybank`, `Revenue`, `Service`) requires
-//! > the owner consilium, at every tier. Every payment out of `User(u)` requires `u`'s own
-//! > consent, at every tier.
+//! > Every payment out of `User(u)` requires `u`'s own consent, at every tier. Every
+//! > other source — an allocation's pooled claim (`Service`, the reserved `fee` and `fund`
+//! > allocations included) and the retired fund singletons — requires the owner
+//! > consilium, at every tier.
 //!
 //! [`PaymentTerms::requirement`] is that rule, and it is total over [`Party`] by
-//! construction ([`Party::is_fund_owned`]). There is **no** "an admin may move money
-//! between fund-owned claims alone" cell: a security review found it turns three
-//! pre-existing single-actor holes into a treasury-wide one, and deleting it is what makes
-//! payments add no new capability to an attacker. Do not reintroduce it.
+//! construction: a party is a person, or it is money held for people through an
+//! allocation, and the owners' quorum speaks for the latter (phase 2 of #245 makes that
+//! quorum per-allocation). There is **no** "an admin may move money between fund-owned
+//! claims alone" cell: a security review found it turns three pre-existing single-actor
+//! holes into a treasury-wide one, and deleting it is what makes payments add no new
+//! capability to an attacker. Do not reintroduce it.
 //!
 //! Pure and wasm-safe: ids and the payload hash are supplied by the application layer, no
 //! clock, no I/O, no crypto.
@@ -50,7 +53,7 @@ use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-	balance::{LedgerAccountKey, Party},
+	balance::{LedgerAccountKey, Party, ServiceId},
 	error::DomainError,
 	hex32,
 	money::{Network, Usdt, WalletAddress},
@@ -139,7 +142,10 @@ impl PaymentDestination {
 		match self {
 			Self::External { .. } => PaymentTier::External,
 			Self::Internal(Party::Service(_)) => PaymentTier::Service,
-			Self::Internal(Party::Piggybank | Party::User(_) | Party::Revenue) => PaymentTier::Internal,
+			Self::Internal(Party::User(_)) => PaymentTier::Internal,
+			// Retired destinations an in-flight order may still name.
+			#[allow(deprecated)]
+			Self::Internal(Party::Piggybank | Party::Revenue) => PaymentTier::Internal,
 		}
 	}
 
@@ -408,12 +414,16 @@ impl PaymentTerms {
 	/// **The §3 policy, as one total function.**
 	///
 	/// It reads the SOURCE and nothing else — not the tier, not the destination, not the
-	/// initiator's role. A fund-owned source is the owners' money however short the hop; an
-	/// investor's claim is theirs however internal the destination.
+	/// initiator's role. An investor's claim is theirs however internal the destination;
+	/// everything else is money held for people through an allocation, and the owners'
+	/// quorum speaks for it however short the hop.
 	pub fn requirement(&self) -> PaymentApproval {
 		match &self.from {
 			Party::User(user) => PaymentApproval::SubjectConsent(*user),
-			Party::Piggybank | Party::Service(_) | Party::Revenue => PaymentApproval::OwnerConsilium,
+			Party::Service(_) => PaymentApproval::OwnerConsilium,
+			// The retired singletons are still a source an in-flight order may name.
+			#[allow(deprecated)]
+			Party::Piggybank | Party::Revenue => PaymentApproval::OwnerConsilium,
 		}
 	}
 
@@ -453,14 +463,20 @@ impl PaymentTerms {
 /// payments history — and the terms are the only thing all three are bound to. A per-surface
 /// formatter is how the mail and the screen come to disagree about what was approved.
 ///
-/// The singleton claims get names an operator uses out loud; the two identified ones keep
-/// their id, because "a service" and "an investor" are not answers to "which one".
+/// The reserved allocations get the names an operator uses out loud; a product and an
+/// investor keep their id, because "a service" and "an investor" are not answers to
+/// "which one".
+#[allow(deprecated)]
 fn party_label(party: &Party) -> String {
 	match party {
-		Party::Piggybank => "the fund's pooled capital".to_owned(),
-		Party::Revenue => "the fund's earned revenue".to_owned(),
+		Party::Service(service) if *service == ServiceId::fee() => "the fee allocation".to_owned(),
+		Party::Service(service) if *service == ServiceId::fund() => "the fund allocation".to_owned(),
 		Party::Service(service) => format!("the {service} product"),
 		Party::User(user) => format!("investor {user}"),
+		// Retired sources, still named in the history and in any order opened before the
+		// migration; the words stay so an old approval reads as it did.
+		Party::Piggybank => "the fund's pooled capital".to_owned(),
+		Party::Revenue => "the fund's earned revenue".to_owned(),
 	}
 }
 
@@ -949,12 +965,21 @@ impl EmitsEvents for PaymentOrder {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::balance::ServiceId;
 
 	const NOW: i64 = 1_700_000_000;
 
 	fn svc() -> ServiceId {
 		ServiceId::parse("trading").unwrap()
+	}
+
+	/// The platform's earned money — the `fee` allocation's claim (#245).
+	fn fee() -> Party {
+		Party::Service(ServiceId::fee())
+	}
+
+	/// The platform's own capital — the `fund` allocation's claim (#245).
+	fn fund() -> Party {
+		Party::Service(ServiceId::fund())
 	}
 
 	fn reason() -> PaymentReason {
@@ -989,8 +1014,8 @@ mod tests {
 	#[test]
 	fn the_tier_is_read_off_the_destination_and_never_supplied() {
 		// The table in the module header, asserted rather than described.
-		assert_eq!(PaymentDestination::Internal(Party::Piggybank).tier(), PaymentTier::Internal);
-		assert_eq!(PaymentDestination::Internal(Party::Revenue).tier(), PaymentTier::Internal);
+		assert_eq!(PaymentDestination::Internal(fund()).tier(), PaymentTier::Service);
+		assert_eq!(PaymentDestination::Internal(fee()).tier(), PaymentTier::Service);
 		assert_eq!(PaymentDestination::Internal(Party::User(UserId::new())).tier(), PaymentTier::Internal);
 		assert_eq!(PaymentDestination::Internal(Party::Service(svc())).tier(), PaymentTier::Service);
 		assert_eq!(external().tier(), PaymentTier::External);
@@ -1012,14 +1037,14 @@ mod tests {
 		let user = UserId::new();
 		let destinations = || {
 			vec![
-				PaymentDestination::Internal(Party::Piggybank),
-				PaymentDestination::Internal(Party::Revenue),
+				PaymentDestination::Internal(fund()),
+				PaymentDestination::Internal(fee()),
 				PaymentDestination::Internal(Party::Service(svc())),
 				PaymentDestination::Internal(Party::User(UserId::new())),
 				external(),
 			]
 		};
-		for source in [Party::Piggybank, Party::Revenue, Party::Service(svc())] {
+		for source in [fund(), fee(), Party::Service(svc())] {
 			for to in destinations() {
 				// A claim paying itself is refused by the constructor, so it is not a cell.
 				if to.party() == Some(&source) {
@@ -1051,28 +1076,58 @@ mod tests {
 
 	#[test]
 	fn the_source_claim_is_the_partys_own_claim() {
-		assert_eq!(terms(Party::Revenue, external()).source_claim(), LedgerAccountKey::FeeRevenue);
-		assert_eq!(terms(Party::Piggybank, external()).source_claim(), LedgerAccountKey::Fund);
+		assert_eq!(terms(fee(), external()).source_claim(), LedgerAccountKey::ServiceClaim(ServiceId::fee()));
+		assert_eq!(terms(fund(), external()).source_claim(), LedgerAccountKey::ServiceClaim(ServiceId::fund()));
 		let user = UserId::new();
 		assert_eq!(terms(Party::User(user), external()).source_claim(), LedgerAccountKey::UserClaim(user));
 		assert_eq!(terms(Party::Service(svc()), external()).source_claim(), LedgerAccountKey::ServiceClaim(svc()));
 	}
 
 	#[test]
+	fn the_reserved_allocations_are_named_out_loud_and_products_by_slug() {
+		// The label is what the owners' screen, the consent mail and the history all
+		// render — one wording per party, decided here.
+		assert_eq!(terms(fee(), external()).source_label(), "the fee allocation");
+		assert_eq!(terms(fund(), external()).source_label(), "the fund allocation");
+		assert_eq!(terms(Party::Service(svc()), external()).source_label(), "the trading product");
+		let user = UserId::new();
+		assert_eq!(terms(Party::User(user), external()).source_label(), format!("investor {user}"));
+		assert_eq!(terms(fee(), PaymentDestination::Internal(fund())).destination_label(), "the fund allocation");
+	}
+
+	#[test]
+	#[allow(deprecated)]
+	fn a_retired_source_still_reads_as_the_owners_money() {
+		// An order opened before the migration names `piggybank` or `revenue` in its terms.
+		// It must still load, still need the owner consilium, still settle on the retired
+		// singleton claim and still read as it did when it was approved.
+		for (source, claim, label) in [
+			(Party::Piggybank, LedgerAccountKey::Fund, "the fund's pooled capital"),
+			(Party::Revenue, LedgerAccountKey::FeeRevenue, "the fund's earned revenue"),
+		] {
+			let legacy = terms(source.clone(), external());
+			assert_eq!(legacy.requirement(), PaymentApproval::OwnerConsilium);
+			assert_eq!(legacy.source_claim(), claim);
+			assert_eq!(legacy.source_label(), label);
+			assert_eq!(PaymentDestination::Internal(source).tier(), PaymentTier::Internal);
+		}
+	}
+
+	#[test]
 	fn the_constructor_refuses_every_shape_that_can_never_execute() {
 		// from == to: nothing moves, yet an approval and an index slot are spent.
-		let err = PaymentTerms::new(Party::Revenue, PaymentDestination::Internal(Party::Revenue), usdt("5"), reason()).unwrap_err();
+		let err = PaymentTerms::new(fee(), PaymentDestination::Internal(fee()), usdt("5"), reason()).unwrap_err();
 		assert!(matches!(err, DomainError::Validation(_)));
 		let user = UserId::new();
 		assert!(PaymentTerms::new(Party::User(user), PaymentDestination::Internal(Party::User(user)), usdt("5"), reason()).is_err());
 		// Zero: TigerBeetle rejects a zero-amount transfer, so this order could only park.
-		assert!(PaymentTerms::new(Party::Revenue, external(), Usdt::ZERO, reason()).is_err());
+		assert!(PaymentTerms::new(fee(), external(), Usdt::ZERO, reason()).is_err());
 		// An address for another rail.
 		let mismatched = PaymentDestination::External {
 			network: Network::Trc20,
 			address: address(),
 		};
-		assert!(PaymentTerms::new(Party::Revenue, mismatched, usdt("5"), reason()).is_err());
+		assert!(PaymentTerms::new(fee(), mismatched, usdt("5"), reason()).is_err());
 		// The two ends are still allowed to be different users, and a different service.
 		assert!(PaymentTerms::new(Party::User(user), PaymentDestination::Internal(Party::User(UserId::new())), usdt("5"), reason()).is_ok());
 	}
@@ -1095,19 +1150,19 @@ mod tests {
 
 	#[test]
 	fn the_canonical_encoding_separates_fields_and_carries_the_reason() {
-		let a = PaymentTerms::new(Party::Revenue, external(), usdt("100"), PaymentReason::new("ab").unwrap()).unwrap();
-		let b = PaymentTerms::new(Party::Revenue, external(), usdt("100"), PaymentReason::new("a").unwrap()).unwrap();
+		let a = PaymentTerms::new(fee(), external(), usdt("100"), PaymentReason::new("ab").unwrap()).unwrap();
+		let b = PaymentTerms::new(fee(), external(), usdt("100"), PaymentReason::new("a").unwrap()).unwrap();
 		// Length prefixes: two reasons that concatenate alike must not encode alike.
 		assert_ne!(a.canonical_bytes(), b.canonical_bytes());
 		assert_eq!(a.canonical_bytes(), a.canonical_bytes());
 		// THE REASON IS IN THE DIGEST. Without this an approval would bind to the amount and
 		// the destination while the sentence the human read stayed free to change.
-		let reworded = PaymentTerms::new(Party::Revenue, external(), usdt("100"), PaymentReason::new("something else entirely").unwrap()).unwrap();
+		let reworded = PaymentTerms::new(fee(), external(), usdt("100"), PaymentReason::new("something else entirely").unwrap()).unwrap();
 		assert_ne!(a.canonical_bytes(), reworded.canonical_bytes());
 		// So are the amount and both ends.
-		let dearer = PaymentTerms::new(Party::Revenue, external(), usdt("101"), PaymentReason::new("ab").unwrap()).unwrap();
+		let dearer = PaymentTerms::new(fee(), external(), usdt("101"), PaymentReason::new("ab").unwrap()).unwrap();
 		assert_ne!(a.canonical_bytes(), dearer.canonical_bytes());
-		let elsewhere = PaymentTerms::new(Party::Piggybank, external(), usdt("100"), PaymentReason::new("ab").unwrap()).unwrap();
+		let elsewhere = PaymentTerms::new(fund(), external(), usdt("100"), PaymentReason::new("ab").unwrap()).unwrap();
 		assert_ne!(a.canonical_bytes(), elsewhere.canonical_bytes());
 		// The domain prefix opens every encoding, so a digest over these terms can never be
 		// mistaken for one over another subject.
@@ -1119,8 +1174,8 @@ mod tests {
 	fn an_internal_destination_cannot_encode_as_an_external_one() {
 		// The discriminator is length-prefixed inside the encoding, so no arrangement of a
 		// party id can make an internal payment hash like a payment to an address.
-		let internal = PaymentTerms::new(Party::Revenue, PaymentDestination::Internal(Party::Piggybank), usdt("1"), reason()).unwrap();
-		let out = PaymentTerms::new(Party::Revenue, external(), usdt("1"), reason()).unwrap();
+		let internal = PaymentTerms::new(fee(), PaymentDestination::Internal(fund()), usdt("1"), reason()).unwrap();
+		let out = PaymentTerms::new(fee(), external(), usdt("1"), reason()).unwrap();
 		assert_ne!(internal.canonical_bytes(), out.canonical_bytes());
 	}
 
@@ -1128,7 +1183,7 @@ mod tests {
 	fn two_orders_with_identical_terms_hash_differently_as_subjects() {
 		// Without the id in the subject an owner's approval of one order would be a valid
 		// signature over every other order with the same terms.
-		let shared = terms(Party::Revenue, external());
+		let shared = terms(fee(), external());
 		let one = PaymentSubject {
 			payment_id: PaymentId::new(),
 			terms: shared.clone(),
@@ -1144,7 +1199,7 @@ mod tests {
 
 	#[test]
 	fn an_internal_payment_reserves_on_approval_and_settles_on_execution() {
-		let mut order = opened(Party::Piggybank, PaymentDestination::Internal(Party::Revenue));
+		let mut order = opened(fund(), PaymentDestination::Internal(fee()));
 		order.approve(NOW).unwrap();
 		let events = order.drain_events();
 		assert!(matches!(events[0], PaymentEvent::ApprovalRecorded { .. }));
@@ -1172,7 +1227,7 @@ mod tests {
 		// TWO RESERVES AGAINST ONE CLAIM IS THE BUG THIS PREVENTS. An L1 payment's money is
 		// moved by the withdrawal it creates, whose own `Requested` event is already in the
 		// outbox taking the identical `Dr <source> / Cr clearing` pending.
-		let mut order = opened(Party::Revenue, external());
+		let mut order = opened(fee(), external());
 		order.approve(NOW).unwrap();
 		let events = order.drain_events();
 		assert!(!events.iter().any(|e| matches!(e, PaymentEvent::Reserved { .. })));
@@ -1190,21 +1245,21 @@ mod tests {
 	fn an_effect_that_does_not_match_the_tier_is_refused() {
 		// The tier says which effect is possible; recording the other one would leave the
 		// money in one plane and the record in the other.
-		let mut internal = opened(Party::Piggybank, PaymentDestination::Internal(Party::Revenue));
+		let mut internal = opened(fund(), PaymentDestination::Internal(fee()));
 		internal.approve(NOW).unwrap();
 		assert!(matches!(
 			internal.mark_executed(PaymentEffect::Withdrawal(WithdrawalId::new()), NOW),
 			Err(DomainError::Conflict(_))
 		));
 
-		let mut out = opened(Party::Revenue, external());
+		let mut out = opened(fee(), external());
 		out.approve(NOW).unwrap();
 		assert!(matches!(out.mark_executed(PaymentEffect::Transfer, NOW), Err(DomainError::Conflict(_))));
 	}
 
 	#[test]
 	fn execution_is_recorded_once_and_retries_are_no_ops() {
-		let mut order = opened(Party::Revenue, external());
+		let mut order = opened(fee(), external());
 		order.approve(NOW).unwrap();
 		order.drain_events();
 		let withdrawal = WithdrawalId::new();
@@ -1225,13 +1280,13 @@ mod tests {
 
 	#[test]
 	fn approval_is_idempotent_and_only_reachable_from_pending() {
-		let mut order = opened(Party::Piggybank, PaymentDestination::Internal(Party::Revenue));
+		let mut order = opened(fund(), PaymentDestination::Internal(fee()));
 		order.approve(NOW).unwrap();
 		order.drain_events();
 		order.approve(NOW + 1).unwrap();
 		assert!(order.drain_events().is_empty(), "a repeat approval raises nothing — and reserves nothing twice");
 
-		let mut cancelled = opened(Party::Piggybank, PaymentDestination::Internal(Party::Revenue));
+		let mut cancelled = opened(fund(), PaymentDestination::Internal(fee()));
 		cancelled.cancel(NOW).unwrap();
 		assert!(matches!(cancelled.approve(NOW + 1), Err(DomainError::Conflict(_))));
 	}
@@ -1252,14 +1307,14 @@ mod tests {
 
 	#[test]
 	fn cancel_and_expire_are_idempotent_mutually_exclusive_and_never_early() {
-		let mut cancelled = opened(Party::Revenue, external());
+		let mut cancelled = opened(fee(), external());
 		cancelled.cancel(NOW).unwrap();
 		cancelled.drain_events();
 		cancelled.cancel(NOW + 1).unwrap();
 		assert!(cancelled.drain_events().is_empty());
 		assert!(cancelled.expire(NOW + TTL_SECS + 1).is_err());
 
-		let mut expired = opened(Party::Revenue, external());
+		let mut expired = opened(fee(), external());
 		// Refuses to cut the window short, so a clock skew cannot void a live approval.
 		assert!(matches!(expired.expire(NOW + 10), Err(DomainError::Conflict(_))));
 		expired.expire(NOW + TTL_SECS).unwrap();
@@ -1272,7 +1327,7 @@ mod tests {
 
 	#[test]
 	fn execution_failure_is_terminal_and_states_why() {
-		let mut order = opened(Party::Revenue, external());
+		let mut order = opened(fee(), external());
 		order.approve(NOW).unwrap();
 		order.drain_events();
 		order.mark_execution_failed("payout exceeds the fund's available revenue".into(), NOW).unwrap();
@@ -1293,8 +1348,8 @@ mod tests {
 	/// locked amount back, or a terminal order strands it in `clearing` forever.
 	#[test]
 	fn an_internal_payment_that_fails_to_execute_releases_its_reservation() {
-		for to in [PaymentDestination::Internal(Party::Revenue), PaymentDestination::Internal(Party::Service(svc()))] {
-			let mut order = opened(Party::Piggybank, to);
+		for to in [PaymentDestination::Internal(fee()), PaymentDestination::Internal(Party::Service(svc()))] {
+			let mut order = opened(fund(), to);
 			order.approve(NOW).unwrap();
 			order.drain_events();
 			order.mark_execution_failed("the consent was voided".into(), NOW + 1).unwrap();
@@ -1307,7 +1362,7 @@ mod tests {
 			assert!(!events[1].relays());
 			assert_eq!(events.iter().filter(|e| e.relays()).count(), 1, "exactly one money fact: the release");
 			let PaymentEvent::Released { from, amount, .. } = &events[0] else { unreachable!() };
-			assert_eq!(from, &Party::Piggybank);
+			assert_eq!(from, &fund());
 			assert_eq!(*amount, usdt("100"));
 			assert_eq!(order.state(), PaymentState::ExecutionFailed);
 			assert!(!order.state().is_open(), "a failed order no longer holds its source");
@@ -1319,7 +1374,7 @@ mod tests {
 
 	#[test]
 	fn the_version_moves_on_every_fact() {
-		let mut order = opened(Party::Piggybank, PaymentDestination::Internal(Party::Revenue));
+		let mut order = opened(fund(), PaymentDestination::Internal(fee()));
 		let at_open = order.version();
 		order.approve(NOW).unwrap();
 		// Three facts: the approval record, the verdict, and the reservation.
@@ -1356,7 +1411,7 @@ mod tests {
 
 	#[test]
 	fn events_round_trip_through_json() {
-		let mut order = PaymentOrder::open(PaymentId::new(), terms(Party::Revenue, external()), [0xab; 32], UserId::new(), NOW);
+		let mut order = PaymentOrder::open(PaymentId::new(), terms(fee(), external()), [0xab; 32], UserId::new(), NOW);
 		let event = order.drain_events().pop().unwrap();
 		let json = serde_json::to_string(&event).unwrap();
 		let back: PaymentEvent = serde_json::from_str(&json).unwrap();
@@ -1384,13 +1439,13 @@ mod tests {
 	fn every_destination_shape_survives_a_json_round_trip() {
 		for destination in [
 			external(),
-			PaymentDestination::Internal(Party::Revenue),
+			PaymentDestination::Internal(fee()),
 			PaymentDestination::Internal(Party::User(UserId::new())),
 			PaymentDestination::Internal(Party::Service(ServiceId::parse("alpha").unwrap())),
 		] {
 			let subject = PaymentSubject {
 				payment_id: PaymentId::new(),
-				terms: terms(Party::Piggybank, destination.clone()),
+				terms: terms(fund(), destination.clone()),
 			};
 			let json = serde_json::to_string(&subject).unwrap();
 			let back: PaymentSubject = serde_json::from_str(&json).unwrap_or_else(|err| panic!("{destination:?} must read back: {err} — from {json}"));

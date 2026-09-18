@@ -263,6 +263,8 @@ impl DepositWatcher {
 	/// loses every deposit after the gap as well. A backfill asked for a window
 	/// its endpoint no longer has gets the error back instead: the operator chose that window
 	/// deliberately, and "done, credited 0" would be a lie.
+	// A treasury arrival still credits the retired fund party until C-3 rewires the watchers.
+	#[allow(deprecated)]
 	pub async fn scan_range(&self, from: u64, to: u64, cursor: CursorPolicy) -> Result<ScanSummary, WatcherError> {
 		let network = self.config.network;
 		let mut summary = ScanSummary {
@@ -352,6 +354,8 @@ impl DepositWatcher {
 		Ok(summary)
 	}
 
+	// Same: "capital" is still spelled with the retired party until C-3.
+	#[allow(deprecated)]
 	async fn credit(&self, party: Party, network: Network, transfer: &Transfer) -> Result<bool, WatcherError> {
 		let amount = Usdt::from_onchain(network, transfer.value).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {

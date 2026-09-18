@@ -127,6 +127,8 @@ async fn a_transfer_to_a_user_address_is_not_capital() {
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn an_external_treasury_arrival_is_capital_once() {
 	let Some(pool) = common::pool().await else { return };
 	let deposits = PgDeposits::new(pool.clone());

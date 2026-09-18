@@ -89,6 +89,8 @@ impl WithdrawalSource {
 	}
 
 	/// The claim account debited — the one line that makes a payout a payout.
+	// `Revenue` debits the retired fee claim: queued payouts replay until C-4.
+	#[allow(deprecated)]
 	pub fn claim_key(&self) -> LedgerAccountKey {
 		match self {
 			Self::User(user) => LedgerAccountKey::UserClaim(*user),
@@ -636,6 +638,7 @@ mod tests {
 	}
 
 	#[test]
+	#[allow(deprecated)]
 	fn a_revenue_payout_debits_the_fee_claim_and_pays_no_fee() {
 		// The whole point of the source: a payout takes the fund's EARNED money (`fee`),
 		// never a client claim and never the fund's seed capital (`fund`).

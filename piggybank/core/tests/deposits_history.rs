@@ -28,6 +28,8 @@ fn unique_tx_ref() -> TxRef {
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn list_by_user_returns_only_the_users_deposits_newest_first() {
 	let Some(pool) = pool().await else {
 		eprintln!("DATABASE_URL unset — skipping deposits-history test");

@@ -117,6 +117,8 @@ async fn seed_one_of_each(pool: &PgPool, user: UserId) -> (TxRef, WithdrawalId, 
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn merges_all_four_kinds_newest_first_and_only_for_the_caller() {
 	let Some(pool) = common::pool().await else {
 		eprintln!("DATABASE_URL unset — skipping operations-feed test");

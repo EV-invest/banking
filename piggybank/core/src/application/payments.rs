@@ -159,6 +159,8 @@ pub async fn open(ports: &PaymentPorts<'_>, initiator: UserId, terms: PaymentTer
 }
 
 /// Everything the order's eventual execution will check, checked now.
+// The retired fund/revenue sources still route as before for in-flight orders until C-4.
+#[allow(deprecated)]
 async fn check_executable(ports: &PaymentPorts<'_>, terms: &PaymentTerms) -> Result<(), DomainError> {
 	// A product's pooled claim exists in the ledger the moment something is posted to it,
 	// registered or not — so the registry, not the ledger, is what says the slug names a
@@ -366,6 +368,8 @@ async fn settle_on_the_ledger(ports: &PaymentPorts<'_>, id: PaymentId) -> Result
 /// withdrawal only while it is still `Queued`. Leaving it for the dispatcher is what keeps
 /// that void possible — and it puts the withdrawal through `require_dispatchable`, so the
 /// pause, the freeze and the verification floor are read at the moment the money leaves.
+// Same: an open order naming a retired source still executes as it was approved (C-4).
+#[allow(deprecated)]
 async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Result<ExecutionOutcome, DomainError> {
 	let PaymentDestination::External { network, address } = order.terms().to() else {
 		return Ok(ExecutionOutcome::Failed("an internal payment has no withdrawal to create".to_owned()));

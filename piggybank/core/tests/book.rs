@@ -266,6 +266,8 @@ async fn parked(h: &Harness, aggregate_id: Uuid) -> Vec<String> {
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fee() {
 	let _revenue = REVENUE.lock().await;
 	let Some(h) = harness().await else { return };
