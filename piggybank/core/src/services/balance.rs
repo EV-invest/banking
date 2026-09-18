@@ -19,10 +19,14 @@ use tonic::{Request, Response, Status};
 
 use crate::{
 	AppState,
-	application::{balance as balance_app, consilium as consilium_app, funds as funds_app, wallet as wallet_app, withdrawals as withdrawal_app},
+	application::{
+		balance::{self as balance_app, AllocationTreasury},
+		consilium as consilium_app, funds as funds_app, wallet as wallet_app, withdrawals as withdrawal_app,
+	},
 	services::{
+		allocations::holding_to_proto,
 		funds::redemption_to_proto,
-		support::{caller_id, map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, unix_now},
+		support::{caller_id, map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, resolve_target_user, unix_now},
 		wallet::withdrawal_to_proto,
 	},
 };
@@ -40,15 +44,14 @@ impl BalanceSvc {
 
 #[tonic::async_trait]
 impl BalanceService for BalanceSvc {
-	/// The treasury, on the wire the pre-#245 view still has until the contract step
-	/// (C-7) gives the allocations a field. Three figures keep their names and change
-	/// their meaning to the honest one: `held_for_clients` is what people hold DIRECTLY
-	/// (Σ `user:<id>` claims), no longer the remainder `custody − fund − fee`;
-	/// `fund_capital` and `fee_revenue` are the `fund` / `fee` allocation's cash plus
-	/// whatever the data migration has yet to move off the retired singleton claim of
-	/// the same name — so the operator's snapshot reads the same before and after it.
-	/// The allocations' holders, supply and price are read (every treasury call
-	/// verifies them) but not yet serialised.
+	/// The treasury: every claim on the custody is somebody's (#245) — a person's
+	/// directly (`held_by_users`) or an allocation's, whose units people hold
+	/// (`allocations`, the hidden `fee` and `fund` included, each with its claim, supply,
+	/// price and holders).
+	///
+	/// The retired singleton claims have no field: once the data migration has run they
+	/// are zero, and until then a non-zero balance on them is a fact for the operator's
+	/// log, not a figure on a screen that would have to explain a fourth kind of owner.
 	async fn get_treasury(&self, request: Request<pb::GetTreasuryRequest>) -> Result<Response<pb::Treasury>, Status> {
 		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
 		let t = balance_app::treasury(&balance_app::TreasuryPorts {
@@ -59,13 +62,13 @@ impl BalanceService for BalanceSvc {
 		})
 		.await
 		.map_err(map_err)?;
-		let allocation_cash = |service: ServiceId| t.allocations.iter().find(|a| a.service == service).map(|a| a.claim.posted).unwrap_or(Usdt::ZERO);
-		let fund_capital = allocation_cash(ServiceId::fund())
-			.checked_add(t.retired.fund)
-			.ok_or_else(|| Status::internal("fund capital overflows"))?;
-		let fee_revenue = allocation_cash(ServiceId::fee())
-			.checked_add(t.retired.fee_revenue)
-			.ok_or_else(|| Status::internal("fee revenue overflows"))?;
+		if !t.retired.fund.is_zero() || !t.retired.fee_revenue.is_zero() {
+			tracing::warn!(
+				retired_fund = %t.retired.fund.to_decimal_string(),
+				retired_fee_revenue = %t.retired.fee_revenue.to_decimal_string(),
+				"the retired fund/fee claims still hold cash: the ownership data migration (`piggybank migrate-ownership`) has not run"
+			);
+		}
 		Ok(Response::new(pb::Treasury {
 			rails: t
 				.rails
@@ -83,10 +86,9 @@ impl BalanceService for BalanceSvc {
 				.collect(),
 			bank: t.bank.to_decimal_string(),
 			total_custody: t.total_custody.to_decimal_string(),
-			fund_capital: fund_capital.to_decimal_string(),
-			fee_revenue: fee_revenue.to_decimal_string(),
-			held_for_clients: t.held_by_users.to_decimal_string(),
 			reserved_for_withdrawals: t.reserved_for_withdrawals.to_decimal_string(),
+			held_by_users: t.held_by_users.to_decimal_string(),
+			allocations: t.allocations.iter().map(allocation_treasury_to_proto).collect(),
 		}))
 	}
 
@@ -101,28 +103,32 @@ impl BalanceService for BalanceSvc {
 	/// admitted them here). The arrival is verified now, against `expected_amount`, so the
 	/// owners vote over a transfer that exists and is worth what the terms say.
 	///
-	/// The depositor is the caller: the wire carries no `depositor_user_id` yet (the
-	/// contract step of #245, C-7, adds one so an owner can attribute another person's
-	/// transfer, and puts the `consilium_id` in the response — until then it is in the
-	/// log line). `expected_amount` is REQUIRED: the amount is under the owners'
+	/// The depositor is `depositor_user_id` — resolved the way every admin RPC resolves a
+	/// target, so an owner can attribute another person's transfer — or the caller when
+	/// the field is empty. `expected_amount` is REQUIRED: the amount is under the owners'
 	/// signature, so "whatever the chain says" is not a proposal. The response reports
-	/// `recorded = false` — nothing is booked until the quorum executes — and the amount
-	/// the terms carry.
+	/// `recorded = false` — nothing is booked until the quorum executes — the amount the
+	/// terms carry, and the consilium the proposal lives in.
 	async fn seed_capital(&self, request: Request<pb::SeedCapitalRequest>) -> Result<Response<pb::SeedCapitalResponse>, Status> {
 		require_permission(&self.state, &request, Permission::CapitalManage).await?;
-		let depositor = caller_id(&request)?;
+		let initiator = caller_id(&request)?;
 		let req = request.into_inner();
 		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
 		let network = Network::parse(&req.network).map_err(map_err)?;
 		let amount = optional(&req.expected_amount)
 			.ok_or_else(|| Status::invalid_argument("expected_amount is required: a seed is proposed at the amount the chain reports, and the owners approve that figure"))
 			.and_then(|raw| Usdt::parse_decimal(raw).map_err(map_err))?;
+		let depositor = match optional(&req.depositor_user_id) {
+			Some(raw) => resolve_target_user(&self.state, raw).await?,
+			None => initiator,
+		};
 		let terms = SeedCapitalTerms::new(tx_ref, network, amount, depositor).map_err(map_err)?;
-		let opened = consilium_app::open_seed_capital(&self.state.consilium_ports(), depositor, terms, unix_now())
+		let opened = consilium_app::open_seed_capital(&self.state.consilium_ports(), initiator, terms, unix_now())
 			.await
 			.map_err(map_err)?;
 		tracing::info!(
 			consilium_id = %opened.consilium.id(),
+			%initiator,
 			%depositor,
 			amount = %amount.to_decimal_string(),
 			"seed consilium opened: the treasury arrival is booked only once the owners' quorum executes it"
@@ -130,6 +136,7 @@ impl BalanceService for BalanceSvc {
 		Ok(Response::new(pb::SeedCapitalResponse {
 			recorded: false,
 			amount: amount.to_decimal_string(),
+			consilium_id: opened.consilium.id().to_string(),
 		}))
 	}
 
@@ -371,51 +378,19 @@ impl BalanceService for BalanceSvc {
 		}))
 	}
 
-	/// The `fee` allocation, on the wire the retired payout view still has (#245): its
-	/// cash as `earned`, the reservations as `pending_payout`, and NO rails — nothing pays
-	/// this claim out on-chain any more. The supply, the price and the holders wait for
-	/// the contract step (C-7) to have a field.
-	async fn get_fund_revenue(&self, request: Request<pb::GetFundRevenueRequest>) -> Result<Response<pb::FundRevenue>, Status> {
+	/// The `fee` allocation as its owners read it (#245): the same line the treasury
+	/// lists it as — cash, supply, price and holders. Nothing here pays it out: a holder
+	/// is paid by redeeming, and a payment out of its claim is the owners' consilium.
+	async fn get_fund_revenue(&self, request: Request<pb::GetFundRevenueRequest>) -> Result<Response<pb::AllocationTreasury>, Status> {
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
 		let fee = balance_app::fee_allocation(self.state.allocations.as_ref(), self.state.ledger.as_ref(), self.state.nav.as_ref())
 			.await
 			.map_err(map_err)?;
-		Ok(Response::new(pb::FundRevenue {
-			earned: fee.claim.posted.to_decimal_string(),
-			available: fee.claim.available.to_decimal_string(),
-			pending_payout: fee.claim.reserved.to_decimal_string(),
-			rails: Vec::new(),
-		}))
+		Ok(Response::new(allocation_treasury_to_proto(&fee)))
 	}
 
-	async fn request_revenue_payout(&self, request: Request<pb::RequestRevenuePayoutRequest>) -> Result<Response<pb::Withdrawal>, Status> {
-		// CLOSED ON PURPOSE. This RPC used to pay the fund's revenue out on one Admin/Owner's
-		// say-so, gated on the very permission that merely lets someone OPEN a consilium. That
-		// made the whole governance mechanism decorative: any principal who could propose a
-		// payout could equally well skip the proposal and take the money.
-		//
-		// The permission check stays FIRST so the refusal reads the same to everyone who could
-		// once call this, and tells nobody else that the path exists at all.
-		//
-		// Since #245 the payout kind itself is retired: the fund's earnings are the `fee`
-		// allocation's, held by people, and cash leaves it only by a holder's redemption
-		// onto their own claim. `consilium_app::execute` still carries the consilia that
-		// were open when the kind was retired, with a withdrawal id DERIVED from the
-		// consilium — so the payout path itself carries the proof of authorization rather
-		// than trusting its caller.
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
-		let req = request.into_inner();
-		tracing::warn!(
-			network = %req.network,
-			address = %req.address,
-			amount = %req.amount,
-			"refused a direct fund revenue payout: the fee allocation pays its holders by redemption"
-		);
-		Err(Status::failed_precondition(
-			"the revenue payout is retired: the fund's earnings are held through the fee allocation, and a holder is paid by redeeming their units",
-		))
-	}
-
+	/// HISTORY ONLY (#245): a payout queued before the kind was retired is refunded to
+	/// the retired revenue claim. Nothing opens a new one.
 	async fn cancel_revenue_payout(&self, request: Request<pb::CancelRevenuePayoutRequest>) -> Result<Response<pb::Withdrawal>, Status> {
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
 		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
@@ -483,5 +458,26 @@ impl BalanceService for BalanceSvc {
 			old_address: migrated.old_address,
 			new_address: migrated.new_address.as_str().to_owned(),
 		}))
+	}
+}
+
+/// One allocation's treasury line on the wire — the shape `GetTreasury` lists every
+/// allocation in and `GetFundRevenue` answers with for `fee`. The holders cross exactly
+/// as the cap table's do ([`holding_to_proto`]), so the two screens cannot come to name
+/// a holder differently.
+fn allocation_treasury_to_proto(line: &AllocationTreasury) -> pb::AllocationTreasury {
+	pb::AllocationTreasury {
+		service: line.service.to_string(),
+		title: line.title.clone(),
+		access: line.access.as_str().to_owned(),
+		claim: Some(pb::AllocationClaim {
+			posted: line.claim.posted.to_decimal_string(),
+			available: line.claim.available.to_decimal_string(),
+			reserved: line.claim.reserved.to_decimal_string(),
+		}),
+		units_outstanding: line.units_outstanding.to_decimal_string(),
+		nav: line.nav.nav.to_decimal_string(),
+		nav_posted_at_unix: line.nav.posted_at_unix,
+		holders: line.holders.iter().map(holding_to_proto).collect(),
 	}
 }

@@ -215,6 +215,29 @@ export type BankingV1AllocationAccessGrantList = {
 };
 
 /**
+ * AllocationClaim
+ *
+ * An allocation's cash claim (`service:<id>`), split the way every reader needs it and
+ * read off ONE ledger balance, so the three can never disagree: `posted` is settled,
+ * `reserved` is spoken for by approved payments out of it that have not settled, and
+ * `available = posted − reserved` is what a redemption or a new payment may take.
+ */
+export type BankingV1AllocationClaim = {
+    /**
+     * posted
+     */
+    posted?: string;
+    /**
+     * available
+     */
+    available?: string;
+    /**
+     * reserved
+     */
+    reserved?: string;
+};
+
+/**
  * AllocationList
  */
 export type BankingV1AllocationList = {
@@ -222,6 +245,58 @@ export type BankingV1AllocationList = {
      * allocations
      */
     allocations?: Array<BankingV1Allocation>;
+};
+
+/**
+ * AllocationTreasury
+ *
+ * One allocation as the treasury shows it (#245): the registry's name for it, its cash,
+ * its supply, its price and who holds it — the same shape for a product and for the
+ * reserved `fee` / `fund` allocations, whose `access` is `hidden`. `nav` is a product's
+ * posted mark, or the computed value of a reserved allocation (its cash plus every fee
+ * class it holds at that product's NAV) over its supply; `nav_posted_at_unix` is 0
+ * while nothing under it has been marked (seed-priced). `holders` are largest first —
+ * people, or the `fee` allocation holding a product's fee class.
+ */
+export type BankingV1AllocationTreasury = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * title
+     */
+    title?: string;
+    /**
+     * access
+     *
+     * hidden | view | invest
+     */
+    access?: string;
+    /**
+     * claim
+     */
+    claim?: BankingV1AllocationClaim;
+    /**
+     * units_outstanding
+     *
+     * decimal units
+     */
+    units_outstanding?: string;
+    /**
+     * nav
+     *
+     * decimal USDT per unit
+     */
+    nav?: string;
+    /**
+     * nav_posted_at_unix
+     */
+    nav_posted_at_unix?: number | string;
+    /**
+     * holders
+     */
+    holders?: Array<BankingV1UnitHolding>;
 };
 
 /**
@@ -598,9 +673,9 @@ export type BankingV1Consilium = {
      * revenue_payout
      *
      * EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,
-     * `fee_policy`) is set, decided by the kind. Named fields rather than a oneof because the
-     * surfaces read them by name and a oneof buys nothing here that the "exactly one" rule
-     * does not already give.
+     * `fee_policy`, `holder_grant`, `seed_capital`) is set, decided by the kind. Named fields
+     * rather than a oneof because the surfaces read them by name and a oneof buys nothing
+     * here that the "exactly one" rule does not already give.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -657,10 +732,11 @@ export type BankingV1Consilium = {
     /**
      * executed_withdrawal_id
      *
-     * Set exactly once, on EXECUTED — and exactly ONE of the three effect ids is
-     * (`executed_withdrawal_id`, `executed_payment_id`, `executed_valuation_id`), because a
-     * consilium has one effect. `consilium_execution_is_recorded` states that to the database
-     * as `num_nonnulls(...) = 1`.
+     * Set exactly once, on EXECUTED — and exactly ONE of the effect ids is
+     * (`executed_withdrawal_id`, `executed_payment_id`, `executed_valuation_id`,
+     * `executed_fee_policy_change_id`, `executed_issuance_id`, `executed_subscription_id`),
+     * because a consilium has one effect. `consilium_execution_is_recorded` states that to
+     * the database as `num_nonnulls(...) = 1`.
      */
     executed_withdrawal_id?: string;
     /**
@@ -708,6 +784,32 @@ export type BankingV1Consilium = {
      * The fee-policy change an executed FEE_POLICY consilium scheduled.
      */
     executed_fee_policy_change_id?: string;
+    /**
+     * holder_grant
+     *
+     * The fifth terms sibling — set exactly for a HOLDER_GRANT consilium.
+     */
+    holder_grant?: BankingV1HolderGrantTerms;
+    /**
+     * seed_capital
+     *
+     * The sixth — set exactly for a SEED_CAPITAL consilium.
+     */
+    seed_capital?: BankingV1SeedCapitalTerms;
+    /**
+     * executed_issuance_id
+     *
+     * The in-kind issuance an executed HOLDER_GRANT consilium minted
+     * (`AllocationsService.UnitIssuance`).
+     */
+    executed_issuance_id?: string;
+    /**
+     * executed_subscription_id
+     *
+     * The `fund` subscription an executed SEED_CAPITAL consilium booked
+     * (`FundsService.Subscription`).
+     */
+    executed_subscription_id?: string;
 };
 
 /**
@@ -824,8 +926,7 @@ export type BankingV1ConsiliumInvitation = {
     /**
      * revenue_payout
      *
-     * Exactly one of `revenue_payout`, `payment` and `valuation_override` is set — see
-     * `Consilium`.
+     * Exactly one of the terms siblings is set — see `Consilium`.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -889,6 +990,14 @@ export type BankingV1ConsiliumInvitation = {
      * fee_policy
      */
     fee_policy?: BankingV1ConsiliumFeePolicyTerms;
+    /**
+     * holder_grant
+     */
+    holder_grant?: BankingV1HolderGrantTerms;
+    /**
+     * seed_capital
+     */
+    seed_capital?: BankingV1SeedCapitalTerms;
 };
 
 /**
@@ -904,9 +1013,9 @@ export type BankingV1ConsiliumList = {
 /**
  * ConsiliumPaymentTerms
  *
- * The immutable subject of a PAYMENT consilium — the §3 rule that money belonging to the
- * fund (`piggybank`, `revenue`, `service:<id>`) moves only on the owners' quorum, at every
- * tier.
+ * The immutable subject of a PAYMENT consilium — the §3 rule that money pooled in an
+ * allocation (`service:<id>`, the reserved `fee` and `fund` included) moves only on the
+ * owners' quorum, at every tier.
  *
  * A PROJECTION OF THE ORDER, not the order. `banking.v1.Payment` (payments.proto) is what
  * the payments screen reads; this is what an owner needs in order to judge one request:
@@ -1502,7 +1611,7 @@ export type BankingV1FeeSettlement = {
 /**
  * FeeShares
  *
- * The manager's uncollected fee units in one fund.
+ * The `fee` allocation's uncollected fee units in one fund — the product's fee class.
  */
 export type BankingV1FeeShares = {
     /**
@@ -1575,15 +1684,6 @@ export type BankingV1FundNav = {
      * decimal units still issuable (0 once at the cap)
      */
     remaining_capacity?: string;
-    /**
-     * company_units
-     *
-     * Of `units_outstanding`, the company's own stake — units issued in kind to the fund
-     * itself (AllocationsService.IssueUnits), never bought through Subscribe. Shown to an
-     * investor so the share of the product that is neither theirs nor the market's is on
-     * the card rather than inferred from a supply that does not add up. decimal units
-     */
-    company_units?: string;
 };
 
 /**
@@ -1614,40 +1714,6 @@ export type BankingV1FundNavHistory = {
      * truncated
      */
     truncated?: boolean;
-};
-
-/**
- * FundRevenue
- *
- * The fund's OWN money — what it earned, not what it custodies. `earned` is the `fee`
- * claim, credited by exactly two things: the fee retained on a user withdrawal, and the
- * settled management + performance fee (the "2 and 20").
- * `earned = available + pending_payout` by construction (all three are read off one
- * ledger balance), so the figures can never disagree about a payout in flight.
- */
-export type BankingV1FundRevenue = {
-    /**
-     * earned
-     *
-     * everything earned and still held
-     */
-    earned?: string;
-    /**
-     * available
-     *
-     * free to pay out now
-     */
-    available?: string;
-    /**
-     * pending_payout
-     *
-     * locked by queued / in-flight payouts
-     */
-    pending_payout?: string;
-    /**
-     * rails
-     */
-    rails?: Array<BankingV1RevenueRail>;
 };
 
 /**
@@ -1857,6 +1923,36 @@ export type BankingV1GrantAllocationAccessRequest = {
 };
 
 /**
+ * HolderGrantTerms
+ *
+ * The immutable subject of a HOLDER-GRANT consilium (#245): `units` of the reserved
+ * `allocation` minted to `user_id`, with no cash leg. The units are frozen, not a cash
+ * figure — what they are worth is the allocation's NAV at execution. Executing it records
+ * a `UnitIssuance` (`source = "mint"`, holder `user`) that `executed_issuance_id` names.
+ */
+export type BankingV1HolderGrantTerms = {
+    /**
+     * allocation
+     *
+     * fee | fund — a reserved allocation only
+     */
+    allocation?: string;
+    /**
+     * user_id
+     *
+     * On the request: a banking (or concierge) user id, resolved the way every admin RPC
+     * resolves a target. On a response: the money-plane id the terms stored.
+     */
+    user_id?: string;
+    /**
+     * units
+     *
+     * decimal units, > 0
+     */
+    units?: string;
+};
+
+/**
  * IssueUnitsRequest
  */
 export type BankingV1IssueUnitsRequest = {
@@ -1864,6 +1960,16 @@ export type BankingV1IssueUnitsRequest = {
      * service
      */
     service?: string;
+    /**
+     * user_id
+     *
+     * Who receives the units: a banking (or concierge) user id, resolved the way every
+     * admin RPC resolves a target. Required — a mint to nobody is a malformed request.
+     * Only a person: the company is not a holder (#245), and a reserved allocation is
+     * seated by the owners' consilium (`ConsiliumService.OpenHolderGrant`) or by the fee
+     * accrual, never by an operator's mint — so there is deliberately no arm for either.
+     */
+    user_id?: string;
     /**
      * units
      *
@@ -1875,9 +1981,9 @@ export type BankingV1IssueUnitsRequest = {
      *
      * Decimal USDT the holder is deemed to have paid. Empty means `units × NAV` at the
      * dealing mark — what a subscription for these units would have cost right now. An
-     * explicit value may be anything, zero included: the company's stake in an asset it
-     * already owned cost it no cash. For a user holder this is what lands in their
-     * position's cost basis, and so what their P&L and management fee are measured from.
+     * explicit value may be anything, zero included: a stake in an asset the holder
+     * already owned cost them no cash. This is what lands in their position's cost basis,
+     * and so what their P&L and management fee are measured from.
      */
     cost_basis?: string;
     /**
@@ -1886,17 +1992,7 @@ export type BankingV1IssueUnitsRequest = {
      * required, 1..64 chars, unique per service
      */
     idempotency_key?: string;
-} & ({
-    /**
-     * company
-     */
-    company: boolean;
-} | {
-    /**
-     * user_id
-     */
-    user_id: string;
-});
+};
 
 /**
  * IssueUserTokenRequest
@@ -2175,7 +2271,8 @@ export type BankingV1ListPaymentsRequest = {
     /**
      * fund_owned_only
      *
-     * Only orders whose source is fund-owned — the governance surface.
+     * Only orders whose source is an allocation's claim (`service:<id>`) — the ones the
+     * owners' consilium gates, i.e. the governance surface.
      */
     fund_owned_only?: boolean;
 };
@@ -2416,6 +2513,16 @@ export type BankingV1NetworkWithdrawable = {
 };
 
 /**
+ * OpenHolderGrantRequest
+ */
+export type BankingV1OpenHolderGrantRequest = {
+    /**
+     * terms
+     */
+    terms?: BankingV1HolderGrantTerms;
+};
+
+/**
  * OpenPaymentRequest
  */
 export type BankingV1OpenPaymentRequest = {
@@ -2440,16 +2547,6 @@ export type BankingV1OpenPaymentRequest = {
      * payload the approver signs.
      */
     reason?: string;
-};
-
-/**
- * OpenRevenuePayoutRequest
- */
-export type BankingV1OpenRevenuePayoutRequest = {
-    /**
-     * terms
-     */
-    terms?: BankingV1RevenuePayoutTerms;
 };
 
 /**
@@ -2825,15 +2922,16 @@ export type BankingV1Party = {
     /**
      * kind
      *
-     * piggybank | revenue | service | user.
+     * user | service. (`piggybank` and `revenue` are retired, #245 — the platform's money is
+     * the `fee` and `fund` allocations: `{kind: "service", id: "fee" | "fund"}`.)
      */
     kind?: string;
     /**
      * id
      *
-     * Empty for the two singleton claims. A service slug for `service`. For `user`, the
-     * CONCIERGE user id the console carries (resolved to the money-plane id here; a banking
-     * id is accepted as a fallback, the way UsersService.GetUserBalance resolves one).
+     * A service slug for `service` (`fee` and `fund` included). For `user`, the CONCIERGE
+     * user id the console carries (resolved to the money-plane id here; a banking id is
+     * accepted as a fallback, the way UsersService.GetUserBalance resolves one).
      */
     id?: string;
 };
@@ -3085,14 +3183,16 @@ export type BankingV1PaymentEnd = {
     /**
      * kind
      *
-     * piggybank | revenue | service | user, or `external` for an address.
+     * service | user, or `external` for an address. An order opened before #245 may read
+     * `piggybank` or `revenue` — the retired singleton claims; nothing opens one now.
      */
     kind?: string;
     /**
      * id
      *
      * The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the
-     * response carries what the order stored). Empty for singletons and addresses.
+     * response carries what the order stored). Empty for addresses and the retired
+     * singletons.
      */
     id?: string;
     /**
@@ -3423,6 +3523,11 @@ export type BankingV1RecordDepositRequest = {
 
 /**
  * RecordDepositResponse
+ *
+ * The chain names the owner of the deposit address the transfer landed on, so the
+ * credited party is always a PERSON: `party_kind` is `user` and `party_id` their banking
+ * id. A transfer to the treasury address is nobody's until the owners say whose — it is
+ * refused here and attributed through `SeedCapital`.
  */
 export type BankingV1RecordDepositResponse = {
     /**
@@ -3440,13 +3545,13 @@ export type BankingV1RecordDepositResponse = {
     /**
      * party_kind
      *
-     * who the chain says it belongs to: piggybank | user | service
+     * always `user`
      */
     party_kind?: string;
     /**
      * party_id
      *
-     * the user UUID or service id (empty for piggybank)
+     * the banking user id
      */
     party_id?: string;
 };
@@ -3599,30 +3704,6 @@ export type BankingV1RegisterAllocationRequest = {
 };
 
 /**
- * RequestRevenuePayoutRequest
- */
-export type BankingV1RequestRevenuePayoutRequest = {
-    /**
-     * network
-     *
-     * bep20 | polygon | trc20 | ton — the rail to ship on
-     */
-    network?: string;
-    /**
-     * address
-     *
-     * destination on-chain address (validated per network)
-     */
-    address?: string;
-    /**
-     * amount
-     *
-     * decimal USDT to pay out; no fee is charged, so this is the net
-     */
-    amount?: string;
-};
-
-/**
  * RequestWithdrawalRequest
  */
 export type BankingV1RequestWithdrawalRequest = {
@@ -3655,6 +3736,14 @@ export type BankingV1RetireUnitsRequest = {
      */
     service?: string;
     /**
+     * user_id
+     *
+     * Whose units are burnt: a banking (or concierge) user id, shaped as IssueUnits'
+     * holder is and for the same reason. Required — a burn of nobody's units is a
+     * malformed request.
+     */
+    user_id?: string;
+    /**
      * units
      *
      * decimal units, > 0, at most what the holder has available
@@ -3680,23 +3769,16 @@ export type BankingV1RetireUnitsRequest = {
      * explicit override to burn units out of a live (draft or open) product.
      */
     force?: boolean;
-} & ({
-    /**
-     * company
-     */
-    company: boolean;
-} | {
-    /**
-     * user_id
-     */
-    user_id: string;
-});
+};
 
 /**
  * RevenuePayoutTerms
  *
- * The immutable subject of a revenue payout. Amounts are decimal USDT STRINGS, as
- * everywhere else on this wire.
+ * The immutable subject of a revenue payout — HISTORY ONLY. Retired by #245: the
+ * platform's earnings are the `fee` allocation's, held by people, and cash leaves it by
+ * a holder's redemption or a `payment` out of `service:fee`. Consilia opened before the
+ * retirement still read (and, if approved, execute) through this. Amounts are decimal
+ * USDT STRINGS, as everywhere else on this wire.
  */
 export type BankingV1RevenuePayoutTerms = {
     /**
@@ -3724,40 +3806,6 @@ export type BankingV1RevenuePayoutTerms = {
      * Free-text note from the initiator, shown in the mail. Never interpreted.
      */
     memo?: string;
-};
-
-/**
- * RevenueRail
- *
- * Per-rail payout options, the mirror of WalletService's `NetworkWithdrawable`.
- * `payable` is the whole available revenue (a request beyond `instant` is accepted and
- * queued until the treasury is topped up); `instant` ships without queueing.
- */
-export type BankingV1RevenueRail = {
-    /**
-     * network
-     *
-     * bep20 | polygon | trc20 | ton
-     */
-    network?: string;
-    /**
-     * payable
-     *
-     * max requestable on this rail (= FundRevenue.available)
-     */
-    payable?: string;
-    /**
-     * instant
-     *
-     * ships now = min(available, min(TB rail, on-chain treasury))
-     */
-    instant?: string;
-    /**
-     * minimum
-     *
-     * smallest payout accepted
-     */
-    minimum?: string;
 };
 
 /**
@@ -3903,14 +3951,16 @@ export type BankingV1ScheduleFeePolicyRequest = {
 /**
  * SeedCapitalRequest
  *
- * Record fund capital that reached a rail's treasury, PROVEN against the chain.
+ * Propose a seed: a transfer that reached a rail's treasury, PROVEN against the chain,
+ * as `depositor_user_id`'s deposit and subscription into `fund`.
  *
- * Like RecordDepositRequest the caller supplies only a pointer to a fact: the amount is
- * read back from the chain and the recipient decides whether it is capital at all. The
- * transfer must have landed on the rail's treasury address from a sender outside every
- * wallet we control. A transfer to a user's deposit address is that user's deposit, not
- * capital — refused, use RecordDeposit. The sweep consolidating a user's address into
- * the treasury is money already on the ledger — refused.
+ * Like RecordDepositRequest the caller supplies only a pointer to a fact: the transfer
+ * must have landed on the rail's treasury address from a sender outside every wallet we
+ * control. A transfer to a user's deposit address is that user's deposit, not a seed —
+ * refused, use RecordDeposit. The sweep consolidating a user's address into the treasury
+ * is money already on the ledger — refused. Unlike RecordDeposit the amount is UNDER THE
+ * OWNERS' SIGNATURE: `expected_amount` is required, checked against the chain now, and
+ * frozen into the terms the owners vote over.
  */
 export type BankingV1SeedCapitalRequest = {
     /**
@@ -3928,29 +3978,86 @@ export type BankingV1SeedCapitalRequest = {
     /**
      * expected_amount
      *
-     * Optional operator assertion in decimal USDT. When set it must equal what the chain
-     * reports or the call is refused, so a mistyped reference fails loudly instead of
-     * silently crediting some other transfer.
+     * REQUIRED, decimal USDT: what the chain must report for this reference. A seed is
+     * proposed at a figure the owners approve, not at "whatever the chain says" — a
+     * mistyped reference naming some other real transfer fails here, loudly.
      */
     expected_amount?: string;
+    /**
+     * depositor_user_id
+     *
+     * Whose money it is: the person booked as depositor and seated as a holder of `fund`.
+     * A banking (or concierge) user id, resolved the way every admin RPC resolves a
+     * target. Empty means the caller — an owner attributing their own transfer.
+     */
+    depositor_user_id?: string;
 };
 
 /**
  * SeedCapitalResponse
+ *
+ * A seed is a consilium, not a write: `recorded` is always false here — nothing is
+ * booked until the owners' quorum executes it — and `consilium_id` is where the
+ * proposal lives (`ConsiliumService.GetConsilium`).
  */
 export type BankingV1SeedCapitalResponse = {
     /**
      * recorded
      *
-     * false if `tx_ref` was already recorded (idempotent no-op)
+     * always false: the booking is the consilium's execution
      */
     recorded?: boolean;
     /**
      * amount
      *
-     * what the CHAIN reported, decimal USDT — never the caller's number
+     * what the terms carry, decimal USDT — verified against the chain
      */
     amount?: string;
+    /**
+     * consilium_id
+     *
+     * the seed-capital consilium this opened
+     */
+    consilium_id?: string;
+};
+
+/**
+ * SeedCapitalTerms
+ *
+ * The immutable subject of a SEED-CAPITAL consilium (#245): the transfer `tx_ref` names
+ * on `network`, which the chain must report as exactly `amount` USDT landing on the
+ * treasury from outside, is `depositor_user_id`'s — booked as their deposit and
+ * subscribed into `fund` at its price when the quorum executes. The amount is frozen
+ * into the terms (the owners approve "this dollar is this person's"); the units are
+ * not — they are what the cash buys at execution. Executing it records the fund
+ * subscription `executed_subscription_id` names. Opened through
+ * `BalanceService.SeedCapital`, never here.
+ */
+export type BankingV1SeedCapitalTerms = {
+    /**
+     * tx_ref
+     *
+     * `txhash:logIndex` (EVM) | `txhash:recipient` (TON)
+     */
+    tx_ref?: string;
+    /**
+     * network
+     *
+     * bep20 | polygon | trc20 | ton
+     */
+    network?: string;
+    /**
+     * amount
+     *
+     * decimal USDT, as the chain reports it
+     */
+    amount?: string;
+    /**
+     * depositor_user_id
+     *
+     * the money-plane id the terms stored
+     */
+    depositor_user_id?: string;
 };
 
 /**
@@ -4407,50 +4514,15 @@ export type BankingV1TradeList = {
 };
 
 /**
- * TransferCompanyStakeRequest
- */
-export type BankingV1TransferCompanyStakeRequest = {
-    /**
-     * service
-     */
-    service?: string;
-    /**
-     * user_id
-     *
-     * The recipient: a banking (or concierge) user id, resolved the way every admin RPC
-     * resolves a target. Never the company — the company handing units to itself is not
-     * a request, so there is no `oneof` here.
-     */
-    user_id?: string;
-    /**
-     * units
-     *
-     * decimal units, > 0, at most what the company holds
-     */
-    units?: string;
-    /**
-     * cost_basis
-     *
-     * Decimal USDT the recipient is deemed to have paid — what lands in their position's
-     * cost basis. Empty means `units × NAV` at the dealing mark, like IssueUnits; an
-     * explicit value may be anything, zero included.
-     */
-    cost_basis?: string;
-    /**
-     * idempotency_key
-     *
-     * required, 1..64 chars, unique per service (shared with IssueUnits)
-     */
-    idempotency_key?: string;
-};
-
-/**
  * Treasury
  *
- * The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).
- * Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset
- * side) equals the sum of all claims — so client liabilities are the remainder beyond
- * the fund's own capital and retained fees.
+ * The treasury picture: per-rail liquidity (Layer 2) and who the claims on it belong to
+ * (Layer 1). Under the unified-claim model the invariant is GLOBAL — `total_custody`
+ * (the asset side) equals the sum of all claims — and every claim is somebody's (#245):
+ * a person's directly (`held_by_users`, Σ `user:<id>` claims) or an allocation's, whose
+ * units people hold (`allocations`, the hidden `fee` and `fund` included). Nothing here
+ * is a remainder: each figure is read off its own accounts, and whether they add up to
+ * the custody is the reconciliation's finding, not this view's arithmetic.
  */
 export type BankingV1Treasury = {
     /**
@@ -4472,37 +4544,51 @@ export type BankingV1Treasury = {
      */
     total_custody?: string;
     /**
-     * fund_capital
-     *
-     * the fund's own unallocated capital
-     */
-    fund_capital?: string;
-    /**
-     * fee_revenue
-     *
-     * retained withdrawal-fee revenue
-     */
-    fee_revenue?: string;
-    /**
-     * held_for_clients
-     *
-     * claims owed to users + services
-     */
-    held_for_clients?: string;
-    /**
      * reserved_for_withdrawals
      *
-     * of held_for_clients, locked by in-flight withdrawals
+     * locked by in-flight withdrawals and approved payments
      */
     reserved_for_withdrawals?: string;
+    /**
+     * held_by_users
+     *
+     * Σ user claims — what people hold directly
+     */
+    held_by_users?: string;
+    /**
+     * allocations
+     */
+    allocations?: Array<BankingV1AllocationTreasury>;
+};
+
+/**
+ * UnitHolderRef
+ *
+ * One holder of an allocation's units, as the cap table and the treasury name them.
+ * `kind` is `user` (`id` is the banking user id) or `allocation` (`id` is the holding
+ * allocation's slug — the reserved `fee` allocation holding a product's fee class). The
+ * reserved allocations' own holders are always people.
+ */
+export type BankingV1UnitHolderRef = {
+    /**
+     * kind
+     *
+     * user | allocation
+     */
+    kind?: string;
+    /**
+     * id
+     */
+    id?: string;
 };
 
 /**
  * UnitHolders
  *
- * The settled supply of one product by holder class, all decimal units.
- * `investor_units` is `units_outstanding − company_units − fee_units`: the ledger keeps
- * one holding per investor, and the supply invariant makes the difference exact.
+ * The cap table of one product: the settled supply and every holder of it, largest
+ * first (ties by the holder's stored identity, so the table reads the same on every
+ * refresh). Σ `holders[].units` = `units_outstanding` is the supply invariant the
+ * reconciliation checks — it is read, never derived, here. All units decimal.
  */
 export type BankingV1UnitHolders = {
     /**
@@ -4514,39 +4600,45 @@ export type BankingV1UnitHolders = {
      */
     units_outstanding?: string;
     /**
-     * company_units
-     */
-    company_units?: string;
-    /**
-     * fee_units
-     */
-    fee_units?: string;
-    /**
-     * investor_units
-     */
-    investor_units?: string;
-    /**
      * queued_units
      *
      * Decimal units of `mint` issuances still `queued` — recorded, not yet posted by the
      * relay. Once they land, `units_outstanding` grows by this much, so an operator
      * pinning the cap to what is issued must wait for it to read zero: a cap pinned to
-     * the settled figure alone leaves the queued mint to land above it. Only `mint`
-     * counts — a `company` hand-over moves units between holders and leaves the supply
-     * as it was.
+     * the settled figure alone leaves the queued mint to land above it.
      * TODO(#271): retire (PR #278) shrinks supply — subtract queued retires once it lands.
      */
     queued_units?: string;
+    /**
+     * holders
+     */
+    holders?: Array<BankingV1UnitHolding>;
+};
+
+/**
+ * UnitHolding
+ *
+ * One line of a cap table: who, and how many units (decimal). Holdings of zero are not
+ * listed.
+ */
+export type BankingV1UnitHolding = {
+    /**
+     * holder
+     */
+    holder?: BankingV1UnitHolderRef;
+    /**
+     * units
+     */
+    units?: string;
 };
 
 /**
  * UnitIssuance
  *
- * One in-kind issuance: a mint, a hand-over out of the company's stake, or a
- * retirement (`source`).
- * The holder is flattened to a kind + id pair here, unlike the request's `oneof`,
- * because this shape is projected to TypeScript through OpenAPI and a flat message
- * survives that pipeline unambiguously (the same trade the operations timeline makes).
+ * One in-kind issuance: a mint or a retirement (`source`), or — on rows that predate
+ * #245 — a hand-over out of the company's stake.
+ * The holder is a flattened `UnitHolderRef`: a person, or the reserved allocation the
+ * fee accrual minted a product's fee class to.
  */
 export type BankingV1UnitIssuance = {
     /**
@@ -4560,19 +4652,22 @@ export type BankingV1UnitIssuance = {
     /**
      * holder_kind
      *
-     * user | company
+     * `user` | `allocation`. Rows written before #245 may still read `company`; nothing
+     * writes it any more.
      */
     holder_kind?: string;
     /**
      * holder_id
      *
-     * the banking user id for `user`; empty for `company`
+     * The banking user id for `user`; the holding allocation's slug (`fee`) for
+     * `allocation`; empty on a historical `company` row. A client must never resolve an
+     * `allocation` holder as a user.
      */
     holder_id?: string;
     /**
      * units
      *
-     * decimal units minted, handed over or retired (always positive)
+     * decimal units minted or retired (always positive)
      */
     units?: string;
     /**
@@ -4604,10 +4699,11 @@ export type BankingV1UnitIssuance = {
     /**
      * source
      *
-     * Where the units came from — or went: `mint` (IssueUnits — supply grew by `units`),
-     * `company` (TransferCompanyStake — moved out of the company's stake, supply
-     * unchanged) or `retire` (RetireUnits — burnt out of the holder's account, supply
-     * shrank by `units`). `units` is always the magnitude; the source is the direction.
+     * Where the units came from — or went: `mint` (IssueUnits or an executed holder
+     * grant — supply grew by `units`) or `retire` (RetireUnits — burnt out of the
+     * holder's account, supply shrank by `units`). Rows written before #245 may read
+     * `company` (the retired TransferCompanyStake — moved out of the company's stake,
+     * supply unchanged). `units` is always the magnitude; the source is the direction.
      * Always populated; a row that predates the field reads as `mint`.
      */
     source?: string;
@@ -5065,9 +5161,10 @@ export type BankingV1WithdrawalQueue = {
  * One withdrawal awaiting operator action. `email` is the mirrored identity email
  * (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.
  *
- * Revenue payouts share this queue: they need the same dispatch/settle/fail actions,
- * and an operator clearing the queue must see everything in flight against the rails.
- * They carry `source = "revenue"` with `user_id`/`email` empty — the fund owns them.
+ * A revenue payout opened before #245 shares this queue while it is still in flight: it
+ * needs the same dispatch/settle/fail actions, and an operator clearing the queue must
+ * see everything in flight against the rails. It carries `source = "revenue"` with
+ * `user_id`/`email` empty. Nothing opens a new one.
  */
 export type BankingV1WithdrawalQueueItem = {
     /**
@@ -7682,35 +7779,6 @@ export type BankingV1AllocationsServiceSetAllocationUnitCapResponses = {
 
 export type BankingV1AllocationsServiceSetAllocationUnitCapResponse = BankingV1AllocationsServiceSetAllocationUnitCapResponses[keyof BankingV1AllocationsServiceSetAllocationUnitCapResponses];
 
-export type BankingV1AllocationsServiceTransferCompanyStakeData = {
-    body: BankingV1TransferCompanyStakeRequest;
-    headers: {
-        'Connect-Protocol-Version': ConnectProtocolVersion;
-        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
-    };
-    path?: never;
-    query?: never;
-    url: '/banking.v1.AllocationsService/TransferCompanyStake';
-};
-
-export type BankingV1AllocationsServiceTransferCompanyStakeErrors = {
-    /**
-     * Error
-     */
-    default: ConnectError;
-};
-
-export type BankingV1AllocationsServiceTransferCompanyStakeError = BankingV1AllocationsServiceTransferCompanyStakeErrors[keyof BankingV1AllocationsServiceTransferCompanyStakeErrors];
-
-export type BankingV1AllocationsServiceTransferCompanyStakeResponses = {
-    /**
-     * Success
-     */
-    200: BankingV1UnitIssuance;
-};
-
-export type BankingV1AllocationsServiceTransferCompanyStakeResponse = BankingV1AllocationsServiceTransferCompanyStakeResponses[keyof BankingV1AllocationsServiceTransferCompanyStakeResponses];
-
 export type BankingV1AllocationsServiceUpdateAllocationData = {
     body: BankingV1UpdateAllocationRequest;
     headers: {
@@ -8054,7 +8122,7 @@ export type BankingV1BalanceServiceGetFundRevenueResponses = {
     /**
      * Success
      */
-    200: BankingV1FundRevenue;
+    200: BankingV1AllocationTreasury;
 };
 
 export type BankingV1BalanceServiceGetFundRevenueResponse = BankingV1BalanceServiceGetFundRevenueResponses[keyof BankingV1BalanceServiceGetFundRevenueResponses];
@@ -8319,35 +8387,6 @@ export type BankingV1BalanceServiceRecordDepositResponses = {
 };
 
 export type BankingV1BalanceServiceRecordDepositResponse = BankingV1BalanceServiceRecordDepositResponses[keyof BankingV1BalanceServiceRecordDepositResponses];
-
-export type BankingV1BalanceServiceRequestRevenuePayoutData = {
-    body: BankingV1RequestRevenuePayoutRequest;
-    headers: {
-        'Connect-Protocol-Version': ConnectProtocolVersion;
-        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
-    };
-    path?: never;
-    query?: never;
-    url: '/banking.v1.BalanceService/RequestRevenuePayout';
-};
-
-export type BankingV1BalanceServiceRequestRevenuePayoutErrors = {
-    /**
-     * Error
-     */
-    default: ConnectError;
-};
-
-export type BankingV1BalanceServiceRequestRevenuePayoutError = BankingV1BalanceServiceRequestRevenuePayoutErrors[keyof BankingV1BalanceServiceRequestRevenuePayoutErrors];
-
-export type BankingV1BalanceServiceRequestRevenuePayoutResponses = {
-    /**
-     * Success
-     */
-    200: BankingV1Withdrawal;
-};
-
-export type BankingV1BalanceServiceRequestRevenuePayoutResponse = BankingV1BalanceServiceRequestRevenuePayoutResponses[keyof BankingV1BalanceServiceRequestRevenuePayoutResponses];
 
 export type BankingV1BalanceServiceRotateDepositAddressData = {
     body: BankingV1RotateDepositAddressRequest;
@@ -8958,34 +8997,34 @@ export type BankingV1ConsiliumServiceListConsiliaResponses = {
 
 export type BankingV1ConsiliumServiceListConsiliaResponse = BankingV1ConsiliumServiceListConsiliaResponses[keyof BankingV1ConsiliumServiceListConsiliaResponses];
 
-export type BankingV1ConsiliumServiceOpenRevenuePayoutData = {
-    body: BankingV1OpenRevenuePayoutRequest;
+export type BankingV1ConsiliumServiceOpenHolderGrantData = {
+    body: BankingV1OpenHolderGrantRequest;
     headers: {
         'Connect-Protocol-Version': ConnectProtocolVersion;
         'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
     };
     path?: never;
     query?: never;
-    url: '/banking.v1.ConsiliumService/OpenRevenuePayout';
+    url: '/banking.v1.ConsiliumService/OpenHolderGrant';
 };
 
-export type BankingV1ConsiliumServiceOpenRevenuePayoutErrors = {
+export type BankingV1ConsiliumServiceOpenHolderGrantErrors = {
     /**
      * Error
      */
     default: ConnectError;
 };
 
-export type BankingV1ConsiliumServiceOpenRevenuePayoutError = BankingV1ConsiliumServiceOpenRevenuePayoutErrors[keyof BankingV1ConsiliumServiceOpenRevenuePayoutErrors];
+export type BankingV1ConsiliumServiceOpenHolderGrantError = BankingV1ConsiliumServiceOpenHolderGrantErrors[keyof BankingV1ConsiliumServiceOpenHolderGrantErrors];
 
-export type BankingV1ConsiliumServiceOpenRevenuePayoutResponses = {
+export type BankingV1ConsiliumServiceOpenHolderGrantResponses = {
     /**
      * Success
      */
     200: BankingV1Consilium;
 };
 
-export type BankingV1ConsiliumServiceOpenRevenuePayoutResponse = BankingV1ConsiliumServiceOpenRevenuePayoutResponses[keyof BankingV1ConsiliumServiceOpenRevenuePayoutResponses];
+export type BankingV1ConsiliumServiceOpenHolderGrantResponse = BankingV1ConsiliumServiceOpenHolderGrantResponses[keyof BankingV1ConsiliumServiceOpenHolderGrantResponses];
 
 export type BankingV1ConsiliumServiceOpenValuationOverrideData = {
     body: BankingV1OpenValuationOverrideRequest;

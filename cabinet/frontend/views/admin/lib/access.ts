@@ -1,4 +1,5 @@
-// The access vocabulary, rendered. Mirrors `contracts::allocation::access` — `hidden <
+// The access vocabulary, rendered — by the registry and by the treasury, which chips the
+// hidden `fee` / `fund` the same way. Mirrors `contracts::allocation::access` — `hidden <
 // view < invest`, and a grant may only carry the top two (a grant that lowered a holder
 // below the default would make "revoke" ambiguous).
 

@@ -1,4 +1,4 @@
-//! `consilium` context — the two gRPC surfaces of multi-owner payout authorization.
+//! `consilium` context — the two gRPC surfaces of multi-owner authorization.
 //!
 //! [`ConsiliumSvc`] sits **behind** the user-auth layer and is Owner-only: opening, reading
 //! and withdrawing a request are things a signed-in owner does.
@@ -16,10 +16,10 @@
 use domain::{
 	authz::Permission,
 	balance::ServiceId,
-	consilium::{ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
+	consilium::{ConsiliumState, ConsiliumTerms, HolderGrantTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
 	fees::FeePolicy,
-	money::{Network, Usdt, WalletAddress},
+	money::{Shares, Usdt},
 	users::mask_email,
 };
 use evbanking_contracts::banking::v1::{self as pb, consilium_approval_service_server::ConsiliumApprovalService, consilium_service_server::ConsiliumService};
@@ -30,7 +30,7 @@ use crate::{
 	AppState,
 	application::consilium as consilium_app,
 	ports::consilium::{ConsiliumView, FeePolicyDetail, InvitationView, VoteAudit},
-	services::support::{MAX_AUDIT_IP_BYTES, MAX_AUDIT_USER_AGENT_BYTES, caller_id, clamp, map_err, require_permission, unix_now},
+	services::support::{MAX_AUDIT_IP_BYTES, MAX_AUDIT_USER_AGENT_BYTES, caller_id, clamp, map_err, require_permission, resolve_target_user, unix_now},
 };
 
 /// The default page size for the governance history.
@@ -94,16 +94,6 @@ fn parse_consilium_id(raw: &str) -> Result<domain::consilium::ConsiliumId, Statu
 		.map_err(|_| Status::invalid_argument("invalid consilium id"))
 }
 
-/// The terms, validated into their domain form. Shape errors surface here rather than after
-/// three owners have approved something that could never have shipped.
-fn parse_terms(terms: Option<pb::RevenuePayoutTerms>) -> Result<RevenuePayoutTerms, Status> {
-	let terms = terms.ok_or_else(|| Status::invalid_argument("terms are required"))?;
-	let network = Network::parse(&terms.network).map_err(map_err)?;
-	let address = WalletAddress::parse(network, &terms.address).map_err(map_err)?;
-	let amount = Usdt::parse_decimal(&terms.amount).map_err(map_err)?;
-	RevenuePayoutTerms::new(network, address, amount, terms.memo).map_err(map_err)
-}
-
 /// The valuation-override terms, validated into their domain form. The fund's existence
 /// and its unit supply are the application's gates; this is only the wire's shape.
 fn parse_valuation_override_terms(terms: Option<pb::ValuationOverrideTerms>) -> Result<ValuationOverrideTerms, Status> {
@@ -146,6 +136,8 @@ fn decision_from_proto(raw: i32) -> Result<VoteDecision, Status> {
 }
 
 /// The payout terms as the wire carries them, or `None` for a kind that is not a payout.
+/// History only (#245): nothing opens a payout, but the consilia that were open when the
+/// kind was retired still list and still execute.
 ///
 /// No `_` arm: a new kind needs a field of its own on the contract, and this stops compiling
 /// rather than quietly rendering it as an absent payout — a request that reads as having no
@@ -198,12 +190,38 @@ fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPayment
 	}
 }
 
+/// The holder-grant terms as the wire carries them — the fifth terms sibling (#245). The
+/// user crosses as the money-plane id the terms stored, which is what the hash binds.
+fn holder_grant_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::HolderGrantTerms> {
+	match terms {
+		ConsiliumTerms::HolderGrant(terms) => Some(pb::HolderGrantTerms {
+			allocation: terms.allocation.to_string(),
+			user_id: terms.user.to_string(),
+			units: terms.units.to_decimal_string(),
+		}),
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::SeedCapital(_) => None,
+	}
+}
+
+/// The seed-capital terms as the wire carries them — the sixth terms sibling (#245). The
+/// reference is rendered in FULL, as the address of a payout is: the owners are approving
+/// that THIS transfer is this person's.
+fn seed_capital_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::SeedCapitalTerms> {
+	match terms {
+		ConsiliumTerms::SeedCapital(terms) => Some(pb::SeedCapitalTerms {
+			tx_ref: terms.tx_ref.as_str().to_owned(),
+			network: terms.network.as_str().to_owned(),
+			amount: terms.amount.to_decimal_string(),
+			depositor_user_id: terms.depositor.to_string(),
+		}),
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) => None,
+	}
+}
+
 /// The fee-policy terms as the wire carries them: the hashed subject plus the live
 /// presentation (product title, holder count) the repository reads beside it.
 fn fee_policy_terms_to_proto(terms: &ConsiliumTerms, detail: Option<&FeePolicyDetail>) -> Option<pb::ConsiliumFeePolicyTerms> {
 	match terms {
-		// The holder grant and the seed have no wire field until the contract step (C-7 of
-		// #245): the row lists with its id, state and tally, and no terms.
 		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
 		ConsiliumTerms::FeePolicy(subject) => {
 			let from = subject.from.unwrap_or(FeePolicy::NONE);
@@ -239,6 +257,8 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 		payment: payment_terms_to_proto(c.terms()),
 		valuation_override: valuation_override_terms_to_proto(c.terms()),
 		fee_policy: fee_policy_terms_to_proto(c.terms(), view.fee_policy.as_ref()),
+		holder_grant: holder_grant_terms_to_proto(c.terms()),
+		seed_capital: seed_capital_terms_to_proto(c.terms()),
 		payload_hash: c.payload_hash_hex(),
 		initiator_user_id: c.initiator().to_string(),
 		initiator_email: view.initiator_email.clone(),
@@ -266,6 +286,8 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 		executed_payment_id: c.executed_payment_id().map(|id| id.to_string()).unwrap_or_default(),
 		executed_valuation_id: c.executed_valuation_id().map(|id| id.to_string()).unwrap_or_default(),
 		executed_fee_policy_change_id: c.executed_fee_policy_change_id().map(|id| id.to_string()).unwrap_or_default(),
+		executed_issuance_id: c.executed_issuance_id().map(|id| id.to_string()).unwrap_or_default(),
+		executed_subscription_id: c.executed_subscription_id().map(|id| id.to_string()).unwrap_or_default(),
 		failure_reason: c.failure_reason().unwrap_or_default().to_owned(),
 		version: c.version(),
 	}
@@ -279,6 +301,8 @@ fn invitation_to_proto(view: &InvitationView) -> pb::ConsiliumInvitation {
 		payment: payment_terms_to_proto(&view.terms),
 		valuation_override: valuation_override_terms_to_proto(&view.terms),
 		fee_policy: fee_policy_terms_to_proto(&view.terms, view.fee_policy.as_ref()),
+		holder_grant: holder_grant_terms_to_proto(&view.terms),
+		seed_capital: seed_capital_terms_to_proto(&view.terms),
 		payload_hash: view.payload_hash.clone(),
 		initiator_email: mask_email(&view.initiator_email),
 		voter_email: mask_email(&view.voter_email),
@@ -303,27 +327,35 @@ fn approval_err(err: DomainError) -> Status {
 
 #[tonic::async_trait]
 impl ConsiliumService for ConsiliumSvc {
-	/// RETIRED (#245) — the application refuses every well-formed request; the permission
-	/// check stays first so the refusal reads the same to everyone who could once call this
-	/// and tells nobody else that the path exists. The proto arm goes in C-7.
-	async fn open_revenue_payout(&self, request: Request<pb::OpenRevenuePayoutRequest>) -> Result<Response<pb::Consilium>, Status> {
+	/// Seat a holder of a reserved allocation (#245). Gated on `RevenuePayout` — the
+	/// permission every owner-only surface of this service shares (opening was once a
+	/// payout, and the name stayed) — and NOT on `AllocationManage`: an operator who sizes
+	/// products has no say over who holds the owners' money, and the domain refuses an
+	/// initiator without a seat whatever admitted them here. The person is resolved the
+	/// way every admin RPC resolves a target, so the units land on the money-plane row
+	/// they redeem from.
+	async fn open_holder_grant(&self, request: Request<pb::OpenHolderGrantRequest>) -> Result<Response<pb::Consilium>, Status> {
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
 		let initiator = caller_id(&request)?;
-		let terms = parse_terms(request.into_inner().terms)?;
-		let view = consilium_app::open_revenue_payout(&self.state.consilium_ports(), initiator, terms.clone(), unix_now())
+		let terms = request.into_inner().terms.ok_or_else(|| Status::invalid_argument("terms are required"))?;
+		let allocation = ServiceId::parse(&terms.allocation).map_err(map_err)?;
+		let user = resolve_target_user(&self.state, &terms.user_id).await?;
+		let units = Shares::parse_decimal(&terms.units).map_err(map_err)?;
+		let terms = HolderGrantTerms::new(allocation, user, units).map_err(map_err)?;
+		let view = consilium_app::open_holder_grant(&self.state.consilium_ports(), initiator, terms.clone(), unix_now())
 			.await
 			.map_err(map_err)?;
-		// WARN on success on purpose: a request to move company money out is worth an audit
-		// line that stands out, the same way the payout itself is.
+		// WARN on success, as every open does: a request to hand somebody a share of the
+		// owners' money is worth an audit line that stands out.
 		tracing::warn!(
 			consilium_id = %view.consilium.id(),
 			initiator = %initiator,
-			network = %terms.network,
-			address = %terms.address.as_str(),
-			amount = %terms.amount,
+			allocation = %terms.allocation,
+			user = %terms.user,
+			units = %terms.units.to_decimal_string(),
 			threshold = view.consilium.threshold(),
 			owner_count = view.consilium.owner_count(),
-			"opened a revenue-payout consilium"
+			"opened a holder-grant consilium"
 		);
 		Ok(Response::new(consilium_to_proto(&view)))
 	}

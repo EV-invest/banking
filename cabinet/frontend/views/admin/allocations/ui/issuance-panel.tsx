@@ -11,7 +11,7 @@ import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Alert, AlertDescription, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { issueUnits, type IssueUnitsBody } from "@/entities/admin/api/admin-client";
 import { unitHoldersResource } from "@/entities/admin/model/admin-resource";
@@ -22,13 +22,12 @@ import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { BackingAction } from "@/views/admin/allocations/ui/backing-action";
-import { HoldersTable } from "@/views/admin/allocations/ui/holders-table";
+import { HoldersTable } from "@/views/admin/ui/holders-table";
 import { IssuanceResult, type IssuanceOutcome } from "@/views/admin/allocations/ui/issuance-result";
 import { IssueForm } from "@/views/admin/allocations/ui/issue-form";
 import { PanelHeader } from "@/views/admin/allocations/ui/panel-header";
 import { PinCapAction } from "@/views/admin/allocations/ui/pin-cap-action";
 import { RetireAction } from "@/views/admin/allocations/ui/retire-action";
-import { TransferStakeAction } from "@/views/admin/allocations/ui/transfer-stake-action";
 
 export function IssuancePanel({ allocation, onClose, className }: { allocation: Allocation; onClose: () => void; className?: string }) {
   const t = useT();
@@ -45,9 +44,8 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
     try {
       const issuance = await issueUnits(body);
       setLast({ issuance, holderLabel });
-      // A mint moves the supply and, through it, the mark's `units_outstanding` and
-      // `company_units` — the product page and the fund cards read the latter. Both are
-      // named even for a `queued` row: the refresh shows the split as it stands, and the
+      // A mint moves the supply and, through it, the mark's `units_outstanding`. Both are
+      // named even for a `queued` row: the refresh shows the table as it stands, and the
       // resource's own cadence picks the posted mint up when the relay lands it.
       revalidateTag(TAG.adminUnitHolders, TAG.nav);
       await read.refresh();
@@ -68,9 +66,10 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
         <PanelHeader allocation={allocation} onClose={onClose} />
 
         {error && (
-          <p className="flex items-center gap-2 text-xs text-accent-error">
-            <TriangleAlert className="size-3.5" /> {error}
-          </p>
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         <div className="space-y-2">
@@ -88,10 +87,9 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
           <Settled loading={!read.data} skeleton={<Skeleton className="h-24 w-full" />}>
             {read.data && (
               <>
-                <HoldersTable holders={read.data} />
+                <HoldersTable holders={read.data.holders} outstanding={read.data.units_outstanding} queued={read.data.queued_units} />
                 <PinCapAction allocation={allocation} holders={read.data} />
-                <TransferStakeAction allocation={allocation} holders={read.data} />
-                <RetireAction allocation={allocation} holders={read.data} />
+                <RetireAction allocation={allocation} />
               </>
             )}
           </Settled>

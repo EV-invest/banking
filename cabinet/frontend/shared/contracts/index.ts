@@ -28,8 +28,6 @@ export type {
   BankingV1RequestWithdrawalRequest as RequestWithdrawalRequest,
   BankingV1CancelWithdrawalRequest as CancelWithdrawalRequest,
   BankingV1UserBalanceResponse as UserBalanceResponse,
-  BankingV1Treasury as Treasury,
-  BankingV1RailLiquidity as RailLiquidity,
   // Fund shares (the service currency).
   BankingV1Position as Position,
   BankingV1PositionList as PositionList,
@@ -59,16 +57,31 @@ export type {
 // The allocation catalog is served to BOTH the investor surface (`/api/allocations`,
 // open products only) and the admin one from the same BFF DTO, so the hand-written
 // types live in one place and are re-exported here for the investor imports.
+//
+// The treasury and the cap table (#245) are hand-written there too, NOT re-exported from
+// `./gen`: the BFF reshapes them (`nav_posted_at_unix` → the string `nav_posted_at`, a
+// missing claim → zeros, a holder-less line dropped), so the generated `BankingV1Treasury`
+// is not the shape that arrives. `./governance` carries the two #245 consilium terms for
+// the same reason.
 export type {
   Allocation,
   AllocationAccessGrant,
   AllocationAccessGrantList,
   AllocationAccessLevel,
   AllocationBacking,
+  AllocationClaim,
   AllocationGrantLevel,
   AllocationIcon,
   AllocationList,
   AllocationState,
+  AllocationTreasury,
+  RailLiquidity,
+  SeedCapitalBody,
+  SeedCapitalProposal,
+  Treasury,
+  UnitHolderKind,
+  UnitHolderRef,
+  UnitHolding,
 } from "./admin";
 
 // Identity surface — owned by the concierge plane.

@@ -259,10 +259,6 @@
     "en": "Accepting subscriptions and redemptions",
     "t": "Accepte souscriptions et rachats"
   },
-  "admin.alloc.holders.company": {
-    "en": "Company",
-    "t": "Société"
-  },
   "admin.alloc.holders.empty": {
     "en": "No units issued yet",
     "t": "Aucune part émise pour l'instant"
@@ -270,14 +266,6 @@
   "admin.alloc.holders.emptyHint": {
     "en": "The split by holder appears once a subscription or an in-kind issuance mints the first unit.",
     "t": "La répartition par détenteur apparaît dès qu'une souscription ou une émission en nature crée la première part."
-  },
-  "admin.alloc.holders.fee": {
-    "en": "Fee account",
-    "t": "Compte de frais"
-  },
-  "admin.alloc.holders.investors": {
-    "en": "Investors",
-    "t": "Investisseurs"
   },
   "admin.alloc.holders.outstanding": {
     "en": "Outstanding",
@@ -340,8 +328,8 @@
     "t": "Émettre"
   },
   "admin.alloc.issue.costBasisHint": {
-    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the company already owned cost it no cash.",
-    "t": "Facultatif — par défaut parts × VL à la valorisation actuelle. Zéro est admis : une participation dans un actif que la société possédait déjà ne lui a rien coûté."
+    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the holder already owned cost them no cash.",
+    "t": "Facultatif — par défaut parts × NAV à l'évaluation actuelle. Zéro est autorisé : une part d'un actif que le détenteur possédait déjà ne lui a rien coûté."
   },
   "admin.alloc.issue.field.costBasis": {
     "en": "Cost basis (USDT)",
@@ -354,14 +342,6 @@
   "admin.alloc.issue.field.units": {
     "en": "Units",
     "t": "Parts"
-  },
-  "admin.alloc.issue.holder.company": {
-    "en": "Company",
-    "t": "Société"
-  },
-  "admin.alloc.issue.holder.investor": {
-    "en": "Investor",
-    "t": "Investisseur"
   },
   "admin.alloc.issue.note": {
     "en": "In kind: no cash moves. The units count against the cap like a subscription would, and the cost basis is what the holder is deemed to have paid.",
@@ -478,46 +458,6 @@
   "admin.alloc.retire.submit": {
     "en": "Retire",
     "t": "Retirer"
-  },
-  "admin.alloc.transfer.action": {
-    "en": "Transfer company stake",
-    "t": "Transférer la part de la société"
-  },
-  "admin.alloc.transfer.available": {
-    "en": "The company holds {units} units",
-    "t": "La société détient {units} parts"
-  },
-  "admin.alloc.transfer.confirm": {
-    "en": "{units} units: Company → {holder} — the supply does not change.",
-    "t": "{units} parts : Société → {holder} — l’encours ne change pas."
-  },
-  "admin.alloc.transfer.field.recipient": {
-    "en": "Recipient",
-    "t": "Bénéficiaire"
-  },
-  "admin.alloc.transfer.nothingHeld": {
-    "en": "The company holds no settled units in this product — nothing to transfer.",
-    "t": "La société ne détient aucune part réglée dans ce produit — rien à transférer."
-  },
-  "admin.alloc.transfer.reason.recipient": {
-    "en": "Pick a recipient",
-    "t": "Choisissez un bénéficiaire"
-  },
-  "admin.alloc.transfer.resultApplied": {
-    "en": "{units} units moved from the company to {holder}.",
-    "t": "{units} parts transférées de la société à {holder}."
-  },
-  "admin.alloc.transfer.resultQueued": {
-    "en": "{units} units from the company to {holder} queued — the relay posts the transfer shortly, and the split below follows.",
-    "t": "{units} parts de la société vers {holder} en attente — le relais comptabilise le transfert sous peu, et la répartition ci-dessous suit."
-  },
-  "admin.alloc.transfer.review": {
-    "en": "Review transfer",
-    "t": "Vérifier le transfert"
-  },
-  "admin.alloc.transfer.submit": {
-    "en": "Transfer",
-    "t": "Transférer"
   },
   "admin.alloc.open": {
     "en": "Open",
@@ -670,6 +610,18 @@
   "admin.col.when": {
     "en": "When",
     "t": "Date"
+  },
+  "admin.consilium.open": {
+    "en": "Open the consilium",
+    "t": "Ouvrir le consilium"
+  },
+  "admin.consilium.openedId": {
+    "en": "Consilium {id}",
+    "t": "Consilium {id}"
+  },
+  "admin.consilium.openedTitle": {
+    "en": "Opened — nothing has moved",
+    "t": "Ouvert — rien n'a bougé"
   },
   "admin.dispatch": {
     "en": "Dispatch",
@@ -1159,6 +1111,22 @@
     "en": "Fund revenue",
     "t": "Revenus du fonds"
   },
+  "admin.holder.allocation": {
+    "en": "Allocation",
+    "t": "Allocation"
+  },
+  "admin.holder.allocation.fee": {
+    "en": "Platform fees",
+    "t": "Frais de la plateforme"
+  },
+  "admin.holder.allocation.fund": {
+    "en": "Platform capital",
+    "t": "Capital de la plateforme"
+  },
+  "admin.holder.person": {
+    "en": "Person",
+    "t": "Personne"
+  },
   "admin.kyc.elevated": {
     "en": "Elevated",
     "t": "Approfondi"
@@ -1268,8 +1236,8 @@
     "t": "Un motif est obligatoire — c'est ce que lisent les approbateurs."
   },
   "admin.payments.err.noRailFromPooled": {
-    "en": "Fund capital and a product's pooled claim cannot ship to an address. Move it to fund revenue or to an investor first.",
-    "t": "Le capital du fonds et la créance commune d'un produit ne peuvent pas être envoyés à une adresse. Transférez-les d'abord vers les revenus du fonds ou vers un investisseur."
+    "en": "An allocation's pooled claim — a product's, or the platform's fee and fund — cannot ship to an address. A holder redeems onto their own claim and withdraws from there.",
+    "t": "La créance groupée d'une allocation — celle d'un produit, ou les frais et le capital de la plateforme — ne peut pas être envoyée à une adresse. Un détenteur rachète sur sa propre créance et retire depuis là."
   },
   "admin.payments.err.pickDestination": {
     "en": "Complete the destination.",
@@ -1298,14 +1266,6 @@
   "admin.payments.kind.external": {
     "en": "An external address",
     "t": "Une adresse externe"
-  },
-  "admin.payments.kind.piggybank": {
-    "en": "Fund capital (piggybank)",
-    "t": "Capital du fonds (piggybank)"
-  },
-  "admin.payments.kind.revenue": {
-    "en": "Fund revenue",
-    "t": "Revenus du fonds"
   },
   "admin.payments.kind.service": {
     "en": "A product",
@@ -1515,73 +1475,81 @@
     "en": "Governance mail is not configured",
     "t": "L'e-mail de gouvernance n'est pas configuré"
   },
-  "admin.revenue.amountUsdt": {
-    "en": "Amount (USDT)",
-    "t": "Montant (USDT)"
+  "admin.revenue.cashAvailable": {
+    "en": "Cash · available",
+    "t": "Trésorerie · disponible"
   },
-  "admin.revenue.availableHint": {
-    "en": "free of in-flight payouts",
-    "t": "hors versements en cours"
+  "admin.revenue.cashAvailableHint": {
+    "en": "free of approved payments",
+    "t": "hors paiements approuvés"
   },
-  "admin.revenue.availableToPayOut": {
-    "en": "Available to pay out",
-    "t": "Disponible au versement"
+  "admin.revenue.cashPosted": {
+    "en": "Cash · posted",
+    "t": "Trésorerie · comptabilisée"
+  },
+  "admin.revenue.cashPostedHint": {
+    "en": "settled fees + settled 2-and-20, reserved included",
+    "t": "frais réglés + 2-et-20 réglés, réservé inclus"
   },
   "admin.revenue.earned": {
-    "en": "Earned",
-    "t": "Gagné"
-  },
-  "admin.revenue.earnedTotal": {
-    "en": "Earned · total",
-    "t": "Gagné · total"
-  },
-  "admin.revenue.earnedTotalHint": {
-    "en": "fees + settled 2-and-20",
-    "t": "frais + 2-et-20 réglés"
+    "en": "The fee allocation",
+    "t": "L'allocation des frais"
   },
   "admin.revenue.footnote": {
     "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
     "t": "Un versement suit la même saga qu’un retrait client : il apparaît donc aussi dans la file Retraits, pour expédition puis règlement. Seul un versement encore en file peut être annulé — une fois en cours de traitement, une diffusion a pu aboutir et l’annuler reviendrait à payer deux fois."
   },
+  "admin.revenue.grant.intro": {
+    "en": "Seat a person on the fee allocation. The owners are asked; the units are minted only when more than half of them agree.",
+    "t": "Faire entrer une personne dans l'allocation des frais. Les propriétaires sont consultés ; les parts ne sont émises que si plus de la moitié d'entre eux acceptent."
+  },
+  "admin.revenue.grant.opened": {
+    "en": "The owners have each been emailed a link. No units are minted until more than half of them confirm from their own mailboxes; the cap table above follows once the relay posts the grant.",
+    "t": "Chaque propriétaire a reçu un lien par e-mail. Aucune part n'est émise tant que plus de la moitié d'entre eux ne confirment pas depuis leur messagerie ; le tableau des détenteurs ci-dessus suivra une fois l'attribution comptabilisée."
+  },
+  "admin.revenue.grant.submit": {
+    "en": "Propose holder grant",
+    "t": "Proposer une attribution de parts"
+  },
   "admin.revenue.inFlight": {
     "en": "In flight",
     "t": "En cours d’envoi"
+  },
+  "admin.revenue.navPosted": {
+    "en": "marked {ago}",
+    "t": "évalué {ago}"
   },
   "admin.revenue.noPayouts": {
     "en": "No payouts yet",
     "t": "Aucun versement pour l’instant"
   },
   "admin.revenue.noPayoutsHintConsilium": {
-    "en": "Revenue the fund has earned stays on the ledger until the owners approve a payout. Approved payouts appear here once they execute.",
-    "t": "Les revenus gagnés par le fonds restent au grand livre tant que les propriétaires n'ont pas approuvé un versement. Les versements approuvés apparaissent ici une fois exécutés."
+    "en": "Nothing opens a revenue payout any more: a holder redeems, or the owners approve a payment out of the fee allocation. Payouts opened before that change appear here.",
+    "t": "Plus aucun versement de revenus n'est ouvert : un détenteur rachète, ou les propriétaires approuvent un paiement depuis l'allocation des frais. Les versements ouverts avant ce changement apparaissent ici."
   },
   "admin.revenue.ownMoneyNote": {
-    "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
-    "t": "Il s’agit des fonds propres de la société. Les soldes des clients et le capital d’amorçage du fonds sont des créances distinctes au registre : ils ne sont pas comptés ici et ne sont pas accessibles depuis cet écran."
+    "en": "This is the platform's own money. Client balances and the fund allocation are separate ledger claims and are not included here — and cannot be reached from this screen.",
+    "t": "C'est l'argent propre de la plateforme. Les soldes clients et l'allocation du capital sont des créances distinctes du grand livre, non incluses ici — et inaccessibles depuis cet écran."
   },
   "admin.revenue.payouts": {
     "en": "Payouts",
     "t": "Versements"
   },
-  "admin.revenue.pendingHint": {
-    "en": "queued + in-flight",
-    "t": "en file + en cours d’envoi"
-  },
-  "admin.revenue.pendingPayout": {
-    "en": "Pending payout",
-    "t": "Versement en attente"
-  },
   "admin.revenue.subtitle": {
-    "en": "What the fund earned — fees and the settled 2-and-20 — and the payouts it has made of it",
-    "t": "Ce que le fonds a gagné — frais et 2-et-20 réglés — et les versements effectués à partir de ces revenus"
+    "en": "What the platform earned — the fee allocation: its cash, its units and who holds them",
+    "t": "Ce que la plateforme a gagné — l'allocation des frais : sa trésorerie, ses parts et qui les détient"
   },
   "admin.revenue.toPayments": {
-    "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
-    "t": "Verser les revenus — vers une adresse, dans un produit ou à un investisseur — est un ordre de paiement que les propriétaires autorisent. Ouvrez-en un là-bas."
+    "en": "Moving the platform's earnings — into a product, or to an investor — is a payment order the owners authorise. Open one there. Cash reaches the chain only through a holder's redemption and their own withdrawal.",
+    "t": "Déplacer les gains de la plateforme — vers un produit ou vers un investisseur — est un ordre de paiement que les propriétaires autorisent. Ouvrez-en un là-bas. L'argent n'atteint la chaîne que par le rachat d'un détenteur et son propre retrait."
   },
   "admin.revenue.toTreasury": {
-    "en": "The revenue claim beside the fund's other balances: custody per rail, client claims, seed capital.",
-    "t": "La créance de revenus à côté des autres soldes du fonds : garde par rail, créances clients, capital initial."
+    "en": "The fee allocation beside the platform's other balances: custody per rail, user claims, every allocation and its holders.",
+    "t": "L'allocation des frais à côté des autres soldes de la plateforme : conservation par réseau, créances utilisateurs, chaque allocation et ses détenteurs."
+  },
+  "admin.revenue.unitsHint": {
+    "en": "units of the fee allocation, held by people",
+    "t": "parts de l'allocation des frais, détenues par des personnes"
   },
   "admin.revenue.whereNext": {
     "en": "Move or inspect it",
@@ -1683,6 +1651,42 @@
     "en": "Copy {what}",
     "t": "Copier {what}"
   },
+  "admin.treasury.allocations.claimDetail": {
+    "en": "posted {posted} · reserved {reserved}",
+    "t": "comptabilisé {posted} · réservé {reserved}"
+  },
+  "admin.treasury.allocations.col.allocation": {
+    "en": "Allocation",
+    "t": "Allocation"
+  },
+  "admin.treasury.allocations.col.claim": {
+    "en": "Cash claim",
+    "t": "Créance en trésorerie"
+  },
+  "admin.treasury.allocations.empty": {
+    "en": "No allocations yet",
+    "t": "Aucune allocation pour l'instant"
+  },
+  "admin.treasury.allocations.emptyHint": {
+    "en": "Every allocation the hub knows appears here with its claim, supply and holders — the products, and the hidden fee and fund allocations once they exist.",
+    "t": "Chaque allocation connue du hub apparaît ici avec sa créance, son encours et ses détenteurs — les produits, et les allocations cachées des frais et du capital dès qu'elles existent."
+  },
+  "admin.treasury.allocations.moreHolders": {
+    "en": "+{n} more",
+    "t": "+{n} autres"
+  },
+  "admin.treasury.allocations.noHolders": {
+    "en": "no holders",
+    "t": "aucun détenteur"
+  },
+  "admin.treasury.allocations.title": {
+    "en": "Held through allocations",
+    "t": "Détenu via les allocations"
+  },
+  "admin.treasury.allocations.unmarked": {
+    "en": "not yet marked",
+    "t": "pas encore évalué"
+  },
   "admin.treasury.alreadyRecorded": {
     "en": "Already recorded — that reference was credited before, nothing changed.",
     "t": "Déjà enregistré — cette référence a déjà été créditée, rien n’a changé."
@@ -1711,18 +1715,6 @@
     "en": "Expected amount (USDT) · optional",
     "t": "Montant attendu (USDT) · facultatif"
   },
-  "admin.treasury.feeRevenueHint": {
-    "en": "earned — fees + settled 2-and-20",
-    "t": "gagné — frais + 2-et-20 réglés"
-  },
-  "admin.treasury.fundCapital": {
-    "en": "Fund capital",
-    "t": "Capital du fonds"
-  },
-  "admin.treasury.fundCapitalHint": {
-    "en": "company's own",
-    "t": "fonds propres de la société"
-  },
   "admin.treasury.gas": {
     "en": "Gas",
     "t": "Gas"
@@ -1743,21 +1735,21 @@
     "en": "gas",
     "t": "gas"
   },
-  "admin.treasury.heldForClients": {
-    "en": "Held for clients",
-    "t": "Détenu pour les clients"
+  "admin.treasury.heldByUsers": {
+    "en": "Held by users",
+    "t": "Détenu par les utilisateurs"
   },
-  "admin.treasury.heldForClientsHint": {
-    "en": "user + service balances",
-    "t": "soldes utilisateurs + services"
+  "admin.treasury.heldByUsersHint": {
+    "en": "user claims · held directly",
+    "t": "créances utilisateurs · détenues directement"
   },
   "admin.treasury.invariantNote": {
     "en": "Per-rail backing is the treasury's job, not the ledger's: a shortfall on one rail is accept-and-queue, then rebalanced via CEX / alt-rail / top-up. The global invariant is {invariant}.",
     "t": "La couverture rail par rail relève de la trésorerie, pas du registre : un déficit sur un rail est accepté et mis en file, puis rééquilibré via CEX, rail alternatif ou réapprovisionnement. L’invariant global est {invariant}."
   },
   "admin.treasury.layer1": {
-    "en": "Layer 1 · Ledger — user claims (USDT)",
-    "t": "Couche 1 · Registre — créances clients (USDT)"
+    "en": "Layer 1 · Ledger — claims by holder (USDT)",
+    "t": "Couche 1 · Grand livre — créances par détenteur (USDT)"
   },
   "admin.treasury.layer2": {
     "en": "Layer 2 · Treasury — liquidity by rail",
@@ -1774,10 +1766,6 @@
   "admin.treasury.onchainUsdt": {
     "en": "On-chain USDT",
     "t": "USDT on-chain"
-  },
-  "admin.treasury.party.fundCapital": {
-    "en": "fund capital",
-    "t": "capital du fonds"
   },
   "admin.treasury.party.generic": {
     "en": "{kind} {id}",
@@ -1803,6 +1791,10 @@
     "en": "Recorded — the chain reported {amount}, credited to {party}.",
     "t": "Enregistré — la chaîne a rapporté {amount}, crédité à {party}."
   },
+  "admin.treasury.recordedTitle": {
+    "en": "Recorded",
+    "t": "Enregistré"
+  },
   "admin.treasury.refNote": {
     "en": "The reference is both what gets verified and the idempotency key — {evmRef} on an EVM rail, {tonRef} on TON. A reference that names no confirmed transfer to one of our addresses is refused, and a re-submission of one already recorded is a no-op. Fill the amount only to assert what you expect; a mismatch is then an error instead of a surprise.",
     "t": "La référence est à la fois ce qui est vérifié et la clé d’idempotence — {evmRef} sur un rail EVM, {tonRef} sur TON. Une référence qui ne désigne aucun transfert confirmé vers l’une de nos adresses est refusée, et une nouvelle soumission d’une référence déjà enregistrée est sans effet. Ne renseignez le montant que pour affirmer ce que vous attendez : un écart devient alors une erreur plutôt qu’une surprise."
@@ -1815,13 +1807,45 @@
     "en": "queued + in-flight (clearing)",
     "t": "en file + en cours (compensation)"
   },
+  "admin.treasury.seed.amount": {
+    "en": "Amount (USDT)",
+    "t": "Montant (USDT)"
+  },
+  "admin.treasury.seed.amountProblem": {
+    "en": "A positive decimal, e.g. 10000 or 2500.50",
+    "t": "Un nombre décimal positif, p. ex. 10000 ou 2500.50"
+  },
+  "admin.treasury.seed.depositor": {
+    "en": "Depositor · optional",
+    "t": "Déposant · facultatif"
+  },
+  "admin.treasury.seed.depositorHint": {
+    "en": "Leave empty to attribute the seed to yourself.",
+    "t": "Laissez vide pour vous attribuer l'amorçage."
+  },
+  "admin.treasury.seed.intro": {
+    "en": "USDT sent to a treasury address as the platform's own capital is nobody's until the owners say whose. Name the transfer, the amount the chain must report and the person it is attributed to; when the owners carry it, the hub books their deposit and their subscription into the fund allocation in one step.",
+    "t": "Les USDT envoyés à une adresse de trésorerie comme capital propre de la plateforme n'appartiennent à personne tant que les propriétaires ne le décident pas. Indiquez le transfert, le montant que la chaîne doit rapporter et la personne à qui il est attribué ; quand les propriétaires l'approuvent, le hub comptabilise son dépôt et sa souscription dans l'allocation du capital en une seule étape."
+  },
+  "admin.treasury.seed.opened": {
+    "en": "The owners have each been emailed a link. Nothing is booked until more than half of them confirm from their own mailboxes; the treasury follows once the chain-proven deposit and the fund subscription post.",
+    "t": "Chaque propriétaire a reçu un lien par e-mail. Rien n'est comptabilisé tant que plus de la moitié d'entre eux ne confirment pas depuis leur messagerie ; la trésorerie suivra une fois le dépôt vérifié sur la chaîne et la souscription au capital comptabilisés."
+  },
+  "admin.treasury.seed.submit": {
+    "en": "Propose seed",
+    "t": "Proposer"
+  },
+  "admin.treasury.seed.title": {
+    "en": "Propose seed capital",
+    "t": "Proposer un capital d'amorçage"
+  },
   "admin.treasury.selectRail": {
     "en": "Select a rail…",
     "t": "Choisir un rail…"
   },
   "admin.treasury.subtitle": {
-    "en": "Two layers — user claims (USDT) vs on-chain liquidity by rail",
-    "t": "Deux couches — créances clients (USDT) et liquidité on-chain par rail"
+    "en": "Two layers — ledger claims (USDT) by holder vs on-chain liquidity by rail",
+    "t": "Deux couches — créances du grand livre (USDT) par détenteur vs liquidité on-chain par réseau"
   },
   "admin.users.accessSecurity": {
     "en": "Access & security",
@@ -2331,6 +2355,54 @@
     "en": "This link can no longer be used",
     "t": "Ce lien ne peut plus être utilisé"
   },
+  "approval.holderGrant.allocation.fee": {
+    "en": "of the fee allocation",
+    "t": "de l'allocation des frais"
+  },
+  "approval.holderGrant.allocation.fund": {
+    "en": "of the fund allocation",
+    "t": "de l'allocation du capital"
+  },
+  "approval.holderGrant.approve": {
+    "en": "Approve this grant",
+    "t": "Approuver cette attribution"
+  },
+  "approval.holderGrant.decided.approvedTitle": {
+    "en": "You approved this grant",
+    "t": "Vous avez approuvé cette attribution"
+  },
+  "approval.holderGrant.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the units are minted once enough owners have agreed.",
+    "t": "Votre réponse a été enregistrée. Il n'y a rien d'autre à faire ici — les parts sont émises une fois qu'assez de propriétaires ont accepté."
+  },
+  "approval.holderGrant.decided.rejectedTitle": {
+    "en": "You rejected this grant",
+    "t": "Vous avez rejeté cette attribution"
+  },
+  "approval.holderGrant.executes": {
+    "en": "If it passes, the units are minted to this person in kind, and they hold that share of the allocation from then on.",
+    "t": "S'il est adopté, les parts sont émises en nature pour cette personne, qui détient cette part de l'allocation dès lors."
+  },
+  "approval.holderGrant.holder": {
+    "en": "Holder",
+    "t": "Détenteur"
+  },
+  "approval.holderGrant.lead": {
+    "en": "{initiator} has asked to seat a person on one of the platform's own allocations, as set out below. Who holds the platform's money is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} a demandé de faire entrer une personne dans l'une des allocations propres de la plateforme, comme indiqué ci-dessous. Qui détient l'argent de la plateforme n'est jamais la décision d'une seule personne, d'où l'accord des propriétaires."
+  },
+  "approval.holderGrant.payloadHashHint": {
+    "en": "The fingerprint is taken over the allocation, the person and the units above. It is checked again before anything is minted, so a request cannot be edited after you have agreed to it.",
+    "t": "L'empreinte est calculée sur l'allocation, la personne et les parts ci-dessus. Elle est vérifiée à nouveau avant toute émission, si bien qu'une demande ne peut pas être modifiée après votre accord."
+  },
+  "approval.holderGrant.title": {
+    "en": "Approve a holder grant",
+    "t": "Approuver une attribution de parts"
+  },
+  "approval.holderGrant.units": {
+    "en": "Units to mint",
+    "t": "Parts à émettre"
+  },
   "approval.loadFailed": {
     "en": "We couldn't load this request",
     "t": "Impossible de charger cette demande"
@@ -2510,6 +2582,50 @@
   "approval.removal.title": {
     "en": "A request to end your ownership",
     "t": "Une demande de mettre fin à votre propriété"
+  },
+  "approval.seedCapital.amount": {
+    "en": "Amount",
+    "t": "Montant"
+  },
+  "approval.seedCapital.approve": {
+    "en": "Approve this seed",
+    "t": "Approuver cet apport"
+  },
+  "approval.seedCapital.decided.approvedTitle": {
+    "en": "You approved this seed",
+    "t": "Vous avez approuvé cet apport"
+  },
+  "approval.seedCapital.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the deposit is booked once enough owners have agreed.",
+    "t": "Votre réponse a été enregistrée. Il n'y a rien d'autre à faire ici — le dépôt est comptabilisé une fois qu'assez de propriétaires ont accepté."
+  },
+  "approval.seedCapital.decided.rejectedTitle": {
+    "en": "You rejected this seed",
+    "t": "Vous avez rejeté cet apport"
+  },
+  "approval.seedCapital.depositor": {
+    "en": "Depositor",
+    "t": "Déposant"
+  },
+  "approval.seedCapital.executes": {
+    "en": "If it passes, the transfer is verified on chain and booked as this person's deposit and subscription into the fund allocation — in one step, or not at all.",
+    "t": "S'il est adopté, le transfert est vérifié sur la chaîne et comptabilisé comme dépôt de cette personne et souscription dans l'allocation du capital — en une seule étape, ou pas du tout."
+  },
+  "approval.seedCapital.lead": {
+    "en": "{initiator} has asked to attribute a transfer to the treasury as a person's seed of the platform's capital, as set out below. Whose capital it is is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} a demandé d'attribuer un transfert vers la trésorerie comme apport d'une personne au capital de la plateforme, comme indiqué ci-dessous. À qui appartient ce capital n'est jamais la décision d'une seule personne, d'où l'accord des propriétaires."
+  },
+  "approval.seedCapital.payloadHashHint": {
+    "en": "The fingerprint is taken over the reference, the rail, the amount and the depositor above. It is checked again before anything is booked, so a request cannot be edited after you have agreed to it.",
+    "t": "L'empreinte est calculée sur la référence, le réseau, le montant et le déposant ci-dessus. Elle est vérifiée à nouveau avant toute comptabilisation, si bien qu'une demande ne peut pas être modifiée après votre accord."
+  },
+  "approval.seedCapital.reference": {
+    "en": "On-chain reference",
+    "t": "Référence on-chain"
+  },
+  "approval.seedCapital.title": {
+    "en": "Approve seed capital",
+    "t": "Approuver un capital d'amorçage"
   },
   "approval.tally": {
     "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}} so far",
@@ -2983,9 +3099,33 @@
     "en": "This room is for the fund's owners",
     "t": "Cette salle est réservée aux propriétaires du fonds"
   },
+  "consilium.holderGrant.allocation": {
+    "en": "Allocation",
+    "t": "Allocation"
+  },
+  "consilium.holderGrant.carried": {
+    "en": "Minted",
+    "t": "Émis"
+  },
+  "consilium.holderGrant.executes": {
+    "en": "If it passes, the units are minted to this person in kind — the allocation's supply grows by them, and they hold that share from then on.",
+    "t": "S'il est adopté, les parts sont émises en nature pour cette personne — l'encours de l'allocation augmente d'autant, et elle détient cette part dès lors."
+  },
+  "consilium.holderGrant.holder": {
+    "en": "Holder",
+    "t": "Détenteur"
+  },
+  "consilium.holderGrant.unitsWord": {
+    "en": "units",
+    "t": "parts"
+  },
   "consilium.kind.fee_policy": {
     "en": "Fee terms",
     "t": "Conditions de frais"
+  },
+  "consilium.kind.holder_grant": {
+    "en": "Holder grant",
+    "t": "Attribution de parts"
   },
   "consilium.kind.payment": {
     "en": "Payment",
@@ -2994,6 +3134,10 @@
   "consilium.kind.revenue_payout": {
     "en": "Revenue payout",
     "t": "Versement de revenus"
+  },
+  "consilium.kind.seed_capital": {
+    "en": "Seed capital",
+    "t": "Capital d'amorçage"
   },
   "consilium.kind.valuation_override": {
     "en": "NAV mark",
@@ -3430,6 +3574,18 @@
   "consilium.roster.you": {
     "en": "(you)",
     "t": "(vous)"
+  },
+  "consilium.seedCapital.carried": {
+    "en": "Booked",
+    "t": "Comptabilisé"
+  },
+  "consilium.seedCapital.depositor": {
+    "en": "Depositor · {id}",
+    "t": "Déposant · {id}"
+  },
+  "consilium.seedCapital.executes": {
+    "en": "If it passes, the transfer is verified on chain, booked as this person's deposit and subscribed into the fund allocation — one chain, or nothing.",
+    "t": "S'il est adopté, le transfert est vérifié sur la chaîne, comptabilisé comme dépôt de cette personne et souscrit dans l'allocation du capital — en une seule chaîne, ou pas du tout."
   },
   "consilium.state.approved": {
     "en": "Approved",
@@ -5579,33 +5735,33 @@
     "en": "The invariant",
     "t": "L’invariant"
   },
+  "tips.admin.treasury.layer1.allocations.body": {
+    "en": "Every allocation's cash claim, supply, price and holders — the products and the hidden fee and fund allocations. Every unit belongs to a person or to the fee allocation; nothing is nobody's.",
+    "t": "Créance en trésorerie, encours, prix et détenteurs de chaque allocation — les produits et les allocations cachées des frais et du capital. Chaque part appartient à une personne ou à l'allocation des frais ; rien n'est à personne."
+  },
+  "tips.admin.treasury.layer1.allocations.title": {
+    "en": "Held through allocations",
+    "t": "Détenu via les allocations"
+  },
   "tips.admin.treasury.layer1.claims-total.body": {
-    "en": "Total user + fund claims. Equals the sum of on-chain custody — every claim is fully backed.",
-    "t": "Total des créances des utilisateurs et du fonds. Égal à la somme de la conservation on-chain — chaque créance est intégralement couverte."
+    "en": "Total claims — users' and allocations'. Equals the sum of on-chain custody — every claim is fully backed.",
+    "t": "Total des créances — utilisateurs et allocations. Égal à la somme de la conservation on-chain — chaque créance est entièrement couverte."
   },
   "tips.admin.treasury.layer1.claims-total.title": {
     "en": "Claims · total",
     "t": "Créances · total"
   },
-  "tips.admin.treasury.layer1.fund-capital.body": {
-    "en": "Claims that are the fund's own capital, not client money.",
-    "t": "Les créances qui constituent les fonds propres de la société, et non l’argent des clients."
+  "tips.admin.treasury.layer1.held-by-users.body": {
+    "en": "Claims people hold directly — their wallet balances. Read off the user claim accounts, never derived as a remainder.",
+    "t": "Créances détenues directement par des personnes — leurs soldes de portefeuille. Lues sur les comptes de créances utilisateurs, jamais déduites comme un reste."
   },
-  "tips.admin.treasury.layer1.fund-capital.title": {
-    "en": "Fund capital",
-    "t": "Capital du fonds"
-  },
-  "tips.admin.treasury.layer1.held-for-clients.body": {
-    "en": "The portion of claims owed to clients — user wallet plus service balances.",
-    "t": "La part des créances due aux clients — soldes des wallets utilisateurs et soldes de service."
-  },
-  "tips.admin.treasury.layer1.held-for-clients.title": {
-    "en": "Held for clients",
-    "t": "Détenu pour les clients"
+  "tips.admin.treasury.layer1.held-by-users.title": {
+    "en": "Held by users",
+    "t": "Détenu par les utilisateurs"
   },
   "tips.admin.treasury.layer1.ledger.body": {
-    "en": "The ledger's network-agnostic claims in USDT. Total claims equal on-chain custody and break down into held-for-clients, fund capital, and reserved-for-withdrawals.",
-    "t": "Les créances du registre, exprimées en USDT et indépendantes du réseau. Le total des créances est égal à la conservation on-chain et se décompose en détenu pour les clients, capital du fonds et réservé pour les retraits."
+    "en": "The ledger's network-agnostic claims in USDT. Total claims equal on-chain custody and break down into what users hold directly, what allocations hold for their holders, and reserved-for-withdrawals.",
+    "t": "Les créances du grand livre en USDT, indépendantes du réseau. Le total des créances égale la conservation on-chain et se décompose en ce que les utilisateurs détiennent directement, ce que les allocations détiennent pour leurs détenteurs, et le réservé pour retraits."
   },
   "tips.admin.treasury.layer1.ledger.title": {
     "en": "Layer 1 · Ledger",

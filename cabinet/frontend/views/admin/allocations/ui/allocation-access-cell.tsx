@@ -9,7 +9,7 @@ import { useT } from "@evinvest/i18n/react";
 
 import type { AllocationAccessLevel } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
-import { accessLabel, accessTone } from "@/views/admin/allocations/lib/access";
+import { accessLabel, accessTone } from "@/views/admin/lib/access";
 import { AccessSelect } from "@/views/admin/allocations/ui/pickers";
 
 export function AllocationAccessCell({ access, onChange }: { access: AllocationAccessLevel; onChange: (level: AllocationAccessLevel) => void }) {
