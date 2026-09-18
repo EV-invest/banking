@@ -1540,8 +1540,8 @@
     "t": "Was die Plattform verdient hat — die Gebühren-Allokation: ihre Kasse, ihre Anteile und wer sie hält"
   },
   "admin.revenue.toPayments": {
-    "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
-    "t": "Einnahmen auszuzahlen — an eine Adresse, in ein Produkt oder an einen Anleger — ist eine Zahlung, die die Eigentümer genehmigen. Dort eröffnen."
+    "en": "Moving the platform's earnings — into a product, or to an investor — is a payment order the owners authorise. Open one there. Cash reaches the chain only through a holder's redemption and their own withdrawal.",
+    "t": "Die Erträge der Plattform zu bewegen — in ein Produkt oder an einen Anleger — ist ein Zahlungsauftrag, den die Eigentümer genehmigen. Dort eröffnen. Auf die Chain gelangt Geld nur über die Einlösung eines Halters und dessen eigene Abhebung."
   },
   "admin.revenue.toTreasury": {
     "en": "The fee allocation beside the platform's other balances: custody per rail, user claims, every allocation and its holders.",
@@ -1790,6 +1790,10 @@
   "admin.treasury.recorded": {
     "en": "Recorded — the chain reported {amount}, credited to {party}.",
     "t": "Erfasst — die Chain meldete {amount}, gutgeschrieben an {party}."
+  },
+  "admin.treasury.recordedTitle": {
+    "en": "Recorded",
+    "t": "Erfasst"
   },
   "admin.treasury.refNote": {
     "en": "The reference is both what gets verified and the idempotency key — {evmRef} on an EVM rail, {tonRef} on TON. A reference that names no confirmed transfer to one of our addresses is refused, and a re-submission of one already recorded is a no-op. Fill the amount only to assert what you expect; a mismatch is then an error instead of a surprise.",
@@ -3098,14 +3102,6 @@
   "consilium.holderGrant.allocation": {
     "en": "Allocation",
     "t": "Allokation"
-  },
-  "consilium.holderGrant.allocation.fee": {
-    "en": "Platform fees (fee)",
-    "t": "Plattformgebühren (fee)"
-  },
-  "consilium.holderGrant.allocation.fund": {
-    "en": "Platform capital (fund)",
-    "t": "Plattformkapital (fund)"
   },
   "consilium.holderGrant.carried": {
     "en": "Minted",

@@ -1540,8 +1540,8 @@
     "t": "Что заработала платформа — аллокация комиссий: её деньги, её юниты и кто их держит"
   },
   "admin.revenue.toPayments": {
-    "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
-    "t": "Выплата дохода — на адрес, в продукт или инвестору — это платёж, который согласуют владельцы. Открыть его можно там."
+    "en": "Moving the platform's earnings — into a product, or to an investor — is a payment order the owners authorise. Open one there. Cash reaches the chain only through a holder's redemption and their own withdrawal.",
+    "t": "Перемещение заработанного платформой — в продукт или инвестору — это платёжное поручение, которое одобряют владельцы. Открывайте его там. В сеть деньги уходят только через погашение держателем и его собственный вывод."
   },
   "admin.revenue.toTreasury": {
     "en": "The fee allocation beside the platform's other balances: custody per rail, user claims, every allocation and its holders.",
@@ -1790,6 +1790,10 @@
   "admin.treasury.recorded": {
     "en": "Recorded — the chain reported {amount}, credited to {party}.",
     "t": "Зафиксировано — сеть сообщила о сумме {amount}, зачислено: {party}."
+  },
+  "admin.treasury.recordedTitle": {
+    "en": "Recorded",
+    "t": "Записано"
   },
   "admin.treasury.refNote": {
     "en": "The reference is both what gets verified and the idempotency key — {evmRef} on an EVM rail, {tonRef} on TON. A reference that names no confirmed transfer to one of our addresses is refused, and a re-submission of one already recorded is a no-op. Fill the amount only to assert what you expect; a mismatch is then an error instead of a surprise.",
@@ -3098,14 +3102,6 @@
   "consilium.holderGrant.allocation": {
     "en": "Allocation",
     "t": "Аллокация"
-  },
-  "consilium.holderGrant.allocation.fee": {
-    "en": "Platform fees (fee)",
-    "t": "Комиссии платформы (fee)"
-  },
-  "consilium.holderGrant.allocation.fund": {
-    "en": "Platform capital (fund)",
-    "t": "Капитал платформы (fund)"
   },
   "consilium.holderGrant.carried": {
     "en": "Minted",

@@ -1540,8 +1540,8 @@
     "t": "Ce que la plateforme a gagné — l'allocation des frais : sa trésorerie, ses parts et qui les détient"
   },
   "admin.revenue.toPayments": {
-    "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
-    "t": "Verser les revenus — vers une adresse, dans un produit ou à un investisseur — est un ordre de paiement que les propriétaires autorisent. Ouvrez-en un là-bas."
+    "en": "Moving the platform's earnings — into a product, or to an investor — is a payment order the owners authorise. Open one there. Cash reaches the chain only through a holder's redemption and their own withdrawal.",
+    "t": "Déplacer les gains de la plateforme — vers un produit ou vers un investisseur — est un ordre de paiement que les propriétaires autorisent. Ouvrez-en un là-bas. L'argent n'atteint la chaîne que par le rachat d'un détenteur et son propre retrait."
   },
   "admin.revenue.toTreasury": {
     "en": "The fee allocation beside the platform's other balances: custody per rail, user claims, every allocation and its holders.",
@@ -1790,6 +1790,10 @@
   "admin.treasury.recorded": {
     "en": "Recorded — the chain reported {amount}, credited to {party}.",
     "t": "Enregistré — la chaîne a rapporté {amount}, crédité à {party}."
+  },
+  "admin.treasury.recordedTitle": {
+    "en": "Recorded",
+    "t": "Enregistré"
   },
   "admin.treasury.refNote": {
     "en": "The reference is both what gets verified and the idempotency key — {evmRef} on an EVM rail, {tonRef} on TON. A reference that names no confirmed transfer to one of our addresses is refused, and a re-submission of one already recorded is a no-op. Fill the amount only to assert what you expect; a mismatch is then an error instead of a surprise.",
@@ -3098,14 +3102,6 @@
   "consilium.holderGrant.allocation": {
     "en": "Allocation",
     "t": "Allocation"
-  },
-  "consilium.holderGrant.allocation.fee": {
-    "en": "Platform fees (fee)",
-    "t": "Frais de la plateforme (fee)"
-  },
-  "consilium.holderGrant.allocation.fund": {
-    "en": "Platform capital (fund)",
-    "t": "Capital de la plateforme (fund)"
   },
   "consilium.holderGrant.carried": {
     "en": "Minted",

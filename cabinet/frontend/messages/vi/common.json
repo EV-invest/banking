@@ -1540,8 +1540,8 @@
     "t": "Nền tảng đã kiếm được gì — phân bổ phí: tiền mặt, đơn vị và ai nắm giữ"
   },
   "admin.revenue.toPayments": {
-    "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
-    "t": "Chi trả doanh thu — tới một địa chỉ, vào một sản phẩm, hoặc cho một nhà đầu tư — là một lệnh thanh toán do chủ sở hữu phê duyệt. Mở lệnh ở đó."
+    "en": "Moving the platform's earnings — into a product, or to an investor — is a payment order the owners authorise. Open one there. Cash reaches the chain only through a holder's redemption and their own withdrawal.",
+    "t": "Chuyển lợi nhuận của nền tảng — vào một sản phẩm hoặc cho một nhà đầu tư — là lệnh thanh toán do các chủ sở hữu duyệt. Hãy mở lệnh ở đó. Tiền chỉ ra chuỗi qua việc người nắm giữ rút vốn và tự rút tiền."
   },
   "admin.revenue.toTreasury": {
     "en": "The fee allocation beside the platform's other balances: custody per rail, user claims, every allocation and its holders.",
@@ -1790,6 +1790,10 @@
   "admin.treasury.recorded": {
     "en": "Recorded — the chain reported {amount}, credited to {party}.",
     "t": "Đã ghi nhận — blockchain báo {amount}, ghi có cho {party}."
+  },
+  "admin.treasury.recordedTitle": {
+    "en": "Recorded",
+    "t": "Đã ghi nhận"
   },
   "admin.treasury.refNote": {
     "en": "The reference is both what gets verified and the idempotency key — {evmRef} on an EVM rail, {tonRef} on TON. A reference that names no confirmed transfer to one of our addresses is refused, and a re-submission of one already recorded is a no-op. Fill the amount only to assert what you expect; a mismatch is then an error instead of a surprise.",
@@ -3098,14 +3102,6 @@
   "consilium.holderGrant.allocation": {
     "en": "Allocation",
     "t": "Phân bổ"
-  },
-  "consilium.holderGrant.allocation.fee": {
-    "en": "Platform fees (fee)",
-    "t": "Phí nền tảng (fee)"
-  },
-  "consilium.holderGrant.allocation.fund": {
-    "en": "Platform capital (fund)",
-    "t": "Vốn nền tảng (fund)"
   },
   "consilium.holderGrant.carried": {
     "en": "Minted",
