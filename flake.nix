@@ -802,7 +802,7 @@
         # and .tb-client all exist and match what developers run.
         runCheckRust = pkgs.writeShellApplication {
           name = "run-check-rust";
-          runtimeInputs = with pkgs; [ rust git protobuf mold postgresql coreutils ];
+          runtimeInputs = (with pkgs; [ rust git protobuf mold postgresql coreutils ]) ++ [ tigerbeetleBin ]; # tests/ledger_gap.rs runs its own clusters
           text = ''
             cd "$(git rev-parse --show-toplevel)"
             ${linkTbClient}
