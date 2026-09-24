@@ -86,6 +86,27 @@ impl EvmRpc {
 		word_to_u128(as_str(&value, "eth_call")?).ok_or_else(|| RpcError::Rpc("eth_call balanceOf: unparseable result".into()))
 	}
 
+	/// A block's timestamp (unix seconds).
+	pub async fn block_timestamp(&self, block: u64) -> Result<u64, RpcError> {
+		let value = self.call("eth_getBlockByNumber", json!([format!("0x{block:x}"), false])).await?;
+		value
+			.get("timestamp")
+			.and_then(Value::as_str)
+			.and_then(hex_to_u64)
+			.ok_or_else(|| RpcError::Rpc(format!("eth_getBlockByNumber {block}: missing/invalid timestamp")))
+	}
+
+	/// The `contract`'s logs in `[from, to]` matching `topics` (positional; each a single value).
+	pub async fn logs(&self, contract: &str, from: u64, to: u64, topics: &[&str]) -> Result<Vec<Value>, RpcError> {
+		let value = self
+			.call(
+				"eth_getLogs",
+				json!([{ "address": contract, "fromBlock": format!("0x{from:x}"), "toBlock": format!("0x{to:x}"), "topics": topics }]),
+			)
+			.await?;
+		value.as_array().cloned().ok_or_else(|| RpcError::Rpc("eth_getLogs: non-array result".into()))
+	}
+
 	/// Submit a raw signed transaction; returns its hash on acceptance. A node-level error
 	/// (e.g. "already known", "nonce too low", "insufficient funds") comes back as
 	/// [`RpcError::Rpc`] for the caller to interpret — sending the SAME signed transaction
@@ -179,6 +200,12 @@ fn balance_of_calldata(address: &str) -> Option<String> {
 /// Shared by the deposit scan (which filters on it) and the arrival verifier (which checks
 /// the log it was pointed at really is a Transfer, and not some other event of the token's).
 pub(crate) const TRANSFER_TOPIC: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+/// Left-pad a 20-byte `0x` address into a 32-byte topic word for a log filter.
+pub(crate) fn pad_topic(address_lower: &str) -> String {
+	let hex = address_lower.strip_prefix("0x").unwrap_or(address_lower);
+	format!("0x{hex:0>64}")
+}
 
 /// The last 20 bytes of a 32-byte topic word → a lowercase `0x…` address.
 pub(crate) fn address_from_topic(topic: &str) -> Option<String> {

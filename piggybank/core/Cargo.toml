@@ -11,6 +11,10 @@ default-run = "piggybank"
 name = "piggybank"
 path = "src/main.rs"
 
+[[bin]]
+name = "ledger-gap"
+path = "src/ledger_gap.rs"
+
 [features]
 # The concierge governance-mail transport — how an owner is actually told that a payout
 # is waiting on them. ON by default: a consilium nobody can be emailed about is one
@@ -25,6 +29,8 @@ async-trait.workspace = true
 # does) so no crypto crate has to agree on a `rand_core` version.
 getrandom.workspace = true
 hex = { workspace = true }
+# Renders ledger-gap's TigerBeetle timestamps as dates.
+jiff.workspace = true
 reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 
 color-eyre.workspace = true

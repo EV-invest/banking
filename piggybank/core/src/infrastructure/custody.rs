@@ -44,9 +44,13 @@ const GAS_STATION: Uuid = Uuid::from_u128(1);
 /// Wei per gwei — the operator configures the gas-price ceiling in gwei, the node quotes wei.
 const WEI_PER_GWEI: u128 = 1_000_000_000;
 
+/// How far before a withdrawal's `created_at` the forgotten-send scan still looks: the
+/// database's clock and the chain's block timestamps are not the same clock.
+const CLOCK_SKEW_SECS: u64 = 300;
+
 use crate::{
 	config::EvmConfig,
-	infrastructure::evm_rpc::{EvmRpc, RpcError, TRANSFER_TOPIC, address_from_topic, hex_to_u64, word_to_u128},
+	infrastructure::evm_rpc::{EvmRpc, RpcError, TRANSFER_TOPIC, address_from_topic, hex_to_u64, pad_topic, word_to_u128},
 	ports::custody::{BroadcastRequest, Custody, CustodyError, InboundTransfer, TreasuryFunding, format_native_units},
 };
 
@@ -141,6 +145,9 @@ pub struct ChainCustody {
 	network: Network,
 	pool: PgPool,
 	rpc: EvmRpc,
+	/// `eth_getLogs` goes where the deposit scan sends it (`logs_rpc_url`, else `rpc_url`).
+	logs_rpc: EvmRpc,
+	max_block_range: u64,
 	signer: SignerServiceClient<Channel>,
 	service_token: Option<ServiceTokenSource>,
 	chain_id: u64,
@@ -165,6 +172,8 @@ impl ChainCustody {
 			network: evm.network,
 			pool,
 			rpc: EvmRpc::new(evm.rpc_url.clone()),
+			logs_rpc: EvmRpc::new(evm.logs_rpc_url.clone().unwrap_or_else(|| evm.rpc_url.clone())),
+			max_block_range: evm.max_block_range.max(1),
 			signer,
 			service_token,
 			chain_id: evm.chain_id,
@@ -236,9 +245,10 @@ impl ChainCustody {
 			.cloned()
 	}
 
-	/// The previously signed+stored raw transaction for this withdrawal, if any.
-	async fn stored_tx(&self, withdrawal_id: Uuid) -> Result<Option<String>, CustodyError> {
-		sqlx::query_scalar::<_, String>("SELECT raw_tx FROM withdrawal_broadcasts WHERE withdrawal_id = $1 AND network = $2")
+	/// This withdrawal's broadcast row, if any: `Some(Some(raw_tx))` a send we signed,
+	/// `Some(None)` an adopted one whose bytes we never held.
+	async fn stored_tx(&self, withdrawal_id: Uuid) -> Result<Option<Option<String>>, CustodyError> {
+		sqlx::query_scalar::<_, Option<String>>("SELECT raw_tx FROM withdrawal_broadcasts WHERE withdrawal_id = $1 AND network = $2")
 			.bind(withdrawal_id)
 			.bind(self.network.as_str())
 			.fetch_optional(&self.pool)
@@ -246,17 +256,78 @@ impl ChainCustody {
 			.map_err(db_unavailable)
 	}
 
-	async fn store_tx(&self, withdrawal_id: Uuid, nonce: u64, raw_tx: &str, tx_hash: &str) -> Result<(), CustodyError> {
-		sqlx::query("INSERT INTO withdrawal_broadcasts (withdrawal_id, network, nonce, raw_tx, tx_hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (withdrawal_id) DO NOTHING")
+	/// `false` when another delivery stored its row first — then THAT row is the broadcast.
+	async fn store_tx(&self, withdrawal_id: Uuid, nonce: Option<u64>, raw_tx: Option<&str>, tx_hash: &str) -> Result<bool, CustodyError> {
+		let stored = sqlx::query("INSERT INTO withdrawal_broadcasts (withdrawal_id, network, nonce, raw_tx, tx_hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (withdrawal_id) DO NOTHING")
 			.bind(withdrawal_id)
 			.bind(self.network.as_str())
-			.bind(nonce as i64)
+			.bind(nonce.map(|n| n as i64))
 			.bind(raw_tx)
 			.bind(tx_hash)
 			.execute(&self.pool)
 			.await
 			.map_err(db_unavailable)?;
-		Ok(())
+		Ok(stored.rows_affected() == 1)
+	}
+
+	/// Re-send whatever row this withdrawal has: a signed one's bytes again, an adopted one
+	/// nothing (it is mined; the watcher settles it).
+	async fn resend(&self, withdrawal_id: Uuid) -> Result<(), CustodyError> {
+		match self.stored_tx(withdrawal_id).await? {
+			Some(Some(raw_tx)) => self.submit(&raw_tx, true).await,
+			Some(None) => Ok(()),
+			None => Err(CustodyError::Unavailable(format!("broadcast row for {withdrawal_id} vanished between insert and read"))),
+		}
+	}
+
+	/// A mined treasury transfer of exactly this withdrawal's (address, amount) since it was
+	/// created, owned by no other withdrawal: the send a Postgres restore from before the
+	/// broadcast forgot. Scans back from head one `max_block_range` window at a time, so a
+	/// fresh withdrawal costs a window or two. A scan that cannot finish is `Unavailable`:
+	/// sending while unable to rule out a send is the double payout this exists to stop.
+	async fn forgotten_send(&self, treasury: &str, request: &BroadcastRequest) -> Result<Option<String>, CustodyError> {
+		let created: i64 = sqlx::query_scalar("SELECT extract(epoch FROM created_at)::bigint FROM withdrawals WHERE id = $1")
+			.bind(request.withdrawal_id)
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(db_unavailable)?
+			.ok_or_else(|| CustodyError::Rejected(format!("withdrawal {} has no row", request.withdrawal_id)))?;
+		let floor = (created as u64).saturating_sub(CLOCK_SKEW_SECS);
+		let amount = onchain_transfer_amount(self.network, request.amount)?;
+		let from_topic = pad_topic(&treasury.to_lowercase());
+		let to_topic = pad_topic(&request.address.as_str().to_lowercase());
+		let mut to = self.rpc.block_number().await.map_err(read_err)?;
+		loop {
+			let from = to.saturating_sub(self.max_block_range - 1);
+			let logs = self
+				.logs_rpc
+				.logs(&self.usdt_contract, from, to, &[TRANSFER_TOPIC, &from_topic, &to_topic])
+				.await
+				.map_err(read_err)?;
+			for log in logs {
+				if log.get("data").and_then(Value::as_str).and_then(word_to_u128) != Some(amount) {
+					continue;
+				}
+				let hash = log
+					.get("transactionHash")
+					.and_then(Value::as_str)
+					.ok_or_else(|| CustodyError::Unavailable("eth_getLogs: a log without transactionHash".to_owned()))?
+					.to_lowercase();
+				let owned: bool =
+					sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM withdrawal_broadcasts WHERE lower(tx_hash) = $1) OR EXISTS (SELECT 1 FROM withdrawals WHERE lower(tx_ref) = $1)")
+						.bind(&hash)
+						.fetch_one(&self.pool)
+						.await
+						.map_err(db_unavailable)?;
+				if !owned {
+					return Ok(Some(hash));
+				}
+			}
+			if from == 0 || self.logs_rpc.block_timestamp(from).await.map_err(read_err)? < floor {
+				return Ok(None);
+			}
+			to = from - 1;
+		}
 	}
 
 	/// Forget the stored tx for a withdrawal whose FIRST send the node synchronously
@@ -389,11 +460,19 @@ impl Custody for ChainCustody {
 		);
 		// Idempotent: if we already signed+stored a transaction for this withdrawal, re-send
 		// THOSE exact bytes rather than signing a new one (no second nonce can ever go out).
-		if let Some(raw_tx) = self.stored_tx(request.withdrawal_id).await? {
-			return self.submit(&raw_tx, true).await;
+		if self.stored_tx(request.withdrawal_id).await?.is_some() {
+			return self.resend(request.withdrawal_id).await;
 		}
 
 		let treasury = self.treasury_address().await?;
+		// No row can also mean a restore took it back while the chain kept the send.
+		if let Some(tx_hash) = self.forgotten_send(&treasury, request).await? {
+			warn!(withdrawal_id = %request.withdrawal_id, %tx_hash, "chain custody: the chain already carries this withdrawal's transfer with no broadcast row — adopting it, signing nothing");
+			if !self.store_tx(request.withdrawal_id, None, None, &tx_hash).await? {
+				return self.resend(request.withdrawal_id).await;
+			}
+			return Ok(());
+		}
 		let gas_price = self.rpc.gas_price().await.map_err(read_err)?;
 		// A spike above the hub's ceiling is transient: retry on a later pass rather than
 		// letting the signer's fee budget turn a market condition into a park. Checked before
@@ -406,8 +485,11 @@ impl Custody for ChainCustody {
 		let (raw_tx, tx_hash) = self.sign(request, nonce, gas_price).await?;
 
 		// Persist BEFORE broadcasting — a crash after this re-broadcasts THIS tx (same nonce),
-		// never a freshly-signed one with a different nonce.
-		self.store_tx(request.withdrawal_id, nonce, &raw_tx, &tx_hash).await?;
+		// never a freshly-signed one with a different nonce. A concurrent delivery that stored
+		// first owns the broadcast; ours was never sent and goes nowhere.
+		if !self.store_tx(request.withdrawal_id, Some(nonce), Some(&raw_tx), &tx_hash).await? {
+			return self.resend(request.withdrawal_id).await;
+		}
 		match self.submit(&raw_tx, false).await {
 			// The node synchronously refused a first-ever send: nothing entered the mempool,
 			// so free the nonce before parking — otherwise the sequence gaps at this slot and
