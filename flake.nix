@@ -1274,6 +1274,11 @@
 
         packages = {
           default = bankingBins;
+          # The failover agent runs it on the host (devops fallback/agent.nix); only the one
+          # binary, not the service closure around it.
+          ledger-gap = pkgs.runCommand "ledger-gap" { meta.mainProgram = "ledger-gap"; } ''
+            install -Dm755 ${bankingBins}/bin/ledger-gap $out/bin/ledger-gap
+          '';
         } // containerStd.packages;
 
         containers = containerStd.containers;
