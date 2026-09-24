@@ -56,7 +56,7 @@ use crate::{
 	infrastructure::{
 		custody::ChainCustody,
 		deposits::PgDeposits,
-		evm_rpc::{TRANSFER_TOPIC, address_from_topic, hex_to_u64, word_to_u128},
+		evm_rpc::{TRANSFER_TOPIC, address_from_topic, hex_to_u64, pad_topic, word_to_u128},
 		rails::repo,
 	},
 };
@@ -617,12 +617,6 @@ fn decode_transfer(log: &Value) -> Option<Transfer> {
 
 /// A 32-byte big-endian uint256 word → `u128`. `None` if it exceeds `u128` (the high 16
 /// bytes are non-zero) — refused rather than silently truncated.
-/// Left-pad a 20-byte `0x` address into a 32-byte topic word for the `to` filter.
-fn pad_topic(address_lower: &str) -> String {
-	let hex = address_lower.strip_prefix("0x").unwrap_or(address_lower);
-	format!("0x{hex:0>64}")
-}
-
 /// Host (and port) of the RPC URL, for logging without leaking an API key in the path.
 fn rpc_host(url: &str) -> &str {
 	url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or(url)
