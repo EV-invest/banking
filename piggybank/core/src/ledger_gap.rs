@@ -2,7 +2,7 @@
 //! timestamp, and whether another cluster holds exactly that.
 //!
 //! ```text
-//! ledger-gap --cluster-id <u128> watermark --addresses <a,b,c>
+//! ledger-gap --cluster-id <u128> watermark --addresses <a,b,c> [--before <ts>]
 //! ledger-gap --cluster-id <u128> export    --addresses <a,b,c> --since <ts> --out <file>
 //! ledger-gap --cluster-id <u128> check     --addresses <a,b,c> --gap <file>
 //! ```
@@ -108,8 +108,12 @@ fn filter(timestamp_min: u64, limit: u32, flags: tb::QueryFilterFlags) -> tb::Qu
 	}
 }
 
-async fn watermark(client: &tb::Client) -> Result<u64> {
-	let newest = filter(0, 1, tb::QueryFilterFlags::Reversed);
+/// The newest timestamp in the cluster, or the newest strictly below `before`.
+async fn watermark(client: &tb::Client, before: Option<u64>) -> Result<u64> {
+	let newest = tb::QueryFilter {
+		timestamp_max: before.map_or(0, |b| b - 1),
+		..filter(0, 1, tb::QueryFilterFlags::Reversed)
+	};
 	let transfer = bounded("query_transfers", client.query_transfers(newest)).await?.first().map_or(0, |t| t.timestamp);
 	let account = bounded("query_accounts", client.query_accounts(newest)).await?.first().map_or(0, |a| a.timestamp);
 	Ok(transfer.max(account))
@@ -224,7 +228,14 @@ async fn main() -> Result<ExitCode> {
 
 	let code = match command.as_deref() {
 		Some("watermark") => {
-			println!("{}", watermark(client).await?);
+			let before = flags
+				.remove("before")
+				.map(|b| b.parse::<u64>().wrap_err("--before must be a u64 TigerBeetle timestamp"))
+				.transpose()?;
+			if before == Some(0) {
+				bail!("--before 0 bounds nothing below it");
+			}
+			println!("{}", watermark(client, before).await?);
 			ExitCode::SUCCESS
 		}
 		Some("export") => {

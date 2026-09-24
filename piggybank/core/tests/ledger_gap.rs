@@ -122,6 +122,16 @@ async fn check_counts_exactly_what_the_snapshot_is_missing() {
 	let watermark = ledger_gap(pb, &["watermark"]);
 	assert!(watermark.status.success(), "{}", String::from_utf8_lossy(&watermark.stderr));
 	let watermark = stdout(&watermark);
+	// The copy is gone, only A is left: the snapshot's watermark is A's newest object below
+	// the first thing committed after it.
+	let first_after = tb::Client::new(CLUSTER, &format!("127.0.0.1:{pa}")).unwrap();
+	let first_after = tokio::time::timeout(Duration::from_secs(60), first_after.lookup_transfers(&[after[0].id]).unwrap())
+		.await
+		.unwrap()
+		.unwrap()[0]
+		.timestamp;
+	let bounded = ledger_gap(pa, &["watermark", "--before", &first_after.to_string()]);
+	assert_eq!(stdout(&bounded), watermark, "{}", String::from_utf8_lossy(&bounded.stderr));
 	let gap = dir.join("gap.json");
 	let export = ledger_gap(pa, &["export", "--since", &watermark, "--out", gap.to_str().unwrap()]);
 	assert!(export.status.success(), "{}", String::from_utf8_lossy(&export.stderr));
