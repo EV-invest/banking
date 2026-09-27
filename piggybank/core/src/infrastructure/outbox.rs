@@ -31,8 +31,7 @@ pub async fn lock_user(conn: &mut PgConnection, user_id: Uuid) -> Result<(), Dom
 	lock_claim(conn, &LedgerAccountKey::UserClaim(UserId::from_raw(user_id))).await
 }
 
-/// Take the write lock for ONE claim — the general form of [`lock_user`] and
-/// [`lock_revenue_claim`], which are now the two claims that happen to have callers.
+/// Take the write lock for ONE claim — the general form of [`lock_user`].
 ///
 /// Every writer that spends a claim must take this same target before its optimistic
 /// Read-First, or the serialization silently stops covering whoever was added last. Keying
@@ -61,7 +60,8 @@ pub async fn lock_claim(conn: &mut PgConnection, claim: &LedgerAccountKey) -> Re
 /// A `_` arm is right here (unlike the exhaustive matches elsewhere in the domain): a new
 /// account key needs no decision, because the general formula already names it correctly and
 /// uniquely.
-// The retired fee claim keeps its historical lock name so in-flight payouts serialize as before (C-4).
+// The retired fee claim keeps its historical lock name so the payouts replayed against it
+// serialize as they always did.
 #[allow(deprecated)]
 fn claim_lock_name(claim: &LedgerAccountKey) -> Uuid {
 	match claim {
@@ -73,17 +73,6 @@ fn claim_lock_name(claim: &LedgerAccountKey) -> Uuid {
 
 fn claim_lock_key(claim: &LedgerAccountKey) -> i64 {
 	advisory_key(claim_lock_name(claim))
-}
-
-/// Take the write lock for the fund's **revenue claim** (`fee`) — the account a revenue
-/// payout spends. Concurrent payouts contend for it exactly as concurrent spends contend
-/// for one user's claim in [`lock_user`], and would diverge PG from TB the same way, so
-/// they serialize on one target too. The claim is a singleton with no row of its own,
-/// hence a fixed v5 UUID standing in as the lock's name rather than a real id.
-// Revenue payouts still spend the retired fee claim until C-4.
-#[allow(deprecated)]
-pub async fn lock_revenue_claim(conn: &mut PgConnection) -> Result<(), DomainError> {
-	lock_claim(conn, &LedgerAccountKey::FeeRevenue).await
 }
 
 /// Insert one event into the `event_log` (always) and the `outbox` (when `relay`),
@@ -313,7 +302,7 @@ mod tests {
 		assert_eq!(
 			claim_lock_key(&LedgerAccountKey::FeeRevenue),
 			advisory_key(Uuid::new_v5(&Uuid::NAMESPACE_OID, b"withdrawal:revenue-claim")),
-			"lock_revenue_claim keyed this fixed v5 name"
+			"the retired lock_revenue_claim keyed this fixed v5 name"
 		);
 		// And distinct claims still get distinct targets, or the generalization would have
 		// serialized unrelated writers against each other.

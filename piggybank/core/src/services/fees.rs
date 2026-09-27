@@ -258,7 +258,7 @@ impl FeesService for FeesSvc {
 
 	async fn settle_fee_shares(&self, request: Request<pb::SettleFeeSharesRequest>) -> Result<Response<pb::FeeSettlement>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
-		let settled_by = caller_id(&request)?.to_string();
+		let settler = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		// Empty means "all of it" — the ordinary end-of-period call.
@@ -274,7 +274,7 @@ impl FeesService for FeesSvc {
 			&self.state.relay_notify,
 			service,
 			units,
-			&settled_by,
+			settler,
 			unix_now(),
 		)
 		.await

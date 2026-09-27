@@ -611,7 +611,7 @@ async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
 
 	// One bulk conversion for the whole fund — not one per investor. This is what the
 	// unit-denominated charge buys: a single ledger operation per period.
-	let settlement = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
+	let settlement = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, UserId::new(), now_unix())
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -802,7 +802,7 @@ async fn a_settlement_the_fund_cannot_cover_is_refused_not_queued() {
 	// Refused, not queued: nobody is waiting on this, and the fee units keep accumulating
 	// at no cost until the fund is liquid again.
 	let revenue_before = cash_of(&h, fee_claim()).await;
-	let err = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
+	let err = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, UserId::new(), now_unix())
 		.await
 		.unwrap_err();
 	assert!(matches!(err, domain::error::DomainError::Validation(_)), "got {err:?}");
@@ -845,7 +845,7 @@ async fn a_queued_redemption_is_reserved_before_the_manager_is_paid() {
 	// would pay the manager out of money already owed to a waiting investor — making a
 	// shortfall the fund had already failed to cover worse. The holdback refuses it.
 	let revenue_before = cash_of(&h, fee_claim()).await;
-	let err = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
+	let err = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, UserId::new(), now_unix())
 		.await
 		.unwrap_err();
 	let domain::error::DomainError::Validation(message) = &err else {
@@ -863,7 +863,7 @@ async fn a_queued_redemption_is_reserved_before_the_manager_is_paid() {
 	let mine = queued.iter().find(|q| q.service == service).expect("the redemption is queued");
 	funds_app::cancel_redemption(&h.reds, &h.notify, mine.id, user).await.unwrap();
 	h.relay.drain().await;
-	fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
+	fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, UserId::new(), now_unix())
 		.await
 		.expect("with the queue cleared the manager is paid");
 }

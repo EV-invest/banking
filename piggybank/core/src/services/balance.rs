@@ -1,7 +1,7 @@
 //! `balance` context — company-money RPCs (all admin-gated): treasury reads,
-//! chain-proven arrival recording (a deposit, or the caller's seed of the `fund`
-//! allocation), the operator
-//! withdrawal lifecycle, and fund valuation + redemption settlement.
+//! chain-proven arrival recording (a deposit; a seed of the `fund` allocation opens the
+//! owners' consilium instead of booking), the operator withdrawal lifecycle, and fund
+//! valuation + redemption settlement.
 //!
 //! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large
 //! type we don't control, so the large-err lint does not apply in this module.
@@ -10,6 +10,7 @@
 use domain::{
 	authz::Permission,
 	balance::{Party, ServiceId},
+	consilium::SeedCapitalTerms,
 	money::{Network, TxRef, Usdt},
 };
 use evbanking_auth::claims_of;
@@ -18,7 +19,7 @@ use tonic::{Request, Response, Status};
 
 use crate::{
 	AppState,
-	application::{balance as balance_app, funds as funds_app, wallet as wallet_app, withdrawals as withdrawal_app},
+	application::{balance as balance_app, consilium as consilium_app, funds as funds_app, wallet as wallet_app, withdrawals as withdrawal_app},
 	services::{
 		funds::redemption_to_proto,
 		support::{caller_id, map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, unix_now},
@@ -66,46 +67,46 @@ impl BalanceService for BalanceSvc {
 		}))
 	}
 
-	/// Seed the platform's capital: the caller's chain-proven transfer into the treasury,
-	/// booked as THEIR deposit and subscribed into the `fund` allocation (#245).
+	/// Propose a seed of the platform's capital: the caller's chain-proven transfer into
+	/// the treasury, to be booked as THEIR deposit and subscribed into the `fund`
+	/// allocation once the owners' quorum executes it (#245).
+	///
+	/// This OPENS A CONSILIUM and books nothing. The chain proves the dollar arrived on the
+	/// treasury; it cannot say whose it is, and the first administrator to name a reference
+	/// must not be the one who decides — so the attribution is the owners' call, and the
+	/// caller must hold a seat (`Consilium::open` refuses anyone else, whatever permission
+	/// admitted them here). The arrival is verified now, against `expected_amount`, so the
+	/// owners vote over a transfer that exists and is worth what the terms say.
 	///
 	/// The depositor is the caller: the wire carries no `depositor_user_id` yet (the
-	/// contract step of #245 adds one so an owner can attribute another person's
-	/// transfer), and an operator who seeds under their own name is the honest default —
-	/// the units land with the person who pressed the button, never on a claim nobody
-	/// holds.
+	/// contract step of #245, C-7, adds one so an owner can attribute another person's
+	/// transfer, and puts the `consilium_id` in the response — until then it is in the
+	/// log line). `expected_amount` is REQUIRED: the amount is under the owners'
+	/// signature, so "whatever the chain says" is not a proposal. The response reports
+	/// `recorded = false` — nothing is booked until the quorum executes — and the amount
+	/// the terms carry.
 	async fn seed_capital(&self, request: Request<pb::SeedCapitalRequest>) -> Result<Response<pb::SeedCapitalResponse>, Status> {
 		require_permission(&self.state, &request, Permission::CapitalManage).await?;
 		let depositor = caller_id(&request)?;
 		let req = request.into_inner();
 		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
 		let network = Network::parse(&req.network).map_err(map_err)?;
-		// Empty means "whatever the chain says"; a value is an assertion the chain must match.
-		let expected_amount = optional(&req.expected_amount).map(Usdt::parse_decimal).transpose().map_err(map_err)?;
-		let seeded = balance_app::seed_fund_capital(
-			&balance_app::SeedPorts {
-				deposits: self.state.deposits.as_ref(),
-				custody: self.state.custody.as_ref(),
-				addresses: self.state.deposit_addresses.as_ref(),
-				subscriptions: self.state.subscriptions.as_ref(),
-				funds: funds_app::FundPorts {
-					allocations: self.state.allocations.as_ref(),
-					ledger: self.state.ledger.as_ref(),
-					nav: self.state.nav.as_ref(),
-					relay: &self.state.relay_notify,
-				},
-			},
-			depositor,
-			tx_ref,
-			network,
-			expected_amount,
-			unix_now(),
-		)
-		.await
-		.map_err(map_err)?;
+		let amount = optional(&req.expected_amount)
+			.ok_or_else(|| Status::invalid_argument("expected_amount is required: a seed is proposed at the amount the chain reports, and the owners approve that figure"))
+			.and_then(|raw| Usdt::parse_decimal(raw).map_err(map_err))?;
+		let terms = SeedCapitalTerms::new(tx_ref, network, amount, depositor).map_err(map_err)?;
+		let opened = consilium_app::open_seed_capital(&self.state.consilium_ports(), depositor, terms, unix_now())
+			.await
+			.map_err(map_err)?;
+		tracing::info!(
+			consilium_id = %opened.consilium.id(),
+			%depositor,
+			amount = %amount.to_decimal_string(),
+			"seed consilium opened: the treasury arrival is booked only once the owners' quorum executes it"
+		);
 		Ok(Response::new(pb::SeedCapitalResponse {
-			recorded: seeded.recorded,
-			amount: seeded.amount.to_decimal_string(),
+			recorded: false,
+			amount: amount.to_decimal_string(),
 		}))
 	}
 
@@ -347,25 +348,25 @@ impl BalanceService for BalanceSvc {
 		}))
 	}
 
+	/// The `fee` allocation, on the wire the retired payout view still has (#245): its
+	/// cash as `earned`, the reservations as `pending_payout`, and NO rails — nothing pays
+	/// this claim out on-chain any more. The supply, the price and the holders wait for
+	/// the contract step (C-7) to have a field.
 	async fn get_fund_revenue(&self, request: Request<pb::GetFundRevenueRequest>) -> Result<Response<pb::FundRevenue>, Status> {
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
-		let revenue = balance_app::fund_revenue(self.state.ledger.as_ref(), self.state.custody.as_ref(), &self.state.configured_networks)
-			.await
-			.map_err(map_err)?;
+		let fee = balance_app::fee_allocation(
+			self.state.allocations.as_ref(),
+			self.state.ledger.as_ref(),
+			self.state.nav.as_ref(),
+			self.state.issuances.as_ref(),
+		)
+		.await
+		.map_err(map_err)?;
 		Ok(Response::new(pb::FundRevenue {
-			earned: revenue.earned.to_decimal_string(),
-			available: revenue.available.to_decimal_string(),
-			pending_payout: revenue.pending_payout.to_decimal_string(),
-			rails: revenue
-				.rails
-				.into_iter()
-				.map(|rail| pb::RevenueRail {
-					network: rail.network.as_str().to_owned(),
-					payable: rail.payable.to_decimal_string(),
-					instant: rail.instant.to_decimal_string(),
-					minimum: rail.minimum.to_decimal_string(),
-				})
-				.collect(),
+			earned: fee.cash.to_decimal_string(),
+			available: fee.available.to_decimal_string(),
+			pending_payout: fee.reserved.to_decimal_string(),
+			rails: Vec::new(),
 		}))
 	}
 
@@ -378,20 +379,22 @@ impl BalanceService for BalanceSvc {
 		// The permission check stays FIRST so the refusal reads the same to everyone who could
 		// once call this, and tells nobody else that the path exists at all.
 		//
-		// `consilium_app::execute` is now the only caller that reaches
-		// `withdrawal_app::request_revenue_payout` for fund revenue, and it gets there with a
-		// withdrawal id DERIVED from the consilium — so the payout path itself carries the
-		// proof of authorization rather than trusting its caller.
+		// Since #245 the payout kind itself is retired: the fund's earnings are the `fee`
+		// allocation's, held by people, and cash leaves it only by a holder's redemption
+		// onto their own claim. `consilium_app::execute` still carries the consilia that
+		// were open when the kind was retired, with a withdrawal id DERIVED from the
+		// consilium — so the payout path itself carries the proof of authorization rather
+		// than trusting its caller.
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
 		let req = request.into_inner();
 		tracing::warn!(
 			network = %req.network,
 			address = %req.address,
 			amount = %req.amount,
-			"refused a direct fund revenue payout: revenue leaves only through an approved consilium"
+			"refused a direct fund revenue payout: the fee allocation pays its holders by redemption"
 		);
 		Err(Status::failed_precondition(
-			"the fund's revenue can only be paid out by an approved consilium; open one with ConsiliumService.OpenRevenuePayout and have a quorum of owners approve it",
+			"the revenue payout is retired: the fund's earnings are held through the fee allocation, and a holder is paid by redeeming their units",
 		))
 	}
 

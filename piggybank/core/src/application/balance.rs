@@ -14,12 +14,15 @@
 //! Nothing here credits a claim nobody holds (#245). USDT that reaches a treasury hot
 //! wallet from outside is *somebody's* — the person who sent it — and is booked as their
 //! deposit, followed by their subscription into the `fund` allocation
-//! ([`seed_fund_capital`]); the retired fund-owned party is never written again.
+//! ([`seed_fund_capital`]); the retired fund-owned party is never written again. WHOSE it
+//! is, the chain cannot say, so the attribution is the owners' quorum's
+//! (`consilium::open_seed_capital`), never one administrator's: the RPC opens the
+//! consilium, and only its execution reaches [`seed_fund_capital`].
 
 use domain::{
-	balance::{LedgerAccountKey, Party},
+	balance::{LedgerAccountKey, Party, ServiceId},
 	error::DomainError,
-	money::{Network, TxRef, Usdt},
+	money::{Network, Shares, TxRef, Usdt},
 	subscriptions::{Subscription, SubscriptionId},
 	users::UserId,
 };
@@ -27,8 +30,13 @@ use tokio::sync::Notify;
 use uuid::Uuid;
 
 use crate::{
-	application::funds::{self as funds_app, FundPorts},
-	ports::{Custody, Deposits, SubscriptionRepository, custody::InboundTransfer, deposit_addresses::DepositAddresses, ledger::Ledger},
+	application::{
+		funds::{self as funds_app, FundPorts, NavQuote},
+		issuance::{self as issuance_app, UnitHolding},
+	},
+	ports::{
+		AllocationRegistry, Custody, Deposits, SubscriptionRepository, UnitIssuanceRepository, custody::InboundTransfer, deposit_addresses::DepositAddresses, ledger::Ledger, nav::NavMarks,
+	},
 };
 
 /// Per-rail on-chain liquidity (the treasury / Layer 2). `custody` is
@@ -143,7 +151,8 @@ pub struct VerifiedArrival {
 ///
 /// A transfer that landed on the TREASURY is refused here: the chain proves the dollar
 /// arrived but not whose it is, and this path credits only whom the chain names. The
-/// operator who knows the sender attributes it with `SeedCapital` instead.
+/// owner who knows the sender proposes the attribution with `SeedCapital` instead, and
+/// the owners' quorum executes it.
 pub async fn record_verified_arrival(
 	deposits: &dyn Deposits,
 	custody: &dyn Custody,
@@ -225,7 +234,11 @@ pub struct SeededCapital {
 /// that is not dealing or a stale price refuses with nothing written. The one gate an
 /// investor's subscribe runs that this does not is the catalog's access level: `fund` is
 /// hidden from everyone by design, and the person who seeds it becomes its holder by the
-/// act itself — the operator's permission to seed is the admission.
+/// act itself — the owners' quorum that executes the seed is the admission.
+///
+/// No RPC reaches this directly: `SeedCapital` opens a `seed_capital` consilium over the
+/// same facts, and this is what its execution calls (`consilium::execute`). The one-off
+/// data migration that seeds the first holders is the other caller.
 pub async fn seed_fund_capital(
 	ports: &SeedPorts<'_>,
 	depositor: UserId,
@@ -277,16 +290,18 @@ pub async fn seed_fund_capital(
 }
 
 /// The seed subscription's id, a function of the chain reference: one transfer, one mint.
-fn seed_subscription_id(tx_ref: &TxRef) -> SubscriptionId {
+/// Public so a seed consilium can name its effect without re-reading the row it opened.
+pub fn seed_subscription_id(tx_ref: &TxRef) -> SubscriptionId {
 	SubscriptionId::from_raw(Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("seed:{}", tx_ref.as_str()).as_bytes()))
 }
 
 /// The chain's account of a reference: the transfer it names and whose money it is.
 ///
-/// One function for both operator write paths so they can never disagree about what counts
-/// as proven — the lookup, the optional assertion and the attribution are the whole of the
-/// evidence, and a path that skipped any of them would be the very hole this closes.
-async fn verify_arrival(
+/// One function for both operator write paths — and for the seed consilium's open gate —
+/// so they can never disagree about what counts as proven: the lookup, the optional
+/// assertion and the attribution are the whole of the evidence, and a path that skipped
+/// any of them would be the very hole this closes.
+pub(crate) async fn verify_arrival(
 	custody: &dyn Custody,
 	addresses: &dyn DepositAddresses,
 	network: Network,
@@ -403,75 +418,47 @@ pub async fn treasury(ledger: &dyn Ledger, custody: &dyn Custody) -> Result<Trea
 	})
 }
 
-/// What the fund has earned and may pay itself — the read behind the admin payout
-/// screen. The mirror of a user's wallet, for the one claim that is the company's own
-/// money rather than money it custodies.
-pub struct FundRevenue {
-	/// Everything the fund has earned and still holds: the `fee` claim's settled
-	/// balance. Grows by every retained withdrawal fee and by every settled 2-and-20
-	/// management/performance fee; falls only when a payout settles.
-	pub earned: Usdt,
-	/// Free to pay out right now — `earned − pending_payout`. Read off the same claim
-	/// balance as the other two, so the three can never disagree.
+/// The `fee` allocation as its owners read it — the view behind the admin revenue screen
+/// (#245). What the platform has earned is not a claim it may pay itself out of: it is an
+/// allocation people hold through units, priced at what it holds, and cash leaves it only
+/// by a holder's redemption. So the screen shows the allocation: its cash, what is
+/// spoken for, its supply and price, and who holds it.
+pub struct FeeAllocationView {
+	/// The allocation's cash: the `service:fee` claim's settled balance. Grows by every
+	/// retained withdrawal fee, every taker fee and every settled fee class; falls by a
+	/// holder's redemption or a payment the owners approved out of it.
+	pub cash: Usdt,
+	/// Cash not yet spoken for — `cash − reserved`. Read off the same claim balance as
+	/// the other two, so the three can never disagree.
 	pub available: Usdt,
-	/// Locked by payouts already queued or in flight (the clearing reservation).
-	pub pending_payout: Usdt,
-	/// Where a payout can ship, and how much of it ships without waiting.
-	pub rails: Vec<RevenueRail>,
+	/// Reserved by approved payments out of the claim that have not settled.
+	pub reserved: Usdt,
+	/// Units of `fee` outstanding — what the cash and the held fee classes are divided
+	/// over.
+	pub units_outstanding: Shares,
+	/// The allocation's price and the value it prices: cash plus every product's fee
+	/// class it holds at that product's NAV (`funds::nav_of`).
+	pub quote: NavQuote,
+	/// Who holds `fee`, largest first — people, seated by holder grants.
+	pub holders: Vec<UnitHolding>,
 }
 
-/// Per-rail payout options, mirroring a user's `NetworkWithdrawable`. `payable` is the
-/// whole available revenue (a request beyond `instant` is accepted and queued until the
-/// treasury is topped up); `instant` is what ships without queueing.
-pub struct RevenueRail {
-	pub network: Network,
-	pub payable: Usdt,
-	pub instant: Usdt,
-	pub minimum: Usdt,
-}
-
-/// The fund's earned revenue and the rails it can be paid out on (Read-First).
+/// The `fee` allocation, Read-First off the ledger: the claim, the supply, the computed
+/// price and the cap table, each read once.
 ///
-/// `instant` uses the **same** effective liquidity as the dispatch gate —
-/// `min(TB rail, on-chain treasury)` — rather than the TB balance alone, because the
-/// operator reading this screen is deciding whether money will actually move. The TB
-/// `wallet:<net>` balance over-counts: it includes confirmed deposits still sitting on
-/// users' derived addresses, which the hot wallet cannot spend. A treasury read failure
-/// degrades to the TB view (best-effort, like the treasury screen) — a flaky node
-/// must not blank the page.
-// Still the retired revenue claim, deliberately: new earnings land on `service:fee` (#245,
-// fee in-kind), but the payout this screen offers (`WithdrawalSource::Revenue`) still
-// spends THIS account until C-4 moves it — a view of the successor would offer an amount
-// the payout cannot draw. C-4 retargets both together.
-#[allow(deprecated)]
-pub async fn fund_revenue(ledger: &dyn Ledger, custody: &dyn Custody, configured: &[Network]) -> Result<FundRevenue, DomainError> {
-	let claim = ledger.balance(&LedgerAccountKey::FeeRevenue).await?;
-	let earned = Usdt::from_base_units(claim.posted);
-	let available = Usdt::from_base_units(claim.available());
-	let pending_payout = Usdt::from_base_units(claim.locked);
-
-	let mut rails = Vec::with_capacity(configured.len());
-	for &network in configured {
-		let rail = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
-		let effective = match custody.treasury_liquidity(network).await {
-			Ok(Some(onchain)) => rail.min(onchain),
-			Ok(None) => rail,
-			Err(err) => {
-				tracing::debug!(%network, "treasury liquidity unavailable for the payout view: {err}");
-				rail
-			}
-		};
-		rails.push(RevenueRail {
-			network,
-			payable: available,
-			instant: available.min(effective),
-			minimum: domain::withdrawals::WithdrawalPolicy::minimum(network),
-		});
-	}
-	Ok(FundRevenue {
-		earned,
-		available,
-		pending_payout,
-		rails,
+/// The claim is read on its own rather than taken from the quote's AUM: the AUM sums the
+/// held fee classes in, and this screen has to tell cash from units.
+pub async fn fee_allocation(allocations: &dyn AllocationRegistry, ledger: &dyn Ledger, nav: &dyn NavMarks, issuances: &dyn UnitIssuanceRepository) -> Result<FeeAllocationView, DomainError> {
+	let fee = ServiceId::fee();
+	let claim = ledger.balance(&LedgerAccountKey::ServiceClaim(fee.clone())).await?;
+	let quote = funds_app::nav_of(nav, ledger, &fee).await?;
+	let holders = issuance_app::unit_holders(allocations, ledger, issuances, fee).await?;
+	Ok(FeeAllocationView {
+		cash: Usdt::from_base_units(claim.posted),
+		available: Usdt::from_base_units(claim.available()),
+		reserved: Usdt::from_base_units(claim.locked),
+		units_outstanding: holders.units_outstanding,
+		quote,
+		holders: holders.holders,
 	})
 }

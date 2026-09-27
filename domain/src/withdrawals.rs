@@ -2,13 +2,12 @@
 //!
 //! Two flows share this saga, differing only in **which claim is debited**
 //! ([`WithdrawalSource`]): an investor moving their own free balance out
-//! ([`WithdrawalSource::User`]), and the fund paying its OWN earnings out to an
-//! operator-controlled wallet ([`WithdrawalSource::Revenue`] — the admin/owner revenue
-//! payout). The revenue source is the `fee` claim, and only two things ever credit it:
-//! the withdrawal fee retained on a user withdrawal, and the settled management +
-//! performance fee ([`crate::fees`], the "2 and 20"). That is the whole of what the fund
-//! has earned — never client money, and never the fund's seed capital (`fund`) — so a
-//! payout cannot reach into what the fund merely custodies.
+//! ([`WithdrawalSource::User`]), and — historically — the fund paying its OWN earnings
+//! out to an operator-controlled wallet ([`WithdrawalSource::Revenue`], the retired
+//! revenue payout). Since #245 every fee is the `fee` allocation's, held by people, and
+//! cash leaves it only through a holder's redemption onto their own claim and then their
+//! own withdrawal: the revenue source stays only so the payouts queued against the retired
+//! claim replay and settle, and no producer names it any more.
 //!
 //! A withdrawal moves that claim out of the fund and onto an external
 //! address. It is the **dangerous direction** (value leaves the system), so it is a
@@ -63,8 +62,9 @@ pub enum WithdrawalSource {
 	/// The retired revenue claim (`fee`, code 40) — what retained withdrawal fees and the
 	/// settled 2-and-20 used to land on. Nothing credits it any more: every fee is the
 	/// `fee` allocation's (`service:fee`, #245), and a payout out of that allocation is
-	/// the payments step's concern. This source spends the legacy balance until then and
-	/// replays what was queued against it. NOT `fund` (seed capital), NOT a client claim.
+	/// a holder's redemption. This source only replays what was queued against the
+	/// retired claim; nothing opens a new one.
+	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
 	Revenue,
 }
 
@@ -74,6 +74,8 @@ impl WithdrawalSource {
 	pub const REVENUE: &'static str = "revenue";
 
 	/// The stored/wire discriminant.
+	// The retired source is still the persistence vocabulary of the rows that hold it.
+	#[allow(deprecated)]
 	pub fn as_wire(&self) -> String {
 		match self {
 			Self::User(user) => user.to_string(),
@@ -81,6 +83,7 @@ impl WithdrawalSource {
 		}
 	}
 
+	#[allow(deprecated)]
 	pub fn parse(raw: &str) -> Result<Self, DomainError> {
 		if raw == Self::REVENUE {
 			return Ok(Self::Revenue);
@@ -91,7 +94,7 @@ impl WithdrawalSource {
 	}
 
 	/// The claim account debited — the one line that makes a payout a payout.
-	// `Revenue` debits the retired fee claim: queued payouts replay until C-4.
+	// `Revenue` debits the retired fee claim: the payouts queued against it replay.
 	#[allow(deprecated)]
 	pub fn claim_key(&self) -> LedgerAccountKey {
 		match self {
@@ -103,6 +106,7 @@ impl WithdrawalSource {
 	/// The user this withdrawal belongs to, or `None` for a revenue payout — which
 	/// belongs to the fund itself and must therefore never surface in a user's wallet,
 	/// withdrawal list, or `pending_withdrawal` segment.
+	#[allow(deprecated)]
 	pub fn user(&self) -> Option<UserId> {
 		match self {
 			Self::User(user) => Some(*user),
@@ -110,6 +114,7 @@ impl WithdrawalSource {
 		}
 	}
 
+	#[allow(deprecated)]
 	pub fn is_revenue(&self) -> bool {
 		matches!(self, Self::Revenue)
 	}
@@ -155,6 +160,7 @@ impl WithdrawalPolicy {
 	/// same account — money in a circle, and an operator told they'd receive 100 when
 	/// the chain sees 99. Gross therefore equals net for a payout. On-chain gas is
 	/// unaffected either way: the rail's treasury pays it, exactly as for a user.
+	#[allow(deprecated)]
 	pub fn fee_for(source: WithdrawalSource, network: Network) -> Usdt {
 		match source {
 			WithdrawalSource::User(_) => Self::fee(network),
@@ -668,6 +674,8 @@ mod tests {
 	}
 
 	#[test]
+	// The retired source still has to satisfy the saga's shape rules on replay.
+	#[allow(deprecated)]
 	fn the_payout_minimum_still_applies() {
 		// fee_for() is zero for a payout, so the minimum is the only dust guard left.
 		let err = Withdrawal::request(WithdrawalId::new(), WithdrawalSource::Revenue, Network::Ton, addr(Network::Ton), gross("1"), Usdt::ZERO).unwrap_err();
@@ -675,6 +683,8 @@ mod tests {
 	}
 
 	#[test]
+	// The retired source's wire literal is frozen: stored rows and queued events carry it.
+	#[allow(deprecated)]
 	fn source_round_trips_and_rejects_junk() {
 		let uid = UserId::new();
 		for source in [WithdrawalSource::User(uid), WithdrawalSource::Revenue] {

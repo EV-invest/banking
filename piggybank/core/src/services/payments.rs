@@ -88,12 +88,12 @@ impl AppState {
 	async fn parse_party(&self, party: Option<&pb::Party>) -> Result<Party, Status> {
 		let party = party.ok_or_else(|| Status::invalid_argument("a party is required"))?;
 		match party.kind.as_str() {
-			// Still accepted on the wire until C-4 moves the console onto `service:fund` /
-			// `service:fee`; the parties themselves are retired (#245).
-			#[allow(deprecated)]
-			"piggybank" => Ok(Party::Piggybank),
-			#[allow(deprecated)]
-			"revenue" => Ok(Party::Revenue),
+			// The retired kinds (#245) are refused by name rather than falling through to
+			// "unknown": a console still sending them is told where the money went.
+			"piggybank" | "revenue" => Err(Status::invalid_argument(format!(
+				"party kind '{}' is retired: the fund's money is the fee and fund allocations — use {{kind: \"service\", id: \"fee\" | \"fund\"}}",
+				party.kind
+			))),
 			"service" => ServiceId::parse(&party.id).map(Party::Service).map_err(map_err),
 			"user" => {
 				let raw = Uuid::parse_str(&party.id).map_err(|_| Status::invalid_argument("invalid user id"))?;

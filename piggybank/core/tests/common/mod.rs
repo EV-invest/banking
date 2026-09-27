@@ -18,7 +18,12 @@
 
 use std::sync::{Arc, LazyLock};
 
-use domain::users::UserId;
+use async_trait::async_trait;
+use domain::{
+	error::DomainError,
+	money::{Network, WalletAddress},
+	users::UserId,
+};
 use piggybank_core::{
 	infrastructure::{
 		db,
@@ -26,7 +31,7 @@ use piggybank_core::{
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
 	},
-	ports::ledger::Ledger,
+	ports::{deposit_addresses::DepositAddresses, ledger::Ledger},
 };
 use sqlx::{AssertSqlSafe, Connection, PgConnection, PgPool, migrate::MigrateError, postgres::PgPoolOptions};
 use tokio::sync::OnceCell;
@@ -372,6 +377,20 @@ pub async fn seeded_ledger(pool: &PgPool, skipping: &str) -> Option<Arc<dyn Ledg
 /// verified investor sets the column exactly the way the bridge does. `provision` leaves
 /// a fresh user at the schema default (tier 0, unverified), which is what the money gates
 /// refuse.
+/// No deposit rails at all: no user owns any address, so nothing ever attributes a
+/// transfer to a person. For the suites whose consilium ports need an address gateway
+/// but never open a seed — the seed suite fakes its own, with one owned address.
+pub struct NoAddresses;
+
+impl domain::architecture::Gateway for NoAddresses {}
+
+#[async_trait]
+impl DepositAddresses for NoAddresses {
+	async fn address(&self, _user: UserId, _network: Network) -> Result<Option<WalletAddress>, DomainError> {
+		Ok(None)
+	}
+}
+
 pub async fn set_kyc_level(pool: &PgPool, user: UserId, level: i32) {
 	let affected = sqlx::query("UPDATE users SET kyc_level = $2 WHERE id = $1")
 		.bind(user.raw())

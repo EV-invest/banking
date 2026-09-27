@@ -19,8 +19,9 @@
 //! - tier 1 does both;
 //! - the refusals are told apart at the wire: an unconfigured rail is `Ok(None)` ("this
 //!   rail cannot fund you"), an unverified caller is `Forbidden` ("finish verification");
-//! - a **revenue payout is not gated** — it pays the fund's own earned revenue out and
-//!   has no user behind it to verify.
+//! - a **payment out of the fee allocation is not gated** — its source is the platform's
+//!   own money, held by people through units, with no user behind it to verify; what
+//!   gates it is the owners' quorum.
 
 use std::sync::{
 	Arc,
@@ -30,17 +31,19 @@ use std::sync::{
 use async_trait::async_trait;
 use domain::{
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, TransferCode},
+	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
+	payments::{PaymentDestination, PaymentReason, PaymentTerms},
 	users::{Email, UserId},
 	withdrawals::WithdrawalId,
 };
 use piggybank_core::{
-	application::{balance as balance_app, wallet as wallet_app, withdrawals as withdrawal_app},
+	application::{balance as balance_app, payments as payments_app, wallet as wallet_app, withdrawals as withdrawal_app},
 	config::KycGate,
 	infrastructure::{
-		custody::StubCustody, deposits::PgDeposits, nav::PgNav, outflow::PgOutflowPolicy, positions::PgFundPositions, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
+		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, deposits::PgDeposits, nav::PgNav, outflow::PgOutflowPolicy, payments::PgPayments,
+		positions::PgFundPositions, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
 	},
 	ports::{
 		DepositAddresses, UserRepository, WithdrawalRepository,
@@ -92,7 +95,7 @@ struct Harness {
 	relay: Relay,
 	notify: Arc<Notify>,
 	/// This suite is exposed to the shared-outbox race the same way `allocation_registry`
-	/// was (#294/#298): every test deposits and drains, and `a_revenue_payout_is_not_gated_on_kyc`
+	/// was (#294/#298): every test deposits and drains, and the since-retired `a_revenue_payout_is_not_gated_on_kyc`
 	/// drains five times. It has failed for it in CI — run 34894158429, `a_revenue_payout_is_not_gated_on_kyc`
 	/// panicking on `fund the fee claim: Validation("insufficient available balance to
 	/// withdraw")`: the 200 USDT this test had just deposited and drained was not on the
@@ -320,46 +323,91 @@ async fn a_verified_user_can_withdraw() {
 	assert_eq!(Usdt::from_base_units(claim.locked), usdt("50"), "the gross is reserved into clearing");
 }
 
-/// A revenue payout pays the fund's own earned revenue out. There is no user behind it —
-/// `WithdrawalSource::Revenue` names the retired `fee` claim, not a person — so a KYC tier
-/// is not merely unchecked here, there is nothing to check. The gate must therefore stay
-/// out of this path entirely, and the payout is exercised end to end rather than asserted
-/// by reading the code.
+/// A payment out of the fee allocation is the platform's own money moving — there is no
+/// user behind `Party::Service(fee)` (its holders own it through units), so a KYC tier is
+/// not merely unchecked at open, there is nothing to check: what stands in front of it is
+/// the owners' quorum. The gate stays out of the DESTINATION too: the money lands on a
+/// tier-0 investor's claim, and the verification floor applies when they try to take it
+/// out, not when it arrives. Exercised end to end rather than asserted by reading the code.
 ///
-/// Retained fees no longer land on the claim this payout spends (they are the `fee`
-/// allocation's, #245) and the payout itself moves there in a later step, so the claim
-/// is funded directly here, the deposit shape (`Dr wallet / Cr fee`) — the balance an
-/// in-flight legacy payout would find.
+/// Opening a fund-owned order seats a consilium, so this test wears the governance suite's
+/// fixtures: three owners on the global roster and a mailer that stands in as wired.
 #[tokio::test]
-// Drives the retired revenue claim on purpose: the payout still spends it until C-4.
-#[allow(deprecated)]
-async fn a_revenue_payout_is_not_gated_on_kyc() {
+async fn a_payment_from_the_fee_allocation_is_not_gated_on_kyc() {
 	let Some(h) = harness().await else { return };
-	let network = Network::Bep20;
-	let fee_account = LedgerAccountKey::FeeRevenue;
-	// The payout minimum is 2 USDT: fund the whole amount rather than leaning on whatever
-	// the shared singleton happens to hold.
+	let recipient = user_at_tier(&h, 0).await;
+	let fee_claim = LedgerAccountKey::ServiceClaim(ServiceId::fee());
+	// Fund the whole amount rather than leaning on whatever the shared claim happens to
+	// hold: the open runs the real solvency pre-check against it.
 	h.ledger
 		.post(&LedgerTransfer {
 			id: Uuid::new_v4().as_u128(),
-			debit: LedgerAccountKey::CryptoWallet(network),
-			credit: fee_account.clone(),
+			debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
+			credit: fee_claim.clone(),
 			amount: usdt("2").base_units(),
-			code: TransferCode::WithdrawFee,
+			code: TransferCode::Deposit,
 			reference: 0,
 		})
 		.await
-		.expect("fund the retired revenue claim");
-	let retained = Usdt::from_base_units(h.ledger.balance(&fee_account).await.unwrap().available());
-	assert!(retained >= usdt("2"), "the claim holds what the payout spends, got {retained}");
-
-	// No user id crosses this call at all — the proof that the verification gate cannot
-	// apply to it.
-	let payout = withdrawal_app::request_revenue_payout(&withdrawal_ports(&h), &Network::ALL, WithdrawalId::new(), network, destination(network), usdt("2"))
+		.expect("fund the fee allocation's claim");
+	let mut owners = Vec::with_capacity(3);
+	for _ in 0..3 {
+		let owner = user_at_tier(&h, 0).await;
+		sqlx::query("UPDATE users SET role = 'owner', concierge_user_id = $2 WHERE id = $1")
+			.bind(owner.raw())
+			.bind(Uuid::new_v4())
+			.execute(&h.pool)
+			.await
+			.unwrap();
+		owners.push(owner);
+	}
+	let (payments, consilia, allocations) = (PgPayments::new(h.pool.clone()), PgConsilia::new(h.pool.clone()), PgAllocations::new(h.pool.clone()));
+	let ports = payments_app::PaymentPorts {
+		payments: &payments,
+		consilia: &consilia,
+		users: h.users.as_ref(),
+		withdrawals: h.withdrawals.as_ref(),
+		ledger: h.ledger.as_ref(),
+		custody: &StubCustody,
+		policy: &h.outflow,
+		allocations: &allocations,
+		relay: &h.notify,
+		configured: &Network::ALL,
+		kyc: KycGate::ENFORCED,
+		approval_url_base: "https://example.test/consilium",
+		consent_url_base: "https://example.test/consent",
+		governance_mail_wired: true,
+	};
+	let terms = PaymentTerms::new(
+		Party::Service(ServiceId::fee()),
+		PaymentDestination::Internal(Party::User(recipient)),
+		usdt("2"),
+		PaymentReason::new("a documented reason").unwrap(),
+	)
+	.unwrap();
+	// Neither end is a verified account, and the open passes: the tier-0 initiator is an
+	// owner, not the source, and the tier-0 recipient is only being paid.
+	let view = payments_app::open(&ports, owners[0], terms, now_unix())
 		.await
-		.expect("a revenue payout is never gated on a user's KYC tier");
-	assert_eq!(payout.net_amount(), usdt("2"), "a payout charges no fee");
-	common::drain_to_quiescence(&h.relay, &h.pool).await;
+		.expect("a payment from the fee allocation is never gated on a user's KYC tier");
+	assert!(view.consilium_id.is_some(), "the fund's money is the owners' to release");
+	assert!(view.consent.is_none(), "no investor is asked to consent to the fund's money");
+	// Leave the governance state as it was found: the roster is global.
+	sqlx::query("UPDATE users SET role = 'investor' WHERE role = 'owner'").execute(&h.pool).await.unwrap();
+	sqlx::query("UPDATE consilium SET state = 'cancelled', decided_at = now() WHERE id = $1")
+		.bind(view.consilium_id.unwrap().raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	sqlx::query("UPDATE payments SET state = 'cancelled', decided_at = now() WHERE id = $1")
+		.bind(view.order.id().raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+}
+
+fn now_unix() -> i64 {
+	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
 }
 
 /// The switch in its other position — `KYC_GATE_ENABLED=false`. It is not a third

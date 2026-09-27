@@ -60,7 +60,9 @@ impl ConsiliumApprovalSvc {
 }
 
 impl AppState {
-	fn consilium_ports(&self) -> consilium_app::ConsiliumPorts<'_> {
+	/// The consilium write-path's ports over the hub's state. `pub(crate)` because the
+	/// balance surface opens a seed consilium through the same ports (`SeedCapital`).
+	pub(crate) fn consilium_ports(&self) -> consilium_app::ConsiliumPorts<'_> {
 		consilium_app::ConsiliumPorts {
 			consilia: self.consilia.as_ref(),
 			withdrawals: self.withdrawals.as_ref(),
@@ -72,6 +74,10 @@ impl AppState {
 			allocations: self.allocations.as_ref(),
 			nav: self.nav.as_ref(),
 			fee_changes: self.fees.changes.as_ref(),
+			issuances: self.issuances.as_ref(),
+			deposits: self.deposits.as_ref(),
+			addresses: self.deposit_addresses.as_ref(),
+			subscriptions: self.subscriptions.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
 			kyc: self.kyc_gate,
@@ -154,7 +160,7 @@ fn payout_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerm
 			amount: terms.amount.to_decimal_string(),
 			memo: terms.memo.clone(),
 		}),
-		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) => None,
+		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
 	}
 }
 
@@ -168,7 +174,7 @@ fn valuation_override_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::Valua
 			service: terms.service.to_string(),
 			aum: terms.aum.to_decimal_string(),
 		}),
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::FeePolicy(_) => None,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
 	}
 }
 
@@ -180,7 +186,7 @@ fn valuation_override_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::Valua
 /// disagree about what an owner approved.
 fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPaymentTerms> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) => None,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
 		ConsiliumTerms::Payment(subject) => Some(pb::ConsiliumPaymentTerms {
 			payment_id: subject.payment_id.to_string(),
 			tier: subject.terms.tier().as_str().to_owned(),
@@ -196,7 +202,9 @@ fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPayment
 /// presentation (product title, holder count) the repository reads beside it.
 fn fee_policy_terms_to_proto(terms: &ConsiliumTerms, detail: Option<&FeePolicyDetail>) -> Option<pb::ConsiliumFeePolicyTerms> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) => None,
+		// The holder grant and the seed have no wire field until the contract step (C-7 of
+		// #245): the row lists with its id, state and tally, and no terms.
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
 		ConsiliumTerms::FeePolicy(subject) => {
 			let from = subject.from.unwrap_or(FeePolicy::NONE);
 			Some(pb::ConsiliumFeePolicyTerms {
@@ -295,10 +303,10 @@ fn approval_err(err: DomainError) -> Status {
 
 #[tonic::async_trait]
 impl ConsiliumService for ConsiliumSvc {
+	/// RETIRED (#245) — the application refuses every well-formed request; the permission
+	/// check stays first so the refusal reads the same to everyone who could once call this
+	/// and tells nobody else that the path exists. The proto arm goes in C-7.
 	async fn open_revenue_payout(&self, request: Request<pb::OpenRevenuePayoutRequest>) -> Result<Response<pb::Consilium>, Status> {
-		// Owner-only, through the same matrix the direct payout RPC uses. `RevenuePayout` is
-		// the capability that moves company money outward; opening a consilium is the first
-		// step of exactly that act.
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
 		let initiator = caller_id(&request)?;
 		let terms = parse_terms(request.into_inner().terms)?;

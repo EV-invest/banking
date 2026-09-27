@@ -159,9 +159,21 @@ pub async fn open(ports: &PaymentPorts<'_>, initiator: UserId, terms: PaymentTer
 }
 
 /// Everything the order's eventual execution will check, checked now.
-// The retired fund/revenue sources still route as before for in-flight orders until C-4.
+// The retired parties are refused by name until C-9 removes them from the type.
 #[allow(deprecated)]
 async fn check_executable(ports: &PaymentPorts<'_>, terms: &PaymentTerms) -> Result<(), DomainError> {
+	// Nothing new is opened against the retired claims (#245): the fund's money is the
+	// `fee` and `fund` allocations, addressed as `service:fee` / `service:fund`.
+	if let Party::Piggybank | Party::Revenue = terms.from() {
+		return Err(DomainError::Validation(
+			"the fund's capital and revenue claims are retired: pay from service:fund or service:fee".into(),
+		));
+	}
+	if let PaymentDestination::Internal(Party::Piggybank | Party::Revenue) = terms.to() {
+		return Err(DomainError::Validation(
+			"the fund's capital and revenue claims are retired: pay into service:fund or service:fee".into(),
+		));
+	}
 	// A product's pooled claim exists in the ledger the moment something is posted to it,
 	// registered or not — so the registry, not the ledger, is what says the slug names a
 	// product. Money paid into a claim no product owns is reachable by nobody.
@@ -171,20 +183,19 @@ async fn check_executable(ports: &PaymentPorts<'_>, terms: &PaymentTerms) -> Res
 		return Err(DomainError::Validation(format!("no product is registered as service {service}")));
 	}
 	match (terms.to(), terms.from()) {
-		(PaymentDestination::External { .. }, Party::Piggybank | Party::Service(_)) => {
-			// The withdrawal saga pays out of an investor's claim or of the fund's earned
-			// revenue, and of nothing else: `WithdrawalSource` names those two and has no
-			// arm for the fund's pooled capital or a product's pooled funds. Rather than teach
-			// the saga two new sources for a request nobody has made, the order is refused
-			// with the route that exists — move the money to a claim the saga can pay from.
+		(PaymentDestination::External { .. }, Party::Piggybank | Party::Revenue | Party::Service(_)) => {
+			// The withdrawal saga pays out of an investor's claim and of nothing else: an
+			// allocation's pooled money — a product's or the platform's own `fee`/`fund` —
+			// has no `WithdrawalSource` (#237). The one way cash leaves a reserved allocation
+			// is a holder redeeming onto their own claim and withdrawing from there, so the
+			// order is refused with that route rather than the saga taught a source nobody
+			// holds.
 			Err(DomainError::Validation(
-				"an external payment can leave only from an investor's claim or from the fund's earned revenue; move the money to one of those first".into(),
+				"an external payment can leave only from an investor's claim; an allocation's cash reaches the chain through a holder's redemption and their own withdrawal".into(),
 			))
 		}
 		(PaymentDestination::External { network, address }, Party::User(user)) =>
 			withdrawal_app::check_user_withdrawal(ports.ledger, &ports.admission_gates(), *user, *network, address.clone(), terms.amount()).await,
-		(PaymentDestination::External { network, address }, Party::Revenue) =>
-			withdrawal_app::check_revenue_payout(ports.ledger, ports.configured, *network, address.clone(), terms.amount()).await,
 		// Read-First on the source's claim: the spendable balance (posted minus what other
 		// in-flight spends have already reserved) must cover the amount. TigerBeetle's
 		// non-negative flag is the backstop at settlement.
@@ -368,7 +379,7 @@ async fn settle_on_the_ledger(ports: &PaymentPorts<'_>, id: PaymentId) -> Result
 /// withdrawal only while it is still `Queued`. Leaving it for the dispatcher is what keeps
 /// that void possible — and it puts the withdrawal through `require_dispatchable`, so the
 /// pause, the freeze and the verification floor are read at the moment the money leaves.
-// Same: an open order naming a retired source still executes as it was approved (C-4).
+// The retired sources are named so the match stays total until C-9 removes them.
 #[allow(deprecated)]
 async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Result<ExecutionOutcome, DomainError> {
 	let PaymentDestination::External { network, address } = order.terms().to() else {
@@ -390,11 +401,11 @@ async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Re
 				order.terms().amount(),
 			)
 			.await,
-		Party::Revenue => withdrawal_app::queue_revenue_payout(&ports.withdrawal_ports(), ports.configured, withdrawal, *network, address.clone(), order.terms().amount()).await,
 		// Refused at open; stated here too so the match is total and a row that somehow
-		// carries this shape fails visibly rather than paying from a source the saga has no
-		// account for.
-		Party::Piggybank | Party::Service(_) => return Ok(ExecutionOutcome::Failed("an external payment cannot leave from this source".to_owned())),
+		// carries this shape — an order opened against the retired revenue claim before
+		// #245 included — fails visibly rather than paying from a source the saga no longer
+		// opens a withdrawal for.
+		Party::Piggybank | Party::Revenue | Party::Service(_) => return Ok(ExecutionOutcome::Failed("an external payment cannot leave from this source".to_owned())),
 	};
 	Ok(match requested {
 		Ok(created) => ExecutionOutcome::Executed(PaymentEffect::Withdrawal(created.id())),
