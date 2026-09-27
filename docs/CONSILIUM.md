@@ -583,7 +583,18 @@ A consent that burns (five wrong codes) or is voided by a moved pin closes the o
 withdrawal cancelled) once it was approved — and, in that same transaction, queues a
 `PAYMENT_OUTCOME` notice (#238) to **the investor whose money it was and the staff member
 who opened the order**, one copy each (one when they are the same person), each under its
-own key `payment:<id>:outcome:<recipient>`. The notice says what died and why in closed
+own key `payment:<id>:outcome:<recipient>`. **`EMAIL_CHANGED` goes to the initiator only**:
+the investor's copy would reach the mailbox that just replaced theirs — possibly
+unverified, possibly an attacker's — so it is not sent, and an investor who opened the
+order on their own money is told nothing by mail. An order still `approved` when the void is
+found — at the L1 window, or by an execution retried after an earlier attempt created the
+withdrawal and died — has that withdrawal cancelled in the same transaction while it is
+still `Queued`; one already dispatched is recorded as executed and logged at error, and
+nobody is told nothing moved. **The notice never holds up the transition it reports.** It
+is written inside a savepoint: if queuing it fails for any reason, only the savepoint is
+rolled back, the failure is logged at error with the payment id, and the burn, the
+rejection, the void of the withdrawal and the order's failure commit regardless — a broken
+mail queue must not undo a burn and its attempt. The notice says what died and why in closed
 words concierge phrases itself — `TOKEN_BURNED`/`WRONG_CODES`, or `INVALIDATED` with
 `SESSIONS_REVOKED` or `EMAIL_CHANGED` — beside the tier, the two ends as the consent
 invitation named them, the amount spelled as money (`1200.5 USDT`) and the order's id; it
