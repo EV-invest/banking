@@ -33,7 +33,7 @@
 //! one money use case that never moves cash while charging: a fee is collected by moving
 //! *units* between holders, so it costs no chain fee and cannot touch an investor's cash
 //! claim. Only the periodic bulk settlement of accumulated fee units crosses into cash.
-//! [`issuance`] is the operator's in-kind mint — units to an investor or to the company
+//! [`issuance`] is the operator's in-kind mint — units to an investor or to the fee allocation
 //! with no cash leg — the one supply path beside a subscription, run through the same
 //! registry, NAV and cap gates.
 //! [`book`] is the secondary market: holders trading an allocation's units with each
@@ -42,9 +42,6 @@
 //! [`ownership`] is the read of who holds an allocation — its claim, its supply and its
 //! holders, summed from the ledger — behind the cap table, the treasury and the
 //! reconciliation's "every unit at a holder" checks.
-//! [`migrate_ownership`] is the one-off data migration behind the `piggybank
-//! migrate-ownership` command: the retired singleton claims moved onto the reserved
-//! allocations and their first holders seated, one linked chain per allocation.
 
 pub mod allocations;
 pub mod auth_sync;
@@ -55,7 +52,6 @@ pub(crate) mod credentials;
 pub mod fees;
 pub mod funds;
 pub mod issuance;
-pub mod migrate_ownership;
 pub mod operations;
 pub mod ownership;
 pub mod payments;
