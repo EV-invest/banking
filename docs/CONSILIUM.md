@@ -578,12 +578,24 @@ person recognises it by — the receiving investor's masked mailbox, the product
 "investor 8f3e…" is not approved for the wrong person; the label alone is what the digest
 binds.
 
-A consent that burns (five wrong codes) or is voided by a moved pin rejects the order and
-mails **nobody**: the outcome kinds concierge renders are addressed to a seated owner, and a
-consent-decided order's initiator may be an admin who holds no seat. The initiator reads
-the verdict and its reason on the payments screen. Telling them by mail needs a kind
-concierge does not yet have, and is deliberately not faked through `PAYOUT_OUTCOME`, which
-concierge would refuse for a non-owner recipient after ten charged attempts. An order
+A consent that burns (five wrong codes) or is voided by a moved pin closes the order —
+`rejected` while it was pending, `execution_failed` (reservation released, a still-queued
+withdrawal cancelled) once it was approved — and, in that same transaction, queues a
+`PAYMENT_OUTCOME` notice (#238) to **the investor whose money it was and the staff member
+who opened the order**, one copy each (one when they are the same person), each under its
+own key `payment:<id>:outcome:<recipient>`. The notice says what died and why in closed
+words concierge phrases itself — `TOKEN_BURNED`/`WRONG_CODES`, or `INVALIDATED` with
+`SESSIONS_REVOKED` or `EMAIL_CHANGED` — beside the tier, the two ends as the consent
+invitation named them, the amount spelled as money (`1200.5 USDT`) and the order's id; it
+carries no link and no code. Every copy names the investor by their identity-plane id, and
+concierge sends it only to that person or to an admin/owner, so it cannot be aimed
+elsewhere. Only the transition that closes the order writes it: a retried submission, a
+second execution attempt or a sweep over the closed order finds it closed and queues
+nothing, and the keys make a replayed write a no-op. An investor who answers — approving
+or refusing — an order that expires, one its operator withdraws, and a fund-owned order
+its consilium refuses send no such notice; `PAYOUT_OUTCOME` stays the consilium's, to
+seated owners only. The initiator also reads the verdict and its reason on the payments
+screen. An order
 closed without a verdict — withdrawn by its operator, or expired — takes back the consent
 invitation the relay has not delivered yet, token and code blanked, before the order is
 locked, exactly as a closing consilium takes back its invitations (#368).
