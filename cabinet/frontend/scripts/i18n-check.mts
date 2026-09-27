@@ -114,6 +114,7 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Outbox",
     "Performance",
     "{amount} Performance",
+    "Person",
     "Portfolio",
     "Rollout %",
     "Service",
@@ -133,8 +134,12 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Actions",
     "Admin",
     "Admissions",
+    // The fund term is the same word in French; the catalogue already says "allocation"
+    // in every sentence about one.
+    "Allocation",
     "Arbitrage",
     "Consilium",
+    "Consilium {id}",
     "Documents",
     "Feature flags",
     "Max",

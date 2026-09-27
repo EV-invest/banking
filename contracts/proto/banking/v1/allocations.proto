@@ -32,16 +32,17 @@ package banking.v1;
 // docs/ARCHITECTURE.md.
 //
 // The one place this service touches supply is `IssueUnits`: an operator minting units
-// IN KIND — to an investor or to the company — with no cash behind them, for a product
-// registered against an asset that already exists and already has owners. It lives here
-// rather than on FundsService because it is a registry decision about who holds what,
-// made by the same `AllocationManage` holder who sizes the product, not an investor
-// dealing at NAV. `TransferCompanyStake` is the same decision in the other direction —
-// units the company was seeded with handed to the person they belong to — and touches
-// holdings, not supply. `RetireUnits` is the mirror of `IssueUnits`: a holder's units
-// burnt with no cash leg, supply shrinking by exactly that. It is Read-First on what the
-// holder has AVAILABLE (units resting on the book or reserved by a redemption cannot be
-// retired), and the burn shows in `ListUnitHolders` like any other supply change.
+// IN KIND — to an investor — with no cash behind them, for a product registered against
+// an asset that already exists and already has owners. It lives here rather than on
+// FundsService because it is a registry decision about who holds what, made by the same
+// `AllocationManage` holder who sizes the product, not an investor dealing at NAV. The
+// holder is always a PERSON: the company is not a holder (#245 — every unit of value is
+// somebody's), and a reserved allocation (`fee`) comes to hold a product's fee class
+// only through the fee accrual, never through this surface. `RetireUnits` is the mirror
+// of `IssueUnits`: a holder's units burnt with no cash leg, supply shrinking by exactly
+// that. It is Read-First on what the holder has AVAILABLE (units resting on the book or
+// reserved by a redemption cannot be retired), and the burn shows in `ListUnitHolders`
+// like any other supply change.
 //
 // Backing is the third axis. Units minted in kind have no cash in the fund's claim
 // behind them, so `Redeem` — which pays cash out of that claim — is refused on a product
@@ -122,28 +123,9 @@ service AllocationsService {
   // for, the reuse is the mistake it has to catch.
   rpc IssueUnits(IssueUnitsRequest) returns (UnitIssuance);
 
-  // Hand part of the company's stake to a user (AllocationManage): `units` leave
-  // `CompanyShares` and land in the user's holding, and the supply does NOT change —
-  // this is the only way units come back out of the company, since the company has no
-  // user and so cannot sell on the book, and minting the user a copy of what the
-  // company holds would inflate the supply past the cap table. The allocation must be
-  // registered, in any state; the user must exist; the recipient's access level is not
-  // consulted (an operator command, like IssueUnits). Priced at the current (fresh) NAV
-  // for the record and the default cost basis; refused (INVALID_ARGUMENT, as a mint past
-  // the cap is) when the company holds fewer than `units`.
-  //
-  // Answers a `UnitIssuance` with `holder_kind = "user"` and `source = "company"`
-  // rather than a message of its own: from the recipient's side it IS an issuance —
-  // units they did not pay cash for, a stated basis, the same queued → applied life —
-  // and the console lists mints and hand-overs as one history. A second message would
-  // restate the same nine fields to say one word. Idempotent by `idempotency_key`
-  // exactly as IssueUnits, in the same key space: the same key naming a mint and then a
-  // hand-over is ALREADY_EXISTS, not a retry.
-  rpc TransferCompanyStake(TransferCompanyStakeRequest) returns (UnitIssuance);
-
   // Burn a holder's units with no cash leg (AllocationManage) — the reverse of
-  // IssueUnits: `units` leave the holder's account (a user's or the company's) and the
-  // supply shrinks by the same amount. Nothing is paid; this is a cap-table correction,
+  // IssueUnits: `units` leave the holder's account and the supply shrinks by the same
+  // amount. Nothing is paid; this is a cap-table correction,
   // the way an in-kind mint was. The holder must have at least `units` AVAILABLE
   // (Read-First; units resting on the book or reserved by a redemption do not count) —
   // otherwise INVALID_ARGUMENT — and the allocation must be `closed`, because burning a
@@ -153,16 +135,16 @@ service AllocationsService {
   // `cost_basis` is `units × NAV`, the book value written off.
   //
   // Answers a `UnitIssuance` with `source = "retire"` and POSITIVE `units`: the row is
-  // the magnitude, the source is the direction, and the console lists mints, hand-overs
-  // and retirements as one history. Idempotent by `idempotency_key` in the same key
-  // space as IssueUnits: the same key naming a mint and then a retirement is
-  // ALREADY_EXISTS, not a retry.
+  // the magnitude, the source is the direction, and the console lists mints and
+  // retirements as one history. Idempotent by `idempotency_key` in the same key space
+  // as IssueUnits: the same key naming a mint and then a retirement is ALREADY_EXISTS,
+  // not a retry.
   rpc RetireUnits(RetireUnitsRequest) returns (UnitIssuance);
 
-  // The settled supply of one product by holder class (AllocationManage): what the
-  // company holds, what the fee account holds, and what is left to investors. Read
-  // straight from the ledger — the number an operator checks against the registration
-  // before opening a product to the market.
+  // The cap table of one product (AllocationManage): the settled supply and every
+  // holder of it — people, and the reserved `fee` allocation holding the product's fee
+  // class — largest first. Read straight from the ledger — the number an operator
+  // checks against the registration before opening a product to the market.
   rpc ListUnitHolders(ListUnitHoldersRequest) returns (UnitHolders);
 }
 
@@ -295,48 +277,35 @@ message ListAllocationAccessGrantsRequest {
 
 message IssueUnitsRequest {
   string service = 1;
-  // Who receives the units. Exactly one of the two: a banking (or concierge) user id,
-  // resolved the way every admin RPC resolves a target, or the company itself. A
-  // `oneof` rather than a kind + id pair because the request has to make "the company"
-  // and "a user with no id" impossible to confuse — `company: false` with no `user_id`
-  // is a malformed request, not a mint to nobody.
-  oneof holder {
-    string user_id = 2;
-    bool company = 3;
-  }
+  // Who receives the units: a banking (or concierge) user id, resolved the way every
+  // admin RPC resolves a target. Required — a mint to nobody is a malformed request.
+  // Only a person: the company is not a holder (#245), and a reserved allocation is
+  // seated by the owners' consilium (`ConsiliumService.OpenHolderGrant`) or by the fee
+  // accrual, never by an operator's mint — so there is deliberately no arm for either.
+  string user_id = 2;
+  // Field 3 was `bool company`, the other arm of a `oneof holder`. Reserved so no later
+  // field can inherit its number and be read by an old client as "mint to the company".
+  reserved 3;
+  reserved "company";
   string units = 4;             // decimal units, > 0
   // Decimal USDT the holder is deemed to have paid. Empty means `units × NAV` at the
   // dealing mark — what a subscription for these units would have cost right now. An
-  // explicit value may be anything, zero included: the company's stake in an asset it
-  // already owned cost it no cash. For a user holder this is what lands in their
-  // position's cost basis, and so what their P&L and management fee are measured from.
+  // explicit value may be anything, zero included: a stake in an asset the holder
+  // already owned cost them no cash. This is what lands in their position's cost basis,
+  // and so what their P&L and management fee are measured from.
   string cost_basis = 5;
   string idempotency_key = 6;   // required, 1..64 chars, unique per service
 }
 
-message TransferCompanyStakeRequest {
-  string service = 1;
-  // The recipient: a banking (or concierge) user id, resolved the way every admin RPC
-  // resolves a target. Never the company — the company handing units to itself is not
-  // a request, so there is no `oneof` here.
-  string user_id = 2;
-  string units = 3;             // decimal units, > 0, at most what the company holds
-  // Decimal USDT the recipient is deemed to have paid — what lands in their position's
-  // cost basis. Empty means `units × NAV` at the dealing mark, like IssueUnits; an
-  // explicit value may be anything, zero included.
-  string cost_basis = 4;
-  string idempotency_key = 5;   // required, 1..64 chars, unique per service (shared with IssueUnits)
-}
-
 message RetireUnitsRequest {
   string service = 1;
-  // Whose units are burnt. Exactly one of the two, shaped as IssueUnits' holder is and
-  // for the same reason: a user (banking or concierge id) or the company itself, with
-  // `company: false` and no `user_id` a malformed request rather than a burn of nobody's.
-  oneof holder {
-    string user_id = 2;
-    bool company = 3;
-  }
+  // Whose units are burnt: a banking (or concierge) user id, shaped as IssueUnits'
+  // holder is and for the same reason. Required — a burn of nobody's units is a
+  // malformed request.
+  string user_id = 2;
+  // Field 3 was `bool company` — see IssueUnitsRequest.
+  reserved 3;
+  reserved "company";
   string units = 4;             // decimal units, > 0, at most what the holder has available
   // Decimal USDT of book value written off, recorded on the row. Empty means
   // `units × NAV` at the dealing mark, like IssueUnits. No cash moves either way.
@@ -347,17 +316,21 @@ message RetireUnitsRequest {
   bool force = 7;
 }
 
-// One in-kind issuance: a mint, a hand-over out of the company's stake, or a
-// retirement (`source`).
-// The holder is flattened to a kind + id pair here, unlike the request's `oneof`,
-// because this shape is projected to TypeScript through OpenAPI and a flat message
-// survives that pipeline unambiguously (the same trade the operations timeline makes).
+// One in-kind issuance: a mint or a retirement (`source`), or — on rows that predate
+// #245 — a hand-over out of the company's stake.
+// The holder is a flattened `UnitHolderRef`: a person, or the reserved allocation the
+// fee accrual minted a product's fee class to.
 message UnitIssuance {
   string id = 1;
   string service = 2;
-  string holder_kind = 3;     // user | company
-  string holder_id = 4;       // the banking user id for `user`; empty for `company`
-  string units = 5;           // decimal units minted, handed over or retired (always positive)
+  // `user` | `allocation`. Rows written before #245 may still read `company`; nothing
+  // writes it any more.
+  string holder_kind = 3;
+  // The banking user id for `user`; the holding allocation's slug (`fee`) for
+  // `allocation`; empty on a historical `company` row. A client must never resolve an
+  // `allocation` holder as a user.
+  string holder_id = 4;
+  string units = 5;           // decimal units minted or retired (always positive)
   string nav = 6;             // decimal USDT per unit the issuance was recorded at
   string cost_basis = 7;      // decimal USDT
   // `queued` until the relay posts the leg, then `applied`. A client that needs the
@@ -365,10 +338,11 @@ message UnitIssuance {
   // relay has not reached yet (or one it parked — see BalanceService.ListParkedEvents).
   string state = 8;
   int64 created_at = 9;       // unix seconds
-  // Where the units came from — or went: `mint` (IssueUnits — supply grew by `units`),
-  // `company` (TransferCompanyStake — moved out of the company's stake, supply
-  // unchanged) or `retire` (RetireUnits — burnt out of the holder's account, supply
-  // shrank by `units`). `units` is always the magnitude; the source is the direction.
+  // Where the units came from — or went: `mint` (IssueUnits or an executed holder
+  // grant — supply grew by `units`) or `retire` (RetireUnits — burnt out of the
+  // holder's account, supply shrank by `units`). Rows written before #245 may read
+  // `company` (the retired TransferCompanyStake — moved out of the company's stake,
+  // supply unchanged). `units` is always the magnitude; the source is the direction.
   // Always populated; a row that predates the field reads as `mint`.
   string source = 10;
 }
@@ -377,21 +351,38 @@ message ListUnitHoldersRequest {
   string service = 1;
 }
 
-// The settled supply of one product by holder class, all decimal units.
-// `investor_units` is `units_outstanding − company_units − fee_units`: the ledger keeps
-// one holding per investor, and the supply invariant makes the difference exact.
+// One holder of an allocation's units, as the cap table and the treasury name them.
+// `kind` is `user` (`id` is the banking user id) or `allocation` (`id` is the holding
+// allocation's slug — the reserved `fee` allocation holding a product's fee class). The
+// reserved allocations' own holders are always people.
+message UnitHolderRef {
+  string kind = 1;  // user | allocation
+  string id = 2;
+}
+
+// One line of a cap table: who, and how many units (decimal). Holdings of zero are not
+// listed.
+message UnitHolding {
+  UnitHolderRef holder = 1;
+  string units = 2;
+}
+
+// The cap table of one product: the settled supply and every holder of it, largest
+// first (ties by the holder's stored identity, so the table reads the same on every
+// refresh). Σ `holders[].units` = `units_outstanding` is the supply invariant the
+// reconciliation checks — it is read, never derived, here. All units decimal.
 message UnitHolders {
   string service = 1;
   string units_outstanding = 2;
-  string company_units = 3;
-  string fee_units = 4;
-  string investor_units = 5;
+  // Fields 3..5 were the pre-#245 three-class summary (`company_units`, `fee_units`,
+  // `investor_units`). Reserved: the table names its holders now.
+  reserved 3, 4, 5;
+  reserved "company_units", "fee_units", "investor_units";
   // Decimal units of `mint` issuances still `queued` — recorded, not yet posted by the
   // relay. Once they land, `units_outstanding` grows by this much, so an operator
   // pinning the cap to what is issued must wait for it to read zero: a cap pinned to
-  // the settled figure alone leaves the queued mint to land above it. Only `mint`
-  // counts — a `company` hand-over moves units between holders and leaves the supply
-  // as it was.
+  // the settled figure alone leaves the queued mint to land above it.
   // TODO(#271): retire (PR #278) shrinks supply — subtract queued retires once it lands.
   string queued_units = 6;
+  repeated UnitHolding holders = 7;
 }

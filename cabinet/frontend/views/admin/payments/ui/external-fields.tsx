@@ -2,17 +2,17 @@
 
 // An on-chain destination: the rail, then the address.
 //
-// The rails on offer are the fund's configured payout rails — the same read the revenue
-// screen's chips were built on — because an external order ships as a withdrawal and can
-// only ship on a rail with a running watcher. A rail the hub does not list is not a
-// choice the form can make on its behalf.
+// The rails on offer are the treasury's configured rails — the same read the Treasury
+// screen's per-rail cards are built on — because an external order ships as a withdrawal
+// and can only ship on a rail with a running watcher. A rail the hub does not list is not
+// a choice the form can make on its behalf.
 
 import { useId } from "react";
 
 import { useT } from "@evinvest/i18n/react";
 import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle, Input, Label, RadioGroup, RadioGroupItem, Skeleton } from "@evinvest/uikit";
 
-import { fundRevenueResource } from "@/entities/admin/model/admin-resource";
+import { treasuryResource } from "@/entities/admin/model/admin-resource";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
@@ -31,13 +31,13 @@ export function ExternalFields({
 }) {
   const t = useT();
   const railId = useId();
-  const revenue = useResource(fundRevenueResource);
-  const rails = revenue.data?.rails ?? null;
+  const treasury = useResource(treasuryResource);
+  const rails = treasury.data?.rails ?? null;
 
   return (
     <div className="space-y-2">
-      {!rails && revenue.error ? (
-        <ResourceError error={revenue.error} onRetry={() => void revenue.refresh()} retrying={revenue.isValidating} />
+      {!rails && treasury.error ? (
+        <ResourceError error={treasury.error} onRetry={() => void treasury.refresh()} retrying={treasury.isValidating} />
       ) : !rails ? (
         <Skeleton className="h-9 w-full" />
       ) : rails.length === 0 ? (

@@ -259,20 +259,15 @@ pub async fn treasury(State(st): State<AppState>, jar: CookieJar) -> Result<Json
 }
 
 /// `POST /api/admin/treasury/record-deposit` — write a ledger fact for USDT that arrived
-/// on-chain out of band.
-///
-/// Funding a rail's treasury hot wallet directly moves real USDT while producing no ledger
-/// entry at all: the rail's `custody` figure stays put, `fund_capital` understates what the
-/// company put in, and the withdrawal dispatch gate (`min(TB rail, on-chain treasury)`) keeps
-/// reading zero, so that liquidity cannot be spent. This records the missing fact.
+/// on a user's deposit address out of band.
 ///
 /// Chain-proven and idempotent by `tx_ref`: the amount and the credited party are read off
-/// the chain, never taken from the form. `RecordDeposit` is the general path — the chain
-/// decides whether the transfer is a user's deposit or the fund's capital; `SeedCapital` is
-/// the same verification plus the assertion "this is fund capital", refusing a user's
-/// deposit instead of crediting it. Pass the real on-chain reference (`txhash:logIndex` on
-/// an EVM rail) so a re-submission, and any watcher that later scans the same transfer,
-/// collapse onto the same key.
+/// the chain, never taken from the form — the chain names the deposit address's owner, so
+/// this always credits a person. A transfer to a rail's treasury address is nobody's until
+/// the owners say whose: it is refused here and proposed through
+/// `/api/admin/treasury/seed-capital` instead. Pass the real on-chain reference
+/// (`txhash:logIndex` on an EVM rail) so a re-submission, and any watcher that later scans
+/// the same transfer, collapse onto the same key.
 pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
@@ -302,13 +297,40 @@ pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar,
 	})))
 }
 
+/// `POST /api/admin/treasury/seed-capital` — propose a seed of the platform's capital
+/// (#245): a transfer that reached a rail's treasury address, proven against the chain,
+/// attributed to a person as their deposit and subscription into `fund`. Body: `tx_ref`,
+/// `network`, `expected_amount` (required — the figure the owners approve), and
+/// `depositor_user_id` (the id the console carries, resolved hub-side; empty = the
+/// caller). Opens a consilium and books nothing: the answer is `recorded: false`, the
+/// amount the terms carry, and the `consilium_id` the owners' room shows. The plane
+/// re-checks `CapitalManage` and refuses a proposer who holds no owner seat.
+pub async fn seed_capital(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::SeedCapitalProposal>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(tx_ref), Some(network), Some(expected_amount)) = (required(&v, "tx_ref"), required(&v, "network"), required(&v, "expected_amount")) else {
+		return Err(ApiError::BadRequest("tx_ref, network and expected_amount are required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::SeedCapitalRequest {
+		network,
+		tx_ref,
+		expected_amount,
+		depositor_user_id: required(&v, "depositor_user_id").unwrap_or_default(),
+	};
+	Ok(Json(st.grpc.seed_capital(&token, req).await?.into()))
+}
+
 // ── fees ─────────────────────────────────────────────────────────────────────
 //
 // The fee plane shipped with no operator surface at all: the sweeper ran hourly and
 // nothing could give a fund a policy for it to act on, so no fund ever charged anything.
 // These are the five calls that make it operable. Paying the collected revenue OUT is
-// not among them: `/api/admin/revenue/payout` already does that, debiting the same `fee`
-// claim through the ordinary withdrawal pipeline.
+// not among them: what a settlement converts lands in the `fee` allocation's claim, and
+// that leaves only by a holder's redemption or a payment the owners approve.
 
 /// `GET /api/admin/fees/policies` — every fund's fee terms, for the fees table.
 pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::FeePolicyList>, ApiError> {
@@ -785,49 +807,15 @@ pub async fn revoke_allocation_access(State(st): State<AppState>, jar: CookieJar
 	Ok(Json(json!({ "ok": true })))
 }
 
-/// `POST /api/admin/allocations/issue` — mint units in kind to an investor or to the
-/// company, with no cash leg. Body: `service`, `units`, `idempotency_key`, and exactly
-/// one of `user_id` (the id the console carries — concierge-first, banking as a
-/// fallback, resolved hub-side like `/users/balance`) or `company: true`; `cost_basis`
-/// is optional and defaults hub-side to `units × NAV`. The key is the retry contract —
-/// the console generates one per form submission and re-sends the same one on a
-/// timeout, so a double click lands one mint.
+/// `POST /api/admin/allocations/issue` — mint units in kind to a person, with no cash
+/// leg. Body: `service`, `units`, `idempotency_key`, `user_id` (the id the console
+/// carries — concierge-first, banking as a fallback, resolved hub-side like
+/// `/users/balance`); `cost_basis` is optional and defaults hub-side to `units × NAV`.
+/// Only a person: the company is not a holder (#245), and the reserved allocations are
+/// seated through `/api/consilium/holder-grant`. The key is the retry contract — the
+/// console generates one per form submission and re-sends the same one on a timeout, so
+/// a double click lands one mint.
 pub async fn issue_units(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::UnitIssuance>, ApiError> {
-	require_admin(&st, &jar).await?;
-	if !verify_csrf(&st, &jar, &headers) {
-		return Err(ApiError::Csrf);
-	}
-	let v = parse_body(&body);
-	let (Some(service), Some(units), Some(idempotency_key)) = (required(&v, "service"), required(&v, "units"), required(&v, "idempotency_key")) else {
-		return Err(ApiError::BadRequest("service, units and idempotency_key are required".into()));
-	};
-	// The hub refuses a request naming nobody; answering here spares it a money-plane
-	// token for a form the console never filled in.
-	let holder = match (required(&v, "user_id"), bool_field(&v, "company")) {
-		(Some(_), true) => return Err(ApiError::BadRequest("user_id and company are mutually exclusive".into())),
-		(Some(user_id), false) => bk::issue_units_request::Holder::UserId(user_id),
-		(None, true) => bk::issue_units_request::Holder::Company(true),
-		(None, false) => return Err(ApiError::BadRequest("a holder is required: user_id, or company = true".into())),
-	};
-	let token = require_money_token(&st, &jar).await?;
-	let req = bk::IssueUnitsRequest {
-		service,
-		holder: Some(holder),
-		units,
-		cost_basis: editable(&v, "cost_basis"),
-		idempotency_key,
-	};
-	Ok(Json(st.grpc.issue_units(&token, req).await?.into()))
-}
-
-/// `POST /api/admin/allocations/transfer-stake` — hand part of the company's stake in a
-/// product to a user: the units leave the company's holding and land in theirs, and the
-/// supply does not move. Body: `service`, `user_id` (the id the console carries,
-/// resolved hub-side like `/allocations/issue`), `units`, `idempotency_key`; `cost_basis`
-/// is optional and defaults hub-side to `units × NAV`. Answers the same `UnitIssuance`
-/// shape as a mint, with `source: "company"`. The key is the same retry contract, in the
-/// same per-product key space as `/allocations/issue`.
-pub async fn transfer_company_stake(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::UnitIssuance>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
@@ -835,21 +823,23 @@ pub async fn transfer_company_stake(State(st): State<AppState>, jar: CookieJar, 
 	let v = parse_body(&body);
 	let (Some(service), Some(user_id), Some(units), Some(idempotency_key)) = (required(&v, "service"), required(&v, "user_id"), required(&v, "units"), required(&v, "idempotency_key"))
 	else {
+		// The hub refuses a request naming nobody; answering here spares it a money-plane
+		// token for a form the console never filled in.
 		return Err(ApiError::BadRequest("service, user_id, units and idempotency_key are required".into()));
 	};
 	let token = require_money_token(&st, &jar).await?;
-	let req = bk::TransferCompanyStakeRequest {
+	let req = bk::IssueUnitsRequest {
 		service,
 		user_id,
 		units,
 		cost_basis: editable(&v, "cost_basis"),
 		idempotency_key,
 	};
-	Ok(Json(st.grpc.transfer_company_stake(&token, req).await?.into()))
+	Ok(Json(st.grpc.issue_units(&token, req).await?.into()))
 }
 
-/// `GET /api/admin/allocations/holders?service=` — the product's settled supply split
-/// into the company's stake, the fee account's units and what investors hold.
+/// `GET /api/admin/allocations/holders?service=` — the product's cap table: the settled
+/// supply and every holder of it (people and the `fee` allocation), largest first.
 pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::UnitHolders>, ApiError> {
 	require_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
@@ -862,34 +852,29 @@ pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query
 
 /// `POST /api/admin/allocations/retire` — burn a holder's units with no cash leg, the
 /// reverse of `/allocations/issue`: the units leave the holder's account and the supply
-/// shrinks by the same amount. Body: `service`, `units`, `idempotency_key`, exactly one
-/// of `user_id` (resolved hub-side like `/allocations/issue`) or `company: true`;
-/// `cost_basis` is optional and defaults hub-side to `units × NAV`; `force` (default
-/// `false`) is the operator's explicit override to burn units out of a live product —
-/// without it the hub answers 412 unless the allocation is `closed`. Answers the same
-/// `UnitIssuance` shape as a mint, with `source: "retire"` and positive `units`. The key
-/// is the same retry contract, in the same per-product key space as `/allocations/issue`.
+/// shrinks by the same amount. Body: `service`, `user_id` (resolved hub-side like
+/// `/allocations/issue`), `units`, `idempotency_key`; `cost_basis` is optional and
+/// defaults hub-side to `units × NAV`; `force` (default `false`) is the operator's
+/// explicit override to burn units out of a live product — without it the hub answers
+/// 412 unless the allocation is `closed`. Answers the same `UnitIssuance` shape as a
+/// mint, with `source: "retire"` and positive `units`. The key is the same retry
+/// contract, in the same per-product key space as `/allocations/issue`.
 pub async fn retire_units(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::UnitIssuance>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
 	let v = parse_body(&body);
-	let (Some(service), Some(units), Some(idempotency_key)) = (required(&v, "service"), required(&v, "units"), required(&v, "idempotency_key")) else {
-		return Err(ApiError::BadRequest("service, units and idempotency_key are required".into()));
-	};
-	// Same shape and same reason as the mint: a burn of nobody's units is a form the
-	// console never filled in, and refusing it here spares the hub a money-plane token.
-	let holder = match (required(&v, "user_id"), bool_field(&v, "company")) {
-		(Some(_), true) => return Err(ApiError::BadRequest("user_id and company are mutually exclusive".into())),
-		(Some(user_id), false) => bk::retire_units_request::Holder::UserId(user_id),
-		(None, true) => bk::retire_units_request::Holder::Company(true),
-		(None, false) => return Err(ApiError::BadRequest("a holder is required: user_id, or company = true".into())),
+	let (Some(service), Some(user_id), Some(units), Some(idempotency_key)) = (required(&v, "service"), required(&v, "user_id"), required(&v, "units"), required(&v, "idempotency_key"))
+	else {
+		// Same reason as the mint: a burn of nobody's units is a form the console never
+		// filled in, and refusing it here spares the hub a money-plane token.
+		return Err(ApiError::BadRequest("service, user_id, units and idempotency_key are required".into()));
 	};
 	let token = require_money_token(&st, &jar).await?;
 	let req = bk::RetireUnitsRequest {
 		service,
-		holder: Some(holder),
+		user_id,
 		units,
 		cost_basis: editable(&v, "cost_basis"),
 		idempotency_key,
@@ -1068,40 +1053,23 @@ pub async fn fail_withdrawal(State(st): State<AppState>, jar: CookieJar, headers
 	Ok(Json(json!({ "ok": true })))
 }
 
-// ── revenue payouts (banking money plane, the fund's own money) ────────────────
+// ── revenue (banking money plane, the `fee` allocation) ───────────────────────
 
-/// `GET /api/admin/revenue` — what the fund has earned and may pay itself, plus the
-/// rails a payout can ship on. Admin/Owner at the plane (`RevenuePayout`); an Operator
-/// who may read the treasury is refused here, since this is the payout surface.
-pub async fn fund_revenue(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::FundRevenue>, ApiError> {
+/// `GET /api/admin/revenue` — what the platform has earned: the `fee` allocation in the
+/// treasury's shape (cash, supply, price, holders). Admin/Owner at the plane
+/// (`RevenuePayout`); an Operator who may read the treasury is refused here. Nothing
+/// pays it out from this surface (#245): a holder redeems, or the owners approve a
+/// payment out of `service:fee` through `/api/admin/payments`.
+pub async fn fund_revenue(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AllocationTreasury>, ApiError> {
 	require_admin(&st, &jar).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let revenue = st.grpc.fund_revenue(&token).await.map_err(|s| ApiError::read(s, "fund revenue unavailable"))?;
 	Ok(Json(revenue.into()))
 }
 
-/// `POST /api/admin/revenue/payout` — send earned revenue to an external wallet.
-///
-/// The cap is enforced at the money plane against the revenue claim's available
-/// balance, not here: this handler must never be the thing standing between company
-/// money and client money. Accepted-and-queued like any withdrawal when the rail is
-/// short, then dispatched/settled through the usual withdrawal queue.
-pub async fn request_revenue_payout(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Withdrawal>, ApiError> {
-	require_admin(&st, &jar).await?;
-	if !verify_csrf(&st, &jar, &headers) {
-		return Err(ApiError::Csrf);
-	}
-	let token = require_money_token(&st, &jar).await?;
-	let v = parse_body(&body);
-	let (Some(network), Some(address), Some(amount)) = (required(&v, "network"), required(&v, "address"), required(&v, "amount")) else {
-		return Err(ApiError::BadRequest("network, address and amount are required".into()));
-	};
-	let req = bk::RequestRevenuePayoutRequest { network, address, amount };
-	Ok(Json(st.grpc.request_revenue_payout(&token, req).await?.into()))
-}
-
-/// `POST /api/admin/revenue/cancel` — cancel a still-queued payout (refund to the
-/// revenue claim). The hub refuses a user's withdrawal and refuses once processing.
+/// `POST /api/admin/revenue/cancel` — HISTORY ONLY: cancel a payout queued before the
+/// kind was retired (#245). The hub refuses a user's withdrawal and refuses once
+/// processing.
 pub async fn cancel_revenue_payout(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Withdrawal>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
@@ -1114,7 +1082,8 @@ pub async fn cancel_revenue_payout(State(st): State<AppState>, jar: CookieJar, h
 	Ok(Json(st.grpc.cancel_revenue_payout(&token, &id).await?.into()))
 }
 
-/// `GET /api/admin/revenue/payouts` — the fund's payout history, newest first.
+/// `GET /api/admin/revenue/payouts` — HISTORY ONLY: the payouts opened before the kind
+/// was retired (#245), newest first.
 pub async fn revenue_payouts(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::WithdrawalList>, ApiError> {
 	require_admin(&st, &jar).await?;
 	let token = require_money_token(&st, &jar).await?;
@@ -1375,6 +1344,7 @@ mod admin_route_tests {
 		revoke: Option<bk::RevokeAllocationAccessRequest>,
 		set_backing: Option<bk::SetAllocationBackingRequest>,
 		retire: Option<bk::RetireUnitsRequest>,
+		issue: Option<bk::IssueUnitsRequest>,
 		money_tokens_issued: usize,
 	}
 
@@ -1823,15 +1793,11 @@ mod admin_route_tests {
 			self.guard_money_plane(&request)?;
 			let req = request.into_inner();
 			self.seen.lock().unwrap().retire = Some(req.clone());
-			let (holder_kind, holder_id) = match req.holder {
-				Some(bk::retire_units_request::Holder::UserId(id)) => ("user", id),
-				Some(bk::retire_units_request::Holder::Company(_)) | None => ("company", String::new()),
-			};
 			Ok(GrpcResponse::new(bk::UnitIssuance {
 				id: "9e2f".into(),
 				service: req.service,
-				holder_kind: holder_kind.into(),
-				holder_id,
+				holder_kind: "user".into(),
+				holder_id: req.user_id,
 				units: req.units,
 				nav: "1.25".into(),
 				cost_basis: if req.cost_basis.is_empty() { "16250".into() } else { req.cost_basis },
@@ -1841,16 +1807,38 @@ mod admin_route_tests {
 			}))
 		}
 
-		async fn issue_units(&self, _: GrpcRequest<bk::IssueUnitsRequest>) -> Result<GrpcResponse<bk::UnitIssuance>, Status> {
-			Err(Status::unimplemented("not reached by the access routes"))
+		async fn issue_units(&self, request: GrpcRequest<bk::IssueUnitsRequest>) -> Result<GrpcResponse<bk::UnitIssuance>, Status> {
+			self.guard_money_plane(&request)?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().issue = Some(req.clone());
+			Ok(GrpcResponse::new(bk::UnitIssuance {
+				id: "7c1e".into(),
+				service: req.service,
+				holder_kind: "user".into(),
+				holder_id: req.user_id,
+				units: req.units,
+				nav: "1.25".into(),
+				cost_basis: if req.cost_basis.is_empty() { "16250".into() } else { req.cost_basis },
+				state: "queued".into(),
+				created_at: 1_750_000_600,
+				source: "mint".into(),
+			}))
 		}
 
-		async fn transfer_company_stake(&self, _: GrpcRequest<bk::TransferCompanyStakeRequest>) -> Result<GrpcResponse<bk::UnitIssuance>, Status> {
-			Err(Status::unimplemented("not reached by the access routes"))
-		}
-
-		async fn list_unit_holders(&self, _: GrpcRequest<bk::ListUnitHoldersRequest>) -> Result<GrpcResponse<bk::UnitHolders>, Status> {
-			Err(Status::unimplemented("not reached by the access routes"))
+		/// The cap table the hub answers with: a person and the `fee` allocation, each a
+		/// line — the shape the holders screen has to render without summing anything.
+		async fn list_unit_holders(&self, request: GrpcRequest<bk::ListUnitHoldersRequest>) -> Result<GrpcResponse<bk::UnitHolders>, Status> {
+			self.guard_money_plane(&request)?;
+			let holding = |kind: &str, id: &str, units: &str| bk::UnitHolding {
+				holder: Some(bk::UnitHolderRef { kind: kind.into(), id: id.into() }),
+				units: units.into(),
+			};
+			Ok(GrpcResponse::new(bk::UnitHolders {
+				service: request.into_inner().service,
+				units_outstanding: "13250".into(),
+				queued_units: "100".into(),
+				holders: vec![holding("user", KNOWN_INVESTOR, "13000"), holding("allocation", "fee", "250")],
+			}))
 		}
 	}
 
@@ -2711,11 +2699,18 @@ mod admin_route_tests {
 			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","user_id":"investor-7","level":"invest"}"#),
 			("/api/admin/allocations/grants/revoke", r#"{"service":"quy-nhon","user_id":"investor-7"}"#),
 			(
-				"/api/admin/allocations/transfer-stake",
+				"/api/admin/allocations/issue",
 				r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000","idempotency_key":"k"}"#,
 			),
-			("/api/admin/allocations/retire", r#"{"service":"quy-nhon","company":true,"units":"13000","idempotency_key":"k"}"#),
+			(
+				"/api/admin/allocations/retire",
+				r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000","idempotency_key":"k"}"#,
+			),
 			("/api/admin/allocations/backing", r#"{"service":"quy-nhon","backing":"cash"}"#),
+			(
+				"/api/admin/treasury/seed-capital",
+				r#"{"tx_ref":"0xabc:0","network":"bep20","expected_amount":"100","depositor_user_id":"investor-7"}"#,
+			),
 		] {
 			let (status, _) = send(&app, signed("POST", uri, Some(body), true)).await;
 			assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not change access or holdings: {uri}");
@@ -2793,11 +2788,19 @@ mod admin_route_tests {
 			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","user_id":"investor-7"}"#),
 			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","level":"invest"}"#),
 			("/api/admin/allocations/grants/revoke", r#"{"service":"quy-nhon"}"#),
-			// A hand-over of the company's stake names a user, an amount and a retry key,
-			// or it is not a request.
-			("/api/admin/allocations/transfer-stake", r#"{"service":"quy-nhon","units":"13000","idempotency_key":"k"}"#),
-			("/api/admin/allocations/transfer-stake", r#"{"service":"quy-nhon","user_id":"investor-7","idempotency_key":"k"}"#),
-			("/api/admin/allocations/transfer-stake", r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000"}"#),
+			// A mint names a person, an amount and a retry key, or it is not a request. The
+			// company is not a holder (#245): a stale console sending `company: true` in
+			// place of a person is a form nobody filled in, not a mint to the company.
+			("/api/admin/allocations/issue", r#"{"service":"quy-nhon","units":"13000","idempotency_key":"k"}"#),
+			("/api/admin/allocations/issue", r#"{"service":"quy-nhon","company":true,"units":"13000","idempotency_key":"k"}"#),
+			("/api/admin/allocations/issue", r#"{"service":"quy-nhon","user_id":"investor-7","idempotency_key":"k"}"#),
+			("/api/admin/allocations/issue", r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000"}"#),
+			// A seed names the transfer, its rail and the figure the owners approve, or it
+			// is not a proposal — `expected_amount` is not optional here as it is on a
+			// deposit, because the amount goes under the owners' signature.
+			("/api/admin/treasury/seed-capital", r#"{"network":"bep20","expected_amount":"100"}"#),
+			("/api/admin/treasury/seed-capital", r#"{"tx_ref":"0xabc:0","expected_amount":"100"}"#),
+			("/api/admin/treasury/seed-capital", r#"{"tx_ref":"0xabc:0","network":"bep20"}"#),
 		] {
 			let (status, response) = send(&app, signed("POST", uri, Some(body), true)).await;
 			assert_eq!(status, StatusCode::BAD_REQUEST, "must be refused before the hub is called: {uri} {body}");
@@ -2870,13 +2873,12 @@ mod admin_route_tests {
 		assert_eq!((forwarded.service.as_str(), forwarded.user_id.as_str()), (SERVICE, "investor-7"));
 	}
 
-	/// A retirement forwards the holder in the request's `oneof` shape — the company here,
-	/// which has no id to carry — together with the `force` override, and relays the row
-	/// the hub wrote with `source: "retire"` and POSITIVE units: the row is the magnitude,
-	/// the source is the direction, and a console summing the history must not be handed a
-	/// negative number to guess at.
+	/// A retirement forwards the person as `user_id` together with the `force` override,
+	/// and relays the row the hub wrote with `source: "retire"` and POSITIVE units: the
+	/// row is the magnitude, the source is the direction, and a console summing the
+	/// history must not be handed a negative number to guess at.
 	#[tokio::test]
-	async fn retiring_forwards_the_company_holder_and_the_force_flag_and_relays_the_row() {
+	async fn retiring_forwards_the_holder_and_the_force_flag_and_relays_the_row() {
 		let hub = Hub::new("admin");
 		let seen = hub.seen.clone();
 		let app = app(serve(hub).await);
@@ -2886,7 +2888,7 @@ mod admin_route_tests {
 			signed(
 				"POST",
 				"/api/admin/allocations/retire",
-				Some(r#"{"service":"quy-nhon","company":true,"units":"13000","idempotency_key":"k-retire","force":true}"#),
+				Some(r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000","idempotency_key":"k-retire","force":true}"#),
 				true,
 			),
 		)
@@ -2894,8 +2896,8 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::OK, "{body}");
 		assert_eq!(body["service"], SERVICE);
 		assert_eq!(body["source"], "retire");
-		assert_eq!(body["holder_kind"], "company");
-		assert_eq!(body["holder_id"], "", "the company has no user id to resolve");
+		assert_eq!(body["holder_kind"], "user");
+		assert_eq!(body["holder_id"], "investor-7");
 		assert_eq!(body["units"], "13000", "the magnitude, never signed");
 		assert_eq!(body["cost_basis"], "16250", "the hub's `units × NAV` default when the body named none");
 		assert_eq!(body["state"], "queued");
@@ -2903,15 +2905,81 @@ mod admin_route_tests {
 
 		let forwarded = seen.lock().unwrap().retire.clone().expect("the hub saw the retirement");
 		assert_eq!(forwarded.service, SERVICE);
-		assert_eq!(forwarded.holder, Some(bk::retire_units_request::Holder::Company(true)));
+		assert_eq!(forwarded.user_id, "investor-7");
 		assert_eq!((forwarded.units.as_str(), forwarded.idempotency_key.as_str()), ("13000", "k-retire"));
 		assert!(forwarded.cost_basis.is_empty(), "an absent cost_basis crosses empty so the hub applies its default");
 		assert!(forwarded.force, "the operator's override must reach the hub as given");
 	}
 
-	/// The other holder shape — a named user — crosses as `user_id`, and `force` left out of
-	/// the body is `false`: the console must not be able to burn units out of a live product
-	/// by forgetting a field. A `cost_basis` the operator typed is forwarded verbatim.
+	/// A mint forwards the person as `user_id` — the only holder a mint can name since
+	/// #245 — and relays the row with `source: "mint"`. The console's `company` toggle is
+	/// gone with the company holder; a body that still carries it is refused (see the
+	/// malformed-body test), never quietly minted to somebody.
+	#[tokio::test]
+	async fn issuing_forwards_the_person_and_relays_the_mint() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(
+			&app,
+			signed(
+				"POST",
+				"/api/admin/allocations/issue",
+				Some(r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000","cost_basis":"0","idempotency_key":"k-mint"}"#),
+				true,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!(
+			(body["holder_kind"].as_str(), body["holder_id"].as_str(), body["source"].as_str()),
+			(Some("user"), Some("investor-7"), Some("mint"))
+		);
+		assert_eq!(body["cost_basis"], "0", "an explicit zero basis is a value, not an absence");
+
+		let forwarded = seen.lock().unwrap().issue.clone().expect("the hub saw the mint");
+		assert_eq!(
+			(forwarded.service.as_str(), forwarded.user_id.as_str(), forwarded.units.as_str()),
+			(SERVICE, "investor-7", "13000")
+		);
+		assert_eq!((forwarded.cost_basis.as_str(), forwarded.idempotency_key.as_str()), ("0", "k-mint"));
+	}
+
+	/// The cap table crosses as the hub lists it — one line per holder, a person and the
+	/// `fee` allocation alike, with the kind that says how to render the id — and no
+	/// class totals for the screen to reconcile against.
+	#[tokio::test]
+	async fn the_holders_route_relays_the_cap_table_line_by_line() {
+		let app = app(serve(Hub::new("admin")).await);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/allocations/holders?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!(
+			(body["service"].as_str(), body["units_outstanding"].as_str(), body["queued_units"].as_str()),
+			(Some(SERVICE), Some("13250"), Some("100"))
+		);
+		let holders = body["holders"].as_array().expect("the cap table is a list");
+		assert_eq!(holders.len(), 2);
+		assert_eq!(
+			(holders[0]["holder"]["kind"].as_str(), holders[0]["holder"]["id"].as_str(), holders[0]["units"].as_str()),
+			(Some("user"), Some(KNOWN_INVESTOR), Some("13000"))
+		);
+		assert_eq!(
+			(holders[1]["holder"]["kind"].as_str(), holders[1]["holder"]["id"].as_str(), holders[1]["units"].as_str()),
+			(Some("allocation"), Some("fee"), Some("250"))
+		);
+		for retired in ["company_units", "fee_units", "investor_units"] {
+			assert!(body.get(retired).is_none(), "the pre-#245 class total `{retired}` must not be on the wire");
+		}
+
+		let (status, _) = send(&app, signed("GET", "/api/admin/allocations/holders", None, false)).await;
+		assert_eq!(status, StatusCode::BAD_REQUEST, "a cap table is of one product");
+	}
+
+	/// `force` left out of the body is `false`: the console must not be able to burn units
+	/// out of a live product by forgetting a field. A `cost_basis` the operator typed is
+	/// forwarded verbatim.
 	#[tokio::test]
 	async fn retiring_a_user_defaults_force_to_false_and_keeps_the_typed_cost_basis() {
 		let hub = Hub::new("admin");
@@ -2933,13 +3001,14 @@ mod admin_route_tests {
 		assert_eq!(body["cost_basis"], "120");
 
 		let forwarded = seen.lock().unwrap().retire.clone().expect("the hub saw the retirement");
-		assert_eq!(forwarded.holder, Some(bk::retire_units_request::Holder::UserId("investor-7".into())));
+		assert_eq!(forwarded.user_id, "investor-7");
 		assert_eq!(forwarded.cost_basis, "120");
 		assert!(!forwarded.force, "force absent from the body must cross as false");
 	}
 
-	/// A retirement names an amount, a retry key and exactly one holder, or it is not a
-	/// request — and none of these malformed bodies may cost a money-token mint.
+	/// A retirement names an amount, a retry key and a person, or it is not a request —
+	/// and none of these malformed bodies may cost a money-token mint. The company is not
+	/// a holder any more (#245): a stale console's `company: true` names nobody.
 	#[tokio::test]
 	async fn a_malformed_retirement_is_refused_before_the_hub_is_called() {
 		let hub = Hub::new("admin");
@@ -2947,13 +3016,14 @@ mod admin_route_tests {
 		let app = app(serve(hub).await);
 
 		for body in [
-			r#"{"service":"quy-nhon","company":true,"idempotency_key":"k"}"#,
-			r#"{"service":"quy-nhon","company":true,"units":"1"}"#,
-			r#"{"company":true,"units":"1","idempotency_key":"k"}"#,
-			// Nobody's units, and two holders at once, are both forms nobody filled in.
+			r#"{"service":"quy-nhon","user_id":"investor-7","idempotency_key":"k"}"#,
+			r#"{"service":"quy-nhon","user_id":"investor-7","units":"1"}"#,
+			r#"{"user_id":"investor-7","units":"1","idempotency_key":"k"}"#,
+			// Nobody's units — with or without the retired company flag — is a form nobody
+			// filled in.
 			r#"{"service":"quy-nhon","units":"1","idempotency_key":"k"}"#,
-			r#"{"service":"quy-nhon","company":false,"units":"1","idempotency_key":"k"}"#,
-			r#"{"service":"quy-nhon","user_id":"investor-7","company":true,"units":"1","idempotency_key":"k"}"#,
+			r#"{"service":"quy-nhon","company":true,"units":"1","idempotency_key":"k"}"#,
+			r#"{"service":"quy-nhon","user_id":"","units":"1","idempotency_key":"k"}"#,
 		] {
 			let (status, response) = send(&app, signed("POST", "/api/admin/allocations/retire", Some(body), true)).await;
 			assert_eq!(status, StatusCode::BAD_REQUEST, "must be refused before the hub is called: {body}");

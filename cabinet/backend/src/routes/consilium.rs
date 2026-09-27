@@ -1,12 +1,13 @@
 //! The signed-in governance surface: `/api/consilium/**` (money) and `/api/owners/**`
 //! (ownership).
 //!
-//! Two planes, two tokens, and the split is the point. Paying the fund's own revenue out
-//! is authorized in the MONEY plane, against the owner roster it already mirrors, because
-//! `docs/ARCHITECTURE.md` refuses to let a concierge-signed artifact move money — and a
-//! consilium verdict is exactly such an artifact. Moving a seat — granting one or taking
-//! one away — is authorized in the OWNERSHIP plane, because `Role::Owner` is a
-//! concierge-owned fact and the bridge between the planes is one-way. So the money
+//! Two planes, two tokens, and the split is the point. Moving or sharing the platform's
+//! own money — a payment out of an allocation's claim, a holder seated in `fee` or `fund`,
+//! a seed of `fund` — is authorized in the MONEY plane, against the owner roster it already
+//! mirrors, because `docs/ARCHITECTURE.md` refuses to let a concierge-signed artifact move
+//! money — and a consilium verdict is exactly such an artifact. Moving a seat — granting
+//! one or taking one away — is authorized in the OWNERSHIP plane, because `Role::Owner`
+//! is a concierge-owned fact and the bridge between the planes is one-way. So the money
 //! handlers forward the banking token and never the concierge one; the ownership handlers
 //! forward the concierge token and never the banking one. Neither plane trusts the other's
 //! verdict.
@@ -42,7 +43,7 @@ pub struct ProposalQuery {
 	kind: Option<String>,
 }
 
-// ── money plane: the revenue-payout consilium ────────────────────────────────
+// ── money plane: the owners' consilium ───────────────────────────────────────
 
 /// `GET /api/consilium` — the governance history, newest first. An absent `limit` falls
 /// through to the plane's default page.
@@ -59,27 +60,23 @@ pub async fn get(State(st): State<AppState>, jar: CookieJar, Path(id): Path<Stri
 	Ok(Json(consilium.into()))
 }
 
-/// `POST /api/consilium/revenue-payout` — CSRF-checked: open an invoice to pay fund
-/// revenue out. The plane refuses a second open consilium and a roster too small to reach
-/// quorum; the terms are immutable once open, so a correction means cancel and reopen.
-pub async fn open_revenue_payout(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Consilium>, ApiError> {
+/// `POST /api/consilium/holder-grant` — CSRF-checked: put a new holder of a reserved
+/// allocation to the owners (#245). Body `{allocation, user_id, units}`: `allocation` is
+/// `fee` or `fund`, `user_id` the id the console carries (resolved hub-side like every
+/// admin target), `units` a positive decimal. The plane refuses a roster too small to
+/// reach quorum, a person who is not an active user, and a proposer who holds no owner
+/// seat; the terms are immutable once open, so a correction means cancel and reopen.
+pub async fn open_holder_grant(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Consilium>, ApiError> {
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
-	let token = require_money_token(&st, &jar).await?;
 	let v = parse_body(&body);
-	let (Some(network), Some(address), Some(amount)) = (required(&v, "network"), required(&v, "address"), required(&v, "amount")) else {
-		return Err(ApiError::BadRequest("network, address and amount are required".into()));
+	let (Some(allocation), Some(user_id), Some(units)) = (required(&v, "allocation"), required(&v, "user_id"), required(&v, "units")) else {
+		return Err(ApiError::BadRequest("allocation, user_id and units are required".into()));
 	};
-	// The memo is shown to every owner in their approval mail and is never interpreted,
-	// so an absent one is an empty note rather than a rejected request.
-	let terms = bk::RevenuePayoutTerms {
-		network,
-		address,
-		amount,
-		memo: v.get("memo").and_then(|m| m.as_str()).unwrap_or_default().to_string(),
-	};
-	Ok(Json(st.grpc.open_revenue_payout(&token, terms).await?.into()))
+	let token = require_money_token(&st, &jar).await?;
+	let terms = bk::HolderGrantTerms { allocation, user_id, units };
+	Ok(Json(st.grpc.open_holder_grant(&token, terms).await?.into()))
 }
 
 /// `POST /api/consilium/{id}/cancel` — CSRF-checked: the initiator withdraws their own
@@ -413,7 +410,7 @@ mod route_tests {
 	#[tokio::test]
 	async fn every_signed_in_mutation_is_csrf_gated() {
 		let mutations = [
-			("/api/consilium/revenue-payout", r#"{"network":"TRC20","address":"T1","amount":"10"}"#),
+			("/api/consilium/holder-grant", r#"{"allocation":"fee","user_id":"u-1","units":"100"}"#),
 			("/api/consilium/c-1/cancel", "{}"),
 			("/api/owners/removals", r#"{"target_user_id":"u-2","reason":"inactive"}"#),
 			("/api/owners/removals/r-1/vote", r#"{"vote":"remove"}"#),
@@ -429,7 +426,7 @@ mod route_tests {
 			("/api/owners/resign", r#"{"confirm_email":"ada@example.com"}"#),
 			(
 				"/api/admin/payments",
-				r#"{"source":{"kind":"piggybank","id":""},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"10","reason":"rent"}"#,
+				r#"{"source":{"kind":"service","id":"fee"},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"10","reason":"rent"}"#,
 			),
 			("/api/admin/payments/p-1/cancel", "{}"),
 		];

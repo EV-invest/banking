@@ -9,6 +9,9 @@
 
 import type { Translate } from "@evinvest/i18n";
 
+import type { UnitHolderRef } from "@/shared/contracts/admin";
+import { reservedAllocationLabel } from "@/shared/lib/reserved-allocation";
+
 /** `formatAmount` is a decimal amount → grouped display with no currency symbol; the
  *  admin tables spell the unit out in the header instead. */
 export { compactUnits, formatAmount as amount, formatNav, formatUnits, formatUsd, formatUsdt, fractionOfCap, toBaseUnits } from "@/shared/lib/money";
@@ -176,6 +179,13 @@ const RAIL_LABEL_KEYS: Record<string, string> = {
 export function railLabel(network: string, t: Translate): string {
   const key = RAIL_LABEL_KEYS[network];
   return key ? t(key) : network;
+}
+
+/** A holder of units as a reader sees it: a person by the id the plane stored (the cap
+ *  table carries no email — the directory does), or the allocation holding a product's
+ *  fee class by its name (`shared/lib/reserved-allocation.ts`). */
+export function holderLabel(holder: UnitHolderRef, t: Translate): string {
+  return holder.kind === "allocation" ? reservedAllocationLabel(holder.id, t) : holder.id;
 }
 
 /** Tailwind token classes for a lifecycle/health status pill. */

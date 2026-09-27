@@ -26,7 +26,7 @@ import {
   fetchRemovals,
   fetchUserProposals,
   openAdminAdmission as openAdminAdmissionRequest,
-  openRevenuePayout as openRevenuePayoutRequest,
+  openHolderGrant as openHolderGrantRequest,
   openUserReinstatement as openUserReinstatementRequest,
   openUserSuspension as openUserSuspensionRequest,
   proposeAdmission as proposeAdmissionRequest,
@@ -36,7 +36,7 @@ import {
   voteOnRemoval as voteOnRemovalRequest,
   voteOnUserProposal as voteOnUserProposalRequest,
 } from "@/entities/governance/api/governance-client";
-import type { AdmissionVote, Consilium, OwnerAdmission, OwnerRemoval, ProposalVote, RemovalVote, UserProposal } from "@/shared/contracts/governance";
+import type { AdmissionVote, Consilium, HolderGrantTerms, OwnerAdmission, OwnerRemoval, ProposalVote, RemovalVote, UserProposal } from "@/shared/contracts/governance";
 import { TAG } from "@/shared/lib/cache-tags";
 import { defineResource, revalidateTag } from "@/shared/lib/resource";
 
@@ -151,8 +151,10 @@ export async function resignOwnership(confirmEmail: string): Promise<void> {
   revalidateTag(...GOVERNANCE_TAGS);
 }
 
-export async function openRevenuePayout(body: { network: string; address: string; amount: string; memo?: string }): Promise<Consilium> {
-  const consilium = await openRevenuePayoutRequest(body);
+/** Ask the owners to seat a person on `fee` / `fund`. Nothing is minted until it carries,
+ *  so only the room moves now; the cap table follows when the relay posts the grant. */
+export async function openHolderGrant(body: HolderGrantTerms): Promise<Consilium> {
+  const consilium = await openHolderGrantRequest(body);
   revalidateTag(TAG.consilium);
   return consilium;
 }

@@ -16,7 +16,7 @@
 //! generated stubs rather than a hand-written guess.
 //!
 //! The feature survives as a build-off switch, not as a silent one. A build without it wires
-//! no mailer, and `OpenRevenuePayout` then **refuses** rather than opening a consilium nobody
+//! no mailer, and every `Open*` consilium RPC then **refuses** rather than opening a consilium nobody
 //! can be emailed about — a request that could never reach quorum is worse than an honest
 //! refusal. Every mail is still written in the same transaction as the consilium fact it
 //! announces, so a mailer outage queues rather than loses.

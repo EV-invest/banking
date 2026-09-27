@@ -7,7 +7,7 @@ import { Button, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, S
 
 import type { AllocationAccessGrant } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
-import { accessLabel, accessTone } from "@/views/admin/allocations/lib/access";
+import { accessLabel, accessTone } from "@/views/admin/lib/access";
 import { ago } from "@/views/admin/lib/format";
 import { TABLE_HEAD } from "@/views/admin/lib/table";
 

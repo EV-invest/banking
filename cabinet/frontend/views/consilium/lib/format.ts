@@ -92,17 +92,23 @@ export function stateLabel(state: string | undefined, t: Translate): string {
   return KNOWN_STATES.has(key) ? t(`consilium.state.${key}`) : (state ?? "—");
 }
 
-// ── the four kinds of consilium ──────────────────────────────────────────────
+// ── the kinds of consilium ────────────────────────────────────────────────────
 // Told apart by which sibling is set — a kind is never expressed by widening another
 // one's field (`shared/contracts/governance.ts`). The order matches the views' own
-// branches, so a row that somehow carries two is read the same way everywhere.
+// branches, so a row that somehow carries two is read the same way everywhere. A revenue
+// payout is history only since #245 — nothing opens one — but the ones that were open
+// still read, so it stays the fallback rather than an error.
 
-export type ConsiliumKind = "valuation_override" | "payment" | "fee_policy" | "revenue_payout";
+export type ConsiliumKind = "valuation_override" | "payment" | "fee_policy" | "holder_grant" | "seed_capital" | "revenue_payout";
 
-export function consiliumKind(consilium: Pick<Consilium, "valuation_override" | "payment" | "fee_policy">): ConsiliumKind {
+type Kinded = Pick<Consilium, "valuation_override" | "payment" | "fee_policy" | "holder_grant" | "seed_capital">;
+
+export function consiliumKind(consilium: Kinded): ConsiliumKind {
   if (consilium.valuation_override) return "valuation_override";
   if (consilium.payment) return "payment";
   if (consilium.fee_policy) return "fee_policy";
+  if (consilium.holder_grant) return "holder_grant";
+  if (consilium.seed_capital) return "seed_capital";
   return "revenue_payout";
 }
 
@@ -111,9 +117,15 @@ export function consiliumKindLabel(kind: ConsiliumKind, t: Translate): string {
 }
 
 /** A state pill that knows what was decided: `executed` on a fee-policy consilium means
- *  the change was SCHEDULED, not that anything was paid out. */
-export function consiliumStateLabel(consilium: Pick<Consilium, "state" | "valuation_override" | "payment" | "fee_policy">, t: Translate): string {
-  if (consiliumKind(consilium) === "fee_policy" && normalise(consilium.state) === "executed") return t("consilium.feePolicy.carried");
+ *  the change was SCHEDULED, on a holder grant that the units were MINTED, on a seed that
+ *  the deposit and subscription were BOOKED — not that anything was paid out. */
+export function consiliumStateLabel(consilium: Kinded & Pick<Consilium, "state">, t: Translate): string {
+  if (normalise(consilium.state) === "executed") {
+    const kind = consiliumKind(consilium);
+    if (kind === "fee_policy") return t("consilium.feePolicy.carried");
+    if (kind === "holder_grant") return t("consilium.holderGrant.carried");
+    if (kind === "seed_capital") return t("consilium.seedCapital.carried");
+  }
   return stateLabel(consilium.state, t);
 }
 

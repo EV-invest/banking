@@ -13,7 +13,7 @@ import type { OpenPaymentRequest, Party, PartyKind, PaymentRequirement, PaymentT
 // Relative on purpose, for the same reason as above — and `money.ts` imports nothing.
 import { USDT_DECIMALS } from "../../../../shared/lib/money.ts";
 
-export const PARTY_KINDS: readonly PartyKind[] = ["piggybank", "revenue", "service", "user"];
+export const PARTY_KINDS: readonly PartyKind[] = ["service", "user"];
 
 /** What the destination picker offers: every internal party, plus an address. */
 export type EndKind = PartyKind | "external";
@@ -26,7 +26,7 @@ export const END_KINDS: readonly EndKind[] = [...PARTY_KINDS, "external"];
  */
 export interface EndDraft {
   kind: EndKind;
-  /** The product slug or the concierge user id; ignored for the singletons and addresses. */
+  /** The product slug or the concierge user id; ignored for an address. */
   id: string;
   /** What the picker showed for `id` — a product's title, a user's email. Display only. */
   name: string;
@@ -34,7 +34,7 @@ export interface EndDraft {
   address: string;
 }
 
-export const EMPTY_END: EndDraft = { kind: "piggybank", id: "", name: "", network: "", address: "" };
+export const EMPTY_END: EndDraft = { kind: "service", id: "", name: "", network: "", address: "" };
 
 /** The reason is inside the hashed payload and bounded by the plane (payments.proto). */
 export const REASON_MAX_BYTES = 500;
@@ -45,9 +45,9 @@ export function reasonBytes(reason: string): number {
   return BYTES.encode(reason).length;
 }
 
-/** The two internal kinds that name one of many, and so need an id picked. */
+/** The internal kinds name one of many, and so need an id picked; only an address does not. */
 export function needsId(kind: EndKind): boolean {
-  return kind === "service" || kind === "user";
+  return kind !== "external";
 }
 
 export function previewTier(destination: EndDraft): PaymentTier {
@@ -87,14 +87,15 @@ function sameParty(a: EndDraft, b: EndDraft): boolean {
  *
  * Mirrors the plane's own refusals so the operator hears about them before spending a
  * round trip, in the order they would notice them. The plane still decides: an external
- * destination from the two pooled claims is refused there too (`WithdrawalSource` has no
- * such rail), and this only says so a click earlier.
+ * destination from an allocation's pooled claim — a product's or the reserved `fee` /
+ * `fund` — is refused there too (`WithdrawalSource` has no such rail), and this only
+ * says so a click earlier.
  */
 export function draftProblem(source: EndDraft, destination: EndDraft, amount: string, reason: string): string | null {
   if (!complete(source)) return "admin.payments.err.pickSource";
   if (!complete(destination)) return "admin.payments.err.pickDestination";
   if (sameParty(source, destination)) return "admin.payments.err.sameEnds";
-  if (destination.kind === "external" && (source.kind === "piggybank" || source.kind === "service")) return "admin.payments.err.noRailFromPooled";
+  if (destination.kind === "external" && source.kind === "service") return "admin.payments.err.noRailFromPooled";
   if (!validAmount(amount.trim())) return "admin.payments.err.enterAmount";
   if (!reason.trim()) return "admin.payments.err.enterReason";
   if (reasonBytes(reason.trim()) > REASON_MAX_BYTES) return "admin.payments.err.reasonTooLong";
@@ -102,9 +103,9 @@ export function draftProblem(source: EndDraft, destination: EndDraft, amount: st
 }
 
 function toParty(end: EndDraft): Party {
-  // The singletons carry no id on the wire; sending a stale one from a previous pick
-  // would name a product on a claim that has none.
-  return { kind: end.kind === "external" ? "piggybank" : end.kind, id: needsId(end.kind) ? end.id.trim() : "" };
+  // Only called for an internal end — `toRequest` routes an address to `external` — so
+  // the fallback is unreachable and exists to keep the kind narrow for the compiler.
+  return { kind: end.kind === "external" ? "service" : end.kind, id: end.id.trim() };
 }
 
 /** The wire request for a draft `draftProblem` has passed. Trimmed once, here. */

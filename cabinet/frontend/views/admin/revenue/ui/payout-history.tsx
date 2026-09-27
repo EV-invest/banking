@@ -1,9 +1,8 @@
 "use client";
 
-// Every payout the fund made of its own earnings. Unchanged from the days the proposal
-// form sat above it: a consilium that carries executes as an ordinary withdrawal, and
-// that is where it appears — whether it was opened as a revenue payout or as an external
-// payment order from the revenue claim.
+// Every payout the fund made of its own earnings — HISTORY since #245: nothing opens a
+// revenue payout any more, and the rows here are the ones queued before the kind retired.
+// A still-queued one can be cancelled; the rest are the record.
 
 import { Banknote } from "lucide-react";
 

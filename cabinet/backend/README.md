@@ -41,18 +41,23 @@ in production.
 
 ## The governance surface
 
-Two things must never be one person's decision — paying the fund's own revenue out, and
-taking an owner's seat away. Both are gated by a **consilium**; `docs/CONSILIUM.md` is the
-policy and the threat model. A **payment** — an order between two named ends of the
-platform — is gated the same way: the plane seats the one approval the order needs on
-open (the owners' consilium for a fund-owned source, the investor's own consent for a
-user-owned one), so the payments console has no approve or execute verb; the answer comes
-from a mailbox through `/api/approval/**`.
+Nothing about the platform's own money is one person's decision — a payment out of an
+allocation's pooled claim, a new holder of the `fee` or `fund` allocation, a seed of the
+platform's capital — and neither is taking an owner's seat away. All are gated by a
+**consilium**; `docs/CONSILIUM.md` is the policy and the threat model. A **payment** — an
+order between two named ends of the platform — is gated the same way: the plane seats the
+one approval the order needs on open (the owners' consilium for a source that is an
+allocation's claim, the investor's own consent for a user-owned one), so the payments
+console has no approve or execute verb; the answer comes from a mailbox through
+`/api/approval/**`. The platform holds no money outside an allocation (#245): what it
+earns is the `fee` allocation's, held by people through units, and `GET /api/admin/revenue`
+is that allocation in the treasury's shape; the old revenue payout is history only.
 
 | Route | Plane | Token |
 | ----- | ----- | ----- |
 | `GET /api/consilium`, `GET /api/consilium/{id}` | money | banking |
-| `POST /api/consilium/revenue-payout`, `POST /api/consilium/{id}/cancel` | money | banking |
+| `POST /api/consilium/holder-grant` (`{ allocation, user_id, units }`), `POST /api/consilium/{id}/cancel` | money | banking |
+| `POST /api/admin/treasury/seed-capital` (`{ tx_ref, network, expected_amount, depositor_user_id? }` → `{ recorded: false, amount, consilium_id }`) | money | banking (Admin\|Owner) |
 | `GET /api/owners`, `POST /api/owners/resign` | ownership | concierge |
 | `GET`/`POST /api/owners/removals`, `POST /api/owners/removals/{id}/vote`, `…/cancel` | ownership | concierge |
 | `GET`/`POST /api/owners/admissions`, `POST /api/owners/admissions/{id}/vote`, `…/cancel` | ownership | concierge |
@@ -137,29 +142,32 @@ bound is the plane's five-attempt token burn.
 
 An operator's supply surface for one product, over `AllocationsService`. Units cross as
 decimal strings; every `POST` needs the admin session plus CSRF and forwards the banking
-money token. `UnitIssuance` is one shape for the three writes — `source` says whether
-the row grew the supply (`mint`), moved units out of the company's stake (`company`,
-supply unchanged) or burnt them (`retire`, supply shrank); `units` is always the
-magnitude. `state` is `queued` until the hub's relay posts the leg, then `applied`.
+money token. `UnitIssuance` is one shape for both writes — `source` says whether the row
+grew the supply (`mint`) or burnt units (`retire`, supply shrank); rows that predate #245
+may read `company` (moved out of the company's stake, supply unchanged); `units` is always
+the magnitude. A holder is a PERSON (`holder_kind: "user"`) or the reserved `fee`
+allocation holding a product's fee class (`holder_kind: "allocation"`, `holder_id` its
+slug — never resolve it as a user); the company is no holder any more. `state` is
+`queued` until the hub's relay posts the leg, then `applied`.
 
 | Route | Query / body | Answer | Gates |
 | ----- | ------------ | ------ | ----- |
-| `GET /api/admin/allocations/holders` | `service` | `UnitHolders` — `units_outstanding`, `company_units`, `fee_units`, `investor_units`, `queued_units` (mints not yet posted — do not pin the cap while non-zero) | admin |
-| `POST /api/admin/allocations/issue` | `{ service, units, idempotency_key, cost_basis?, user_id \| company: true }` | `UnitIssuance` (`source: "mint"`) | admin + CSRF |
-| `POST /api/admin/allocations/transfer-stake` | `{ service, user_id, units, idempotency_key, cost_basis? }` | `UnitIssuance` (`source: "company"`, `holder_kind: "user"`) | admin + CSRF |
-| `POST /api/admin/allocations/retire` | `{ service, units, idempotency_key, cost_basis?, force?, user_id \| company: true }` | `UnitIssuance` (`source: "retire"`, positive `units`) | admin + CSRF |
+| `GET /api/admin/allocations/holders` | `service` | `UnitHolders` — `units_outstanding`, `queued_units` (mints not yet posted — do not pin the cap while non-zero), `holders[]` (`{ holder: { kind, id }, units }`, largest first) | admin |
+| `POST /api/admin/allocations/issue` | `{ service, user_id, units, idempotency_key, cost_basis? }` | `UnitIssuance` (`source: "mint"`) | admin + CSRF |
+| `POST /api/admin/allocations/retire` | `{ service, user_id, units, idempotency_key, cost_basis?, force? }` | `UnitIssuance` (`source: "retire"`, positive `units`) | admin + CSRF |
 | `POST /api/admin/allocations/backing` | `{ service, backing }` — `cash \| in_kind` | `Allocation` | admin + CSRF |
 
 `idempotency_key` (1..64 chars) is the retry contract, one key space per product across
-the three writes: the console generates one per form submission and re-sends the same
-one on a timeout, so a double click lands one row. A repeat of the same request answers
-the row as it stands (`200`); the same key for a different request — a mint and then a
-hand-over included — is `409`. `cost_basis` absent or empty defaults hub-side to
-`units × NAV` at the dealing mark. A hand-over of more than the company holds, a mint
-past the unit cap, or a retirement of more than the holder has AVAILABLE (units resting
-on the book or reserved by a redemption do not count) is `400`; an unknown `service` or
-`user_id` is `404`. A retirement out of a product that is not `closed` is `412` unless
-the body carries `force: true`.
+the two writes: the console generates one per form submission and re-sends the same one
+on a timeout, so a double click lands one row. A repeat of the same request answers the
+row as it stands (`200`); the same key for a different request — a mint and then a
+retirement included — is `409`. `cost_basis` absent or empty defaults hub-side to
+`units × NAV` at the dealing mark. A mint past the unit cap, or a retirement of more than
+the holder has AVAILABLE (units resting on the book or reserved by a redemption do not
+count) is `400`; an unknown `service` or `user_id` is `404`. A retirement out of a product
+that is not `closed` is `412` unless the body carries `force: true`. Units of the reserved
+`fee` / `fund` allocations are never minted here: a person is seated in them by the
+owners' consilium (`POST /api/consilium/holder-grant`).
 
 `Allocation.backing` (`cash` | `in_kind`) says what stands behind the units. The hub
 flips a product to `in_kind` on its first mint; `/allocations/backing` is how an operator

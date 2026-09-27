@@ -8,6 +8,7 @@ import type {
   AdmissionVote,
   Consilium,
   ConsiliumList,
+  HolderGrantTerms,
   OwnerAdmission,
   OwnerAdmissionList,
   OwnerList,
@@ -81,8 +82,14 @@ export function resignOwnership(confirmEmail: string): Promise<void> {
   return postJson<void>("/api/owners/resign", { confirm_email: confirmEmail });
 }
 
-export function openRevenuePayout(body: { network: string; address: string; amount: string; memo?: string }): Promise<Consilium> {
-  return postJson<Consilium>("/api/consilium/revenue-payout", body);
+/**
+ * Ask the owners to seat a person on a reserved allocation (#245): `units` of `fee` or
+ * `fund` minted to `user_id` once the quorum carries. The only route in — an operator's
+ * mint refuses the reserved allocations, and `/api/consilium/revenue-payout` this client
+ * used to post to is closed at the plane.
+ */
+export function openHolderGrant(body: HolderGrantTerms): Promise<Consilium> {
+  return postJson<Consilium>("/api/consilium/holder-grant", body);
 }
 
 export function cancelConsilium(consiliumId: string): Promise<Consilium> {

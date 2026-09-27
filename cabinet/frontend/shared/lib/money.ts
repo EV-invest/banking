@@ -198,6 +198,20 @@ export function formatWhole(value: number, locale: Locale = DEFAULT_MONEY_LOCALE
   return numberFormat(locale, "whole", { maximumFractionDigits: 0 }).format(value);
 }
 
+// A decimal amount as the wire carries it. No sign, no exponent, no grouping, no bare
+// point — the hub parses this with the same strictness, so admitting less here only moves
+// the refusal. Stricter than `toBaseUnits`, which tolerates `.5` for display math.
+const WIRE_DECIMAL = /^\d+(\.\d+)?$/;
+
+export function isWireDecimal(raw: string): boolean {
+  return WIRE_DECIMAL.test(raw.trim());
+}
+
+/** A wire decimal with at least one non-zero digit — what an amount field must hold. */
+export function isPositiveWireDecimal(raw: string): boolean {
+  return isWireDecimal(raw) && /[1-9]/.test(raw);
+}
+
 // Whether a signed decimal P&L string is negative (a loss) — exact, no float.
 export function isNegative(value: string | undefined): boolean {
   return (value ?? "").trim().startsWith("-");

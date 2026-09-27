@@ -2,11 +2,11 @@
 
 // Where the money on this screen is moved from, and where it is held.
 //
-// This screen used to carry the payout form. It is statistics now: paying the fund's
-// earnings out is one case of a payment order, and the form that opens one lives on the
-// Payments screen with every other case. The treasury is where the same claim appears
-// among the fund's other balances. Two cards rather than two buttons, because each is a
-// destination with a sentence's worth of reason, not an action.
+// Paying the platform's earnings out is one case of a payment order (from `service:fee`),
+// and the form that opens one lives on the Payments screen with every other case. The
+// treasury is where the same allocation appears beside the products and `fund`. Two
+// cards rather than two buttons, because each is a destination with a sentence's worth
+// of reason, not an action.
 
 import { ArrowLeftRight, ChevronRight, Landmark } from "lucide-react";
 import type { ReactNode } from "react";

@@ -153,14 +153,65 @@ export interface RailLiquidity {
   is_testnet: boolean;
 }
 
+/** An allocation's cash claim off one ledger balance: `posted` is settled, `reserved` is
+ *  spoken for by approved payments out of it, `available` is the difference. */
+export interface AllocationClaim {
+  posted: string;
+  available: string;
+  reserved: string;
+}
+
+/** One allocation as the treasury shows it (#245): name, cash, supply, price and who holds
+ *  it — the same shape for a product and for the reserved `fee` / `fund` allocations
+ *  (`access: "hidden"`), which is also what the Revenue screen reads for `fee`.
+ *
+ *  Hand-written rather than the generated `BankingV1AllocationTreasury`: the BFF reshapes
+ *  the proto's `nav_posted_at_unix` into the string `nav_posted_at` every other stamp here
+ *  uses, and fills a missing `claim` with zeros, so this is the shape that actually
+ *  arrives. `nav_posted_at` is `"0"` while nothing under it has been marked. */
+export interface AllocationTreasury {
+  service: string;
+  title: string;
+  access: AllocationAccessLevel;
+  claim: AllocationClaim;
+  units_outstanding: string;
+  nav: string;
+  nav_posted_at: string;
+  holders: UnitHolding[];
+}
+
+/** The two-layer treasury picture: per-rail custody, and who the claims on it belong to —
+ *  people directly (`held_by_users`) or through the units of an allocation
+ *  (`allocations`, the hidden `fee` and `fund` included). No remainder is derived: each
+ *  figure is read off its own accounts, and Σ = `total_custody` is checked hub-side. */
 export interface Treasury {
   rails: RailLiquidity[];
   bank: string;
   total_custody: string;
-  fund_capital: string;
-  fee_revenue: string;
-  held_for_clients: string;
   reserved_for_withdrawals: string;
+  held_by_users: string;
+  allocations: AllocationTreasury[];
+}
+
+/** The seed-capital body, exactly as the BFF reads it (`POST /api/admin/treasury/
+ *  seed-capital`). A seed is a proposal, not a booking: the chain transfer `tx_ref` on
+ *  `network` is put to the owners as `expected_amount` USDT of `depositor_user_id`'s
+ *  (the caller when omitted), and carries as their deposit plus a `fund` subscription. */
+export interface SeedCapitalBody {
+  tx_ref: string;
+  network: string;
+  /** Decimal USDT — the figure the owners approve; the chain must report exactly it. */
+  expected_amount: string;
+  /** The id the console carries; omitted = the caller. */
+  depositor_user_id?: string;
+}
+
+/** What a seed proposal answers: `recorded` is always false (the booking is the
+ *  consilium's execution), `consilium_id` is where the proposal now lives. */
+export interface SeedCapitalProposal {
+  recorded: boolean;
+  amount: string;
+  consilium_id: string;
 }
 
 // ── allocations (the registry of investable products) ───────────────────────────
@@ -431,28 +482,44 @@ export interface AllocationAccessGrantList {
 
 // ── in-kind issuance (units with no cash leg) ───────────────────────────────────
 
-/** Who an in-kind mint lands on: one investor, or the fund's own stake. */
-export type UnitHolderKind = "user" | "company";
+/** Who holds units: a person (`user`, `id` is the banking user id) or the reserved `fee`
+ *  allocation (`allocation`, `id` is its slug — never a user to look up). The company is
+ *  not a holder (#245). */
+export type UnitHolderKind = "user" | "allocation";
+
+/** One holder of an allocation's units, as the cap table and the treasury name them. */
+export interface UnitHolderRef {
+  kind: UnitHolderKind;
+  id: string;
+}
+
+/** One line of a cap table: who, and how many units (decimal). A zero holding is not
+ *  listed, and a line never lacks a holder — the BFF drops one rather than render it. */
+export interface UnitHolding {
+  holder: UnitHolderRef;
+  units: string;
+}
 
 /** `queued` until the relay posts the mint, then `applied`. A `queued` row is real — the
  *  hub has accepted it — but the units are not on the ledger yet, so a holders read
  *  taken straight after the POST still shows the supply as it was. */
 export type UnitIssuanceState = "queued" | "applied";
 
-/** Where the units came from: `mint` (`/allocations/issue` — the supply grew by `units`),
- *  `company` (`/allocations/transfer-stake` — moved out of the company's stake, the
- *  supply unchanged) or `retire` (`/allocations/retire` — burned out of a holder, the
- *  supply SHRANK by `units`). Always populated; a row that predates the field reads as
- *  `mint`. */
-export type UnitIssuanceSource = "mint" | "company" | "retire";
+/** Where the units came from — or went: `mint` (`/allocations/issue` or an executed
+ *  holder grant — the supply grew by `units`) or `retire` (`/allocations/retire` — burned
+ *  out of a holder, the supply SHRANK by `units`). `company` is history only: the retired
+ *  stake hand-over (pre-#245), which nothing writes any more. Always populated; a row that
+ *  predates the field reads as `mint`. */
+export type UnitIssuanceSource = "mint" | "retire" | "company";
 
-/** One in-kind issuance — a mint or a hand-over of the company's stake — as the hub
- *  recorded it. */
+/** One in-kind issuance — a mint or a retirement — as the hub recorded it. */
 export interface UnitIssuance {
   id: string;
   service: string;
-  holder_kind: UnitHolderKind;
-  /** The banking user id for a `user` holder; empty for `company`. */
+  /** `company` only on rows written before #245; nothing writes it any more. */
+  holder_kind: UnitHolderKind | "company";
+  /** The banking user id for `user`; the holding allocation's slug for `allocation`;
+   *  empty on a historical `company` row. */
   holder_id: string;
   units: string;
   /** Decimal USDT per unit the mint was recorded at. */
@@ -466,33 +533,17 @@ export interface UnitIssuance {
   source: UnitIssuanceSource;
 }
 
-/** The hand-over body, exactly as the BFF reads it (`POST /api/admin/allocations/
- *  transfer-stake`). Always a user — the company handing units to itself is not a
- *  request. `cost_basis` present only when the operator typed one: absent means
- *  `units × NAV` hub-side, and an empty string is NOT the same as absent.
- *  `views/admin/allocations/lib/transfer-stake.ts` is the one place that builds it. */
-export interface TransferStakeBody {
-  service: string;
-  /** The recipient — the id the console carries. */
-  user_id: string;
-  /** Decimal units, > 0, at most what the company holds. */
-  units: string;
-  /** Decimal USDT the recipient is deemed to have paid; omitted = `units × NAV`. */
-  cost_basis?: string;
-  /** 1..64 chars, in the same per-product key space as `/allocations/issue`. The same
-   *  retry contract: one key per submission, the same key on a retry of it. */
-  idempotency_key: string;
-}
-
 /** The retirement body, exactly as the BFF reads it (`POST /api/admin/allocations/
- *  retire`). The mirror of a mint: units are burned out of ONE holder — an investor or
- *  the company — and the supply shrinks by them; no cash moves either way. `cost_basis`
- *  follows the mint's rule (absent = `units × NAV`, an empty string is malformed).
- *  `force` is the operator's explicit override to burn out of a live (draft or open)
- *  product — omitted, not `false`, when the product is closed and needs none.
- *  `views/admin/allocations/lib/retire.ts` is the one place that builds it. */
-export type RetireUnitsBody = {
+ *  retire`). The mirror of a mint: units are burned out of ONE person — the reserved
+ *  allocations are never burned from here — and the supply shrinks by them; no cash moves
+ *  either way. `cost_basis` follows the mint's rule (absent = `units × NAV`, an empty
+ *  string is malformed). `force` is the operator's explicit override to burn out of a
+ *  live (draft or open) product — omitted, not `false`, when the product is closed and
+ *  needs none. `views/admin/allocations/lib/retire.ts` is the one place that builds it. */
+export interface RetireUnitsBody {
   service: string;
+  /** Whose units are burnt — the id the console carries. */
+  user_id: string;
   /** Decimal units, > 0, at most what the holder has available. */
   units: string;
   /** Decimal USDT of book value written off; omitted = `units × NAV`. */
@@ -500,21 +551,20 @@ export type RetireUnitsBody = {
   /** 1..64 chars, in the same per-product key space as `/allocations/issue`. */
   idempotency_key: string;
   force?: true;
-} & ({ user_id: string; company?: never } | { company: true; user_id?: never });
+}
 
-/** A product's settled supply by holder class, all decimal units. `investor_units` is
- *  `units_outstanding − company_units − fee_units`; the supply invariant makes the
- *  difference exact. */
+/** A product's cap table (#245): the settled supply and every holder of it, largest first
+ *  — people and the `fee` allocation alike, each a line. Σ `holders[].units` =
+ *  `units_outstanding` is the supply invariant the hub checks; it is read here, never
+ *  derived. All units decimal. */
 export interface UnitHolders {
   service: string;
   units_outstanding: string;
-  company_units: string;
-  fee_units: string;
-  investor_units: string;
   /** In-kind mints the relay has accepted but not yet posted — not part of
-   *  `units_outstanding` until they land. Optional: objects cached before the BFF
-   *  started sending it carry no field, and readers fold that to "0". */
-  queued_units?: string;
+   *  `units_outstanding` until they land, so a cap pinned to the settled figure alone
+   *  would leave them to land above it. */
+  queued_units: string;
+  holders: UnitHolding[];
 }
 
 // ── valuation + redemptions ─────────────────────────────────────────────────────
@@ -530,12 +580,6 @@ export interface FundNav {
   /** Units still issuable. Already nets off in-flight mints, so offering this figure can
    *  never offer more than the hub will accept. */
   remaining_capacity: string;
-  /** Of `units_outstanding`, the company's own in-kind stake — issued through
-   *  `/allocations/issue`, never bought through Subscribe. Optional on READ for the same
-   *  reason `Allocation.icon` is: `fundNavResource` persists to sessionStorage, and a
-   *  returning user's first frame may rehydrate a mark serialised before this field
-   *  existed. */
-  company_units?: string;
 }
 
 export interface RedemptionQueueItem {
@@ -580,30 +624,15 @@ export interface WithdrawalQueue {
   items: WithdrawalQueueItem[];
 }
 
-// ── revenue (the fund's own earned money) ──────────────────────────────────────
+// ── revenue (the reserved `fee` allocation) ─────────────────────────────────────
+//
+// `GET /api/admin/revenue` answers an `AllocationTreasury` — the `fee` allocation in the
+// treasury's own shape (#245): its cash claim, supply, price and the people who hold it.
+// Nothing pays it out from that surface any more: a holder redeems, or the owners approve
+// a payment out of `service:fee` on the Payments screen.
 
-/** Per-rail payout options. `payable` is the whole available revenue (a request beyond
- *  `instant` is accepted and queued until the treasury is topped up); `instant` ships now. */
-export interface RevenueRail {
-  network: string;
-  payable: string;
-  instant: string;
-  minimum: string;
-}
-
-/** What the fund EARNED and may pay itself — the `fee` claim, credited by the fee
- *  retained on a user withdrawal and by the settled 2-and-20. Client balances and the
- *  fund's seed capital are separate claims and are not in this figure.
- *  `earned = available + pending_payout`, all three off one ledger balance. */
-export interface FundRevenue {
-  earned: string;
-  available: string;
-  pending_payout: string;
-  rails: RevenueRail[];
-}
-
-/** A payout, shaped exactly like a user withdrawal — same saga, same states. `fee` is
- *  always `"0"`: the fee claim is where fees are retained, so a payout charges none. */
+/** A payout opened before the kind was retired — HISTORY ONLY. Shaped exactly like a
+ *  user withdrawal (same saga, same states); `fee` is always `"0"`. */
 export interface RevenuePayout {
   id: string;
   network: string;

@@ -12,8 +12,9 @@
 //! product, so it lives beside the cap rather than on the investor's dealing surface.
 //! [`RetireUnits`] is the mint's mirror, a holder's units burnt. They and
 //! [`ListUnitHolders`] are the only handlers here that read the ledger or notify the
-//! relay. `TransferCompanyStake` is retired with the company holder (#245) and answers
-//! `FAILED_PRECONDITION` until the proto drops it.
+//! relay. Both name a PERSON and nothing else: the company is not a holder (#245), and
+//! the reserved `fee` allocation comes to hold a product's fee class through the fee
+//! accrual, never through an operator's mint.
 //!
 //! [`IssueUnits`]: AllocationsService::issue_units
 //! [`RetireUnits`]: AllocationsService::retire_units
@@ -32,7 +33,7 @@ use domain::{
 	users::{ConciergeUserId, UserId},
 };
 use evbanking_contracts::{
-	allocation::{IssueUnitsHolder, RetireUnitsHolder, access as wire_access, backing as wire_backing, state as wire_state},
+	allocation::{access as wire_access, backing as wire_backing, state as wire_state},
 	banking::v1::{self as pb, allocations_service_server::AllocationsService},
 };
 use tonic::{Request, Response, Status};
@@ -42,7 +43,7 @@ use crate::{
 	application::{
 		allocations as allocations_app,
 		funds::{self as funds_app, FundPorts},
-		issuance::{self as issuance_app, IssueUnitsRequest, RetireUnitsRequest, UnitHoldersView},
+		issuance::{self as issuance_app, IssueUnitsRequest, RetireUnitsRequest, UnitHoldersView, UnitHolding},
 	},
 	ports::{
 		allocations::{AllocationAccessGrant, AllocationRecord},
@@ -72,49 +73,14 @@ impl AllocationsSvc {
 		Ok(Response::new(record_to_proto(&record)))
 	}
 
-	/// The holder a mint or a retirement names. The console names investors by their
-	/// concierge id; resolve the way every admin RPC does, so the units land on (or leave)
-	/// the money-plane row the holder redeems from. `NOT_FOUND` here is the existence
-	/// gate the use case repeats.
-	///
-	/// The `company` arm of the oneof is refused at the boundary: the company is retired
-	/// as a holder (#245), and until the proto drops the arm (C-7) a console still able to
-	/// send it must hear why — the domain would refuse it too, but as a validation error
-	/// about a holder rather than a precondition about a retired command.
-	async fn resolve_holder(&self, holder: Option<WireHolder>) -> Result<UnitHolder, Status> {
-		match holder {
-			Some(WireHolder::UserId(raw)) => Ok(UnitHolder::User(resolve_target_user(&self.state, &raw).await?)),
-			Some(WireHolder::Company(true)) => Err(Status::failed_precondition("retired: the company is no longer a unit holder — issue to a person (#245)")),
-			// `company: false` names nobody: a malformed request, never a mint to — or a
-			// burn of — nobody's units.
-			Some(WireHolder::Company(false)) | None => Err(Status::invalid_argument("holder is required: a user_id")),
-		}
-	}
-}
-
-/// The `holder` oneof, as both `IssueUnitsRequest` and `RetireUnitsRequest` spell it.
-/// prost generates one enum per message, so the two are distinct types with identical
-/// arms; folding them here keeps one resolver rather than two copies of its rules.
-enum WireHolder {
-	UserId(String),
-	Company(bool),
-}
-
-impl From<IssueUnitsHolder> for WireHolder {
-	fn from(holder: IssueUnitsHolder) -> Self {
-		match holder {
-			IssueUnitsHolder::UserId(raw) => Self::UserId(raw),
-			IssueUnitsHolder::Company(flag) => Self::Company(flag),
-		}
-	}
-}
-
-impl From<RetireUnitsHolder> for WireHolder {
-	fn from(holder: RetireUnitsHolder) -> Self {
-		match holder {
-			RetireUnitsHolder::UserId(raw) => Self::UserId(raw),
-			RetireUnitsHolder::Company(flag) => Self::Company(flag),
-		}
+	/// The holder a mint or a retirement names: always a person. The console names
+	/// investors by their concierge id; resolve the way every admin RPC does, so the
+	/// units land on (or leave) the money-plane row the holder redeems from. `NOT_FOUND`
+	/// here is the existence gate the use case repeats. An empty id names nobody — a
+	/// malformed request, never a mint to (or a burn of) nobody's units.
+	async fn resolve_holder(&self, user_id: &str) -> Result<UnitHolder, Status> {
+		let raw = optional(user_id).ok_or_else(|| Status::invalid_argument("user_id is required: units are issued to, and retired from, a person"))?;
+		Ok(UnitHolder::User(resolve_target_user(&self.state, raw).await?))
 	}
 }
 
@@ -267,7 +233,7 @@ impl AllocationsService for AllocationsSvc {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		let holder = self.resolve_holder(req.holder.map(WireHolder::from)).await?;
+		let holder = self.resolve_holder(&req.user_id).await?;
 		// Parsed at the boundary, so a malformed amount is an `invalid_argument` about the
 		// input rather than a validation error from inside the aggregate.
 		let units = Shares::parse_decimal(&req.units).map_err(map_err)?;
@@ -297,21 +263,11 @@ impl AllocationsService for AllocationsSvc {
 		Ok(Response::new(issuance_to_proto(&record)))
 	}
 
-	/// Retired with the company holder (#245): the company no longer holds a stake to
-	/// hand over. Still gated on the permission so an unauthenticated probe learns
-	/// nothing it would not have learnt before; the proto arm goes in C-7.
-	async fn transfer_company_stake(&self, request: Request<pb::TransferCompanyStakeRequest>) -> Result<Response<pb::UnitIssuance>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
-		Err(Status::failed_precondition(
-			"retired: the company no longer holds a stake to transfer — issue units to a person (#245)",
-		))
-	}
-
 	async fn retire_units(&self, request: Request<pb::RetireUnitsRequest>) -> Result<Response<pb::UnitIssuance>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		let holder = self.resolve_holder(req.holder.map(WireHolder::from)).await?;
+		let holder = self.resolve_holder(&req.user_id).await?;
 		let units = Shares::parse_decimal(&req.units).map_err(map_err)?;
 		let cost_basis = optional(&req.cost_basis).map(Usdt::parse_decimal).transpose().map_err(map_err)?;
 		let idempotency_key = IdempotencyKey::parse(&req.idempotency_key).map_err(map_err)?;
@@ -356,13 +312,7 @@ fn issuance_to_proto(record: &UnitIssuanceRecord) -> pb::UnitIssuance {
 		id: issuance.id().to_string(),
 		service: issuance.service().to_string(),
 		holder_kind: issuance.holder().kind_str().to_owned(),
-		// The holder's identity as `holder_kind` says to read it: a user's id, an
-		// allocation's slug, nothing for the retired company (see `contracts::allocation::holder`).
-		holder_id: match issuance.holder() {
-			UnitHolder::User(user) => user.to_string(),
-			UnitHolder::Allocation(service) => service.to_string(),
-			_ => String::new(),
-		},
+		holder_id: holder_id_string(issuance.holder()),
 		units: issuance.units().to_decimal_string(),
 		nav: issuance.nav().to_decimal_string(),
 		cost_basis: issuance.cost_basis().to_decimal_string(),
@@ -372,27 +322,40 @@ fn issuance_to_proto(record: &UnitIssuanceRecord) -> pb::UnitIssuance {
 	}
 }
 
-/// The cap table folded onto the wire's three-class summary until the contract step of
-/// #245 carries the holders themselves: people sum into `investor_units`, the `fee`
-/// allocation's line is `fee_units`, and the retired company stake — a line only until
-/// the data migration moves it — is `company_units`.
-// The retired holder is still a line of the table while its account holds anything.
-#[allow(deprecated)]
+/// The holder's identity as `holder_kind` says to read it: a user's id, an allocation's
+/// slug, nothing for the retired company (see `contracts::allocation::holder`).
+fn holder_id_string(holder: &UnitHolder) -> String {
+	match holder {
+		UnitHolder::User(user) => user.to_string(),
+		UnitHolder::Allocation(service) => service.to_string(),
+		_ => String::new(),
+	}
+}
+
+/// One line of a cap table on the wire. Shared with the treasury
+/// (`BalanceService::GetTreasury`, `GetFundRevenue`), which lists every allocation's
+/// holders in this same shape — one construction, so a holder is named the same way on
+/// every screen.
+pub(crate) fn holding_to_proto(line: &UnitHolding) -> pb::UnitHolding {
+	pb::UnitHolding {
+		holder: Some(pb::UnitHolderRef {
+			kind: line.holder.kind_str().to_owned(),
+			id: holder_id_string(&line.holder),
+		}),
+		units: line.units.to_decimal_string(),
+	}
+}
+
+/// The cap table as the ledger holds it (#245): every holder and their units, largest
+/// first, the way the use case orders them. Nothing is summed into classes here — a
+/// person and the `fee` allocation are both lines, and the supply invariant is the
+/// reconciliation's to check, not this view's to derive.
 fn holders_to_proto(view: &UnitHoldersView) -> pb::UnitHolders {
-	let sum = |pick: fn(&UnitHolder) -> bool| {
-		view.holders
-			.iter()
-			.filter(|line| pick(&line.holder))
-			.try_fold(Shares::ZERO, |acc, line| acc.checked_add(line.units))
-			.unwrap_or(Shares::ZERO)
-	};
 	pb::UnitHolders {
 		service: view.service.to_string(),
 		units_outstanding: view.units_outstanding.to_decimal_string(),
-		company_units: sum(|holder| matches!(holder, UnitHolder::Company)).to_decimal_string(),
-		fee_units: sum(|holder| matches!(holder, UnitHolder::Allocation(allocation) if *allocation == ServiceId::fee())).to_decimal_string(),
-		investor_units: sum(|holder| matches!(holder, UnitHolder::User(_))).to_decimal_string(),
 		queued_units: view.queued_units.to_decimal_string(),
+		holders: view.holders.iter().map(holding_to_proto).collect(),
 	}
 }
 

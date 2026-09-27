@@ -14,6 +14,7 @@ import type {
   AllocationGrantLevel,
   AllocationIcon,
   AllocationList,
+  AllocationTreasury,
   AdminUserList,
   AdminUserProfile,
   CancelFeePolicyChangeRequest,
@@ -26,7 +27,6 @@ import type {
   ScheduleFeePolicyRequest,
   CabinetConfig,
   FundNav,
-  FundRevenue,
   OperationsMode,
   ParkedEventList,
   PlatformConfig,
@@ -35,7 +35,8 @@ import type {
   RetireUnitsBody,
   RevenuePayout,
   RevenuePayoutList,
-  TransferStakeBody,
+  SeedCapitalBody,
+  SeedCapitalProposal,
   Treasury,
   UnitHolders,
   UnitIssuance,
@@ -119,6 +120,12 @@ export const recordTreasuryDeposit = (body: { tx_ref: string; network: string; e
 
 export type RecordedArrival = { recorded: boolean; amount: string; party_kind: string; party_id: string };
 
+/** Propose a seed of the platform's capital (#245): a transfer that reached a rail's
+ *  treasury address, proven against the chain, attributed to a person as their deposit
+ *  and subscription into `fund`. Books nothing — the answer is the consilium the owners'
+ *  room then shows; the plane refuses a proposer who holds no owner seat. */
+export const proposeSeedCapital = (body: SeedCapitalBody): Promise<SeedCapitalProposal> => postJson("/api/admin/treasury/seed-capital", body);
+
 // ── allocations (the registry — the only way a fund comes into existence) ────────
 // The admin listing includes drafts and closed products; the investor-facing
 // `/api/allocations` returns the open set only.
@@ -166,14 +173,15 @@ export const grantAllocationAccess = (service: string, userId: string, level: Al
 export const revokeAllocationAccess = (service: string, userId: string): Promise<Record<string, never>> =>
   postJson("/api/admin/allocations/grants/revoke", { service, user_id: userId });
 
-/** The in-kind issue body, exactly as the BFF reads it: one of `user_id` or `company`
- *  (both is a 400), `cost_basis` present only when the operator typed one (absent means
- *  `units × NAV` hub-side — an empty string is NOT the same as absent). The two holder
- *  shapes are a union rather than two optional fields so a body naming both cannot be
- *  typed at all; `issueUnitsBody` in `views/admin/allocations/lib/issuance.ts` is the
- *  one place that builds it from a form. */
-export type IssueUnitsBody = {
+/** The in-kind issue body, exactly as the BFF reads it: always a person (`user_id` — the
+ *  company is not a holder and the reserved allocations are seated by the owners'
+ *  consilium, #245), `cost_basis` present only when the operator typed one (absent means
+ *  `units × NAV` hub-side — an empty string is NOT the same as absent). `issueUnitsBody`
+ *  in `views/admin/allocations/lib/issuance.ts` is the one place that builds it. */
+export interface IssueUnitsBody {
   service: string;
+  /** Who receives the units — the id the console carries. */
+  user_id: string;
   /** Decimal units, > 0. */
   units: string;
   /** Decimal USDT the holder is deemed to have paid; omitted = `units × NAV`. */
@@ -181,19 +189,14 @@ export type IssueUnitsBody = {
   /** 1..64 chars, unique per service. The retry contract: one key per submission, the
    *  same key on a retry of that submission, so a double click lands one mint. */
   idempotency_key: string;
-} & ({ user_id: string; company?: never } | { company: true; user_id?: never });
+}
 
 export const issueUnits = (body: IssueUnitsBody): Promise<UnitIssuance> => postJson("/api/admin/allocations/issue", body);
 
-// Hand part of the company's stake to an investor: the units leave the company's
-// holding and land in theirs, and the supply does not move. Answers the same shape as a
-// mint with `source: "company"`; the key shares the mint's per-product key space.
-export const transferCompanyStake = (body: TransferStakeBody): Promise<UnitIssuance> => postJson("/api/admin/allocations/transfer-stake", body);
-
-// The mirror of a mint: burn units out of one holder — an investor or the company — so
-// the supply shrinks by them. Answers the same shape with `source: "retire"`; the key
-// shares the mint's per-product key space. Allowed on a `closed` product, or on a live
-// one only with the operator's explicit `force`.
+// The mirror of a mint: burn units out of one person so the supply shrinks by them.
+// Answers the same shape with `source: "retire"`; the key shares the mint's per-product
+// key space. Allowed on a `closed` product, or on a live one only with the operator's
+// explicit `force`.
 export const retireUnits = (body: RetireUnitsBody): Promise<UnitIssuance> => postJson("/api/admin/allocations/retire", body);
 
 // What stands behind the units. Its own route for the same reason the cap and the access
@@ -233,11 +236,12 @@ export const settleWithdrawal = (withdrawalId: string, txRef: string): Promise<{
 export const failWithdrawal = (withdrawalId: string, reason: string): Promise<{ ok: boolean }> =>
   postJson("/api/admin/withdrawals/fail", { withdrawal_id: withdrawalId, reason });
 
-// ── revenue (the fund's own earned money) ────────────────────────────────────────
-// Reads, and cancelling a still-queued payout. Paying revenue OUT is a payment order
-// (`entities/payment`) authorised by the owners' consilium; the one-click
-// `RequestRevenuePayout` this client used to post to is closed at the plane.
-export const fetchFundRevenue = (): Promise<FundRevenue> => getJson("/api/admin/revenue");
+// ── revenue (the reserved `fee` allocation) ──────────────────────────────────────
+// What the platform has earned, in the treasury's own shape (#245): the `fee`
+// allocation's claim, supply, price and holders. Paying it OUT is a payment order
+// (`entities/payment`) authorised by the owners' consilium, or a holder's redemption;
+// the payout list and its cancel are HISTORY — payouts opened before the kind retired.
+export const fetchFundRevenue = (): Promise<AllocationTreasury> => getJson("/api/admin/revenue");
 
 export const fetchRevenuePayouts = (): Promise<RevenuePayoutList> => getJson("/api/admin/revenue/payouts");
 

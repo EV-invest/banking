@@ -29,14 +29,17 @@ import type { Decimal, Timestamp } from "./governance";
 
 // ── Naming an end ──────────────────────────────────────────────────────────────
 
-/** An internal claim as the caller names it when OPENING an order. */
-export type PartyKind = "piggybank" | "revenue" | "service" | "user";
+/** An internal claim as the caller names it when OPENING an order. The platform's own
+ *  money is the reserved `fee` / `fund` allocations, addressed as `service` with that id
+ *  (#245); the `piggybank` / `revenue` singletons this once carried are refused by the
+ *  plane and survive only as {@link PaymentEndKind} on orders opened before. */
+export type PartyKind = "service" | "user";
 
 /**
- * One internal end of an order. `id` is empty for the two singleton claims (`piggybank`,
- * `revenue`), the product id for `service`, and for `user` the CONCIERGE user id the
- * console carries (`AdminUserSummary.user_id`) — the plane resolves it to its own id and
- * echoes THAT back in `PaymentEnd.id`, so the two never round-trip (payments.proto).
+ * One internal end of an order. `id` is the product id for `service` (`fee` / `fund`
+ * for the reserved allocations), and for `user` the CONCIERGE user id the console
+ * carries (`AdminUserSummary.user_id`) — the plane resolves it to its own id and echoes
+ * THAT back in `PaymentEnd.id`, so the two never round-trip (payments.proto).
  */
 export interface Party {
   kind: PartyKind;
@@ -66,7 +69,7 @@ export interface OpenPaymentRequest {
 
 // ── An end as the plane renders it back ────────────────────────────────────────
 
-export type PaymentEndKind = PartyKind | "external";
+export type PaymentEndKind = PartyKind | "external" | "piggybank" | "revenue";
 
 /**
  * One end of an order, resolved for a reader.
