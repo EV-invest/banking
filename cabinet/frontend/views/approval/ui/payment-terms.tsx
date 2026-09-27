@@ -2,7 +2,7 @@
 
 // The terms of a payment order, as an approval page shows them — the amount, both ends,
 // the tier, the reason, the fingerprint. Shared by the investor's consent page and the
-// owners' payout approval when the consilium carries a payment rather than a payout.
+// owners' approval page when the consilium carries a payment.
 //
 // Policy 12–13 shape it: everything the digest covers is on screen before the code field
 // is. An external destination shows its address whole through `FullAddress`; an internal

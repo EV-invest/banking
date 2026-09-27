@@ -25,7 +25,6 @@ import {
   fetchFeePolicyChanges,
   fetchFeeShares,
   fetchRedemptionQueue,
-  fetchRevenuePayouts,
   fetchTreasury,
   fetchUnitHolders,
   fetchUser,
@@ -91,15 +90,6 @@ export const withdrawalQueueResource = defineResource({
 export const fundRevenueResource = defineResource({
   name: "admin.fundRevenue",
   fetch: fetchFundRevenue,
-  revalidate: OPERATIONAL,
-  tags: [TAG.adminRevenue],
-});
-
-// History only: the payouts opened before the kind retired. Still operational, because a
-// still-queued one can be cancelled from the screen.
-export const revenuePayoutsResource = defineResource({
-  name: "admin.revenuePayouts",
-  fetch: fetchRevenuePayouts,
   revalidate: OPERATIONAL,
   tags: [TAG.adminRevenue],
 });

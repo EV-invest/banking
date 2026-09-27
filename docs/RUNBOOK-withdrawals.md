@@ -31,18 +31,13 @@ landed, this park is a rare check-then-act residue (the on-chain balance dropped
 the dispatch-time read and the broadcast), not the norm — but the recovery below stays
 the same.
 
-A queued or processing row is **not always a user's** withdrawal. A **revenue payout** —
-the fund moving its own earned money to an external wallet — rode this same saga and
-appears in this same queue; the console labels it *Fund revenue* in place of an email, and
-`ListWithdrawalQueue` reports `source: revenue`. **Retired since #245**: nothing opens a
-new one (the platform's earnings are the `fee` allocation, and cash leaves it by a
-holder's redemption or an owners' payment order), but a row queued before the retirement
-still dispatches, settles, fails or is cancelled (`CancelRevenuePayout` /
-`ListRevenuePayouts` are history-only RPCs). The recovery steps below are identical, with
-one wording change: **Fail** refunds the retired `fee` claim (TB code 40) rather than a
-user, so nobody is waiting on support — but the cardinal rule is unchanged, because the
-chain does not care whose money it was. A payment order's L1 withdrawal (opened out of an
-investor's own claim, `source: user`) is an ordinary user row here.
+Every queued or processing row is **a person's** withdrawal. The revenue payout that once
+rode this saga (the fund paying its own earnings out) was retired in #245 and removed in C-9:
+`WithdrawalSource::User` is the only source (`domain/src/withdrawals.rs`), the `withdrawals.source`
+CHECK admits only `user` (`0047_ownership_contract.sql`), and production held no revenue row
+when it was narrowed. The platform's earnings are the `fee` allocation; cash leaves it by a
+holder's redemption or an owners' payment order, and a payment order's L1 withdrawal (opened
+out of an investor's own claim) is an ordinary user row here.
 
 ## Step 1 — prove the broadcast never happened
 

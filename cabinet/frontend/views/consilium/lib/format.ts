@@ -95,25 +95,25 @@ export function stateLabel(state: string | undefined, t: Translate): string {
 // ── the kinds of consilium ────────────────────────────────────────────────────
 // Told apart by which sibling is set — a kind is never expressed by widening another
 // one's field (`shared/contracts/governance.ts`). The order matches the views' own
-// branches, so a row that somehow carries two is read the same way everywhere. A revenue
-// payout is history only since #245 — nothing opens one — but the ones that were open
-// still read, so it stays the fallback rather than an error.
+// branches, so a row that somehow carries two is read the same way everywhere. A row with
+// no sibling set is a kind this client does not know yet: it reads as no kind rather than
+// being passed off as one of the five.
 
-export type ConsiliumKind = "valuation_override" | "payment" | "fee_policy" | "holder_grant" | "seed_capital" | "revenue_payout";
+export type ConsiliumKind = "valuation_override" | "payment" | "fee_policy" | "holder_grant" | "seed_capital";
 
 type Kinded = Pick<Consilium, "valuation_override" | "payment" | "fee_policy" | "holder_grant" | "seed_capital">;
 
-export function consiliumKind(consilium: Kinded): ConsiliumKind {
+export function consiliumKind(consilium: Kinded): ConsiliumKind | null {
   if (consilium.valuation_override) return "valuation_override";
   if (consilium.payment) return "payment";
   if (consilium.fee_policy) return "fee_policy";
   if (consilium.holder_grant) return "holder_grant";
   if (consilium.seed_capital) return "seed_capital";
-  return "revenue_payout";
+  return null;
 }
 
-export function consiliumKindLabel(kind: ConsiliumKind, t: Translate): string {
-  return t(`consilium.kind.${kind}`);
+export function consiliumKindLabel(kind: ConsiliumKind | null, t: Translate): string {
+  return kind ? t(`consilium.kind.${kind}`) : "—";
 }
 
 /** A state pill that knows what was decided: `executed` on a fee-policy consilium means

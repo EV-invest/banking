@@ -351,7 +351,7 @@ async fn a_subject_absent_from_the_projection_is_never_an_owner() {
 	assert_eq!(role, domain::authz::Role::default(), "no local row ⇒ the default role, not an inherited privilege");
 	assert_ne!(role, domain::authz::Role::Owner, "nothing outside the mirrored column may grant ownership");
 	assert!(
-		!domain::authz::grants(role, domain::authz::Permission::RevenuePayout),
+		!domain::authz::grants(role, domain::authz::Permission::ConsiliumManage),
 		"an unknown subject must not be able to move the fund's revenue"
 	);
 }

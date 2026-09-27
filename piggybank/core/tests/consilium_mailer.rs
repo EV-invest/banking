@@ -23,7 +23,7 @@ use piggybank_core::{
 	infrastructure::{consilium_mailer::ConsiliumMailer, users::PgUsers},
 	ports::{
 		UserRepository,
-		governance_mail::{FeePolicyTerms, GovernanceMail, GovernanceMailer, MailDeliveryError, PayoutApproval, PayoutOutcome},
+		governance_mail::{FeePolicyTerms, GovernanceMail, GovernanceMailer, MailDeliveryError, PaymentApproval, PayoutOutcome},
 	},
 };
 use sqlx::PgPool;
@@ -113,13 +113,15 @@ async fn a_queued_mail(pool: &PgPool) -> i64 {
 /// The same fixture, carrying a token and a code — the kind whose payload holds a secret.
 async fn a_queued_token_mail(pool: &PgPool) -> i64 {
 	a_queued(pool, |consilium| {
-		GovernanceMail::PayoutApproval(PayoutApproval {
+		GovernanceMail::PaymentApproval(PaymentApproval {
 			consilium_id: consilium.to_string(),
+			payment_id: Uuid::new_v4().to_string(),
 			initiator_email: "owner@example.test".into(),
-			network: "bep20".into(),
-			address: "0x52908400098527886E0F7030069857D2E4169EE7".into(),
+			tier: "service".into(),
+			source: "the fund allocation".into(),
+			destination: "the fixture product".into(),
 			amount: "1".into(),
-			memo: "fixture".into(),
+			reason: "fixture".into(),
 			payload_hash: "00".repeat(32),
 			threshold: 2,
 			owner_count: 3,
@@ -162,10 +164,10 @@ async fn a_queued_row(pool: &PgPool, row: impl FnOnce(Uuid) -> (&'static str, St
 	let consilium = Uuid::new_v4();
 	sqlx::query(
 		"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at, decided_at) \
-		 VALUES ($1, 'revenue_payout', 'cancelled', $2::jsonb, 'fee', $3, $4, 3, 2, now() + interval '72 hours', now())",
+		 VALUES ($1, 'valuation_override', 'cancelled', $2::jsonb, 'service:fixture', $3, $4, 3, 2, now() + interval '72 hours', now())",
 	)
 	.bind(consilium)
-	.bind(r#"{"network":"bep20","address":"0x52908400098527886E0F7030069857D2E4169EE7","amount":"1","memo":"fixture"}"#)
+	.bind(r#"{"service":"fixture","aum":"1"}"#)
 	.bind(vec![9u8; 32])
 	.bind(owner.raw())
 	.execute(pool)
@@ -314,8 +316,8 @@ async fn a_mail_given_up_on_is_redacted_like_a_delivered_one() {
 			.unwrap();
 		assert!(!payload.contains("SECRET"), "the retired row holds no secret: {payload}");
 		let mail: serde_json::Value = serde_json::from_str(&payload).unwrap();
-		assert_eq!(mail["kind"], "payout_approval", "the audit trail keeps what was attempted");
-		assert_eq!(mail["memo"], "fixture");
+		assert_eq!(mail["kind"], "payment_approval", "the audit trail keeps what was attempted");
+		assert_eq!(mail["reason"], "fixture");
 	}
 
 	sqlx::query("DELETE FROM consilium_mail WHERE id = ANY($1)")

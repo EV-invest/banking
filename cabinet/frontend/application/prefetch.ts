@@ -24,7 +24,6 @@ import {
   mfeRegistryResource,
   parkedEventsResource,
   redemptionQueueResource,
-  revenuePayoutsResource,
   treasuryResource,
   usersResource,
   withdrawalQueueResource,
@@ -62,13 +61,7 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
       treasuryResource.prefetch();
     },
   },
-  {
-    prefix: "/admin/revenue",
-    warm: () => {
-      fundRevenueResource.prefetch();
-      revenuePayoutsResource.prefetch();
-    },
-  },
+  { prefix: "/admin/revenue", warm: () => fundRevenueResource.prefetch() },
   { prefix: "/admin/allocations", warm: () => adminAllocationsResource.prefetch() },
   {
     prefix: "/admin/valuation",

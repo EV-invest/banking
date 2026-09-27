@@ -20,13 +20,12 @@ use async_trait::async_trait;
 use domain::{
 	balance::{ServiceId, ValuationId},
 	consilium::{
-		Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, ConsiliumVote, HolderGrantTerms, RevenuePayoutTerms, SeedCapitalTerms,
-		ValuationOverrideTerms, VoteDecision,
+		Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, ConsiliumVote, HolderGrantTerms, SeedCapitalTerms, ValuationOverrideTerms, VoteDecision,
 	},
 	error::DomainError,
 	fees::FeePolicyChangeId,
 	issuance::UnitIssuanceId,
-	money::{Network, Shares, TxRef, Usdt, WalletAddress},
+	money::{Network, Shares, TxRef, Usdt},
 	payments::PaymentId,
 	subscriptions::SubscriptionId,
 	users::{UserId, mask_email},
@@ -47,7 +46,7 @@ use crate::{
 			ConsiliumRepository, ConsiliumView, DIGEST_BYTES, ExecutionOutcome, FeePolicyDetail, InvitationView, MAX_CODE_ATTEMPTS, SubmitOutcome, VoteAudit, VoterCredential, VoterView,
 			invitation_not_found,
 		},
-		governance_mail::{FeePolicyApproval, GovernanceMail, PaymentApproval, PayoutApproval, PayoutOutcome},
+		governance_mail::{FeePolicyApproval, GovernanceMail, PaymentApproval, PayoutOutcome},
 		payments::EndDetail,
 	},
 };
@@ -184,18 +183,7 @@ pub(crate) async fn withdraw_on(conn: &mut PgConnection, id: ConsiliumId, at: i6
 	Ok(true)
 }
 
-/// The stored JSONB shape of the terms. Amounts are exact base-unit strings, as everywhere
-/// else in the control plane — Postgres never holds a money figure it reasons about.
-#[derive(Deserialize, Serialize)]
-struct StoredTerms {
-	network: String,
-	address: String,
-	amount: String,
-	memo: String,
-}
-
-/// The stored JSONB for the terms, per kind. A payout keeps the [`StoredTerms`] shape its rows
-/// predate the enum with; a payment stores the subject's OWN serde shape, the same bytes
+/// The stored JSONB for the terms, per kind. A payment stores the subject's OWN serde shape, the same bytes
 /// `PaymentEvent::Opened` carries into `event_log`; a valuation override stores
 /// [`StoredValuationOverride`], the money-plane convention of an exact base-unit string;
 /// a holder grant stores [`StoredHolderGrant`] and a seed [`StoredSeedCapital`] by the
@@ -203,7 +191,6 @@ struct StoredTerms {
 /// nothing else.
 fn stored_terms(terms: &ConsiliumTerms) -> Result<String, DomainError> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(payout) => serde_json::to_string(&StoredTerms::of(payout)),
 		ConsiliumTerms::Payment(subject) => serde_json::to_string(subject),
 		ConsiliumTerms::ValuationOverride(terms) => serde_json::to_string(&StoredValuationOverride::of(terms)),
 		// The subject's own serde shape, as a payment's is.
@@ -295,12 +282,10 @@ impl StoredValuationOverride {
 	}
 }
 
-/// What a surface states beside the hashed subject, per kind: nothing for a payout (it
-/// names an address), the receiving end's recognisable detail for a payment, the product
+/// What a surface states beside the hashed subject, per kind: the receiving end's recognisable detail for a payment, the product
 /// being marked for a valuation override, the product's title and holder count for a change
 /// of fee terms, the grantee's mailbox for a holder grant, the depositor's for a seed.
 enum SubjectDetail {
-	Payout,
 	Payment(Option<EndDetail>),
 	ValuationOverride(Option<EndDetail>),
 	FeePolicy(FeePolicyDetail),
@@ -314,21 +299,20 @@ impl SubjectDetail {
 	fn end_detail(&self) -> Option<&EndDetail> {
 		match self {
 			Self::Payment(detail) | Self::ValuationOverride(detail) | Self::HolderGrant(detail) | Self::SeedCapital(detail) => detail.as_ref(),
-			Self::Payout | Self::FeePolicy(_) => None,
+			Self::FeePolicy(_) => None,
 		}
 	}
 
 	fn fee_policy(&self) -> Option<FeePolicyDetail> {
 		match self {
 			Self::FeePolicy(detail) => Some(detail.clone()),
-			Self::Payout | Self::Payment(_) | Self::ValuationOverride(_) | Self::HolderGrant(_) | Self::SeedCapital(_) => None,
+			Self::Payment(_) | Self::ValuationOverride(_) | Self::HolderGrant(_) | Self::SeedCapital(_) => None,
 		}
 	}
 }
 
 async fn subject_detail(conn: &mut PgConnection, consilium: &Consilium) -> Result<SubjectDetail, DomainError> {
 	Ok(match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(_) => SubjectDetail::Payout,
 		ConsiliumTerms::Payment(subject) => SubjectDetail::Payment(payments::detail_of(conn, subject.terms.to()).await?),
 		ConsiliumTerms::ValuationOverride(terms) => SubjectDetail::ValuationOverride(
 			sqlx::query_scalar::<_, String>("SELECT title FROM allocations WHERE service = $1")
@@ -431,12 +415,10 @@ pub(crate) fn clip_utf8(s: &str, max_bytes: usize) -> String {
 
 /// The approval invitation for one seat, per kind.
 ///
-/// ONE MAIL PER KIND, NOT ONE WIDENED. The payout template opens with "a request to pay fund
-/// revenue out on-chain" and labels its middle rows Network and Destination address; a
-/// payment is a transfer between two claims the platform holds, and rendering
-/// `Piggybank → Revenue` through that copy would mail the whole roster a sentence naming the
-/// wrong claim and the wrong rail on a money move they are being asked to authorize. A
-/// change of fee terms is not a money move at all and has its own kind. The match has no
+/// ONE MAIL PER KIND, NOT ONE WIDENED, where concierge has one: a payment is a transfer
+/// between two ends the platform names, and a change of fee terms is not a money move at
+/// all and has its own kind. (The revenue-payout template, `PAYOUT_APPROVAL`, went with the
+/// kind in #245; `consilium_mail` refuses it since 0047.) The match has no
 /// `_` arm, so a further kind has to say what its owners read.
 ///
 /// THE VALUATION KIND BORROWS THE PAYMENT TEMPLATE, for now. A valuation override is not a
@@ -459,20 +441,6 @@ pub(crate) fn clip_utf8(s: &str, max_bytes: usize) -> String {
 fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &VoterCredential, approval_url_base: &str, detail: &SubjectDetail) -> GovernanceMail {
 	let approval_url = format!("{}/{}", approval_url_base.trim_end_matches('/'), credential.token);
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(payout) => GovernanceMail::PayoutApproval(PayoutApproval {
-			consilium_id: consilium.id().to_string(),
-			initiator_email: initiator_email.to_owned(),
-			network: payout.network.as_str().to_owned(),
-			address: payout.address.as_str().to_owned(),
-			amount: payout.amount.to_decimal_string(),
-			memo: payout.memo.clone(),
-			payload_hash: consilium.payload_hash_hex(),
-			threshold: consilium.threshold(),
-			owner_count: consilium.owner_count(),
-			expires_at: consilium.expires_at(),
-			approval_url,
-			code: credential.code.clone(),
-		}),
 		ConsiliumTerms::Payment(subject) => GovernanceMail::PaymentApproval(PaymentApproval {
 			consilium_id: consilium.id().to_string(),
 			payment_id: subject.payment_id.to_string(),
@@ -564,12 +532,7 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 /// whether its owners hear how it ended, and through which template.
 fn announces_by_mail(consilium: &Consilium) -> bool {
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(_)
-		| ConsiliumTerms::Payment(_)
-		| ConsiliumTerms::ValuationOverride(_)
-		| ConsiliumTerms::FeePolicy(_)
-		| ConsiliumTerms::HolderGrant(_)
-		| ConsiliumTerms::SeedCapital(_) => true,
+		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => true,
 	}
 }
 
@@ -613,12 +576,6 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, subject: &
 		mark: String::new(),
 	};
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(payout) => PayoutOutcome {
-			network: payout.network.as_str().to_owned(),
-			address: payout.address.as_str().to_owned(),
-			amount: payout.amount.to_decimal_string(),
-			..base
-		},
 		ConsiliumTerms::Payment(payment) => PayoutOutcome {
 			amount: payment.terms.amount().to_decimal_string(),
 			tier: payment.terms.tier().as_str().to_owned(),
@@ -665,24 +622,6 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, subject: &
 			reason: SEED_CAPITAL_MAIL_REASON.to_owned(),
 			..base
 		},
-	}
-}
-
-impl StoredTerms {
-	fn of(terms: &RevenuePayoutTerms) -> Self {
-		Self {
-			network: terms.network.as_str().to_owned(),
-			address: terms.address.as_str().to_owned(),
-			amount: terms.amount.base_units().to_string(),
-			memo: terms.memo.clone(),
-		}
-	}
-
-	fn into_domain(self) -> Result<RevenuePayoutTerms, DomainError> {
-		let network = Network::parse(&self.network)?;
-		let address = WalletAddress::parse(network, &self.address)?;
-		let amount = Usdt::from_base_units(self.amount.parse::<u128>().map_err(|_| DomainError::Repository("malformed consilium amount".into()))?);
-		RevenuePayoutTerms::new(network, address, amount, self.memo)
 	}
 }
 
@@ -743,14 +682,9 @@ fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
 	// always did.
 	let raw_terms: String = row.try_get("terms").map_err(repo_err)?;
 	let terms = match ConsiliumKind::parse(row.try_get::<String, _>("kind").map_err(repo_err)?.as_str())? {
-		ConsiliumKind::RevenuePayout => {
-			let stored: StoredTerms = serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?;
-			ConsiliumTerms::RevenuePayout(stored.into_domain()?)
-		}
-		// The subject's OWN serde shape, not a second hand-written mirror of it. The payout
-		// kind has `StoredTerms` because its JSONB predates the enum; a payment has no such
-		// history, and `PaymentEvent::Opened` already carries these exact bytes into
-		// `event_log`, so one encoding serves the store and the log.
+		// The subject's OWN serde shape, not a second hand-written mirror of it:
+		// `PaymentEvent::Opened` already carries these exact bytes into `event_log`, so one
+		// encoding serves the store and the log.
 		ConsiliumKind::Payment => ConsiliumTerms::Payment(serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?),
 		ConsiliumKind::ValuationOverride => {
 			let stored: StoredValuationOverride = serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?;
@@ -910,12 +844,12 @@ fn audience(consilium: &Consilium) -> impl Iterator<Item = UserId> + '_ {
 }
 
 /// Close the SUBJECT a consilium decided against — the cascade for every verdict that is not
-/// an approval, in the verdict's own transaction. Nothing to do for a payout, a valuation
-/// override, a holder grant or a seed, whose consilium IS the request; a payment order is
+/// an approval, in the verdict's own transaction. Nothing to do for a valuation override, a
+/// holder grant or a seed, whose consilium IS the request; a payment order is
 /// rejected, a fee-policy change is closed as rejected.
 async fn close_decided_subject(conn: &mut PgConnection, consilium: &Consilium, at: i64) -> Result<(), DomainError> {
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => Ok(()),
+		ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => Ok(()),
 		ConsiliumTerms::Payment(subject) => payments::reject_on(conn, subject.payment_id, at).await.map(|_| ()),
 		ConsiliumTerms::FeePolicy(subject) => {
 			let reason = format!("the owners' consilium ended {}", consilium.state().as_str());

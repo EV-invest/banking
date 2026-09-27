@@ -31,7 +31,7 @@ use crate::{
 	fees::{FeePolicyChangeId, FeePolicySubject},
 	hex32,
 	issuance::UnitIssuanceId,
-	money::{Network, Shares, TxRef, Usdt, WalletAddress},
+	money::{Network, Shares, TxRef, Usdt},
 	payments::{PaymentId, PaymentSubject},
 	push_field,
 	subscriptions::SubscriptionId,
@@ -52,10 +52,6 @@ pub const MIN_OWNERS: u32 = 3;
 /// execute, however late a vote arrives.
 pub const TTL_SECS: i64 = 72 * 60 * 60;
 
-/// The longest memo an initiator may attach. Long enough for a real justification, short
-/// enough that the approval mail still reads as one.
-pub const MAX_MEMO_BYTES: usize = 500;
-
 /// Owners needed to carry a consilium: strictly more than half of ALL of them.
 pub fn threshold(owner_count: u32) -> u32 {
 	owner_count / 2 + 1
@@ -71,7 +67,6 @@ pub fn threshold(owner_count: u32) -> u32 {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConsiliumKind {
-	RevenuePayout,
 	/// A [`crate::payments::PaymentOrder`] whose source is fund-owned money — §3's rule
 	/// that the owners' money moves only on the owners' quorum, at every tier.
 	Payment,
@@ -98,7 +93,6 @@ pub enum ConsiliumKind {
 impl ConsiliumKind {
 	pub fn as_str(self) -> &'static str {
 		match self {
-			Self::RevenuePayout => "revenue_payout",
 			Self::Payment => "payment",
 			Self::ValuationOverride => "valuation_override",
 			Self::FeePolicy => "fee_policy",
@@ -107,12 +101,11 @@ impl ConsiliumKind {
 		}
 	}
 
-	/// The word a refusal message calls this kind by — "a payout consilium", "a fee-policy
+	/// The word a refusal message calls this kind by — "a payment consilium", "a fee-policy
 	/// consilium". Kept apart from [`Self::as_str`] because that one is the wire and storage
 	/// spelling and must never move, while this one is prose and may.
 	pub fn noun(self) -> &'static str {
 		match self {
-			Self::RevenuePayout => "payout",
 			Self::Payment => "payment",
 			Self::ValuationOverride => "valuation-override",
 			Self::FeePolicy => "fee-policy",
@@ -123,7 +116,6 @@ impl ConsiliumKind {
 
 	pub fn parse(raw: &str) -> Result<Self, DomainError> {
 		match raw {
-			"revenue_payout" => Ok(Self::RevenuePayout),
 			"payment" => Ok(Self::Payment),
 			"valuation_override" => Ok(Self::ValuationOverride),
 			"fee_policy" => Ok(Self::FeePolicy),
@@ -214,53 +206,6 @@ impl VoteDecision {
 	}
 }
 
-/// The immutable subject of a revenue-payout consilium. There is no edit path: changing
-/// anything means cancel and reopen, and votes are not carried over.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct RevenuePayoutTerms {
-	pub network: Network,
-	pub address: WalletAddress,
-	pub amount: Usdt,
-	pub memo: String,
-}
-
-impl RevenuePayoutTerms {
-	/// The domain-separation prefix. Included in the digest so a hash over these terms
-	/// can never collide with one taken over some other message — including terms of
-	/// another [`ConsiliumTerms`] variant that happen to encode to the same field bytes.
-	///
-	/// FROZEN. Every `payload_hash` ever stored was taken over an encoding starting with
-	/// these bytes; changing one of them invalidates every live approval at once.
-	pub const DOMAIN: &'static [u8] = b"banking.v1.RevenuePayoutTerms\x00";
-
-	pub fn new(network: Network, address: WalletAddress, amount: Usdt, memo: String) -> Result<Self, DomainError> {
-		if address.network() != network {
-			return Err(DomainError::Validation("payout address is for a different network".into()));
-		}
-		if memo.len() > MAX_MEMO_BYTES {
-			return Err(DomainError::Validation(format!("memo exceeds {MAX_MEMO_BYTES} bytes")));
-		}
-		// A control character has no meaning in a memo and every meaning in a mail header.
-		if memo.chars().any(char::is_control) {
-			return Err(DomainError::Validation("memo may not contain control characters".into()));
-		}
-		Ok(Self { network, address, amount, memo })
-	}
-
-	/// The bytes the payload hash is taken over: a fixed field order with every
-	/// variable-length part length-prefixed, so no two distinct terms can encode alike
-	/// and no serializer's map ordering can enter into it.
-	pub fn canonical_bytes(&self) -> Vec<u8> {
-		let mut out = Vec::with_capacity(Self::DOMAIN.len() + 96);
-		out.extend_from_slice(Self::DOMAIN);
-		push_field(&mut out, self.network.as_str().as_bytes());
-		push_field(&mut out, self.address.as_str().as_bytes());
-		out.extend_from_slice(&self.amount.base_units().to_be_bytes());
-		push_field(&mut out, self.memo.as_bytes());
-		out
-	}
-}
-
 /// The immutable subject of a valuation-override consilium: mark `service` at `aum`, past
 /// the NAV-move guard. Only the AUM is frozen — the NAV itself is derived from the LIVE
 /// unit supply at execution, because units can be minted or burned during the 72h vote and
@@ -272,7 +217,7 @@ pub struct ValuationOverrideTerms {
 }
 
 impl ValuationOverrideTerms {
-	/// The domain-separation prefix — see [`RevenuePayoutTerms::DOMAIN`]. FROZEN for the
+	/// The domain-separation prefix — see [`crate::payments::PaymentTerms::DOMAIN`]. FROZEN for the
 	/// same reason.
 	pub const DOMAIN: &'static [u8] = b"banking.v1.ValuationOverrideTerms\x00";
 
@@ -299,7 +244,7 @@ pub struct HolderGrantTerms {
 }
 
 impl HolderGrantTerms {
-	/// The domain-separation prefix — see [`RevenuePayoutTerms::DOMAIN`]. FROZEN for the
+	/// The domain-separation prefix — see [`crate::payments::PaymentTerms::DOMAIN`]. FROZEN for the
 	/// same reason.
 	pub const DOMAIN: &'static [u8] = b"banking.v1.HolderGrantTerms\x00";
 
@@ -349,7 +294,7 @@ pub struct SeedCapitalTerms {
 }
 
 impl SeedCapitalTerms {
-	/// The domain-separation prefix — see [`RevenuePayoutTerms::DOMAIN`]. FROZEN for the
+	/// The domain-separation prefix — see [`crate::payments::PaymentTerms::DOMAIN`]. FROZEN for the
 	/// same reason.
 	pub const DOMAIN: &'static [u8] = b"banking.v1.SeedCapitalTerms\x00";
 
@@ -384,7 +329,6 @@ impl SeedCapitalTerms {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConsiliumTerms {
-	RevenuePayout(RevenuePayoutTerms),
 	/// The payment order this quorum authorizes, subject and all. The ORDER'S id is inside
 	/// the hashed subject (see [`PaymentSubject`]), so an approval of one payment is not a
 	/// valid signature over another with identical terms.
@@ -404,7 +348,6 @@ pub enum ConsiliumTerms {
 impl ConsiliumTerms {
 	pub fn kind(&self) -> ConsiliumKind {
 		match self {
-			Self::RevenuePayout(_) => ConsiliumKind::RevenuePayout,
 			Self::Payment(_) => ConsiliumKind::Payment,
 			Self::ValuationOverride(_) => ConsiliumKind::ValuationOverride,
 			Self::FeePolicy(_) => ConsiliumKind::FeePolicy,
@@ -416,14 +359,13 @@ impl ConsiliumTerms {
 	/// The bytes the payload hash is taken over.
 	///
 	/// EVERY VARIANT MUST CARRY ITS OWN DOMAIN-SEPARATION PREFIX, and this method delegates
-	/// precisely because each one does (see [`RevenuePayoutTerms::DOMAIN`]). Without a
-	/// per-variant prefix the same field bytes could encode under two kinds, so the digest
-	/// an owner signed for one kind would be a valid signature over the other — a payout
-	/// approval spendable as a payment. `terms_of_one_kind_cannot_be_hashed_as_another`
+	/// precisely because each one does (see [`crate::payments::PaymentTerms::DOMAIN`]).
+	/// Without a per-variant prefix the same field bytes could encode under two kinds, so the
+	/// digest an owner signed for one kind would be a valid signature over the other — a
+	/// mark's approval spendable as a payment. `terms_of_one_kind_cannot_be_hashed_as_another`
 	/// pins it.
 	pub fn canonical_bytes(&self) -> Vec<u8> {
 		match self {
-			Self::RevenuePayout(terms) => terms.canonical_bytes(),
 			Self::Payment(subject) => subject.canonical_bytes(),
 			Self::ValuationOverride(terms) => terms.canonical_bytes(),
 			Self::FeePolicy(subject) => subject.canonical_bytes(),
@@ -435,12 +377,8 @@ impl ConsiliumTerms {
 	/// The claim this consilium spends from. Drives both the per-source "one open request"
 	/// index and the advisory lock the execution path takes, so two consilia over DIFFERENT
 	/// claims no longer block each other while two over the SAME claim still do.
-	// `RevenuePayout` spends the retired fee claim: replay-only until the contract
-	// migration (C-9).
-	#[allow(deprecated)]
 	pub fn source_claim(&self) -> LedgerAccountKey {
 		match self {
-			Self::RevenuePayout(_) => LedgerAccountKey::FeeRevenue,
 			// READ OFF THE ORDER, never restated. The per-source "one open request" index and
 			// `payments_single_open_per_source_idx` then key on the same claim, so the two
 			// governance surfaces over one claim serialize against each other rather than
@@ -468,12 +406,6 @@ impl ConsiliumTerms {
 			// while the owners are also deciding who holds the fund or what leaves it.
 			Self::SeedCapital(_) => LedgerAccountKey::ServiceClaim(ServiceId::fund()),
 		}
-	}
-}
-
-impl From<RevenuePayoutTerms> for ConsiliumTerms {
-	fn from(terms: RevenuePayoutTerms) -> Self {
-		Self::RevenuePayout(terms)
 	}
 }
 
@@ -1108,8 +1040,7 @@ mod tests {
 	}
 
 	fn terms() -> ConsiliumTerms {
-		let address = WalletAddress::parse(Network::Bep20, "0x52908400098527886E0F7030069857D2E4169EE7").unwrap();
-		ConsiliumTerms::RevenuePayout(RevenuePayoutTerms::new(Network::Bep20, address, Usdt::parse_decimal("500").unwrap(), "quarterly draw".to_owned()).unwrap())
+		ConsiliumTerms::Payment(payment_subject())
 	}
 
 	fn payout(id: WithdrawalId) -> ConsiliumEffect {
@@ -1152,8 +1083,8 @@ mod tests {
 			let err = Consilium::open(ConsiliumId::new(), terms(), [0u8; 32], roster[0], &roster, NOW).unwrap_err();
 			assert!(matches!(err, DomainError::Validation(_)), "N={n} must be refused, not stored");
 		}
-		// The payout wording is pinned byte-for-byte: `consilium-refusal.test.ts` carries the
-		// same literal, and the classifier's substrings must survive every kind (banking#250).
+		// One wording is pinned byte-for-byte, and the classifier's substrings must survive
+		// every kind (banking#250).
 		let roster = owners(2);
 		let refusal = |kind_terms: ConsiliumTerms| -> String {
 			match Consilium::open(ConsiliumId::new(), kind_terms, [0u8; 32], roster[0], &roster, NOW).unwrap_err() {
@@ -1163,10 +1094,9 @@ mod tests {
 		};
 		assert_eq!(
 			refusal(terms()),
-			"a payout consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached"
+			"a payment consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached"
 		);
-		let by_kind: [(ConsiliumTerms, &str); 6] = [
-			(terms(), "a payout consilium"),
+		let by_kind: [(ConsiliumTerms, &str); 5] = [
 			(ConsiliumTerms::Payment(payment_subject()), "a payment consilium"),
 			(ConsiliumTerms::ValuationOverride(valuation_override("16250")), "a valuation-override consilium"),
 			(ConsiliumTerms::FeePolicy(fee_policy_subject()), "a fee-policy consilium"),
@@ -1411,65 +1341,29 @@ mod tests {
 	}
 
 	#[test]
-	fn the_canonical_encoding_separates_fields_unambiguously() {
-		let address = WalletAddress::parse(Network::Bep20, "0x52908400098527886E0F7030069857D2E4169EE7").unwrap();
-		let amount = Usdt::parse_decimal("1").unwrap();
-		// Two terms whose fields concatenate to the same string must NOT encode alike —
-		// this is exactly what the length prefixes buy.
-		let a = RevenuePayoutTerms::new(Network::Bep20, address.clone(), amount, "ab".to_owned()).unwrap();
-		let b = RevenuePayoutTerms::new(Network::Bep20, address.clone(), amount, "a".to_owned()).unwrap();
-		assert_ne!(a.canonical_bytes(), b.canonical_bytes());
-		// The encoding is deterministic across calls, which is what makes the stored hash
-		// re-verifiable at execution.
-		assert_eq!(a.canonical_bytes(), a.canonical_bytes());
-		// The amount is part of the digest, so editing it invalidates every approval.
-		let dearer = RevenuePayoutTerms::new(Network::Bep20, address, Usdt::parse_decimal("2").unwrap(), "ab".to_owned()).unwrap();
-		assert_ne!(a.canonical_bytes(), dearer.canonical_bytes());
-	}
-
-	#[test]
-	fn terms_reject_a_mismatched_rail_and_an_unsendable_memo() {
-		let bep20 = WalletAddress::parse(Network::Bep20, "0x52908400098527886E0F7030069857D2E4169EE7").unwrap();
-		let amount = Usdt::parse_decimal("5").unwrap();
-		assert!(RevenuePayoutTerms::new(Network::Trc20, bep20.clone(), amount, String::new()).is_err());
-		assert!(RevenuePayoutTerms::new(Network::Bep20, bep20.clone(), amount, "x".repeat(MAX_MEMO_BYTES + 1)).is_err());
-		assert!(RevenuePayoutTerms::new(Network::Bep20, bep20, amount, "line\nbreak".to_owned()).is_err());
-	}
-
-	#[test]
 	fn terms_of_one_kind_cannot_be_hashed_as_another() {
 		// THE PREFIX IS THE WHOLE OF THE SEPARATION. Without one, a second kind whose fields
 		// happened to encode to the same bytes would produce the same digest — and an owner's
-		// approval of a payout would be a valid signature over that other request.
-		let ConsiliumTerms::RevenuePayout(payout) = terms() else { panic!("terms() builds a payout") };
+		// approval of a payment would be a valid signature over that other request.
+		let subject = payment_subject();
 		assert!(
-			payout.canonical_bytes().starts_with(RevenuePayoutTerms::DOMAIN),
+			subject.canonical_bytes().starts_with(crate::payments::PaymentSubject::DOMAIN),
 			"every variant's encoding must open with its own domain prefix"
 		);
+		let payment = ConsiliumTerms::Payment(subject).canonical_bytes();
 		// FROZEN BYTES. Live rows carry a `payload_hash` taken over an encoding that starts
 		// exactly here; a changed prefix invalidates every approval in flight at once.
-		assert_eq!(RevenuePayoutTerms::DOMAIN, b"banking.v1.RevenuePayoutTerms\x00");
-		// The second kind carries its own prefix, so the two encodings cannot collide however
-		// their fields line up — which is what keeps a payout approval from being a valid
-		// signature over a payment.
-		let subject = payment_subject();
-		assert!(subject.canonical_bytes().starts_with(crate::payments::PaymentSubject::DOMAIN));
-		assert_ne!(ConsiliumTerms::Payment(subject).canonical_bytes(), payout.canonical_bytes());
-		// And the third: a mark's encoding opens with its own frozen prefix and can collide
-		// with neither of the other two.
+		// A mark's encoding opens with its own frozen prefix and cannot collide with a
+		// payment's however their fields line up.
 		let mark = valuation_override("250");
 		assert!(mark.canonical_bytes().starts_with(ValuationOverrideTerms::DOMAIN));
 		assert_eq!(ValuationOverrideTerms::DOMAIN, b"banking.v1.ValuationOverrideTerms\x00");
-		assert_ne!(ConsiliumTerms::ValuationOverride(mark.clone()).canonical_bytes(), payout.canonical_bytes());
-		assert_ne!(
-			ConsiliumTerms::ValuationOverride(mark).canonical_bytes(),
-			ConsiliumTerms::Payment(payment_subject()).canonical_bytes()
-		);
-		// And the fifth: a grant of units opens with its own frozen prefix too.
+		assert_ne!(ConsiliumTerms::ValuationOverride(mark).canonical_bytes(), payment);
+		// And a grant of units opens with its own frozen prefix too.
 		let grant = holder_grant("1000");
 		assert!(grant.canonical_bytes().starts_with(HolderGrantTerms::DOMAIN));
 		assert_eq!(HolderGrantTerms::DOMAIN, b"banking.v1.HolderGrantTerms\x00");
-		assert_ne!(ConsiliumTerms::HolderGrant(grant.clone()).canonical_bytes(), payout.canonical_bytes());
+		assert_ne!(ConsiliumTerms::HolderGrant(grant.clone()).canonical_bytes(), payment);
 		assert_ne!(
 			ConsiliumTerms::HolderGrant(grant).canonical_bytes(),
 			ConsiliumTerms::ValuationOverride(valuation_override("250")).canonical_bytes()
@@ -1626,9 +1520,9 @@ mod tests {
 	fn a_payment_consilium_spends_the_orders_claim_and_names_its_own_kind() {
 		let terms = ConsiliumTerms::Payment(payment_subject());
 		assert_eq!(terms.kind(), ConsiliumKind::Payment);
-		// NOT `FeeRevenue`. The per-source "one open request" index keys on this, so a payment
-		// out of the fund's pooled capital must not queue behind a revenue payout — and must
-		// queue behind another payment that spends the same claim.
+		// The per-source "one open request" index keys on this, so a payment out of the fund's
+		// pooled capital queues behind another payment that spends the same claim and behind
+		// nothing else.
 		assert_eq!(terms.source_claim(), LedgerAccountKey::ServiceClaim(crate::balance::ServiceId::fund()));
 	}
 
@@ -1668,20 +1562,12 @@ mod tests {
 	}
 
 	#[test]
-	// The revenue payout spends the retired fee claim: replay-only until the contract
-	// migration (C-9).
-	#[allow(deprecated)]
-	fn wrapping_payout_terms_leaves_the_hashed_bytes_untouched() {
+	fn wrapping_terms_leaves_the_hashed_bytes_untouched() {
 		// The enum is a container, not a second encoding layer: `payload_hash` for every
 		// consilium that already exists was taken over the inner encoding, so the wrapper
 		// must add nothing at all.
-		let wrapped = terms();
-		let ConsiliumTerms::RevenuePayout(inner) = wrapped.clone() else {
-			panic!("terms() builds a payout")
-		};
-		assert_eq!(wrapped.canonical_bytes(), inner.canonical_bytes());
-		assert_eq!(wrapped.kind(), ConsiliumKind::RevenuePayout);
-		assert_eq!(wrapped.source_claim(), LedgerAccountKey::FeeRevenue);
+		let subject = payment_subject();
+		assert_eq!(ConsiliumTerms::Payment(subject.clone()).canonical_bytes(), subject.canonical_bytes());
 	}
 
 	#[test]
@@ -1700,7 +1586,13 @@ mod tests {
 		for decision in [VoteDecision::Pending, VoteDecision::Approve, VoteDecision::Reject] {
 			assert_eq!(VoteDecision::parse(decision.as_str()).unwrap(), decision);
 		}
-		for kind in [ConsiliumKind::RevenuePayout, ConsiliumKind::Payment, ConsiliumKind::ValuationOverride, ConsiliumKind::FeePolicy] {
+		for kind in [
+			ConsiliumKind::Payment,
+			ConsiliumKind::ValuationOverride,
+			ConsiliumKind::FeePolicy,
+			ConsiliumKind::HolderGrant,
+			ConsiliumKind::SeedCapital,
+		] {
 			// THE DATABASE ADMITS EXACTLY THESE. `0031_consilium_payment_kind.sql`,
 			// `0035_consilium_valuation_override.sql` and `0036_fee_policy_changes.sql` widen the
 			// CHECK to the same four strings, and a value on one side only is a row that fails
@@ -1713,6 +1605,8 @@ mod tests {
 		assert!(ConsiliumState::parse("done").is_err());
 		assert!(VoteDecision::parse("maybe").is_err());
 		assert!(ConsiliumKind::parse("owner_removal").is_err());
+		// Retired by #245 and narrowed out of the CHECK by 0047.
+		assert!(ConsiliumKind::parse("revenue_payout").is_err());
 	}
 
 	#[test]

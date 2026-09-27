@@ -87,15 +87,16 @@ pub enum Permission {
 	WithdrawalFail,
 	/// Seed fund capital / record an off-rail deposit.
 	CapitalManage,
-	/// Pay the fund's OWN earned revenue (the `fee` claim) out to an external wallet,
-	/// and read what is payable. The only RPC pair that moves company money outward, so
-	/// it sits with the Admin/Owner capabilities — an Operator may see the treasury but
-	/// never send from it.
-	RevenuePayout,
+	/// Take part in the owners' governance of the platform's own money: open a holder
+	/// grant, read, list and cancel consilia, and read the `fee` allocation as its owners
+	/// do. (Named after the revenue payout it first gated, until #245 retired that.) It sits
+	/// with the Admin/Owner capabilities — an Operator may see the treasury but never
+	/// propose what happens to it.
+	ConsiliumManage,
 	/// Open a payment order between two named ends of the platform, and read the payment
 	/// history. Opening is a proposal, never a move: fund-owned money still needs the owner
 	/// consilium and an investor's claim still needs that investor's consent — so this sits
-	/// with the Admin/Owner capabilities for the same reason `RevenuePayout` does, and an
+	/// with the Admin/Owner capabilities for the same reason `ConsiliumManage` does, and an
 	/// Operator may see the treasury but never propose spending it.
 	PaymentOpen,
 	/// Toggle the money-plane operations mode (read-only kill-switch).
@@ -177,11 +178,11 @@ mod tests {
 		assert!(grants(Role::Owner, Permission::AllocationManage));
 		assert!(grants(Role::Owner, Permission::WithdrawalSettle));
 		assert!(grants(Role::Admin, Permission::OutboxManage));
-		// Paying the fund's revenue out is the sharpest "move", so the read/move split
-		// must hold hardest here: an Operator sees the treasury but cannot send from it.
-		assert!(!grants(Role::Operator, Permission::RevenuePayout));
-		assert!(grants(Role::Admin, Permission::RevenuePayout));
-		assert!(grants(Role::Owner, Permission::RevenuePayout));
+		// Governing the platform's own money is the sharpest "move", so the read/move split
+		// must hold hardest here: an Operator sees the treasury but cannot propose from it.
+		assert!(!grants(Role::Operator, Permission::ConsiliumManage));
+		assert!(grants(Role::Admin, Permission::ConsiliumManage));
+		assert!(grants(Role::Owner, Permission::ConsiliumManage));
 		// Proposing a payment is the same kind of act, whatever approval it then needs.
 		assert!(!grants(Role::Investor, Permission::PaymentOpen));
 		assert!(!grants(Role::Operator, Permission::PaymentOpen));
@@ -195,6 +196,6 @@ mod tests {
 		assert!(grants(Role::Owner, Permission::DepositAddressMigrate));
 		// Investor holds nothing.
 		assert!(!grants(Role::Investor, Permission::TreasuryRead));
-		assert!(!grants(Role::Investor, Permission::RevenuePayout));
+		assert!(!grants(Role::Investor, Permission::ConsiliumManage));
 	}
 }

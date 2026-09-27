@@ -24,7 +24,7 @@ use std::sync::Arc;
 use domain::{
 	auth::AuthSubject,
 	balance::{LedgerAccountKey, ServiceId, TransferCode, ValuationId},
-	consilium::{ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, HolderGrantTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
+	consilium::{ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, HolderGrantTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
 	issuance::{IdempotencyKey, UnitHolder},
 	money::{Nav, Network, Shares, Usdt, WalletAddress},
@@ -40,6 +40,7 @@ use piggybank_core::{
 	ports::{
 		AllocationRegistry, ConsiliumRepository, LedgerTransfer, NavMarks, PaymentRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository,
 		consilium::{ConsiliumView, MAX_CODE_ATTEMPTS, VoteAudit},
+		issuance::StoredIssuance,
 		ledger::Ledger,
 	},
 };
@@ -139,17 +140,6 @@ fn usdt(decimal: &str) -> Usdt {
 
 fn now() -> i64 {
 	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
-}
-
-/// The retired payout's terms — only the refusal of the kind is asserted over them now.
-fn payout_terms(amount: &str) -> RevenuePayoutTerms {
-	RevenuePayoutTerms::new(
-		Network::Bep20,
-		WalletAddress::parse(Network::Bep20, PAYOUT_ADDRESS).unwrap(),
-		usdt(amount),
-		"quarterly draw".to_owned(),
-	)
-	.unwrap()
 }
 
 fn shares(decimal: &str) -> Shares {
@@ -740,7 +730,7 @@ async fn reaching_quorum_mints_exactly_one_grant_and_executing_twice_mints_no_se
 
 	// The issuance is keyed by the consilium, so it is checkable rather than incidental.
 	let issuance = executed.consilium.executed_issuance_id().expect("a grant's effect is an issuance");
-	let record = h.issuances.find_by_id(issuance).await.unwrap().expect("the issuance exists");
+	let record = h.issuances.find_by_id(issuance).await.unwrap().and_then(StoredIssuance::live).expect("the issuance exists");
 	assert_eq!(record.issuance.holder(), &UnitHolder::User(person));
 	assert_eq!(record.issuance.service(), &ServiceId::fee());
 	assert_eq!(record.issuance.units(), shares("500"));
@@ -879,12 +869,6 @@ async fn an_impossible_grant_is_refused_at_open_not_after_a_72h_vote() {
 	let product = ServiceId::parse("svc-arb").unwrap();
 	assert!(matches!(HolderGrantTerms::new(product, roster[1], shares("1")), Err(DomainError::Validation(_))));
 	assert!(matches!(HolderGrantTerms::new(ServiceId::fee(), roster[1], Shares::ZERO), Err(DomainError::Validation(_))));
-
-	// THE RETIRED KIND. The fund's earnings are the `fee` allocation's, and a holder is paid
-	// by redeeming: a payout of the retired claim is refused for every owner, however
-	// well-formed.
-	let err = consilium_app::open_revenue_payout(&ports(&h), roster[0], payout_terms("500"), now()).await.unwrap_err();
-	assert!(matches!(err, DomainError::Validation(ref why) if why.contains("retired")), "got {err:?}");
 
 	let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium").fetch_one(&h.pool).await.unwrap();
 	let open: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium WHERE state = 'open'").fetch_one(&h.pool).await.unwrap();

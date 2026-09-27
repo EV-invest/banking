@@ -1,4 +1,4 @@
--- 0047: the governance mail queue learns the eighth kind, `payment_outcome` (#238).
+-- 0048: the governance mail queue learns `payment_outcome` (#238).
 --
 -- A payment decided by its subject's consent can die without a verdict: the consent link
 -- burns on five wrong codes, or is voided under the subject when their sessions are revoked
@@ -14,13 +14,14 @@
 -- of a kind the binary does not know is retired unread. The CHECK and the
 -- `GovernanceMail::PaymentOutcome` variant therefore land together.
 --
--- The kind CHECK is the inline one Postgres named `consilium_mail_kind_check`, so widening
--- it is DROP + ADD. No row of the new kind exists yet, so the ADD validates only rows of the
--- seven old kinds, all of which it admits; `consilium_mail` is a queue of governance mail —
--- small — and the lock is held for the validation scan alone.
+-- The list is the one 0047 left — `payout_approval` is gone for good, the revenue-payout
+-- invitation nothing writes any more — plus this kind. Rebuilt in one DROP + ADD, so any
+-- sibling migration changing the list conflicts here visibly. No row of the new kind exists
+-- yet, so the ADD validates only rows of the six kinds 0047 admits; `consilium_mail` is a
+-- queue of governance mail — small — and the lock is held for the validation scan alone.
 --
 -- EXPAND ONLY, and reversible while no `payment_outcome` row exists: narrow the CHECK back
--- to the seven kinds of 0036. With such rows present, narrowing requires deleting them
+-- to the six kinds of 0047. With such rows present, narrowing requires deleting them
 -- first — they are notices about orders that moved nothing, not money records.
 --
 -- THE ROLL-OUT WINDOW. The old pod keeps the mailer's singleton lock while the new pod
@@ -37,4 +38,4 @@ SET statement_timeout = '30s';
 
 ALTER TABLE consilium_mail DROP CONSTRAINT consilium_mail_kind_check;
 ALTER TABLE consilium_mail ADD CONSTRAINT consilium_mail_kind_check
-    CHECK (kind IN ('payout_approval', 'payout_outcome', 'token_burned', 'payment_consent', 'payment_approval', 'fee_policy_approval', 'fee_policy_notice', 'payment_outcome'));
+    CHECK (kind IN ('payout_outcome', 'token_burned', 'payment_consent', 'payment_approval', 'fee_policy_approval', 'fee_policy_notice', 'payment_outcome'));

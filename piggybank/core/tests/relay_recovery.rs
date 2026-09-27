@@ -188,12 +188,12 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	// A `processing` withdrawal: deposit, request with a liquid rail (auto-dispatched →
 	// processing), then backdate its last transition past the reaper's window.
 	let processing_user = active_user(&h).await;
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(processing_user), network, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), processing_user, network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
 	// Fund the rail (a stranger's deposit) so the request auto-dispatches to `processing`.
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), UserId::new(), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -220,9 +220,7 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	let queued_user = active_user(&h).await;
 	let short_network = Network::Trc20;
 	let big = usdt("1000000000");
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(queued_user), network, big)
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), queued_user, network, big).await.unwrap();
 	h.relay.drain().await;
 	let queued = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h),
@@ -271,9 +269,7 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 	// accepted-and-queued deterministically on the shared rails (same shape as the reaper
 	// test); the reserve then applies and its saga step is recorded.
 	let big = usdt("1000000000");
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, big)
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, big).await.unwrap();
 	h.relay.drain().await;
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h),
@@ -355,13 +351,11 @@ async fn a_fail_void_parks_when_a_broadcast_row_exists() {
 	let network = Network::Bep20;
 	let user = active_user(&h).await;
 	let claim = domain::balance::LedgerAccountKey::UserClaim(user);
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, network, usdt("100")).await.unwrap();
 	h.relay.drain().await;
 	// Fund the rail (a stranger's deposit) so the request auto-dispatches to `processing` (fail is only legal
 	// from there — the shape of a real broadcast-then-operator-fail incident).
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), UserId::new(), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -530,9 +524,7 @@ async fn a_redelivered_half_applied_settle_completes_instead_of_parking() {
 	// disburse leg drains the net back out the rail holds ≈ base + fee < net — the
 	// issue's `[net, 2·net)` trigger window, hit deterministically.
 	let gross = usdt("1000000000000000");
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, gross)
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, network, gross).await.unwrap();
 	h.relay.drain().await;
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h),
@@ -708,12 +700,10 @@ async fn a_custody_refusal_parks_the_broadcast_once_and_names_the_activity_in_la
 	const ACTIVITY_ID: &str = "0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b";
 
 	let user = active_user(&h).await;
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, network, usdt("100")).await.unwrap();
 	h.relay.drain().await;
 	// Fund the rail (a stranger's deposit) so the request auto-dispatches to `processing` (a Dispatched row exists).
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), UserId::new(), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;

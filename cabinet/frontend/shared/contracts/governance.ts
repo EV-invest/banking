@@ -35,22 +35,6 @@ export type Decimal = string;
  */
 export type Timestamp = string;
 
-// ── The payout being authorized ────────────────────────────────────────────────
-
-/**
- * The money movement a payout consilium authorizes, and the whole of what an owner is
- * agreeing to. Every field is shown in full on the approval page: `payload_hash` is
- * computed over exactly this and re-verified at execution, so anything hidden from the
- * reader is something they approved without seeing (policy 12–13).
- */
-export interface RevenuePayout {
-  network: string;
-  /** Rendered in full, monospace, never truncated. See policy 13. */
-  address: string;
-  amount: Decimal;
-  memo?: string | null;
-}
-
 // ── The change of terms being authorized ───────────────────────────────────────
 
 /**
@@ -96,7 +80,7 @@ export interface HolderGrantTerms {
  * What a seed-capital consilium asks the owners to carry: the chain transfer `tx_ref` on
  * `network`, which the chain must report as exactly `amount` USDT, is `depositor_user_id`'s
  * — booked as their deposit and subscription into `fund` once the quorum carries. The
- * reference is carried in FULL, as a payout's address is (policy 13).
+ * reference is carried in FULL, as an external payment's address is (policy 13).
  */
 export interface SeedCapitalTerms {
   tx_ref: string;
@@ -120,20 +104,17 @@ export type PayoutDecision = "approve" | "reject";
 export interface PayoutApproval {
   consilium_id: string;
   state: string;
-  /** Present for a revenue payout; empty-stringed by the BFF for a payment consilium. */
-  revenue_payout: RevenuePayout;
-  /** Present for a payment consilium — the sibling of `revenue_payout`, and what the page
-   *  renders when it is set (docs/CONSILIUM.md § Payments). */
+  /** Present for a payment consilium, and what the page renders when it is set
+   *  (docs/CONSILIUM.md § Payments). Exactly one of the siblings below describes the
+   *  subject. */
   payment?: ConsiliumPaymentTerms | null;
-  /** Present for a NAV mark past the move guard — the third sibling (banking#232). */
+  /** Present for a NAV mark past the move guard (banking#232). */
   valuation_override?: ValuationOverride | null;
-  /** Present for a fee-policy consilium — the third sibling (docs/FEES.md § Changing the
-   *  terms). */
+  /** Present for a fee-policy consilium (docs/FEES.md § Changing the terms). */
   fee_policy?: ConsiliumFeePolicyTerms | null;
   /** Present for a holder grant — a person seated on `fee` / `fund` (#245). */
   holder_grant?: HolderGrantTerms | null;
-  /** Present for a seed of the platform's capital (#245). Exactly one of the siblings
-   *  describes the subject. */
+  /** Present for a seed of the platform's capital (#245). */
   seed_capital?: SeedCapitalTerms | null;
   /** Full hash; the page shows a short prefix of it. */
   payload_hash: string;
@@ -412,11 +393,10 @@ export interface ValuationOverride {
 }
 
 /**
- * A consilium as the owners' room sees it. Six kinds: a revenue payout (`revenue_payout`,
- * history only since #245), a payment order (`payment`), a NAV mark past the move guard
- * (`valuation_override`), a change of a product's fee terms (`fee_policy`), a person seated
- * on a reserved allocation (`holder_grant`) and a seed of the platform's capital
- * (`seed_capital`), told apart by which sibling is set — exactly one is, and a kind is
+ * A consilium as the owners' room sees it. Five kinds: a payment order (`payment`), a NAV
+ * mark past the move guard (`valuation_override`), a change of a product's fee terms
+ * (`fee_policy`), a person seated on a reserved allocation (`holder_grant`) and a seed of
+ * the platform's capital (`seed_capital`), told apart by which sibling is set — exactly one is, and a kind is
  * never expressed by widening another one's field.
  *
  * The fields past `expires_at` are the ones the money plane records as a request settles.
@@ -426,7 +406,6 @@ export interface ValuationOverride {
 export interface Consilium {
   id: string;
   state: string;
-  revenue_payout?: RevenuePayout | null;
   payment?: ConsiliumPaymentTerms | null;
   valuation_override?: ValuationOverride | null;
   fee_policy?: ConsiliumFeePolicyTerms | null;

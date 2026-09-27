@@ -123,7 +123,7 @@ pub async fn withdraw_undelivered_invitations(conn: &mut PgConnection, consilium
 	let withdrawn = sqlx::query(
 		"UPDATE consilium_mail SET withdrawn_at = now(), payload = payload || '{\"approval_url\": \"\", \"code\": \"\"}'::jsonb \
 		 WHERE consilium_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL \
-		 AND kind IN ('payout_approval', 'payment_approval', 'fee_policy_approval')",
+		 AND kind IN ('payment_approval', 'fee_policy_approval')",
 	)
 	.bind(consilium_id)
 	.execute(&mut *conn)

@@ -562,16 +562,6 @@ export type BankingV1CancelRedemptionRequest = {
 };
 
 /**
- * CancelRevenuePayoutRequest
- */
-export type BankingV1CancelRevenuePayoutRequest = {
-    /**
-     * withdrawal_id
-     */
-    withdrawal_id?: string;
-};
-
-/**
  * CancelWithdrawalRequest
  */
 export type BankingV1CancelWithdrawalRequest = {
@@ -670,15 +660,6 @@ export type BankingV1Consilium = {
      */
     state?: BankingV1ConsiliumState;
     /**
-     * revenue_payout
-     *
-     * EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,
-     * `fee_policy`, `holder_grant`, `seed_capital`) is set, decided by the kind. Named fields
-     * rather than a oneof because the surfaces read them by name and a oneof buys nothing
-     * here that the "exactly one" rule does not already give.
-     */
-    revenue_payout?: BankingV1RevenuePayoutTerms;
-    /**
      * payload_hash
      *
      * Hex SHA-256 over the canonical terms. Shown (short prefix) in the mail so an owner
@@ -763,7 +744,7 @@ export type BankingV1Consilium = {
     /**
      * valuation_override
      *
-     * The third terms sibling — see `revenue_payout`.
+     * A terms sibling — see the "exactly one" note above.
      */
     valuation_override?: BankingV1ValuationOverrideTerms;
     /**
@@ -923,12 +904,6 @@ export type BankingV1ConsiliumInvitation = {
      * state
      */
     state?: BankingV1ConsiliumState;
-    /**
-     * revenue_payout
-     *
-     * Exactly one of the terms siblings is set — see `Consilium`.
-     */
-    revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
      * payload_hash
      */
@@ -2299,13 +2274,6 @@ export type BankingV1ListRedemptionsRequest = {
 };
 
 /**
- * ListRevenuePayoutsRequest
- */
-export type BankingV1ListRevenuePayoutsRequest = {
-    [key: string]: never;
-};
-
-/**
  * ListSessionsRequest
  */
 export type BankingV1ListSessionsRequest = {
@@ -3183,16 +3151,14 @@ export type BankingV1PaymentEnd = {
     /**
      * kind
      *
-     * service | user, or `external` for an address. An order opened before #245 may read
-     * `piggybank` or `revenue` — the retired singleton claims; nothing opens one now.
+     * service | user, or `external` for an address.
      */
     kind?: string;
     /**
      * id
      *
      * The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the
-     * response carries what the order stored). Empty for addresses and the retired
-     * singletons.
+     * response carries what the order stored). Empty for addresses.
      */
     id?: string;
     /**
@@ -3769,43 +3735,6 @@ export type BankingV1RetireUnitsRequest = {
      * explicit override to burn units out of a live (draft or open) product.
      */
     force?: boolean;
-};
-
-/**
- * RevenuePayoutTerms
- *
- * The immutable subject of a revenue payout — HISTORY ONLY. Retired by #245: the
- * platform's earnings are the `fee` allocation's, held by people, and cash leaves it by
- * a holder's redemption or a `payment` out of `service:fee`. Consilia opened before the
- * retirement still read (and, if approved, execute) through this. Amounts are decimal
- * USDT STRINGS, as everywhere else on this wire.
- */
-export type BankingV1RevenuePayoutTerms = {
-    /**
-     * network
-     *
-     * Rail the payout ships on (BEP20 / POLYGON / TRC20 / TON).
-     */
-    network?: string;
-    /**
-     * address
-     *
-     * Destination address, rendered in FULL wherever a human approves it — a truncated
-     * address in an approval mail is an invitation to approve the wrong one.
-     */
-    address?: string;
-    /**
-     * amount
-     *
-     * Gross USDT to pay out, capped by FundRevenue.available at execution.
-     */
-    amount?: string;
-    /**
-     * memo
-     *
-     * Free-text note from the initiator, shown in the mail. Never interpreted.
-     */
-    memo?: string;
 };
 
 /**
@@ -4635,8 +4564,7 @@ export type BankingV1UnitHolding = {
 /**
  * UnitIssuance
  *
- * One in-kind issuance: a mint or a retirement (`source`), or — on rows that predate
- * #245 — a hand-over out of the company's stake.
+ * One in-kind issuance: a mint or a retirement (`source`).
  * The holder is a flattened `UnitHolderRef`: a person, or the reserved allocation the
  * fee accrual minted a product's fee class to.
  */
@@ -4652,16 +4580,15 @@ export type BankingV1UnitIssuance = {
     /**
      * holder_kind
      *
-     * `user` | `allocation`. Rows written before #245 may still read `company`; nothing
-     * writes it any more.
+     * `user` | `allocation`. (The company stake's two historical rows never cross the
+     * wire: a lookup that lands on one is refused as a conflict, #245.)
      */
     holder_kind?: string;
     /**
      * holder_id
      *
      * The banking user id for `user`; the holding allocation's slug (`fee`) for
-     * `allocation`; empty on a historical `company` row. A client must never resolve an
-     * `allocation` holder as a user.
+     * `allocation`. A client must never resolve an `allocation` holder as a user.
      */
     holder_id?: string;
     /**
@@ -4701,9 +4628,8 @@ export type BankingV1UnitIssuance = {
      *
      * Where the units came from — or went: `mint` (IssueUnits or an executed holder
      * grant — supply grew by `units`) or `retire` (RetireUnits — burnt out of the
-     * holder's account, supply shrank by `units`). Rows written before #245 may read
-     * `company` (the retired TransferCompanyStake — moved out of the company's stake,
-     * supply unchanged). `units` is always the magnitude; the source is the direction.
+     * holder's account, supply shrank by `units`). `units` is always the magnitude; the
+     * source is the direction.
      * Always populated; a row that predates the field reads as `mint`.
      */
     source?: string;
@@ -5160,11 +5086,6 @@ export type BankingV1WithdrawalQueue = {
  *
  * One withdrawal awaiting operator action. `email` is the mirrored identity email
  * (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.
- *
- * A revenue payout opened before #245 shares this queue while it is still in flight: it
- * needs the same dispatch/settle/fail actions, and an operator clearing the queue must
- * see everything in flight against the rails. It carries `source = "revenue"` with
- * `user_id`/`email` empty. Nothing opens a new one.
  */
 export type BankingV1WithdrawalQueueItem = {
     /**
@@ -5216,7 +5137,7 @@ export type BankingV1WithdrawalQueueItem = {
     /**
      * source
      *
-     * user | revenue — which claim funds it
+     * user — which claim funds it (always a person's since #245)
      */
     source?: string;
 };
@@ -8068,35 +7989,6 @@ export type BankingV1AuthServiceRevokeSessionResponses = {
 
 export type BankingV1AuthServiceRevokeSessionResponse = BankingV1AuthServiceRevokeSessionResponses[keyof BankingV1AuthServiceRevokeSessionResponses];
 
-export type BankingV1BalanceServiceCancelRevenuePayoutData = {
-    body: BankingV1CancelRevenuePayoutRequest;
-    headers: {
-        'Connect-Protocol-Version': ConnectProtocolVersion;
-        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
-    };
-    path?: never;
-    query?: never;
-    url: '/banking.v1.BalanceService/CancelRevenuePayout';
-};
-
-export type BankingV1BalanceServiceCancelRevenuePayoutErrors = {
-    /**
-     * Error
-     */
-    default: ConnectError;
-};
-
-export type BankingV1BalanceServiceCancelRevenuePayoutError = BankingV1BalanceServiceCancelRevenuePayoutErrors[keyof BankingV1BalanceServiceCancelRevenuePayoutErrors];
-
-export type BankingV1BalanceServiceCancelRevenuePayoutResponses = {
-    /**
-     * Success
-     */
-    200: BankingV1Withdrawal;
-};
-
-export type BankingV1BalanceServiceCancelRevenuePayoutResponse = BankingV1BalanceServiceCancelRevenuePayoutResponses[keyof BankingV1BalanceServiceCancelRevenuePayoutResponses];
-
 export type BankingV1BalanceServiceDispatchWithdrawalData = {
     body: BankingV1DispatchWithdrawalRequest;
     headers: {
@@ -8328,35 +8220,6 @@ export type BankingV1BalanceServiceListRedemptionQueueResponses = {
 };
 
 export type BankingV1BalanceServiceListRedemptionQueueResponse = BankingV1BalanceServiceListRedemptionQueueResponses[keyof BankingV1BalanceServiceListRedemptionQueueResponses];
-
-export type BankingV1BalanceServiceListRevenuePayoutsData = {
-    body: BankingV1ListRevenuePayoutsRequest;
-    headers: {
-        'Connect-Protocol-Version': ConnectProtocolVersion;
-        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
-    };
-    path?: never;
-    query?: never;
-    url: '/banking.v1.BalanceService/ListRevenuePayouts';
-};
-
-export type BankingV1BalanceServiceListRevenuePayoutsErrors = {
-    /**
-     * Error
-     */
-    default: ConnectError;
-};
-
-export type BankingV1BalanceServiceListRevenuePayoutsError = BankingV1BalanceServiceListRevenuePayoutsErrors[keyof BankingV1BalanceServiceListRevenuePayoutsErrors];
-
-export type BankingV1BalanceServiceListRevenuePayoutsResponses = {
-    /**
-     * Success
-     */
-    200: BankingV1WithdrawalList;
-};
-
-export type BankingV1BalanceServiceListRevenuePayoutsResponse = BankingV1BalanceServiceListRevenuePayoutsResponses[keyof BankingV1BalanceServiceListRevenuePayoutsResponses];
 
 export type BankingV1BalanceServiceListWithdrawalQueueData = {
     body: BankingV1ListWithdrawalQueueRequest;

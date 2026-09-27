@@ -26,16 +26,17 @@
 //! product units yet — its capital is cash on its own claim — so an issuance naming it is
 //! refused rather than aliased onto an account that does not exist.
 //!
-//! The company as a holder ([`UnitHolder::Company`]) and the hand-over out of its stake
-//! ([`IssuanceSource::Company`]) are **retired**: the variants stay so the rows and
-//! events that hold them keep reading, but no new issuance may name them.
+//! The company as a holder and the hand-over out of its stake were retired by #245 and
+//! are gone from this vocabulary. The two `unit_issuances` rows production still holds
+//! from them are history, read at the persistence boundary as such
+//! (`ports::issuance::RetiredCompanyIssuance` in the hub), never as a [`UnitIssuance`].
 //!
 //! The mirror of a mint is a **retirement** ([`UnitIssuance::retire`]) — units burnt out
 //! of a holder's account with no cash leg, the way they were minted with none. The relay
 //! posts `Dr SharesOutstanding / Cr <holder shares>`, so supply shrinks by exactly what
 //! the holder gave up and the invariant holds as before. `units` is the magnitude on
 //! every row; the source says which way the supply moved, so the console reads one
-//! history — mint, hand-over (historical), retire — and the positive-digits column CHECK
+//! history — mint, retire — and the positive-digits column CHECK
 //! never has to learn a sign.
 //!
 //! Idempotent by an operator-supplied [`IdempotencyKey`], unique per service: an admin
@@ -79,12 +80,6 @@ pub enum UnitHolder {
 	/// An investor: units land in their `UserShares` and their `fund_positions`
 	/// projection gains the issuance's cost basis.
 	User(UserId),
-	/// The company's own stake: units land in `CompanyShares`. No projection.
-	///
-	/// Retired: no new issuance may name it (the constructors refuse); the variant stays
-	/// so historical rows and outbox/event-log payloads keep reading.
-	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
-	Company,
 	/// A reserved allocation ([`ServiceId::is_reserved`]) holding units of a product —
 	/// `fee` holding a product's fee class. Units land in the product's `FeeShares`
 	/// account; the allocation's own holders own them through their units of it.
@@ -95,13 +90,9 @@ impl UnitHolder {
 	/// The discriminator stored in the `holder_kind` column. Keep byte-identical with
 	/// `evbanking_contracts::allocation::holder` (`unit_holder_strings_are_canonical`
 	/// guards this side).
-	// The retired variant still has to be spelled: this is the persistence vocabulary,
-	// and a stored row is read back through it.
-	#[allow(deprecated)]
 	pub fn kind_str(&self) -> &'static str {
 		match self {
 			Self::User(_) => "user",
-			Self::Company => "company",
 			Self::Allocation(_) => "allocation",
 		}
 	}
@@ -110,7 +101,7 @@ impl UnitHolder {
 	pub fn user_id(&self) -> Option<UserId> {
 		match self {
 			Self::User(id) => Some(*id),
-			_ => None,
+			Self::Allocation(_) => None,
 		}
 	}
 
@@ -118,17 +109,16 @@ impl UnitHolder {
 	pub fn service_id(&self) -> Option<&ServiceId> {
 		match self {
 			Self::Allocation(service) => Some(service),
-			_ => None,
+			Self::User(_) => None,
 		}
 	}
 
 	/// Reconstruct from the `(kind, holder_id, holder_service)` column triple
-	/// (persistence adapter). The retired `company` kind still reads: the rows exist.
-	#[allow(deprecated)]
+	/// (persistence adapter). The retired `company` kind is refused: the adapter reads
+	/// the historical rows that carry it as history before they ever reach here.
 	pub fn from_parts(kind: &str, user: Option<UserId>, service: Option<ServiceId>) -> Result<Self, DomainError> {
 		match (kind, user, service) {
 			("user", Some(user), None) => Ok(Self::User(user)),
-			("company", None, None) => Ok(Self::Company),
 			("allocation", None, Some(service)) => Ok(Self::Allocation(service)),
 			_ => Err(DomainError::Validation(format!("invalid unit holder: {kind}"))),
 		}
@@ -137,20 +127,15 @@ impl UnitHolder {
 	/// The holder graph, as one gate: a user may hold anything; an allocation may hold
 	/// only when it is reserved and the product is not (reserved → product, one hop, so
 	/// no allocation ever holds itself, another product, or another reserved one — every
-	/// unit reaches a person); and the retired company holder is refused outright. The
-	/// holder must also have a physical account to land on ([`Self::shares_key`]), which
+	/// unit reaches a person). The holder must also have a physical account to land on ([`Self::shares_key`]), which
 	/// in phase 1 admits `fee` and refuses `fund`.
 	///
 	/// The aggregate's constructors run it; a use case runs it first of all, before any
 	/// read, so a refused holder is refused as such and not as "holds nothing" or "no
 	/// such allocation".
-	#[allow(deprecated)]
 	pub fn ensure_may_hold(&self, service: &ServiceId) -> Result<(), DomainError> {
 		match self {
 			Self::User(_) => Ok(()),
-			Self::Company => Err(DomainError::Validation(
-				"the company is no longer a unit holder: issue to a person or to the fee allocation".into(),
-			)),
 			Self::Allocation(allocation) => {
 				if !allocation.is_reserved() {
 					return Err(DomainError::Validation(format!("'{allocation}' is not a reserved allocation and cannot hold units")));
@@ -166,23 +151,16 @@ impl UnitHolder {
 	/// The inverse of [`Self::shares_key`], widened to the book's escrow: which product
 	/// and which holder a Share-ledger account's units belong to. `BookShares` is the
 	/// user's — units resting in a sell are still theirs and still count in the supply
-	/// invariant — and the retired company account still answers, because a scan of the
-	/// map must be able to attribute its balance until the data migration moves it.
-	/// `None` for `SharesOutstanding` (the supply belongs to nobody) and every cash
-	/// account.
-	// The retired company account is still a row in the map: a scan reads it back as itself.
-	#[allow(deprecated)]
+	/// invariant. `None` for `SharesOutstanding` (the supply belongs to nobody) and every
+	/// cash account.
 	pub fn of_holding(key: &LedgerAccountKey) -> Option<(ServiceId, Self)> {
 		match key {
 			LedgerAccountKey::UserShares(service, user) | LedgerAccountKey::BookShares(service, user) => Some((service.clone(), Self::User(*user))),
 			LedgerAccountKey::FeeShares(service) => Some((service.clone(), Self::Allocation(ServiceId::fee()))),
-			LedgerAccountKey::CompanyShares(service) => Some((service.clone(), Self::Company)),
 			LedgerAccountKey::SharesOutstanding(_)
-			| LedgerAccountKey::Fund
 			| LedgerAccountKey::CryptoWallet(_)
 			| LedgerAccountKey::UserClaim(_)
 			| LedgerAccountKey::ServiceClaim(_)
-			| LedgerAccountKey::FeeRevenue
 			| LedgerAccountKey::WithdrawalClearing
 			| LedgerAccountKey::BankCustody
 			| LedgerAccountKey::BookCash(_) => None,
@@ -197,11 +175,9 @@ impl UnitHolder {
 	/// holder has no account to land on, and a stored row or payload naming one is
 	/// corrupt — it cannot pass the constructors' gate — so the leg is refused rather
 	/// than aliased onto someone else's shares.
-	#[allow(deprecated)]
 	pub fn shares_key(&self, service: &ServiceId) -> Result<LedgerAccountKey, DomainError> {
 		match self {
 			Self::User(user) => Ok(LedgerAccountKey::UserShares(service.clone(), *user)),
-			Self::Company => Ok(LedgerAccountKey::CompanyShares(service.clone())),
 			Self::Allocation(holder) if *holder == ServiceId::fee() => Ok(LedgerAccountKey::FeeShares(service.clone())),
 			Self::Allocation(holder) => Err(DomainError::Validation(format!("the '{holder}' allocation has no unit account in '{service}'"))),
 		}
@@ -239,9 +215,8 @@ impl IssuanceState {
 	}
 }
 
-/// Where an issuance's units come from — or go. `Mint` grows supply; `Company` (retired)
-/// moved units the company already held and left supply alone; `Retire` shrinks supply
-/// by burning a holder's units. The ledger leg differs, the record does not, and `units`
+/// Where an issuance's units come from — or go. `Mint` grows supply; `Retire` shrinks
+/// supply by burning a holder's units. The ledger leg differs, the record does not, and `units`
 /// is always the magnitude.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -249,13 +224,6 @@ pub enum IssuanceSource {
 	/// Minted in kind: `Dr <holder shares> / Cr SharesOutstanding`.
 	#[default]
 	Mint,
-	/// Out of the company's stake: `Dr UserShares / Cr CompanyShares`. The holder is
-	/// always a user.
-	///
-	/// Retired: there is no constructor for it any more; the variant stays so the rows
-	/// and outbox/event-log payloads written with it keep reading and replaying.
-	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
-	Company,
 	/// Burnt with no cash leg: `Dr SharesOutstanding / Cr <holder shares>`. The mirror
 	/// of `Mint` — supply shrinks by `units`.
 	Retire,
@@ -265,24 +233,19 @@ impl IssuanceSource {
 	/// The stored/wire discriminant. Keep byte-identical with
 	/// `evbanking_contracts::allocation::issuance_source`
 	/// (`issuance_source_strings_are_canonical` guards this side).
-	// The retired variant is still the persistence vocabulary of the rows that hold it.
-	#[allow(deprecated)]
 	pub fn as_str(self) -> &'static str {
 		match self {
 			Self::Mint => "mint",
-			Self::Company => "company",
 			Self::Retire => "retire",
 		}
 	}
 
-	/// Parse the stored/wire form. An unrecognized value is an error rather than a
-	/// silent default, so a corrupt row never reads as a mint when it moved the
-	/// company's units.
-	#[allow(deprecated)]
+	/// Parse the stored/wire form. An unrecognized value — the retired `company` among
+	/// them — is an error rather than a silent default, so a row that moved units without
+	/// minting them never reads as a mint.
 	pub fn parse(raw: &str) -> Result<Self, DomainError> {
 		match raw {
 			"mint" => Ok(Self::Mint),
-			"company" => Ok(Self::Company),
 			"retire" => Ok(Self::Retire),
 			other => Err(DomainError::Validation(format!("unknown issuance source: {other}"))),
 		}
@@ -323,8 +286,7 @@ pub struct UnitIssuanceSnapshot {
 	pub state: IssuanceState,
 }
 
-/// The issuance aggregate — one in-kind mint or one retirement (and, historically, one
-/// hand-over out of the company's stake). Construct via [`UnitIssuance::issue`] /
+/// The issuance aggregate — one in-kind mint or one retirement. Construct via [`UnitIssuance::issue`] /
 /// [`UnitIssuance::retire`] (both raise [`IssuanceEvent::Issued`]) or
 /// [`UnitIssuance::rehydrate`] (load from the store, no events).
 #[derive(Clone, Debug)]
@@ -518,8 +480,7 @@ impl AggregateRoot for UnitIssuance {
 pub enum IssuanceEvent {
 	/// Units handed to — or, for `Retire`, taken from — a holder with no cash leg
 	/// (relay, by `source`: `Mint` → `Dr <holder shares> / Cr SharesOutstanding`,
-	/// `Company` (historical) → `Dr UserShares / Cr CompanyShares`, `Retire` → `Dr
-	/// SharesOutstanding / Cr <holder shares>`, for `units`; then, for a user holder,
+	/// `Retire` → `Dr SharesOutstanding / Cr <holder shares>`, for `units`; then, for a user holder,
 	/// `fund_positions` gains the basis and units, or for a retire sheds them pro rata).
 	Issued {
 		issuance_id: UnitIssuanceId,
@@ -585,19 +546,18 @@ mod tests {
 	}
 
 	#[test]
-	#[allow(deprecated)]
 	fn unit_holder_strings_are_canonical() {
 		// Wire contract: these must match `evbanking_contracts::allocation::holder`.
 		let user = UserId::new();
 		assert_eq!(UnitHolder::User(user).kind_str(), "user");
-		assert_eq!(UnitHolder::Company.kind_str(), "company");
 		assert_eq!(fee().kind_str(), "allocation");
-		for holder in [UnitHolder::User(user), UnitHolder::Company, fee()] {
+		for holder in [UnitHolder::User(user), fee()] {
 			assert_eq!(UnitHolder::from_parts(holder.kind_str(), holder.user_id(), holder.service_id().cloned()).unwrap(), holder);
 		}
-		// A user without an id, a company with one, an allocation without a service, a
-		// user with a service, and an unknown kind are all corrupt rows.
+		// A user without an id, an allocation without a service, a user with a service, an
+		// unknown kind and the retired `company` kind are all refused as holders.
 		assert!(UnitHolder::from_parts("user", None, None).is_err());
+		assert!(UnitHolder::from_parts("company", None, None).is_err());
 		assert!(UnitHolder::from_parts("company", Some(user), None).is_err());
 		assert!(UnitHolder::from_parts("allocation", None, None).is_err());
 		assert!(UnitHolder::from_parts("user", Some(user), Some(ServiceId::fee())).is_err());
@@ -605,11 +565,10 @@ mod tests {
 	}
 
 	#[test]
-	#[allow(deprecated)]
 	fn a_holding_account_reads_back_as_its_product_and_holder() {
 		let user = UserId::new();
 		// The inverse of `shares_key` for every holder that has one...
-		for holder in [UnitHolder::User(user), fee(), UnitHolder::Company] {
+		for holder in [UnitHolder::User(user), fee()] {
 			let key = holder.shares_key(&svc()).unwrap();
 			assert_eq!(UnitHolder::of_holding(&key), Some((svc(), holder.clone())), "{key:?}");
 		}
@@ -634,31 +593,26 @@ mod tests {
 	}
 
 	#[test]
-	#[allow(deprecated)]
 	fn issuance_source_strings_are_canonical() {
 		// Wire contract: these must match `evbanking_contracts::allocation::issuance_source`.
-		// The retired `company` source still round-trips — the rows that hold it exist.
 		assert_eq!(IssuanceSource::Mint.as_str(), "mint");
-		assert_eq!(IssuanceSource::Company.as_str(), "company");
 		assert_eq!(IssuanceSource::Retire.as_str(), "retire");
-		for source in [IssuanceSource::Mint, IssuanceSource::Company, IssuanceSource::Retire] {
+		for source in [IssuanceSource::Mint, IssuanceSource::Retire] {
 			assert_eq!(IssuanceSource::parse(source.as_str()).unwrap(), source);
 			assert_eq!(serde_json::to_string(&source).unwrap(), format!("\"{}\"", source.as_str()));
 		}
 		assert!(IssuanceSource::parse("transfer").is_err());
 		assert!(IssuanceSource::parse("burn").is_err());
+		// The retired hand-over is not a source any more: a stray one is never a mint.
+		assert!(IssuanceSource::parse("company").is_err());
 	}
 
 	#[test]
-	#[allow(deprecated)]
 	fn each_holder_mints_into_its_own_share_account() {
 		let user = UserId::new();
 		assert_eq!(UnitHolder::User(user).shares_key(&svc()).unwrap(), LedgerAccountKey::UserShares(svc(), user));
 		// The fee allocation's holding in a product IS the product's fee class.
 		assert_eq!(fee().shares_key(&svc()).unwrap(), LedgerAccountKey::FeeShares(svc()));
-		// The retired company holder still resolves: its account is what the data
-		// migration debits.
-		assert_eq!(UnitHolder::Company.shares_key(&svc()).unwrap(), LedgerAccountKey::CompanyShares(svc()));
 		// No other allocation has an account in a product — a payload naming one is
 		// refused, never aliased onto someone's shares.
 		assert!(UnitHolder::Allocation(ServiceId::fund()).shares_key(&svc()).is_err());
@@ -687,29 +641,6 @@ mod tests {
 		assert!(matches!(err, DomainError::Validation(ref m) if m.contains("no unit account")), "{err:?}");
 		// The gate stands on the way out too.
 		assert!(retire(UnitHolder::Allocation(ServiceId::fund()), "1", "1").is_err());
-	}
-
-	#[test]
-	#[allow(deprecated)]
-	fn a_company_holder_issuance_is_refused() {
-		// The company is retired as a holder: the row still reads, but nothing new names it.
-		for err in [issue(UnitHolder::Company, "10").unwrap_err(), retire(UnitHolder::Company, "10", "1").unwrap_err()] {
-			assert!(matches!(err, DomainError::Validation(ref m) if m.contains("no longer a unit holder")), "{err:?}");
-		}
-		// The stored record of a company holder still rehydrates: the rows exist.
-		let stored = UnitIssuance::rehydrate(UnitIssuanceSnapshot {
-			id: UnitIssuanceId::new(),
-			service: svc(),
-			holder: UnitHolder::Company,
-			source: IssuanceSource::Company,
-			units: Shares::parse_decimal("13000").unwrap(),
-			nav: Nav::SEED,
-			cost_basis: Usdt::ZERO,
-			idempotency_key: key(),
-			state: IssuanceState::Applied,
-		});
-		assert_eq!(stored.holder(), &UnitHolder::Company);
-		assert_eq!(stored.source(), IssuanceSource::Company);
 	}
 
 	#[test]
@@ -790,7 +721,6 @@ mod tests {
 	}
 
 	#[test]
-	#[allow(deprecated)]
 	fn a_retry_matches_on_holder_source_and_units_only() {
 		let user = UserId::new();
 		let units = Shares::parse_decimal("200").unwrap();
@@ -798,24 +728,21 @@ mod tests {
 		assert!(issuance.matches_request(&UnitHolder::User(user), IssuanceSource::Mint, units));
 		assert!(!issuance.matches_request(&fee(), IssuanceSource::Mint, units));
 		assert!(!issuance.matches_request(&UnitHolder::User(user), IssuanceSource::Mint, Shares::parse_decimal("201").unwrap()));
-		// The same key naming a mint and then a (historical) hand-over of the company's
-		// stake is a different request, not a retry: one grows supply, the other does not.
-		assert!(!issuance.matches_request(&UnitHolder::User(user), IssuanceSource::Company, units));
+		assert!(!issuance.matches_request(&UnitHolder::User(user), IssuanceSource::Retire, units));
 	}
 
 	#[test]
-	#[allow(deprecated)]
 	fn an_event_written_before_the_source_existed_reads_as_a_mint() {
-		// The permanent event log holds `Issued` payloads with no `source`; every one of
-		// them was a mint, and a stored fact must stay readable as the vocabulary grows —
-		// including the retired company holder those early mints went to.
+		// `Issued` payloads from before the field carry no `source`; every one of them was
+		// a mint.
+		let user = UserId::new();
 		let json = format!(
-			r#"{{"type":"issued","issuance_id":"{}","service":"service_arb","holder":{{"kind":"company"}},"units":"10","nav":"1","cost_basis":"10"}}"#,
+			r#"{{"type":"issued","issuance_id":"{}","service":"service_arb","holder":{{"kind":"user","id":"{user}"}},"units":"10","nav":"1","cost_basis":"10"}}"#,
 			UnitIssuanceId::new()
 		);
 		let IssuanceEvent::Issued { source, holder, .. } = serde_json::from_str(&json).unwrap();
 		assert_eq!(source, IssuanceSource::Mint);
-		assert_eq!(holder, UnitHolder::Company);
+		assert_eq!(holder, UnitHolder::User(user));
 	}
 
 	#[test]

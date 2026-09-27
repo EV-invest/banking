@@ -20,8 +20,8 @@ class WireError extends Error {
 const MAIL =
   "governance mail is not configured, so no owner could be sent an approval token; a consilium opened now could never be voted on. Build with the `concierge_governance_mail` feature and configure the concierge mail relay first.";
 const COOLING =
-  "the owner roster changed less than 48h ago; a payout consilium cannot be opened until the cooling-off period lifts in 12h 30m";
-const TOO_FEW = "a payout consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached";
+  "the owner roster changed less than 48h ago; a payment consilium cannot be opened until the cooling-off period lifts in 12h 30m";
+const TOO_FEW = "a payment consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached";
 // Since #250 the noun names the kind being opened; the rest of the sentence is shared.
 const TOO_FEW_FEE_POLICY =
   "a fee-policy consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached";
@@ -41,7 +41,7 @@ test("the cooling-off deadline is extracted, not echoed", () => {
 test("a cooling-off message whose shape changed still classifies, without a NaN", () => {
   // Losing the time is survivable — the screen names the condition without it. Rendering
   // "lifts in NaNh" is not.
-  const refusal = classifyConsiliumRefusal("a payout consilium cannot be opened until the cooling-off period ends");
+  const refusal = classifyConsiliumRefusal("a payment consilium cannot be opened until the cooling-off period ends");
   assert.deepEqual(refusal, { kind: "cooling-off", hours: 0, minutes: 0 });
 });
 
@@ -59,7 +59,7 @@ test("a fund below the floor is recognised, with its owner count", () => {
 
 test("the cooling-off classifies the same whichever kind of consilium was refused", () => {
   // Since #250 `require_settled_roster` names the kind too; the clock is still parsed.
-  for (const noun of ["payout", "payment", "valuation-override", "fee-policy"]) {
+  for (const noun of ["payment", "valuation-override", "fee-policy", "holder-grant", "seed-capital"]) {
     const message =
       `the owner roster changed less than 48h ago; a ${noun} consilium cannot be opened until the cooling-off period lifts in 12h 30m`;
     const refusal = classifyConsiliumRefusal(new WireError(message));
@@ -70,7 +70,7 @@ test("the cooling-off classifies the same whichever kind of consilium was refuse
 test("the owner floor classifies the same whichever kind of consilium was refused", () => {
   // The match is anchored on the condition, not on the noun, so a kind the backend names
   // later still lands on the same explanation rather than on its raw prose.
-  for (const noun of ["payout", "payment", "valuation-override", "fee-policy"]) {
+  for (const noun of ["payment", "valuation-override", "fee-policy", "holder-grant", "seed-capital"]) {
     const message =
       `a ${noun} consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached`;
     const refusal = classifyConsiliumRefusal(new WireError(message));

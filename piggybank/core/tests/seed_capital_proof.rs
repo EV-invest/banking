@@ -335,11 +335,10 @@ async fn units_of(h: &Harness, key: LedgerAccountKey) -> Shares {
 	Shares::from_base_units(h.ledger.balance(&key).await.unwrap().posted)
 }
 
-/// The retired singleton the seed used to credit. Read through the deprecated key on
-/// purpose: the assertion is that it never moves again.
-#[allow(deprecated)]
-fn retired_fund_claim() -> LedgerAccountKey {
-	LedgerAccountKey::Fund
+/// What is on the retired singleton claims the seed used to credit (#245), read by code
+/// through the cash scan — no live key names them. The assertion is that it never moves.
+async fn retired_claims(h: &Harness) -> u128 {
+	h.ledger.cash_invariant().await.unwrap().retired_claims
 }
 
 #[tokio::test]
@@ -379,7 +378,7 @@ async fn an_external_treasury_arrival_seeds_the_depositor_once_per_reference() {
 	let fund = ServiceId::fund();
 	let claim_before = cash_of(&h, LedgerAccountKey::ServiceClaim(fund.clone())).await;
 	let supply_before = units_of(&h, LedgerAccountKey::SharesOutstanding(fund.clone())).await;
-	let retired_before = cash_of(&h, retired_fund_claim()).await;
+	let retired_before = retired_claims(&h).await;
 	// This binary's ledger starts empty, and the tests before this one only ever seed at
 	// the price they read, so `fund` is still at par: 250.5 USDT buys 250.5 units.
 	let price = funds_app::nav_of(&h.nav, h.ledger.as_ref(), &fund).await.unwrap().nav;
@@ -465,7 +464,7 @@ async fn an_external_treasury_arrival_seeds_the_depositor_once_per_reference() {
 		Usdt::ZERO,
 		"nothing is left on the depositor's own claim"
 	);
-	assert_eq!(cash_of(&h, retired_fund_claim()).await, retired_before, "the retired `Fund` claim does not move");
+	assert_eq!(retired_claims(&h).await, retired_before, "the retired `Fund` claim does not move");
 	assert_eq!(
 		funds_app::nav_of(&h.nav, h.ledger.as_ref(), &fund).await.unwrap().nav,
 		Nav::SEED,
@@ -502,7 +501,7 @@ async fn an_external_treasury_arrival_seeds_the_depositor_once_per_reference() {
 		minted.checked_add(minted).unwrap(),
 		"two transfers, twice the units"
 	);
-	assert_eq!(cash_of(&h, retired_fund_claim()).await, retired_before, "still nothing on the retired claim");
+	assert_eq!(retired_claims(&h).await, retired_before, "still nothing on the retired claim");
 
 	// The depositor sees what they hold: `fund` is hidden from the catalog, and a holder
 	// reads it anyway, by title and at its price.
@@ -553,7 +552,7 @@ async fn a_repeated_execution_reopens_a_subscription_the_first_attempt_never_ope
 
 	// The first half of an execution, as a crash leaves it.
 	assert!(
-		balance_app::record_deposit(&h.deposits, &h.notify, tx_ref.clone(), domain::balance::Party::User(depositor), NETWORK, usdt("120"))
+		balance_app::record_deposit(&h.deposits, &h.notify, tx_ref.clone(), depositor, NETWORK, usdt("120"))
 			.await
 			.unwrap()
 	);

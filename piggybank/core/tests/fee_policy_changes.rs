@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, ServiceId},
+	balance::{LedgerAccountKey, ServiceId},
 	consilium::{ConsiliumId, ConsiliumState, VoteDecision},
 	error::DomainError,
 	fees::{ChangeRequirement, CrystallizationPeriod, FeePolicy, FeePolicyChangeId, FeePolicyChangeState, MAX_EFFECTIVE_FROM_HORIZON_SECS, MIN_NOTICE_SECS, ManagementBasis, Trigger},
@@ -274,9 +274,7 @@ async fn mirror(h: &Harness, user: UserId) -> Uuid {
 
 async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 	let tx_ref = TxRef::parse(&format!("fpc-{}", Uuid::new_v4())).unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), Network::Bep20, usdt(amount))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, user, Network::Bep20, usdt(amount)).await.unwrap();
 	h.relay.drain().await;
 }
 

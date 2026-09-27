@@ -20,9 +20,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum GovernanceMail {
-	/// Asking an owner to approve a revenue payout. Carries secrets.
-	PayoutApproval(PayoutApproval),
-	/// Telling the audience how a consilium ended — over a payout or over a payment.
+	/// Telling the audience how a consilium ended, whatever its kind.
 	PayoutOutcome(PayoutOutcome),
 	/// Warning every owner that a token burned on failed code attempts.
 	TokenBurned(PayoutOutcome),
@@ -45,7 +43,6 @@ impl GovernanceMail {
 	/// The stored discriminant, matching the `consilium_mail.kind` CHECK.
 	pub fn as_str(&self) -> &'static str {
 		match self {
-			Self::PayoutApproval(_) => "payout_approval",
 			Self::PayoutOutcome(_) => "payout_outcome",
 			Self::TokenBurned(_) => "token_burned",
 			Self::PaymentConsent(_) => "payment_consent",
@@ -61,7 +58,7 @@ impl GovernanceMail {
 	/// tells the recipient nothing about whether they can vote, so it flips nothing.
 	pub fn carries_a_token(&self) -> bool {
 		match self {
-			Self::PayoutApproval(_) | Self::PaymentConsent(_) | Self::PaymentApproval(_) | Self::FeePolicyApproval(_) => true,
+			Self::PaymentConsent(_) | Self::PaymentApproval(_) | Self::FeePolicyApproval(_) => true,
 			Self::PayoutOutcome(_) | Self::TokenBurned(_) | Self::FeePolicyNotice(_) | Self::PaymentOutcome(_) => false,
 		}
 	}
@@ -71,11 +68,6 @@ impl GovernanceMail {
 	/// as it takes to deliver it and no longer.
 	pub fn redacted(&self) -> Self {
 		match self {
-			Self::PayoutApproval(mail) => Self::PayoutApproval(PayoutApproval {
-				approval_url: String::new(),
-				code: String::new(),
-				..mail.clone()
-			}),
 			Self::PaymentConsent(mail) => Self::PaymentConsent(PaymentConsent {
 				approval_url: String::new(),
 				code: String::new(),
@@ -151,27 +143,6 @@ pub struct FeePolicyNotice {
 	pub link: String,
 }
 
-/// The approval invitation. Everything an owner needs to judge the request before typing
-/// the code — and the address in FULL, because a truncated one in an approval mail is an
-/// invitation to approve the wrong wallet.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PayoutApproval {
-	pub consilium_id: String,
-	pub initiator_email: String,
-	pub network: String,
-	pub address: String,
-	pub amount: String,
-	pub memo: String,
-	pub payload_hash: String,
-	pub threshold: u32,
-	pub owner_count: u32,
-	pub expires_at: i64,
-	/// Absolute URL of the approval page, carrying the opaque token.
-	pub approval_url: String,
-	/// The secret code. Cleared from the queue row on success.
-	pub code: String,
-}
-
 /// How a consilium ended, or why a token burned.
 ///
 /// ONE shape for four subjects, additively — the wire's `PayoutOutcomeMail` is the same:
@@ -239,9 +210,7 @@ pub struct PaymentConsent {
 }
 
 /// The owner-facing approval invitation over a PAYMENT — the consilium counterpart of
-/// [`PaymentConsent`]. Its own shape rather than a widened [`PayoutApproval`], because the
-/// payout template opens with "a request to pay fund revenue out on-chain" and a payment
-/// between two claims rendered through it would name the wrong claim and the wrong rail.
+/// [`PaymentConsent`].
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PaymentApproval {
 	pub consilium_id: String,
@@ -364,20 +333,6 @@ mod tests {
 			basis: "invested_capital".to_owned(),
 			crystallization: "annual".to_owned(),
 		};
-		secret(GovernanceMail::PayoutApproval(PayoutApproval {
-			consilium_id: "c".to_owned(),
-			initiator_email: "o@example.test".to_owned(),
-			network: "bep20".to_owned(),
-			address: "0x0".to_owned(),
-			amount: "1".to_owned(),
-			memo: String::new(),
-			payload_hash: "h".to_owned(),
-			threshold: 2,
-			owner_count: 3,
-			expires_at: 1,
-			approval_url: url(),
-			code: code(),
-		}));
 		secret(GovernanceMail::PaymentConsent(PaymentConsent {
 			payment_id: "p".to_owned(),
 			subject_user_id: "u".to_owned(),
@@ -424,7 +379,7 @@ mod tests {
 		}));
 	}
 
-	/// The consent-outcome notice is queued under the kind the 0047 CHECK admits, hands its
+	/// The consent-outcome notice is queued under the kind the 0048 CHECK admits, hands its
 	/// recipient nothing to answer with — so delivering it flips no seat's `notified` — and
 	/// holds nothing redaction would have to strip.
 	#[test]

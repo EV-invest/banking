@@ -316,19 +316,17 @@ message RetireUnitsRequest {
   bool force = 7;
 }
 
-// One in-kind issuance: a mint or a retirement (`source`), or — on rows that predate
-// #245 — a hand-over out of the company's stake.
+// One in-kind issuance: a mint or a retirement (`source`).
 // The holder is a flattened `UnitHolderRef`: a person, or the reserved allocation the
 // fee accrual minted a product's fee class to.
 message UnitIssuance {
   string id = 1;
   string service = 2;
-  // `user` | `allocation`. Rows written before #245 may still read `company`; nothing
-  // writes it any more.
+  // `user` | `allocation`. (The company stake's two historical rows never cross the
+  // wire: a lookup that lands on one is refused as a conflict, #245.)
   string holder_kind = 3;
   // The banking user id for `user`; the holding allocation's slug (`fee`) for
-  // `allocation`; empty on a historical `company` row. A client must never resolve an
-  // `allocation` holder as a user.
+  // `allocation`. A client must never resolve an `allocation` holder as a user.
   string holder_id = 4;
   string units = 5;           // decimal units minted or retired (always positive)
   string nav = 6;             // decimal USDT per unit the issuance was recorded at
@@ -340,9 +338,8 @@ message UnitIssuance {
   int64 created_at = 9;       // unix seconds
   // Where the units came from — or went: `mint` (IssueUnits or an executed holder
   // grant — supply grew by `units`) or `retire` (RetireUnits — burnt out of the
-  // holder's account, supply shrank by `units`). Rows written before #245 may read
-  // `company` (the retired TransferCompanyStake — moved out of the company's stake,
-  // supply unchanged). `units` is always the magnitude; the source is the direction.
+  // holder's account, supply shrank by `units`). `units` is always the magnitude; the
+  // source is the direction.
   // Always populated; a row that predates the field reads as `mint`.
   string source = 10;
 }

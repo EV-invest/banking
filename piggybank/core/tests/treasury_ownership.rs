@@ -26,7 +26,7 @@ use std::sync::Arc;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, ServiceId},
+	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
 	fees::{FeePolicy, Trigger},
 	issuance::{IdempotencyKey, UnitHolder},
 	money::{Network, Shares, TxRef, Usdt},
@@ -53,7 +53,7 @@ use piggybank_core::{
 	ports::{
 		AllocationRegistry, UserRepository,
 		fees::{FeePolicyChanges, PositionAccruals},
-		ledger::Ledger,
+		ledger::{Ledger, LedgerTransfer},
 	},
 };
 use sqlx::PgPool;
@@ -192,10 +192,28 @@ async fn open_product(h: &Harness, service: &ServiceId, with_fees: bool) {
 	assert!(h.changes.promote(change.id, now_unix()).await.unwrap(), "a fund with no holders takes new terms at once");
 }
 
+/// New custody credited to `party`: a person's chain deposit, or — for an allocation,
+/// which no deposit may credit since #245 — the same `Dr wallet / Cr claim` posted straight
+/// to the ledger, standing in for a settled fee or a realised return.
 async fn fund_party(h: &Harness, party: Party, amount: &str) {
-	let tx_ref = TxRef::parse(&format!("trs-{}", Uuid::new_v4())).unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, party, Network::Bep20, usdt(amount)).await.unwrap();
-	common::drain_to_quiescence(&h.relay, &h.pool).await;
+	match party {
+		Party::User(user) => {
+			let tx_ref = TxRef::parse(&format!("trs-{}", Uuid::new_v4())).unwrap();
+			balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, user, Network::Bep20, usdt(amount)).await.unwrap();
+			common::drain_to_quiescence(&h.relay, &h.pool).await;
+		}
+		Party::Service(service) => {
+			let transfer = LedgerTransfer {
+				id: Uuid::new_v4().as_u128(),
+				debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
+				credit: LedgerAccountKey::ServiceClaim(service),
+				amount: usdt(amount).base_units(),
+				code: TransferCode::Deposit,
+				reference: 0,
+			};
+			h.ledger.post(&transfer).await.unwrap();
+		}
+	}
 }
 
 /// Subscribe and wait for the position projection — the accrual clocks live on it, and

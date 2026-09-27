@@ -1005,9 +1005,7 @@ pub enum BookEvent {
 	/// buyer's cost basis and reduces the seller's. `nav` is the fund's mark at the time,
 	/// carried so the buyer's high-water mark blends the accounting price, not the quote.
 	///
-	/// `payee` is the `fee` allocation (#245); a payload written before the field existed
-	/// defaults to the retired revenue claim it was planned against, so a redelivered
-	/// legacy trade re-plans to the same linked chain.
+	/// `payee` is the `fee` allocation (#245).
 	TradeExecuted {
 		trade_id: TradeId,
 		service: ServiceId,
@@ -1021,7 +1019,6 @@ pub enum BookEvent {
 		notional: Usdt,
 		fee: Usdt,
 		nav: Nav,
-		#[serde(default = "Party::legacy_fee_payee")]
 		payee: Party,
 	},
 	/// An order reached a terminal state with something left in escrow; the relay hands

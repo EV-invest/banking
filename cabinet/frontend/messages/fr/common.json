@@ -403,10 +403,6 @@
     "en": "Pin cap",
     "t": "Plafonner"
   },
-  "admin.alloc.issuance.source.company": {
-    "en": "from the company's stake",
-    "t": "depuis la part de la société"
-  },
   "admin.alloc.issuance.source.mint": {
     "en": "minted",
     "t": "émis"
@@ -598,10 +594,6 @@
   "admin.col.status": {
     "en": "Status",
     "t": "Statut"
-  },
-  "admin.col.transaction": {
-    "en": "Transaction",
-    "t": "Transaction"
   },
   "admin.col.user": {
     "en": "User",
@@ -1495,10 +1487,6 @@
     "en": "The fee allocation",
     "t": "L'allocation des frais"
   },
-  "admin.revenue.footnote": {
-    "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
-    "t": "Un versement suit la même saga qu’un retrait client : il apparaît donc aussi dans la file Retraits, pour expédition puis règlement. Seul un versement encore en file peut être annulé — une fois en cours de traitement, une diffusion a pu aboutir et l’annuler reviendrait à payer deux fois."
-  },
   "admin.revenue.grant.intro": {
     "en": "Seat a person on the fee allocation. The owners are asked; the units are minted only when more than half of them agree.",
     "t": "Faire entrer une personne dans l'allocation des frais. Les propriétaires sont consultés ; les parts ne sont émises que si plus de la moitié d'entre eux acceptent."
@@ -1511,29 +1499,13 @@
     "en": "Propose holder grant",
     "t": "Proposer une attribution de parts"
   },
-  "admin.revenue.inFlight": {
-    "en": "In flight",
-    "t": "En cours d’envoi"
-  },
   "admin.revenue.navPosted": {
     "en": "marked {ago}",
     "t": "évalué {ago}"
   },
-  "admin.revenue.noPayouts": {
-    "en": "No payouts yet",
-    "t": "Aucun versement pour l’instant"
-  },
-  "admin.revenue.noPayoutsHintConsilium": {
-    "en": "Nothing opens a revenue payout any more: a holder redeems, or the owners approve a payment out of the fee allocation. Payouts opened before that change appear here.",
-    "t": "Plus aucun versement de revenus n'est ouvert : un détenteur rachète, ou les propriétaires approuvent un paiement depuis l'allocation des frais. Les versements ouverts avant ce changement apparaissent ici."
-  },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the platform's own money. Client balances and the fund allocation are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "C'est l'argent propre de la plateforme. Les soldes clients et l'allocation du capital sont des créances distinctes du grand livre, non incluses ici — et inaccessibles depuis cet écran."
-  },
-  "admin.revenue.payouts": {
-    "en": "Payouts",
-    "t": "Versements"
   },
   "admin.revenue.subtitle": {
     "en": "What the platform earned — the fee allocation: its cash, its units and who holds them",
@@ -2271,10 +2243,6 @@
     "en": "Your decision",
     "t": "Votre décision"
   },
-  "approval.destination": {
-    "en": "Destination address",
-    "t": "Adresse de destination"
-  },
   "approval.expired.title": {
     "en": "The deadline for this request has passed",
     "t": "Le délai de cette demande est dépassé"
@@ -2411,10 +2379,6 @@
     "en": "The link itself may be perfectly fine — this looks like a problem reaching us. Try again in a moment.",
     "t": "Le lien lui-même est peut-être parfaitement valide — cela ressemble à un problème pour nous joindre. Réessayez dans un instant."
   },
-  "approval.memo": {
-    "en": "Memo",
-    "t": "Mémo"
-  },
   "approval.network": {
     "en": "Network",
     "t": "Réseau"
@@ -2430,10 +2394,6 @@
   "approval.payloadHash": {
     "en": "Request fingerprint",
     "t": "Empreinte de la demande"
-  },
-  "approval.payloadHashHint": {
-    "en": "The fingerprint is taken over the amount, the address, the network and the memo above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
-    "t": "L'empreinte est calculée sur le montant, l'adresse, le réseau et le mémo ci-dessus. Elle est vérifiée à nouveau avant tout mouvement d'argent, si bien qu'une demande ne peut pas être modifiée après votre accord."
   },
   "approval.payment.approve": {
     "en": "Approve this payment",
@@ -2478,30 +2438,6 @@
   "approval.payment.to": {
     "en": "To",
     "t": "Vers"
-  },
-  "approval.payout.approve": {
-    "en": "Approve this payout",
-    "t": "Approuver ce versement"
-  },
-  "approval.payout.decided.approvedTitle": {
-    "en": "You approved this payout",
-    "t": "Vous avez approuvé ce versement"
-  },
-  "approval.payout.decided.freshBody": {
-    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
-    "t": "Votre réponse a été enregistrée. Il n'y a plus rien à faire ici : le versement aura lieu dès qu'assez de propriétaires auront donné leur accord."
-  },
-  "approval.payout.decided.rejectedTitle": {
-    "en": "You rejected this payout",
-    "t": "Vous avez refusé ce versement"
-  },
-  "approval.payout.lead": {
-    "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
-    "t": "{initiator} demande à verser de l'argent que le fonds a gagné. Verser l'argent propre du fonds n'est jamais la décision d'une seule personne : il faut l'accord des propriétaires."
-  },
-  "approval.payout.title": {
-    "en": "Approve a fund payout",
-    "t": "Approuver un versement du fonds"
   },
   "approval.reject": {
     "en": "Reject",
@@ -3131,10 +3067,6 @@
     "en": "Payment",
     "t": "Paiement"
   },
-  "consilium.kind.revenue_payout": {
-    "en": "Revenue payout",
-    "t": "Versement de revenus"
-  },
   "consilium.kind.seed_capital": {
     "en": "Seed capital",
     "t": "Capital d'amorçage"
@@ -3216,8 +3148,8 @@
     "t": "Demandes antérieures"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout or a payment order — marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
-    "t": "Déplacer l'argent du fonds — un versement de revenus ou un ordre de paiement —, valoriser un fonds au-delà du garde-fou de variation de VL et changer ce qu'un produit prélève. Une demande à la fois, et jamais la décision d'une seule personne."
+    "en": "Moving money the fund owns by a payment order, marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
+    "t": "Déplacer l'argent du fonds par un ordre de paiement, valoriser un fonds au-delà du garde-fou de variation de VL et changer ce qu'un produit prélève. Une demande à la fois, et jamais la décision d'une seule personne."
   },
   "consilium.payout.tally": {
     "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}}",

@@ -6,24 +6,18 @@
 //! The consilium is a **separate aggregate** from whatever it authorizes. It reserves
 //! nothing and refunds nothing; on approval it calls the ordinary path the subject already
 //! has, so the queue, the relay, the sweepers and reconciliation cover the result with no
-//! new machinery — and the money aggregates never learn that governance exists. The
-//! revenue payout (a withdrawal out of the retired `fee` claim) is retired with #245:
-//! [`open_revenue_payout`] refuses, and [`execute`] still carries the consilia that were
-//! already open when it did.
+//! new machinery — and the money aggregates never learn that governance exists.
 
 use domain::{
 	allocations::AllocationAccess,
 	balance::{LedgerAccountKey, ServiceId, ValuationId},
-	consilium::{
-		Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, HolderGrantTerms, RevenuePayoutTerms, SeedCapitalTerms, ValuationOverrideTerms, VoteDecision,
-	},
+	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, HolderGrantTerms, SeedCapitalTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
 	fees::FeePolicySubject,
 	issuance::{IdempotencyKey, UnitHolder},
 	money::{Nav, Network, Shares},
 	payments::{PaymentState, PaymentSubject},
 	users::UserId,
-	withdrawals::WithdrawalId,
 };
 use tokio::sync::Notify;
 use uuid::Uuid;
@@ -35,7 +29,6 @@ use crate::{
 		credentials::{self, token_digest},
 		funds::{self as funds_app, FundPorts},
 		issuance as issuance_app, payments as payments_app,
-		withdrawals::{self as withdrawal_app, WithdrawalPorts},
 	},
 	config::KycGate,
 	infrastructure::consilium::digest,
@@ -48,8 +41,6 @@ use crate::{
 	},
 };
 
-/// The salt that makes the payout id a pure function of the consilium.
-const PAYOUT_SALT: &[u8] = b"consilium:revenue-payout";
 /// The salt that makes a valuation override's mark id a pure function of the consilium.
 const VALUATION_SALT: &[u8] = b"consilium:valuation-override";
 
@@ -107,15 +98,6 @@ pub struct ConsiliumPorts<'a> {
 }
 
 impl ConsiliumPorts<'_> {
-	fn withdrawal_ports(&self) -> WithdrawalPorts<'_> {
-		WithdrawalPorts {
-			withdrawals: self.withdrawals,
-			ledger: self.ledger,
-			custody: self.custody,
-			relay: self.relay,
-		}
-	}
-
 	/// The same handles, as the fund use cases borrow them — the holder grant's mint.
 	fn fund_ports(&self) -> FundPorts<'_> {
 		FundPorts {
@@ -159,30 +141,14 @@ impl ConsiliumPorts<'_> {
 	}
 }
 
-/// The payout a consilium will create: `uuid_v5(consilium_id, "consilium:revenue-payout")`.
-///
-/// Deterministic on purpose. A retried execution recomputes the same id, so the second
-/// attempt finds the payout already there instead of opening a second one — the difference
-/// between an at-least-once execution path and a double payout.
-pub fn payout_id(consilium: ConsiliumId) -> WithdrawalId {
-	WithdrawalId::from_raw(Uuid::new_v5(&consilium.raw(), PAYOUT_SALT))
-}
-
 /// The mark a valuation-override consilium will record:
-/// `uuid_v5(consilium_id, "consilium:valuation-override")`. Deterministic for the same
-/// reason as [`payout_id`]: `fund_valuations` is append-only, and a retried execution
-/// must find the mark it already wrote rather than append a second one.
+/// `uuid_v5(consilium_id, "consilium:valuation-override")`. Deterministic on purpose:
+/// `fund_valuations` is append-only, and a retried execution must find the mark it already
+/// wrote rather than append a second one.
 pub fn valuation_id(consilium: ConsiliumId) -> ValuationId {
 	ValuationId::from_raw(Uuid::new_v5(&consilium.raw(), VALUATION_SALT))
 }
 
-/// Open a consilium over a proposed revenue payout.
-///
-/// The roster comes from the LOCAL mirror (`users.role`, maintained by the one-way bridge),
-/// never a live call to concierge: authorizing a payout must not depend on the identity
-/// plane being reachable at that moment. The terms are validated against the very same gates
-/// the payout itself will face, so an impossible request is refused now rather than after
-/// three owners have spent 72 hours approving it.
 /// How long an admission to or removal from the owner roster blocks a new payout proposal.
 ///
 /// WHY THIS EXISTS, AND WHAT IT DOES NOT FIX. The quorum rules compose weaker than any of
@@ -252,18 +218,9 @@ pub(crate) fn require_governance_mail(wired: bool) -> Result<(), DomainError> {
 	))
 }
 
-/// RETIRED (#245): the fund's earnings are the `fee` allocation's, held by people, and
-/// cash leaves it only through a holder's redemption. Refused for every caller; the kind
-/// stays so the consilia opened before the retirement execute and read as they did.
-pub async fn open_revenue_payout(_ports: &ConsiliumPorts<'_>, _initiator: UserId, _terms: RevenuePayoutTerms, _now: i64) -> Result<ConsiliumView, DomainError> {
-	Err(DomainError::Validation(
-		"the revenue payout is retired: the fund's earnings are held through the fee allocation, and a holder is paid by redeeming their units".into(),
-	))
-}
-
 /// Open a consilium over a NAV mark the move guard refuses (banking#232).
 ///
-/// The same two gates a revenue payout applies — a wired mailer, a settled roster — because
+/// The same two gates every consilium applies — a wired mailer, a settled roster — because
 /// a mark moves the price every redemption settles at, which is the same class of decision
 /// as paying the fund's money out. Then the two facts execution will need, checked now so
 /// nobody spends 72 hours approving a mark that cannot be recorded: the allocation exists
@@ -440,23 +397,23 @@ pub async fn submit_decision(consilia: &dyn ConsiliumRepository, token: &str, co
 	consilia.submit(&token_digest(token), code, decision, audit, now).await
 }
 
-/// Turn an approved consilium into a revenue payout.
+/// Turn an approved consilium into its effect.
 ///
 /// Six things make this safe to call more than once, from more than one place (the vote that
 /// carried it, and the sweeper picking up an approval whose execution never ran):
 ///
 /// 1. only an `approved` consilium is executable — an expired, rejected, cancelled or
 ///    already-failed one is refused, so a late vote can never reach the money;
-/// 2. the payload hash is re-verified against the stored terms, so the payout that goes out
-///    is the one the owners were shown;
+/// 2. the payload hash is re-verified against the stored terms, so the effect that lands is
+///    the one the owners were shown;
 /// 3. the tally is re-checked against the LIVE owner roster, so an approval that a seat
 ///    change has since invalidated cannot be spent;
 /// 4. an approval that has been sitting too long past its window is refused rather than
 ///    executed on a stale authorization;
-/// 5. the withdrawal id is derived from the consilium, so a retried execution re-creates the
-///    same row rather than paying twice — and a refusal from the payout path is re-read
-///    against that id before being believed, so the loser of a two-caller race records the
-///    payout that actually exists instead of a phantom failure;
+/// 5. every effect's id is derived from the consilium (or its subject), so a retried
+///    execution finds the row rather than writing a second one — and a refusal from the
+///    effect's path is re-read against that id before being believed, so the loser of a
+///    two-caller race records the effect that actually exists instead of a phantom failure;
 /// 6. a genuine refusal is recorded as `execution_failed` with its reason — terminal,
 ///    visible to the owners, and retried by nothing.
 pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> Result<ConsiliumView, DomainError> {
@@ -516,7 +473,6 @@ pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> R
 	// cannot be added without deciding here how it executes — which is the one question the
 	// aggregate deliberately refuses to answer (it records an id, not a mechanism).
 	let outcome = match consilium.terms().clone() {
-		ConsiliumTerms::RevenuePayout(terms) => execute_revenue_payout(ports, id, terms).await?,
 		ConsiliumTerms::Payment(subject) => execute_payment(ports, consilium, subject, now).await?,
 		ConsiliumTerms::ValuationOverride(terms) => execute_valuation_override(ports, consilium, terms).await?,
 		ConsiliumTerms::FeePolicy(subject) => execute_fee_policy(ports, id, &subject, now).await?,
@@ -591,8 +547,10 @@ async fn execute_holder_grant(ports: &ConsiliumPorts<'_>, id: ConsiliumId, terms
 /// derived from the LIVE supply now, not the supply at open.
 ///
 /// The id is derived from the consilium, so a retried execution finds the mark already
-/// there; and a refusal from the writer is re-read against that id before being believed,
-/// for the same two-caller race `execute_revenue_payout` describes.
+/// there; and a refusal from the writer is re-read against that id before being believed.
+/// Two callers reach this by construction — the carrying vote and the sweeper — and both
+/// can see "no mark" before one of them writes it; recording the loser's error as `Failed`
+/// would be a lie that sticks, mailed to every owner, while the mark exists.
 async fn execute_valuation_override(ports: &ConsiliumPorts<'_>, consilium: &Consilium, terms: ValuationOverrideTerms) -> Result<ExecutionOutcome, DomainError> {
 	let mark = valuation_id(consilium.id());
 	if ports.nav.find(mark).await?.is_some() {
@@ -658,7 +616,7 @@ pub async fn execute_payment(ports: &ConsiliumPorts<'_>, consilium: &Consilium, 
 		// A REFUSAL IS NOT PROOF THE APPROVAL DID NOT LAND. Two callers reach this — the vote
 		// that carried the quorum, and the sweeper — so one can lose the row lock race and see
 		// a conflict over an order the other has already approved. Re-read before believing it,
-		// exactly as `execute_revenue_payout` re-reads the payout id.
+		// exactly as `execute_valuation_override` re-reads the mark id.
 		//
 		// THE RE-READ ASKS FOR THE POSITIVE FACT. "No longer pending" is not it: an order the
 		// initiator withdrew, the sweeper expired or a burned seat rejected is also not
@@ -682,36 +640,6 @@ pub async fn execute_payment(ports: &ConsiliumPorts<'_>, consilium: &Consilium, 
 		tracing::error!(payment_id = %subject.payment_id, "payments: the quorum carried the order but its execution did not complete: {err}");
 	}
 	outcome
-}
-
-/// Create the withdrawal an approved revenue payout authorizes, and say how it went.
-///
-/// Replay only (#245): nothing opens this kind any more, but a consilium approved before
-/// the retirement still carries. The id is derived from the consilium, so a retried
-/// execution re-creates the same row rather than paying twice.
-async fn execute_revenue_payout(ports: &ConsiliumPorts<'_>, id: ConsiliumId, terms: RevenuePayoutTerms) -> Result<ExecutionOutcome, DomainError> {
-	let withdrawal = payout_id(id);
-	if ports.withdrawals.find_by_id(withdrawal).await?.is_some() {
-		return Ok(ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(withdrawal)));
-	}
-	Ok(
-		match withdrawal_app::request_revenue_payout(&ports.withdrawal_ports(), ports.configured, withdrawal, terms.network, terms.address, terms.amount).await {
-			Ok(payout) => ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(payout.id())),
-			// A REFUSAL HERE IS NOT PROOF THE PAYOUT DOES NOT EXIST.
-			//
-			// Two callers reach this by construction: the inline execute after the carrying vote,
-			// and the sweeper. Both can see `find_by_id == None` above; one then inserts and the
-			// other loses on the `withdrawals` primary key. Recording the loser's error as
-			// `Failed` would be a lie that sticks — the consilium would read `execution_failed`,
-			// every owner would be mailed a failure, and `awaiting_execution` would never return
-			// it again, all while the payout row exists and will be broadcast. So: re-read before
-			// believing the error.
-			Err(err) => match ports.withdrawals.find_by_id(withdrawal).await? {
-				Some(_) => ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(withdrawal)),
-				None => ExecutionOutcome::Failed(failure_reason(&err)),
-			},
-		},
-	)
 }
 
 /// How long after the voting window closes an approval may still be spent.
@@ -756,25 +684,19 @@ mod tests {
 		}
 	}
 
-	/// The payout wording is the one the cabinet's classifier was written against, so it
-	/// is pinned byte for byte; the other kinds differ from it in the noun alone.
+	/// One wording is pinned byte for byte — the fragments the cabinet's classifier reads —
+	/// and the other kinds differ from it in the noun alone.
 	#[test]
 	fn cooling_off_refusal_names_the_kind_and_keeps_the_classified_fragments() {
-		let payout = message(cooling_off_refusal(ConsiliumKind::RevenuePayout, 12 * 3600 + 30 * 60));
+		let payment = message(cooling_off_refusal(ConsiliumKind::Payment, 12 * 3600 + 30 * 60));
 		assert_eq!(
-			payout,
-			"the owner roster changed less than 48h ago; a payout consilium cannot be opened until the cooling-off period lifts in 12h 30m"
+			payment,
+			"the owner roster changed less than 48h ago; a payment consilium cannot be opened until the cooling-off period lifts in 12h 30m"
 		);
 
-		for kind in [
-			ConsiliumKind::Payment,
-			ConsiliumKind::ValuationOverride,
-			ConsiliumKind::FeePolicy,
-			ConsiliumKind::HolderGrant,
-			ConsiliumKind::SeedCapital,
-		] {
+		for kind in [ConsiliumKind::ValuationOverride, ConsiliumKind::FeePolicy, ConsiliumKind::HolderGrant, ConsiliumKind::SeedCapital] {
 			let got = message(cooling_off_refusal(kind, 12 * 3600 + 30 * 60));
-			assert_eq!(got, payout.replace("a payout consilium", &format!("a {} consilium", kind.noun())), "{kind:?}");
+			assert_eq!(got, payment.replace("a payment consilium", &format!("a {} consilium", kind.noun())), "{kind:?}");
 			assert!(got.contains("cooling-off") && got.contains("lifts in 12h 30m"), "{kind:?}: {got}");
 		}
 	}

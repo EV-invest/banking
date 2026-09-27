@@ -21,7 +21,7 @@
 //! [`FeeSettlements`] (converting accumulated fee units to cash).
 //!
 //! [`UnitIssuanceRepository`] records an operator's in-kind mint — units to an investor
-//! or to the company with no cash leg — the one supply path beside a subscription.
+//! with no cash leg — the one supply path beside a subscription.
 //!
 //! [`BookStore`] is the allocation book — orders, fills, the per-product terms — one port
 //! for the one transaction a placement is.

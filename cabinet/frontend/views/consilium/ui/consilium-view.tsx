@@ -63,7 +63,6 @@ import { expiresIn, formatDay, formatMoment, hasStamp } from "@/shared/lib/datet
 import { hashPrefix } from "@/shared/lib/hash";
 import { initialsOf } from "@/shared/lib/identity";
 import { formatExactUsdt } from "@/shared/lib/money";
-import { networkLabel } from "@/shared/lib/rail";
 import { useResource } from "@/shared/lib/resource";
 import { BreakGlassNotice } from "@/shared/ui/break-glass-notice";
 import { Link } from "@/shared/ui/cabinet-link";
@@ -455,7 +454,7 @@ function PayoutSection({
                                   ? holderGrantWords(consilium.holder_grant, t, locale)
                                   : consilium.seed_capital
                                     ? seedCapitalWords(consilium.seed_capital, locale)
-                                    : `${formatExactUsdt(consilium.revenue_payout?.amount, locale)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
+                                    : "—"}
                         </ItemTitle>
                         <ItemDescription className="truncate text-xs tabular-nums">
                           {/* `??` cannot do this: an undecided consilium carries the STRING "0", which is truthy. */}
@@ -484,11 +483,9 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
-  const payout = consilium.revenue_payout;
   // A payment consilium carries its terms in `payment`, a NAV mark past the move guard in
   // `valuation_override`, a change of terms in `fee_policy`, a person seated on `fee` /
-  // `fund` in `holder_grant`, a seed of capital in `seed_capital`; the payout fields are
-  // empty in every one of those cases.
+  // `fund` in `holder_grant`, a seed of capital in `seed_capital` — exactly one is set.
   const payment = consilium.payment ?? null;
   const valuation = consilium.valuation_override ?? null;
   const feePolicy = consilium.fee_policy ?? null;
@@ -527,7 +524,7 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
             <OwnershipHeadline grant={grant} seed={seed} />
           ) : (
             <p className="text-2xl font-semibold leading-none tabular-nums text-ink">
-              {formatExactUsdt(valuation ? valuation.aum : payment ? payment.amount : payout?.amount, locale)}
+              {formatExactUsdt(valuation ? valuation.aum : payment?.amount, locale)}
               <span className="ml-2 text-sm font-medium text-ink-soft">USDT</span>
             </p>
           )}
@@ -545,19 +542,11 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
         <FeePolicyTerms terms={feePolicy} />
       ) : grant ? (
         <HolderGrantTermsBlock terms={grant} />
-      ) : seed ? (
-        <SeedCapitalTermsBlock terms={seed} />
       ) : (
-        // Full, monospace, wrapped rather than truncated — the same rule as the approval
-        // email and the approval page. An owner who checks the address here and approves it
-        // there must be looking at the same characters (policy 13).
-        <p className="break-all rounded-lg border border-border bg-secondary px-3 py-2.5 font-mono-tech text-xs leading-relaxed text-ink">
-          {payout?.address || "—"}
-        </p>
+        seed && <SeedCapitalTermsBlock terms={seed} />
       )}
 
       <div className="flex flex-col gap-1.5 text-xs text-ink-soft">
-        {kind === "revenue_payout" && <span className="tabular-nums">{t("consilium.payout.network", { network: networkLabel(payout?.network) })}</span>}
         <span className="font-mono-tech">{t("consilium.payout.fingerprint", { hash: hashPrefix(consilium.payload_hash) })}</span>
         <span>{t("consilium.payout.openedBy", { initiator: consilium.initiator_email })}</span>
         <span className="tabular-nums">
