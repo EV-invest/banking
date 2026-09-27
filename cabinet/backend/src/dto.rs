@@ -1400,8 +1400,8 @@ impl From<bk::RedemptionQueue> for RedemptionQueue {
 }
 
 /// One withdrawal awaiting operator action (admin Withdrawals screen). `source` is
-/// `user` or `revenue`; a revenue payout is the fund's own money leaving, so it carries
-/// no `user_id`/`email` and the screen labels it rather than showing a blank investor.
+/// always `user` since #245 retired the revenue payout (the hub's CHECK admits nothing
+/// else), so every row names its investor.
 #[derive(Serialize)]
 pub struct WithdrawalQueueItem {
 	pub withdrawal_id: String,
@@ -1981,8 +1981,8 @@ fn non_empty(value: String) -> Option<String> {
 #[derive(Default, Serialize)]
 pub struct PaymentEnd {
 	pub label: String,
-	/// `service` | `user`, or `external` for an address (`piggybank` | `revenue` on orders
-	/// that predate #245).
+	/// `service` | `user`, or `external` for an address (the retired `piggybank` /
+	/// `revenue` kinds are refused at the hub and no order carries them).
 	pub kind: String,
 	pub id: String,
 	pub network: String,

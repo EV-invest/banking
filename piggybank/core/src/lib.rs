@@ -78,7 +78,7 @@ pub struct AppState {
 	/// The `subscriptions` aggregate's driven port (mint records + position cost basis).
 	pub subscriptions: Arc<dyn SubscriptionRepository>,
 	/// The `issuance` aggregate's driven port — an operator's in-kind mints (units to an
-	/// investor or the company, no cash leg), idempotent by key.
+	/// investor, no cash leg), idempotent by key.
 	pub issuances: Arc<dyn UnitIssuanceRepository>,
 	/// The `redemptions` aggregate's driven port (the accept-and-queue saga).
 	pub redemptions: Arc<dyn RedemptionRepository>,
