@@ -30,6 +30,16 @@ pub trait UnitIssuanceRepository: Repository<Aggregate = UnitIssuance> {
 	/// insert, so a lost race never leaves an event with no row behind it.
 	async fn issue(&self, issuance: &mut UnitIssuance) -> Result<IssueOutcome, DomainError>;
 
+	/// Persist an issuance whose leg has **already posted** — `state` must be `Applied` —
+	/// with its holder's projection in the same transaction and no outbox event: the
+	/// door of the one-off ownership data migration (#245), which posts its mints to the
+	/// ledger itself as one linked chain per allocation and so has nothing left for the
+	/// relay to do. Idempotent by `(service, idempotency_key)`: `Ok(true)` when the row
+	/// was written, `Ok(false)` when a row already stood under the key (nothing written;
+	/// the caller has checked it names the same request). Every other writer of an
+	/// issuance goes through [`Self::issue`] and lets the relay stamp `applied`.
+	async fn record_applied(&self, issuance: &UnitIssuance) -> Result<bool, DomainError>;
+
 	/// The issuance recorded under `key` for `service`, if any — the idempotency read
 	/// the use case runs before minting a new id.
 	async fn find_by_key(&self, service: &ServiceId, key: &IdempotencyKey) -> Result<Option<UnitIssuanceRecord>, DomainError>;

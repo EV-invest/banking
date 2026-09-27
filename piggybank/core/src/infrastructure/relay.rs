@@ -55,7 +55,7 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::{
-		book, fee_accrual,
+		book, fee_accrual, issuance,
 		outbox::{self, OutboxRow},
 		rails::now_unix_i64,
 	},
@@ -665,11 +665,9 @@ async fn project_trade(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error
 /// subscription at that NAV would: an investor handed units in kind is measured for
 /// performance fees from the price they were handed them at. An allocation holder (and the
 /// retired company one) gets no projection — there is no investor to report P&L or charge
-/// fees to. Whether the units were minted or (historically) came out of the company's
-/// stake, the recipient's position gains the same units and basis; a **retirement** runs
-/// the seller's side of a trade instead —
-/// units off, basis down pro rata (clamped at zero, for the reasons [`project_trade`]
-/// gives), high-water mark untouched, because nothing was realised at any price.
+/// fees to. The projection itself is [`issuance::project_holder_position`], shared with
+/// the one-off ownership data migration, which writes its rows already applied and posts
+/// its mints itself: one place says what a holder's position gains from a mint.
 async fn project_issuance(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error> {
 	const PROJECTION_LEG: i32 = 100;
 	let IssuanceEvent::Issued {
@@ -695,52 +693,7 @@ async fn project_issuance(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Er
 			.bind(row.aggregate_id)
 			.execute(&mut *tx)
 			.await?;
-		if let UnitHolder::User(user) = holder {
-			// Same obligation as the subscribe projection: settle what the old basis
-			// accrued before moving it (see [`super::fee_accrual`]).
-			fee_accrual::carry_accrual(&mut tx, user.raw(), service.as_str(), now_unix_i64())
-				.await
-				.map_err(|err| sqlx::Error::Protocol(format!("carry fee accrual before issuance basis change: {err}")))?;
-			match source {
-				// A hand-over row still in the outbox across the deploy projects like the
-				// mint it is from the recipient's side.
-				#[allow(deprecated)]
-				IssuanceSource::Mint | IssuanceSource::Company => {
-					sqlx::query(
-						"INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5) \
-						 ON CONFLICT (user_id, service) DO UPDATE SET \
-						 cost_basis = (fund_positions.cost_basis::numeric + EXCLUDED.cost_basis::numeric)::text, \
-						 units = (fund_positions.units::numeric + EXCLUDED.units::numeric)::text, \
-						 high_water_mark = GREATEST(fund_positions.high_water_mark::numeric, EXCLUDED.high_water_mark::numeric)::text, \
-						 updated_at = now()",
-					)
-					.bind(user.raw())
-					.bind(service.as_str())
-					.bind(cost_basis.base_units().to_string())
-					.bind(units.base_units().to_string())
-					.bind(nav.base_units().to_string())
-					.execute(&mut *tx)
-					.await?;
-				}
-				// The row's own `cost_basis` is the book value the operator wrote off for the
-				// record; the projection sheds its basis pro rata to the units retired, exactly
-				// as a seller's does, so a holder who retires half keeps half of what they paid.
-				IssuanceSource::Retire => {
-					sqlx::query(
-						"UPDATE fund_positions SET \
-						 cost_basis = CASE WHEN units::numeric > $3::numeric THEN trunc(cost_basis::numeric * (units::numeric - $3::numeric) / units::numeric)::text ELSE '0' END, \
-						 units = GREATEST(units::numeric - $3::numeric, 0)::text, \
-						 updated_at = now() \
-						 WHERE user_id = $1 AND service = $2",
-					)
-					.bind(user.raw())
-					.bind(service.as_str())
-					.bind(units.base_units().to_string())
-					.execute(&mut *tx)
-					.await?;
-				}
-			}
-		}
+		issuance::project_holder_position(&mut tx, &holder, source, &service, units, nav, cost_basis).await?;
 	}
 	tx.commit().await?;
 	Ok(())
@@ -1508,6 +1461,14 @@ fn void_clearing(aggregate_id: Uuid, source: WithdrawalSource, amount: Usdt, ref
 /// the same id and a completion can recompute its reservation's `pending_id`.
 fn tid(aggregate_id: Uuid, salt: &[u8]) -> u128 {
 	Uuid::new_v5(&aggregate_id, salt).as_u128()
+}
+
+/// The transfer id of an issuance's mint leg, derived from the issuance id the way
+/// [`plan_issuance`] derives it — exposed so the ownership data migration, which posts its
+/// mints itself, stamps the ids the relay would have, and a reconciler recomputing a
+/// transfer from a `unit_issuances` row finds the migration's mints like any other.
+pub fn issuance_mint_id(issuance_id: Uuid) -> u128 {
+	tid(issuance_id, ISSUE_MINT)
 }
 
 /// The transfer id of a payment's reservation leg — what the payment execution path asks

@@ -312,7 +312,7 @@ pub async fn retire_units(
 /// hold at all ([`UnitHolder::ensure_may_hold`]) is checked by the use case before any
 /// read, so the retired company holder never gets here.
 #[allow(deprecated)]
-async fn require_holder(allocations: &dyn AllocationRegistry, users: &dyn UserRepository, holder: &UnitHolder) -> Result<(), DomainError> {
+pub(crate) async fn require_holder(allocations: &dyn AllocationRegistry, users: &dyn UserRepository, holder: &UnitHolder) -> Result<(), DomainError> {
 	match holder {
 		UnitHolder::User(user) => {
 			let Some(row) = users.find_by_id(*user).await? else {

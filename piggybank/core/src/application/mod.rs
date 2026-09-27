@@ -42,6 +42,9 @@
 //! [`ownership`] is the read of who holds an allocation — its claim, its supply and its
 //! holders, summed from the ledger — behind the cap table, the treasury and the
 //! reconciliation's "every unit at a holder" checks.
+//! [`migrate_ownership`] is the one-off data migration behind the `piggybank
+//! migrate-ownership` command: the retired singleton claims moved onto the reserved
+//! allocations and their first holders seated, one linked chain per allocation.
 
 pub mod allocations;
 pub mod auth_sync;
@@ -52,6 +55,7 @@ pub(crate) mod credentials;
 pub mod fees;
 pub mod funds;
 pub mod issuance;
+pub mod migrate_ownership;
 pub mod operations;
 pub mod ownership;
 pub mod payments;

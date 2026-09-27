@@ -421,6 +421,13 @@ pub enum TransferCode {
 	/// reconciliation reading the Share ledger alone can tell which burns the fund's
 	/// cash should account for.
 	UnitRetire,
+	/// The one-off ownership data migration's cash leg (#245): what was on the retired
+	/// `fund` (code 1) or `fee` (code 40) claim moved onto the reserved allocation's own
+	/// claim, `Dr <retired> / Cr service:<fund|fee>`. Its own code so a reconciler reading
+	/// the USDT ledger can tell the hand-over from a payment or a fee settlement; the unit
+	/// legs the migration posts alongside carry [`Self::UnitIssue`] / [`Self::UnitRetire`],
+	/// exactly like the rows behind them.
+	OwnershipMigrate,
 }
 
 impl TransferCode {
@@ -453,6 +460,7 @@ impl TransferCode {
 			Self::BookFee => 51,
 			Self::CompanyStakeTransfer => 52,
 			Self::UnitRetire => 53,
+			Self::OwnershipMigrate => 54,
 		}
 	}
 }
@@ -979,6 +987,7 @@ mod tests {
 			TransferCode::BookFee,
 			TransferCode::CompanyStakeTransfer,
 			TransferCode::UnitRetire,
+			TransferCode::OwnershipMigrate,
 		]
 		.map(TransferCode::code);
 		let mut sorted = transfer_codes;
