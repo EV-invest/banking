@@ -22,7 +22,7 @@ use std::sync::Arc;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, ServiceId, ValuationId},
+	balance::{LedgerAccountKey, ServiceId, ValuationId},
 	book::{BookPolicy, ClientOrderId, OrderId, OrderKind, Price, PriceTimeEngine, Side, Tif},
 	fees::{self, CrystallizationPeriod, FeeAssessment, FeeAssessmentId, FeePolicy, ManagementBasis, Trigger},
 	money::{Nav, Network, Shares, TxRef, Usdt},
@@ -223,9 +223,7 @@ async fn install_policy(h: &Harness, service: &ServiceId, policy: FeePolicy) {
 
 async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 	let tx_ref = TxRef::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), Network::Bep20, usdt(amount))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, user, Network::Bep20, usdt(amount)).await.unwrap();
 	h.relay.drain().await;
 }
 

@@ -11,7 +11,7 @@
 //! keeps its NAV and cash absent; and the page cap reports `truncated` honestly.
 
 use domain::{
-	balance::{Party, ServiceId},
+	balance::ServiceId,
 	money::{Nav, Network, Shares, TxRef, Usdt, WalletAddress},
 	redemptions::{Redemption, RedemptionId, RedemptionState},
 	subscriptions::{Subscription, SubscriptionId},
@@ -98,7 +98,7 @@ async fn seed_one_of_each(pool: &PgPool, user: UserId) -> (TxRef, WithdrawalId, 
 	let redemptions = PgRedemptions::new(pool.clone());
 
 	let tx_ref = unique_tx_ref();
-	assert!(deposits.record(tx_ref.clone(), Party::User(user), Network::Ton, usdt("125.5")).await.expect("record deposit"));
+	assert!(deposits.record(tx_ref.clone(), user, Network::Ton, usdt("125.5")).await.expect("record deposit"));
 	age_deposit(pool, &tx_ref, 4).await;
 
 	let mut withdrawal = Withdrawal::request(WithdrawalId::new(), WithdrawalSource::User(user), Network::Bep20, address(), usdt("50"), usdt("1")).expect("build withdrawal");
@@ -117,8 +117,6 @@ async fn seed_one_of_each(pool: &PgPool, user: UserId) -> (TxRef, WithdrawalId, 
 }
 
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn merges_all_four_kinds_newest_first_and_only_for_the_caller() {
 	let Some(pool) = common::pool().await else {
 		eprintln!("DATABASE_URL unset — skipping operations-feed test");
@@ -129,14 +127,9 @@ async fn merges_all_four_kinds_newest_first_and_only_for_the_caller() {
 	let other = UserId::new();
 
 	let (tx_ref, withdrawal_id, subscription_id, redemption_id) = seed_one_of_each(&pool, user).await;
-	// Another user's full history, and the fund's own deposit, must stay invisible.
+	// Another user's full history must stay invisible. (The seed's historical `piggybank`
+	// deposits are pinned over a pre-0047 schema in `ownership_contract`.)
 	seed_one_of_each(&pool, other).await;
-	assert!(
-		PgDeposits::new(pool.clone())
-			.record(unique_tx_ref(), Party::Piggybank, Network::Bep20, usdt("1000"))
-			.await
-			.expect("record fund deposit")
-	);
 
 	let page = feed.list_by_user(user, MAX_PAGE).await.expect("list");
 	assert_eq!(page.operations.len(), 4, "exactly the caller's four operations");

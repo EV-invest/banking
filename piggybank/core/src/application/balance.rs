@@ -14,14 +14,15 @@
 //! Nothing here credits a claim nobody holds (#245). USDT that reaches a treasury hot
 //! wallet from outside is *somebody's* — the person who sent it — and is booked as their
 //! deposit, followed by their subscription into the `fund` allocation
-//! ([`seed_fund_capital`]); the retired fund-owned party is never written again. WHOSE it
+//! ([`seed_fund_capital`]). A deposit is always a person's: [`record_deposit`] takes a
+//! user, and the `deposits` CHECK says the same since migration 0047. WHOSE it
 //! is, the chain cannot say, so the attribution is the owners' quorum's
 //! (`consilium::open_seed_capital`), never one administrator's: the RPC opens the
 //! consilium, and only its execution reaches [`seed_fund_capital`].
 
 use domain::{
 	allocations::{Allocation, AllocationAccess},
-	balance::{LedgerAccountKey, Party, ServiceId},
+	balance::{LedgerAccountKey, ServiceId},
 	error::DomainError,
 	money::{Network, Shares, TxRef, Usdt},
 	subscriptions::{Subscription, SubscriptionId},
@@ -78,21 +79,9 @@ pub struct Treasury {
 	/// Layer 1 — every allocation the registry knows, the hidden `fee` and `fund` included,
 	/// each with its claim, its supply and who holds it.
 	pub allocations: Vec<AllocationTreasury>,
-	/// Layer 1 — the retired singleton claims, with what is still on them until the
-	/// ownership data migration moves it onto the reserved allocations. Zero after.
-	pub retired: RetiredClaims,
 	/// The amount reserved by queued/in-flight withdrawals and approved payments (the
 	/// clearing account's pending balance).
 	pub reserved_for_withdrawals: Usdt,
-}
-
-/// What is still on the retired `fund` (code 1) and `fee` (code 40) claims (#245).
-/// Read so the operator's snapshot before and after the data migration is the same
-/// screen; both are zero once it has run, and the field goes with the contract step.
-#[derive(Clone, Copy, Debug)]
-pub struct RetiredClaims {
-	pub fund: Usdt,
-	pub fee_revenue: Usdt,
 }
 
 /// One allocation as the treasury shows it: the registry's name for it, its ownership
@@ -133,31 +122,15 @@ pub struct TreasuryPorts<'a> {
 /// Record an on-chain deposit, **idempotent by `tx_ref`** (see [`Deposits::record`]).
 /// Returns `true` if newly recorded, `false` for a duplicate; the relay is nudged
 /// only when a new event was committed.
-// The retired parties are refused by name until the contract migration (C-9) removes
-// them from the type.
-#[allow(deprecated)]
-pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError> {
+///
+/// The depositor is a person, by type: an allocation's claim grows by a subscription or a
+/// settled fee, both of which move a dollar already on the ledger, never by new custody
+/// booked straight onto it — a claim credited that way would have nobody behind it (#245).
+pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxRef, user: UserId, network: Network, amount: Usdt) -> Result<bool, DomainError> {
 	if amount.is_zero() {
 		return Err(DomainError::Validation("deposit amount must be positive".into()));
 	}
-	// `fee` is the fund's EARNINGS claim: it is credited by settling a fee or retaining a
-	// withdrawal fee, each of which moves a dollar that is already on the ledger. A deposit
-	// credits a claim against NEW custody, so booking one here would invent revenue nobody
-	// earned and put `fee` in the deposit history, where every reader expects an arrival.
-	// The refusal is narrow on purpose — `Party` names it so payments can spend it, not so
-	// anything may pay into it.
-	if matches!(party, Party::Revenue) {
-		return Err(DomainError::Validation("the fee claim is credited by settling a fee, never by a deposit".into()));
-	}
-	// The retired `Fund` claim has nobody behind it (#245). Capital is a person's deposit
-	// plus their subscription into the `fund` allocation — `seed_fund_capital` — so no
-	// caller, however privileged, can put a dollar on a claim without a holder.
-	if matches!(party, Party::Piggybank) {
-		return Err(DomainError::Validation(
-			"the fund's capital is seeded by its depositor — record it with SeedCapital, naming who sent it".into(),
-		));
-	}
-	let recorded = deposits.record(tx_ref, party, network, amount).await?;
+	let recorded = deposits.record(tx_ref, user, network, amount).await?;
 	if recorded {
 		relay.notify_one();
 	}
@@ -222,7 +195,7 @@ pub async fn record_verified_arrival(
 			)));
 		}
 	};
-	let recorded = record_deposit(deposits, relay, tx_ref, Party::User(user), network, transfer.amount).await?;
+	let recorded = record_deposit(deposits, relay, tx_ref, user, network, transfer.amount).await?;
 	Ok(VerifiedArrival {
 		recorded,
 		user,
@@ -306,7 +279,7 @@ pub async fn seed_fund_capital(
 	}
 	let subscription_id = seed_subscription_id(&tx_ref);
 	let mut subscription = funds_app::price_fund_seed(&ports.funds, subscription_id, depositor, transfer.amount, now_unix).await?;
-	let recorded = record_deposit(ports.deposits, ports.funds.relay, tx_ref.clone(), Party::User(depositor), network, transfer.amount).await?;
+	let recorded = record_deposit(ports.deposits, ports.funds.relay, tx_ref.clone(), depositor, network, transfer.amount).await?;
 	if !recorded {
 		// The deposit and the subscription are two commits: a process that died between
 		// them left the cash on the depositor's own claim with no units against it. A repeat
@@ -460,7 +433,6 @@ pub async fn treasury(ports: &TreasuryPorts<'_>) -> Result<Treasury, DomainError
 	for allocation in ports.allocations.list_all().await? {
 		allocations.push(allocation_treasury(ports.ledger, ports.nav, &allocation).await?);
 	}
-	let retired = retired_claims(ports.ledger).await?;
 	let reserved_for_withdrawals = Usdt::from_base_units(ports.ledger.balance(&LedgerAccountKey::WithdrawalClearing).await?.pending);
 	Ok(Treasury {
 		rails,
@@ -468,19 +440,7 @@ pub async fn treasury(ports: &TreasuryPorts<'_>) -> Result<Treasury, DomainError
 		total_custody,
 		held_by_users,
 		allocations,
-		retired,
 		reserved_for_withdrawals,
-	})
-}
-
-/// What is still on the retired singleton claims. Their keys stay resolvable for
-/// exactly this — a read that says how much the data migration has yet to move — and
-/// this is the one place the treasury still names them.
-#[allow(deprecated)]
-async fn retired_claims(ledger: &dyn Ledger) -> Result<RetiredClaims, DomainError> {
-	Ok(RetiredClaims {
-		fund: Usdt::from_base_units(ledger.balance(&LedgerAccountKey::Fund).await?.posted),
-		fee_revenue: Usdt::from_base_units(ledger.balance(&LedgerAccountKey::FeeRevenue).await?.posted),
 	})
 }
 

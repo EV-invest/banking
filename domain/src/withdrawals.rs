@@ -1,13 +1,9 @@
 //! `withdrawals` bounded context — on-chain withdrawals out of the fund.
 //!
-//! Two flows share this saga, differing only in **which claim is debited**
-//! ([`WithdrawalSource`]): an investor moving their own free balance out
-//! ([`WithdrawalSource::User`]), and — historically — the fund paying its OWN earnings
-//! out to an operator-controlled wallet ([`WithdrawalSource::Revenue`], the retired
-//! revenue payout). Since #245 every fee is the `fee` allocation's, held by people, and
-//! cash leaves it only through a holder's redemption onto their own claim and then their
-//! own withdrawal: the revenue source stays only so the payouts queued against the retired
-//! claim replay and settle, and no producer names it any more.
+//! The claim debited is always an investor's own ([`WithdrawalSource::User`]). The fund's
+//! earnings used to leave by a second source — the revenue payout — which #245 retired:
+//! every fee is the `fee` allocation's, held by people, and cash leaves it only through a
+//! holder's redemption onto their own claim and then their own withdrawal.
 //!
 //! A withdrawal moves that claim out of the fund and onto an external
 //! address. It is the **dangerous direction** (value leaves the system), so it is a
@@ -42,81 +38,50 @@ pub type WithdrawalId = Id<WithdrawalTag>;
 /// Phantom tag making [`WithdrawalId`] a distinct, incompatible identity type.
 pub struct WithdrawalTag;
 
-/// **Whose money leaves** — the claim a withdrawal debits.
+/// **Whose money leaves** — the claim a withdrawal debits. One variant since #245 retired
+/// the revenue payout; kept as a type because the saga, the relay's legs and the stored
+/// `source` column are all written against "a source", and a second one would be a variant
+/// here, not a parallel saga.
 ///
-/// The saga (reserve → dispatch → settle/void), the operator queue, the chain watchers
-/// and every recovery job are identical for both variants; only this account differs.
-/// That is why one aggregate serves both, rather than a parallel payout saga that would
-/// have to re-earn the same guarantees.
-///
-/// The wire form is a single string — a user's UUID, or the literal `revenue` — so an
-/// `event_log`/`outbox` payload written before revenue payouts existed (whose field held
-/// a bare UUID) still reads back as [`WithdrawalSource::User`]. Together with the
-/// `alias` on [`WithdrawalEvent`]'s `source` field there is nothing to backfill and no
-/// undrained row that stops deserializing.
+/// The wire form is the user's UUID as a string, so an `event_log`/`outbox` payload
+/// written before the field was a source (it held a bare UUID) still reads back as
+/// [`WithdrawalSource::User`]. Together with the `alias` on [`WithdrawalEvent`]'s `source`
+/// field there is nothing to backfill and no undrained row that stops deserializing.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(into = "String", try_from = "String")]
 pub enum WithdrawalSource {
 	/// An investor's own unified claim (`user:<uuid>`).
 	User(UserId),
-	/// The retired revenue claim (`fee`, code 40) — what retained withdrawal fees and the
-	/// settled 2-and-20 used to land on. Nothing credits it any more: every fee is the
-	/// `fee` allocation's (`service:fee`, #245), and a payout out of that allocation is
-	/// a holder's redemption. This source only replays what was queued against the
-	/// retired claim; nothing opens a new one.
-	#[deprecated(note = "retired: replay-only, removed after the ownership contract migration (#245)")]
-	Revenue,
 }
 
 impl WithdrawalSource {
-	/// The literal marking a revenue payout. Deliberately not UUID-shaped, so the two
-	/// forms can never be confused when parsing a stored value.
-	pub const REVENUE: &'static str = "revenue";
-
 	/// The stored/wire discriminant.
-	// The retired source is still the persistence vocabulary of the rows that hold it.
-	#[allow(deprecated)]
 	pub fn as_wire(&self) -> String {
 		match self {
 			Self::User(user) => user.to_string(),
-			Self::Revenue => Self::REVENUE.to_owned(),
 		}
 	}
 
-	#[allow(deprecated)]
+	/// Parse the stored/wire form. The retired `revenue` literal is not UUID-shaped and
+	/// is refused like any other junk.
 	pub fn parse(raw: &str) -> Result<Self, DomainError> {
-		if raw == Self::REVENUE {
-			return Ok(Self::Revenue);
-		}
 		uuid::Uuid::parse_str(raw)
 			.map(|id| Self::User(Id::from_raw(id)))
 			.map_err(|_| DomainError::Validation(format!("unknown withdrawal source: {raw}")))
 	}
 
-	/// The claim account debited — the one line that makes a payout a payout.
-	// `Revenue` debits the retired fee claim: the payouts queued against it replay.
-	#[allow(deprecated)]
+	/// The claim account debited.
 	pub fn claim_key(&self) -> LedgerAccountKey {
 		match self {
 			Self::User(user) => LedgerAccountKey::UserClaim(*user),
-			Self::Revenue => LedgerAccountKey::FeeRevenue,
 		}
 	}
 
-	/// The user this withdrawal belongs to, or `None` for a revenue payout — which
-	/// belongs to the fund itself and must therefore never surface in a user's wallet,
-	/// withdrawal list, or `pending_withdrawal` segment.
-	#[allow(deprecated)]
-	pub fn user(&self) -> Option<UserId> {
+	/// The user this withdrawal belongs to.
+	pub fn user(&self) -> UserId {
 		match self {
-			Self::User(user) => Some(*user),
-			Self::Revenue => None,
+			Self::User(user) => *user,
 		}
-	}
-
-	#[allow(deprecated)]
-	pub fn is_revenue(&self) -> bool {
-		matches!(self, Self::Revenue)
 	}
 }
 
@@ -154,17 +119,9 @@ impl WithdrawalPolicy {
 	}
 
 	/// The fee retained for a withdrawal out of `source`.
-	///
-	/// A **revenue payout charges none**: the `fee` claim is where fees are retained,
-	/// so charging one would debit the gross and credit the fee straight back to the
-	/// same account — money in a circle, and an operator told they'd receive 100 when
-	/// the chain sees 99. Gross therefore equals net for a payout. On-chain gas is
-	/// unaffected either way: the rail's treasury pays it, exactly as for a user.
-	#[allow(deprecated)]
 	pub fn fee_for(source: WithdrawalSource, network: Network) -> Usdt {
 		match source {
 			WithdrawalSource::User(_) => Self::fee(network),
-			WithdrawalSource::Revenue => Usdt::ZERO,
 		}
 	}
 }
@@ -392,8 +349,8 @@ impl Withdrawal {
 		self.source
 	}
 
-	/// The owning investor, or `None` when the fund is paying out its own revenue.
-	pub fn user(&self) -> Option<UserId> {
+	/// The owning investor.
+	pub fn user(&self) -> UserId {
 		self.source.user()
 	}
 
@@ -444,7 +401,7 @@ impl AggregateRoot for Withdrawal {
 /// ops and the custody broadcast with no extra read. Internally tagged so the stored
 /// JSON is self-describing.
 ///
-/// `source` is read from either key: events written before revenue payouts existed
+/// `source` is read from either key: events written before the field was a source
 /// spell it `user` and hold a bare UUID, which [`WithdrawalSource`]'s string form
 /// parses unchanged. An outbox row parked before the upgrade therefore still drains
 /// after it — no backfill, no wedged queue.
@@ -475,9 +432,7 @@ pub enum WithdrawalEvent {
 	/// Confirmed on-chain (relay: post the clearing pending, then move net→`wallet:<net>`
 	/// and the retained fee→`payee`'s claim).
 	///
-	/// `payee` is the `fee` allocation (#245). A payload written before the field existed
-	/// defaults to the retired revenue claim it was planned against, so a settle parked
-	/// or half-applied before the upgrade re-plans to the same fee leg.
+	/// `payee` is the `fee` allocation (#245).
 	Settled {
 		withdrawal_id: WithdrawalId,
 		#[serde(alias = "user")]
@@ -486,7 +441,6 @@ pub enum WithdrawalEvent {
 		amount: Usdt,
 		fee: Usdt,
 		tx_ref: TxRef,
-		#[serde(default = "Party::legacy_fee_payee")]
 		payee: Party,
 	},
 	/// Broadcast confirmed not to have landed — void the clearing reservation (refund).
@@ -653,45 +607,20 @@ mod tests {
 	}
 
 	#[test]
-	#[allow(deprecated)]
-	fn a_revenue_payout_debits_the_fee_claim_and_pays_no_fee() {
-		// The whole point of the source: a payout takes the fund's EARNED money (`fee`),
-		// never a client claim and never the fund's seed capital (`fund`).
-		assert_eq!(WithdrawalSource::Revenue.claim_key(), LedgerAccountKey::FeeRevenue);
-		assert_eq!(WithdrawalPolicy::fee_for(WithdrawalSource::Revenue, Network::Bep20), Usdt::ZERO);
+	fn a_withdrawal_debits_its_users_claim_and_pays_the_policy_fee() {
 		let uid = UserId::new();
 		assert_eq!(WithdrawalSource::User(uid).claim_key(), LedgerAccountKey::UserClaim(uid));
 		assert_eq!(WithdrawalPolicy::fee_for(WithdrawalSource::User(uid), Network::Bep20), WithdrawalPolicy::fee(Network::Bep20));
-
-		// Gross == net for a payout, and it runs the identical saga.
-		let mut w = Withdrawal::request(WithdrawalId::new(), WithdrawalSource::Revenue, Network::Bep20, addr(Network::Bep20), gross("500"), Usdt::ZERO).unwrap();
-		assert_eq!(w.net_amount(), gross("500"));
-		assert!(w.user().is_none(), "a payout belongs to the fund, so no user's wallet may show it");
-		assert!(w.source().is_revenue());
-		w.dispatch().unwrap();
-		w.settle(TxRef::parse("0xhash").unwrap()).unwrap();
-		assert_eq!(w.state(), WithdrawalState::Completed);
 	}
 
 	#[test]
-	// The retired source still has to satisfy the saga's shape rules on replay.
-	#[allow(deprecated)]
-	fn the_payout_minimum_still_applies() {
-		// fee_for() is zero for a payout, so the minimum is the only dust guard left.
-		let err = Withdrawal::request(WithdrawalId::new(), WithdrawalSource::Revenue, Network::Ton, addr(Network::Ton), gross("1"), Usdt::ZERO).unwrap_err();
-		assert!(matches!(err, DomainError::Validation(_)));
-	}
-
-	#[test]
-	// The retired source's wire literal is frozen: stored rows and queued events carry it.
-	#[allow(deprecated)]
 	fn source_round_trips_and_rejects_junk() {
 		let uid = UserId::new();
-		for source in [WithdrawalSource::User(uid), WithdrawalSource::Revenue] {
-			assert_eq!(WithdrawalSource::parse(&source.as_wire()).unwrap(), source);
-		}
-		assert_eq!(WithdrawalSource::Revenue.as_wire(), "revenue");
-		// Not UUID-shaped and not the literal ⇒ refused, never a silent default.
+		let source = WithdrawalSource::User(uid);
+		assert_eq!(WithdrawalSource::parse(&source.as_wire()).unwrap(), source);
+		// Not UUID-shaped ⇒ refused, never a silent default — the retired `revenue` literal
+		// included (#245).
+		assert!(WithdrawalSource::parse("revenue").is_err());
 		assert!(WithdrawalSource::parse("fund").is_err());
 		assert!(WithdrawalSource::parse("").is_err());
 	}

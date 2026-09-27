@@ -37,7 +37,8 @@ fn repo_err(err: sqlx::Error) -> DomainError {
 
 #[async_trait]
 impl Deposits for PgDeposits {
-	async fn record(&self, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError> {
+	async fn record(&self, tx_ref: TxRef, user: UserId, network: Network, amount: Usdt) -> Result<bool, DomainError> {
+		let party = Party::User(user);
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let event_id = Uuid::new_v4();
 		let inserted = sqlx::query_scalar::<_, String>(

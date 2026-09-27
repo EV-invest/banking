@@ -13,7 +13,7 @@ use std::sync::Arc;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationBacking, AllocationEvent, AllocationIcon, AllocationId, AllocationState},
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, ServiceId},
+	balance::{LedgerAccountKey, ServiceId},
 	error::DomainError,
 	issuance::{IdempotencyKey, IssuanceSource, IssuanceState, UnitHolder, UnitIssuance, UnitIssuanceId},
 	money::{Nav, Network, Shares, TxRef, Usdt},
@@ -27,7 +27,7 @@ use piggybank_core::{
 	},
 	ports::{
 		AllocationRegistry, FundPositionReader, UnitIssuanceRepository, UserRepository,
-		issuance::{IssueOutcome, UnitIssuanceRecord},
+		issuance::{IssueOutcome, StoredIssuance, UnitIssuanceRecord},
 		ledger::Ledger,
 	},
 };
@@ -134,9 +134,7 @@ async fn register_with_icon(h: &Harness, service: &ServiceId, icon: AllocationIc
 /// Credit `amount` to the user's unified claim so a subscribe has money to move.
 async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 	let tx_ref = TxRef::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), Network::Bep20, usdt(amount))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, user, Network::Bep20, usdt(amount)).await.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 }
 
@@ -223,11 +221,6 @@ fn investor_units(holders: &issuance_app::UnitHoldersView) -> Shares {
 
 fn fee_units(holders: &issuance_app::UnitHoldersView) -> Shares {
 	units_held_by(holders, |holder| matches!(holder, UnitHolder::Allocation(a) if *a == ServiceId::fee()))
-}
-
-#[allow(deprecated)]
-fn company_units(holders: &issuance_app::UnitHoldersView) -> Shares {
-	units_held_by(holders, |holder| matches!(holder, UnitHolder::Company))
 }
 
 async fn units_of(h: &Harness, key: LedgerAccountKey) -> Shares {
@@ -515,7 +508,7 @@ async fn units_issued_in_kind_land_on_the_holder_and_in_the_supply_with_no_cash_
 
 	// The relay stamped both rows applied once the mint posted — never before.
 	for record in [&to_investor, &to_company] {
-		let applied = h.issuances.find_by_id(record.issuance.id()).await.unwrap().unwrap();
+		let applied = h.issuances.find_by_id(record.issuance.id()).await.unwrap().and_then(StoredIssuance::live).unwrap();
 		assert_eq!(applied.issuance.state(), IssuanceState::Applied);
 		assert!(applied.applied_at.is_some());
 	}
@@ -545,7 +538,6 @@ async fn units_issued_in_kind_land_on_the_holder_and_in_the_supply_with_no_cash_
 			},
 		]
 	);
-	assert_eq!(company_units(&holders), Shares::ZERO);
 	assert_eq!(fee_units(&holders), Shares::ZERO, "nothing was minted into the fee allocation");
 	// And what the investor's own screen shows.
 	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), investor, false, now_unix())
@@ -606,7 +598,13 @@ async fn an_issuance_defaults_its_cost_basis_to_units_times_nav() {
 	assert_eq!(position.cost_basis, usdt("250"));
 	assert_eq!(position.high_water_mark, Nav::parse_decimal("1.25").unwrap());
 	// The owner's explicit zero basis was taken as given.
-	let seed = h.issuances.find_by_key(&service, &IdempotencyKey::parse("seed").unwrap()).await.unwrap().unwrap();
+	let seed = h
+		.issuances
+		.find_by_key(&service, &IdempotencyKey::parse("seed").unwrap())
+		.await
+		.unwrap()
+		.and_then(StoredIssuance::live)
+		.unwrap();
 	assert_eq!(seed.issuance.cost_basis(), Usdt::ZERO);
 }
 
@@ -707,90 +705,9 @@ async fn an_issuance_is_logged_and_reaches_the_relay_as_its_own_kind() {
 	assert!(dispatched, "the relay drained it rather than parking an unknown kind");
 }
 
-#[tokio::test]
-#[allow(deprecated)]
-async fn the_company_holder_and_the_stake_transfer_are_retired() {
-	// #245: the company holds nothing any more. A mint to it or a burn from it is refused
-	// before the registry is even consulted, nothing is written, and the hand-over out of
-	// its stake has no use case left — only the rows it wrote, which still read.
-	let Some(h) = harness().await else { return };
-	let service = unique_service();
-	register(&h, &service).await;
-
-	let err = issue(&h, &service, UnitHolder::Company, "13000", Some("13000"), "company").await.unwrap_err();
-	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("no longer a unit holder")), "got {err:?}");
-	let err = retire(&h, &service, UnitHolder::Company, "1", "company-burn", true).await.unwrap_err();
-	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("no longer a unit holder")), "got {err:?}");
-	assert!(h.issuances.find_by_key(&service, &IdempotencyKey::parse("company").unwrap()).await.unwrap().is_none());
-	common::drain_to_quiescence(&h.relay, &h.pool).await;
-	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, Shares::ZERO);
-	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, Shares::ZERO);
-	assert_eq!(
-		h.allocations.find(&service).await.unwrap().unwrap().backing(),
-		AllocationBacking::Cash,
-		"a refused mint must not flip the product to in_kind"
-	);
-}
-
-#[tokio::test]
-#[allow(deprecated)]
-async fn a_company_row_written_before_the_retirement_still_reads_and_replays() {
-	// The retirement is producer-side only. A `company` mint that was recorded — and its
-	// outbox event, undrained across the deploy — is still read back as what it was and
-	// still posts onto the retired `shares_company:<svc>` account: that balance is what
-	// the data migration moves, and a row the relay could not plan would park instead.
-	let Some(h) = harness().await else { return };
-	let service = unique_service();
-	register(&h, &service).await;
-	let id = Uuid::new_v4();
-	let units = shares("13000");
-	let payload = format!(
-		r#"{{"type":"issued","issuance_id":"{id}","service":"{service}","holder":{{"kind":"company"}},"source":"mint","units":"{u}","nav":"{n}","cost_basis":"0"}}"#,
-		u = units.base_units(),
-		n = Nav::SEED.base_units()
-	);
-	let mut tx = h.pool.begin().await.unwrap();
-	sqlx::query(
-		"INSERT INTO unit_issuances (id, service, holder_kind, holder_id, source, units, nav, cost_basis, idempotency_key, state) \
-		 VALUES ($1, $2, 'company', NULL, 'mint', $3, $4, '0', 'legacy', 'queued')",
-	)
-	.bind(id)
-	.bind(service.as_str())
-	.bind(units.base_units().to_string())
-	.bind(Nav::SEED.base_units().to_string())
-	.execute(&mut *tx)
-	.await
-	.unwrap();
-	sqlx::query("INSERT INTO outbox (event_id, aggregate, aggregate_id, kind, payload) VALUES ($1, 'unit_issuance', $2, 'issuances', $3::jsonb)")
-		.bind(Uuid::new_v4())
-		.bind(id)
-		.bind(&payload)
-		.execute(&mut *tx)
-		.await
-		.unwrap();
-	tx.commit().await.unwrap();
-	h.notify.notify_one();
-	common::drain_to_quiescence(&h.relay, &h.pool).await;
-
-	assert_eq!(
-		units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await,
-		units,
-		"the legacy leg posted where it always did"
-	);
-	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, units);
-	let record = h
-		.issuances
-		.find_by_key(&service, &IdempotencyKey::parse("legacy").unwrap())
-		.await
-		.unwrap()
-		.expect("the row still reads");
-	assert_eq!(record.issuance.holder(), &UnitHolder::Company);
-	assert_eq!(record.issuance.state(), IssuanceState::Applied, "the relay stamped the replayed row");
-	// And the cap table still shows the retired stake until the data migration moves it.
-	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
-	assert_eq!(company_units(&holders), units);
-	assert_eq!(investor_units(&holders), Shares::ZERO);
-}
+// The company holder, its mint and its hand-over are gone from the vocabulary (#245): the
+// schema refuses them since 0047, and the two production rows are pinned as history by
+// `tests/ownership_contract.rs`, over a database migrated to 0046 first.
 
 /// H-2 / M-2 of the #245 security review: one `AllocationManage` holder could grant
 /// themselves `invest` on `fee` or `fund` and subscribe cash into the owners' money without
@@ -897,7 +814,6 @@ async fn the_fee_allocation_holds_a_products_fee_class_and_nothing_holds_a_reser
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("800"));
 	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
 	assert_eq!(fee_units(&holders), shares("800"));
-	assert_eq!(company_units(&holders), Shares::ZERO);
 	assert_eq!(investor_units(&holders), Shares::ZERO);
 	// The row round-trips through its own column, not the user one.
 	let (kind, user, holder_service): (String, Option<Uuid>, Option<String>) = sqlx::query_as("SELECT holder_kind, holder_id, holder_service FROM unit_issuances WHERE id = $1")
@@ -906,7 +822,7 @@ async fn the_fee_allocation_holds_a_products_fee_class_and_nothing_holds_a_reser
 		.await
 		.unwrap();
 	assert_eq!((kind.as_str(), user, holder_service.as_deref()), ("allocation", None, Some("fee")));
-	let reread = h.issuances.find_by_id(record.issuance.id()).await.unwrap().unwrap();
+	let reread = h.issuances.find_by_id(record.issuance.id()).await.unwrap().and_then(StoredIssuance::live).unwrap();
 	assert_eq!(reread.issuance.holder(), &fee);
 	assert_eq!(reread.issuance.state(), IssuanceState::Applied);
 
@@ -1581,7 +1497,7 @@ async fn retiring_units_on_a_closed_product_burns_them_out_of_the_holder_and_the
 	// The relay stamped both rows applied with the source intact, and the investor's
 	// projection shed units and basis pro rata — the mark stays where the mint put it.
 	for record in [&from_investor, &from_company] {
-		let applied = h.issuances.find_by_id(record.issuance.id()).await.unwrap().unwrap();
+		let applied = h.issuances.find_by_id(record.issuance.id()).await.unwrap().and_then(StoredIssuance::live).unwrap();
 		assert_eq!(applied.issuance.state(), IssuanceState::Applied);
 		assert_eq!(applied.issuance.source(), IssuanceSource::Retire, "the source survives the round trip");
 		assert!(applied.applied_at.is_some());

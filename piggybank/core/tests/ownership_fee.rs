@@ -30,7 +30,7 @@ use std::sync::Arc;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, ServiceId, ValuationId},
+	balance::{LedgerAccountKey, Party, ServiceId, TransferCode, ValuationId},
 	error::DomainError,
 	fees::{FeePolicy, Trigger},
 	issuance::{IdempotencyKey, UnitHolder},
@@ -61,7 +61,7 @@ use piggybank_core::{
 	ports::{
 		AllocationRegistry, RedemptionRepository, UserRepository,
 		fees::{FeePolicyChanges, FeeSettlements, PositionAccruals},
-		ledger::Ledger,
+		ledger::{Ledger, LedgerTransfer},
 		nav::NavMarks,
 	},
 };
@@ -206,10 +206,28 @@ async fn open_fund(h: &Harness, service: &ServiceId) {
 	assert!(h.changes.promote(change.id, now_unix()).await.unwrap(), "a fund with no holders takes new terms at once");
 }
 
+/// New custody credited to `party`: a person's chain deposit, or — for an allocation,
+/// which no deposit may credit since #245 — the same `Dr wallet / Cr claim` posted straight
+/// to the ledger, standing in for a settled fee or a realised return.
 async fn fund_party(h: &Harness, party: Party, amount: &str) {
-	let tx_ref = TxRef::parse(&format!("own-{}", Uuid::new_v4())).unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, party, Network::Bep20, usdt(amount)).await.unwrap();
-	common::drain_to_quiescence(&h.relay, &h.pool).await;
+	match party {
+		Party::User(user) => {
+			let tx_ref = TxRef::parse(&format!("own-{}", Uuid::new_v4())).unwrap();
+			balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, user, Network::Bep20, usdt(amount)).await.unwrap();
+			common::drain_to_quiescence(&h.relay, &h.pool).await;
+		}
+		Party::Service(service) => {
+			let transfer = LedgerTransfer {
+				id: Uuid::new_v4().as_u128(),
+				debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
+				credit: LedgerAccountKey::ServiceClaim(service),
+				amount: usdt(amount).base_units(),
+				code: TransferCode::Deposit,
+				reference: 0,
+			};
+			h.ledger.post(&transfer).await.unwrap();
+		}
+	}
 }
 
 async fn fund_user(h: &Harness, user: UserId, amount: &str) {
@@ -371,13 +389,16 @@ async fn settled_fee_cash_lands_in_the_fee_allocation_and_its_holders_nav_rises(
 	// Settle: the product buys its fee class back at today's NAV. Cash lands on the fee
 	// allocation's claim — not on the retired revenue account — and the holders' NAV is
 	// unchanged, because the units left and their exact value arrived.
+	let retired_before = h.ledger.cash_invariant().await.unwrap().retired_claims;
 	let cash = settle_fee_shares(&h, &service).await;
 	assert_eq!(cash, nav("2").value(fee_class).unwrap(), "priced at the day's NAV");
 	assert_eq!(cash_of(&h, fee_claim()).await, claim_before.checked_add(cash).unwrap(), "the cash is the fee allocation's");
 	assert_eq!(units_of(&h, LedgerAccountKey::FeeShares(service.clone())).await, Shares::ZERO);
-	#[allow(deprecated)]
-	let retired = cash_of(&h, LedgerAccountKey::FeeRevenue).await;
-	assert_eq!(retired, Usdt::ZERO, "nothing new lands on the retired revenue claim");
+	assert_eq!(
+		h.ledger.cash_invariant().await.unwrap().retired_claims,
+		retired_before,
+		"nothing new lands on the retired revenue claim"
+	);
 	let settled = fee_nav(&h).await;
 	assert!(
 		settled.base_units().abs_diff(marked_up.base_units()) <= 1,

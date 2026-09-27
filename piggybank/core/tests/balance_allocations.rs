@@ -19,7 +19,7 @@ use std::sync::Arc;
 use domain::{
 	allocations::AllocationAccess,
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, ServiceId, TransferCode, ValuationId},
+	balance::{LedgerAccountKey, ServiceId, TransferCode, ValuationId},
 	error::DomainError,
 	money::{Nav, Network, Shares, TxRef, Usdt, WalletAddress},
 	redemptions::RedemptionState,
@@ -116,6 +116,22 @@ fn unique_tx_ref() -> TxRef {
 	TxRef::parse(&format!("itest-{}", Uuid::new_v4())).unwrap()
 }
 
+/// A product's off-platform return landing on its claim: custody grows and the
+/// allocation's claim with it. Posted straight to the ledger because no deposit may credit
+/// an allocation (#245, `deposits.party_kind = 'user'`) — this is the test standing in for
+/// the fund's realised profit, not a path the hub offers.
+async fn realize_profit(h: &Harness, service: &ServiceId, amount: Usdt) {
+	let transfer = LedgerTransfer {
+		id: Uuid::new_v4().as_u128(),
+		debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
+		credit: LedgerAccountKey::ServiceClaim(service.clone()),
+		amount: amount.base_units(),
+		code: TransferCode::Deposit,
+		reference: 0,
+	};
+	h.ledger.post(&transfer).await.unwrap();
+}
+
 async fn claim(h: &Harness, key: &LedgerAccountKey) -> Usdt {
 	Usdt::from_base_units(h.ledger.balance(key).await.unwrap().posted)
 }
@@ -186,17 +202,13 @@ async fn deposit_credits_once_and_is_idempotent_by_tx_ref() {
 
 	assert!(claim(&h, &key).await.is_zero());
 
-	let recorded = balance_app::record_deposit(&h.deposits, &h.notify, tx_ref.clone(), Party::User(user), network, usdt("100"))
-		.await
-		.unwrap();
+	let recorded = balance_app::record_deposit(&h.deposits, &h.notify, tx_ref.clone(), user, network, usdt("100")).await.unwrap();
 	assert!(recorded, "first record is new");
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(claim(&h, &key).await, usdt("100"), "the deposit credited the user's claim");
 
 	// Re-recording the same chain tx is a no-op — no second event, no double credit.
-	let again = balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), network, usdt("100"))
-		.await
-		.unwrap();
+	let again = balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, user, network, usdt("100")).await.unwrap();
 	assert!(!again, "duplicate tx_ref is idempotent");
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(claim(&h, &key).await, usdt("100"), "no double credit on a duplicate");
@@ -209,9 +221,7 @@ async fn deposit_credits_a_claim_backed_by_custody() {
 	let wallet = LedgerAccountKey::CryptoWallet(network);
 	let user = UserId::new();
 
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("250"))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, network, usdt("250")).await.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// The user's unified claim is isolated (random user); the rail's custody wallet is a
@@ -227,9 +237,7 @@ async fn non_negative_flag_is_the_ledger_backstop() {
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let network = Network::Bep20;
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("10"))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, network, usdt("10")).await.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Bypass the application check and over-debit the claim directly: TB's
@@ -252,9 +260,7 @@ async fn transfer_id_is_idempotent_no_double_move() {
 	let user = UserId::new();
 	let network = Network::Ton;
 	let service = unique_service();
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, network, usdt("100")).await.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	let transfer = LedgerTransfer {
@@ -440,7 +446,7 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
 	let outstanding = LedgerAccountKey::SharesOutstanding(service.clone());
 
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("400"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, usdt("400"))
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -533,7 +539,7 @@ async fn fund_nav_history_lists_the_window_and_values_the_holder_through_it() {
 
 	// Day −4: 200 cash → 200 units at the seed NAV. Day −3: marked to 1.5. Now: marked to 2.
 	let day = 24 * 60 * 60;
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("400"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, usdt("400"))
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -621,7 +627,7 @@ async fn redeem_when_fund_is_liquid_auto_completes() {
 	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
 	let outstanding = LedgerAccountKey::SharesOutstanding(service.clone());
 
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -662,7 +668,7 @@ async fn queued_short_redemption(
 		nav: nav_repo,
 		relay: &h.notify,
 	};
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -700,9 +706,7 @@ async fn redeem_on_a_short_fund_queues_then_settles_with_profit() {
 	assert_eq!(claim(&h, &user_claim).await, Usdt::ZERO, "no cash paid while queued");
 
 	// The fund realizes profit: a deposit credits the service claim up to 200.
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
-		.await
-		.unwrap();
+	realize_profit(&h, &service, usdt("100")).await;
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(claim(&h, &service_claim).await, usdt("200"), "the fund topped up");
 
@@ -782,7 +786,7 @@ async fn a_parked_subscribe_cash_leg_leaves_no_cost_basis() {
 
 	// Fund only 50, then commit a 100-cash subscription straight through the repo (skipping the
 	// application solvency check) so the relay's cash leg `Dr user / Cr service` overdraws.
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("50"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, usdt("50"))
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -824,9 +828,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
 	let network = Network::Bep20;
 
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, network, usdt("100")).await.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Fire both at once; the shared `users` advisory lock inside each `open` serializes the two
@@ -916,7 +918,7 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 	let service = registered_service(&h).await;
 	let now = now_unix();
 
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -938,9 +940,7 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Top the fund up so both settles' payouts clear the relay pre-check (2 × 120 = 240).
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("140"))
-		.await
-		.unwrap();
+	realize_profit(&h, &service, usdt("140")).await;
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Settle both back-to-back — the under-reduction bug surfaces on the SECOND settle.
@@ -987,9 +987,7 @@ async fn a_repeat_settle_reduces_the_cost_basis_exactly_once() {
 	// AUM 400 → NAV 4, so the 30-unit redemption prices to 120 cash > the 100 fund claim
 	// and queues; top the fund up, then settle it — once for real.
 	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now, "400", "30").await;
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
-		.await
-		.unwrap();
+	realize_profit(&h, &service, usdt("100")).await;
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, id, now).await.unwrap();
 	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("70")), "one settle: basis 100 → 70");
@@ -1044,9 +1042,7 @@ async fn settle_refuses_reduction_until_the_subscribe_projection_lands() {
 		reference: 0,
 	};
 	h.ledger.post(&mint).await.unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
-		.await
-		.unwrap();
+	realize_profit(&h, &service, usdt("100")).await;
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// The auto-settle loses to the missing projection — the redeem is still accepted, queued.
@@ -1110,7 +1106,7 @@ async fn subscribe_refuses_an_investor_the_product_is_not_open_to_until_granted(
 	let service = registered_locked_service(&h).await;
 	let now = now_unix();
 
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(investor), Network::Bep20, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), investor, Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -1137,7 +1133,7 @@ async fn subscribe_refuses_an_investor_the_product_is_not_open_to_until_granted(
 
 	// The product is still locked for everyone else — the grant is per investor.
 	let stranger = UserId::new();
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(stranger), Network::Bep20, usdt("10"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), stranger, Network::Bep20, usdt("10"))
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -1163,7 +1159,7 @@ async fn an_invest_default_admits_anyone_and_lowering_it_never_traps_a_holder() 
 	let service = registered_locked_service(&h).await;
 	let now = now_unix();
 
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -1215,7 +1211,7 @@ async fn a_valuation_poster_cannot_redeem_from_that_fund_inside_the_cooldown() {
 	let service = registered_service(&h).await;
 	let now = now_unix();
 	for user in [poster, other] {
-		balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+		balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, usdt("100"))
 			.await
 			.unwrap();
 		common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -1269,7 +1265,7 @@ async fn a_queued_redemption_is_refused_at_settle_once_its_owner_has_marked_the_
 	let service = registered_service(&h).await;
 	let now = now_unix();
 	for user in [poster, other] {
-		balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+		balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, Network::Bep20, usdt("100"))
 			.await
 			.unwrap();
 		common::drain_to_quiescence(&h.relay, &h.pool).await;
@@ -1292,9 +1288,7 @@ async fn a_queued_redemption_is_refused_at_settle_once_its_owner_has_marked_the_
 	funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("2100"), &poster.to_string(), now)
 		.await
 		.unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("1000"))
-		.await
-		.unwrap();
+	realize_profit(&h, &service, usdt("1000")).await;
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	let err = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, queued_by_poster.id(), now)

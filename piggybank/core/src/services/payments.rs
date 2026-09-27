@@ -190,7 +190,7 @@ fn party_end(party: &Party, label: String, detail: String) -> pb::PaymentEnd {
 	pb::PaymentEnd {
 		label,
 		kind: party.kind_str().to_owned(),
-		id: party.id_str().unwrap_or_default(),
+		id: party.id_str(),
 		network: String::new(),
 		address: String::new(),
 		detail,

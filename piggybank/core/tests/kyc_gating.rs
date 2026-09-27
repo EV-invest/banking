@@ -186,9 +186,7 @@ async fn user_at_tier(h: &Harness, tier: i32) -> UserId {
 }
 
 async fn deposit(h: &Harness, user: UserId, network: Network, amount: &str) {
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt(amount))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), user, network, usdt(amount)).await.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 }
 

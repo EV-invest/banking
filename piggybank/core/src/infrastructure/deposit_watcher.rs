@@ -42,7 +42,6 @@ use std::{
 };
 
 use domain::{
-	balance::Party,
 	money::{Network, TxRef, Usdt},
 	users::UserId,
 };
@@ -371,7 +370,7 @@ impl DepositWatcher {
 			return Ok(false); // a legal but meaningless zero-value Transfer — not a deposit.
 		}
 		let tx_ref = TxRef::parse(&transfer.tx_ref()).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, user, network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
 		if newly {

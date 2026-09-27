@@ -14,9 +14,9 @@
 //!
 //! [`retire_units`] is the mint's mirror — a holder's units burnt with no cash leg —
 //! with a Read-First on what the holder has free and a closed-door gate that `force`
-//! overrides. The hand-over out of the company's stake (`TransferCompanyStake`) is
-//! retired with the company holder itself (#245): the RPC is gone from the contract, and
-//! the rows it wrote stay readable.
+//! overrides. The hand-over out of the company's stake (the stake-transfer RPC) was
+//! retired with the company holder itself (#245); the two rows it and the company mint
+//! wrote are history ([`StoredIssuance::RetiredCompany`]), and their key is taken for good.
 //!
 //! **The reserved allocations are not the operator's to mint.** `fee` and `fund` are the
 //! platform's own money, held by people (#245); a unit of either dilutes every holder
@@ -49,7 +49,7 @@ use crate::{
 	ports::{
 		UnitIssuanceRepository, UserRepository,
 		allocations::AllocationRegistry,
-		issuance::{IssueOutcome, UnitIssuanceRecord},
+		issuance::{IssueOutcome, StoredIssuance, UnitIssuanceRecord},
 		ledger::Ledger,
 	},
 };
@@ -202,7 +202,7 @@ async fn mint(
 		idempotency_key: &request.idempotency_key,
 	};
 	if let Some(existing) = issuances.find_by_key(&request.service, &request.idempotency_key).await? {
-		return identity.same_request_or_conflict(existing);
+		return identity.same_stored_request_or_conflict(existing);
 	}
 	// Pure and first: a holder the graph refuses is refused as such, before any read
 	// could fail for a reason that hides it.
@@ -270,7 +270,7 @@ pub async fn retire_units(
 		idempotency_key: &request.idempotency_key,
 	};
 	if let Some(existing) = issuances.find_by_key(&request.service, &request.idempotency_key).await? {
-		return identity.same_request_or_conflict(existing);
+		return identity.same_stored_request_or_conflict(existing);
 	}
 	request.holder.ensure_may_hold(&request.service)?;
 	let allocation = allocations_app::get(ports.allocations, &request.service).await?;
@@ -310,8 +310,7 @@ pub async fn retire_units(
 /// redeem than a missing one, and a holder grant approved over an active person must not
 /// mint to them once they have been disabled during the vote. Whether the holder may
 /// hold at all ([`UnitHolder::ensure_may_hold`]) is checked by the use case before any
-/// read, so the retired company holder never gets here.
-#[allow(deprecated)]
+/// read.
 pub(crate) async fn require_holder(allocations: &dyn AllocationRegistry, users: &dyn UserRepository, holder: &UnitHolder) -> Result<(), DomainError> {
 	match holder {
 		UnitHolder::User(user) => {
@@ -327,7 +326,6 @@ pub(crate) async fn require_holder(allocations: &dyn AllocationRegistry, users: 
 			Ok(())
 		}
 		UnitHolder::Allocation(service) => allocations_app::get(allocations, service).await.map(drop),
-		UnitHolder::Company => Ok(()),
 	}
 }
 
@@ -354,6 +352,19 @@ struct RequestIdentity<'a> {
 }
 
 impl RequestIdentity<'_> {
+	/// [`Self::same_request_or_conflict`] over what a key lookup found: a historical
+	/// company-stake row is never the same request as anything asked today.
+	fn same_stored_request_or_conflict(&self, existing: StoredIssuance) -> Result<UnitIssuanceRecord, DomainError> {
+		match existing {
+			StoredIssuance::Live(record) => self.same_request_or_conflict(record),
+			StoredIssuance::RetiredCompany(_) => Err(DomainError::Conflict(format!(
+				"idempotency key '{}' already names a historical company-stake issuance on '{}'",
+				self.idempotency_key.as_str(),
+				self.service
+			))),
+		}
+	}
+
 	fn same_request_or_conflict(&self, existing: UnitIssuanceRecord) -> Result<UnitIssuanceRecord, DomainError> {
 		if existing.issuance.matches_request(self.holder, self.source, self.units) {
 			Ok(existing)
@@ -371,8 +382,7 @@ impl RequestIdentity<'_> {
 /// flight. Gated on the allocation existing, like the NAV view: a cap table for a
 /// product no registry entry backs is a cap table for a fund that does not exist.
 ///
-/// The holders are summed from the ledger's holding accounts (the retired company stake
-/// among them, as its own line, until the data migration moves it) by
+/// The holders are summed from the ledger's holding accounts by
 /// [`ownership_app::allocation_ownership`], the one read of who holds an allocation.
 /// The sum is read at one instant per account, so it can differ from
 /// `units_outstanding` by a mint landing mid-scan — a read-only view over a moving

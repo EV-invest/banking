@@ -290,9 +290,7 @@ pub(crate) async fn detail_of(conn: &mut PgConnection, to: &PaymentDestination) 
 			.await
 			.map_err(repo_err)?
 			.map(EndDetail::ProductTitle),
-		// Retired parties still appear in stored orders until C-9.
-		#[allow(deprecated)]
-		Some(Party::Piggybank | Party::Revenue) | None => None,
+		None => None,
 	})
 }
 
@@ -467,7 +465,7 @@ fn require_seat_matches(seat: &ApprovalSeat, requirement: PaymentApproval) -> Re
 /// populated, which is what `payments_destination_is_coherent` states to the database.
 fn destination_columns(to: &PaymentDestination) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
 	match to {
-		PaymentDestination::Internal(party) => (Some(party.kind_str().to_owned()), party.id_str(), None, None),
+		PaymentDestination::Internal(party) => (Some(party.kind_str().to_owned()), Some(party.id_str()), None, None),
 		PaymentDestination::External { network, address } => (None, None, Some(network.as_str().to_owned()), Some(address.as_str().to_owned())),
 	}
 }
@@ -938,7 +936,7 @@ impl PaymentFeed for PgPayments {
 	async fn list(&self, filter: &PaymentFilter, limit: i64) -> Result<Vec<PaymentView>, DomainError> {
 		let mut conn = self.pool.acquire().await.map_err(repo_err)?;
 		let (party_kind, party_id) = match &filter.party {
-			Some(party) => (Some(party.kind_str().to_owned()), party.id_str()),
+			Some(party) => (Some(party.kind_str().to_owned()), Some(party.id_str())),
 			None => (None, None),
 		};
 		// Every predicate is written as "the filter is absent OR it matches", so one prepared
@@ -1001,9 +999,7 @@ impl PaymentFeed for PgPayments {
 			match order.terms().to().party() {
 				Some(Party::User(user)) => user_ids.push(user.raw()),
 				Some(Party::Service(service)) => services.push(service.as_str().to_owned()),
-				// Retired parties still appear in stored orders until C-9.
-				#[allow(deprecated)]
-				Some(Party::Piggybank | Party::Revenue) | None => {}
+				None => {}
 			}
 		}
 		let mut email_by_user = HashMap::new();
@@ -1038,9 +1034,7 @@ impl PaymentFeed for PgPayments {
 				let destination_detail = match order.terms().to().party() {
 					Some(Party::User(user)) => email_by_user.get(&user.raw()).cloned().map(EndDetail::Mailbox),
 					Some(Party::Service(service)) => title_by_service.get(service.as_str()).cloned().map(EndDetail::ProductTitle),
-					// Retired parties still appear in stored orders until C-9.
-					#[allow(deprecated)]
-					Some(Party::Piggybank | Party::Revenue) | None => None,
+					None => None,
 				};
 				Ok(PaymentView {
 					consilium_id: consilium_by_payment.get(&id).copied(),

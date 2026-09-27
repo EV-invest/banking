@@ -76,10 +76,11 @@ async fn only_one_relay_drains_under_the_outbox_lock() {
 	assert!(contender.is_none(), "a second relay must not acquire the outbox lock while one is held");
 
 	// The holder still drains: commit a deposit and prove the primary moves it in TB.
-	let party = Party::User(UserId::new());
+	let user = UserId::new();
+	let party = Party::User(user);
 	let claim = party.claim_key();
 	let before = h.balance(&claim).await;
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), party, Network::Bep20, usdt("250")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), user, Network::Bep20, usdt("250")).await.unwrap();
 	primary.drain().await;
 	let after = h.balance(&claim).await;
 	assert_eq!(after.saturating_sub(before), usdt("250").base_units(), "the lock holder applied the committed deposit");
@@ -102,10 +103,11 @@ async fn only_one_relay_drains_under_the_outbox_lock() {
 	let mut lock = primary.acquire_outbox_lock().await.expect("primary re-takes the outbox lock");
 	let lock_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()").fetch_one(lock.as_mut()).await.expect("read the lock backend pid");
 
-	let party = Party::User(UserId::new());
+	let user = UserId::new();
+	let party = Party::User(user);
 	let claim = party.claim_key();
 	let before = h.balance(&claim).await;
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), party, Network::Bep20, usdt("77")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), user, Network::Bep20, usdt("77")).await.unwrap();
 
 	sqlx::query("SELECT pg_terminate_backend($1)")
 		.bind(lock_pid)

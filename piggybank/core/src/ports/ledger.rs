@@ -73,7 +73,8 @@ pub trait Ledger: Gateway {
 	/// (the authoritative store) over the `tb_accounts` map, so a cap table and the
 	/// `fee` allocation's price are sums of what is, never of what a projection thinks.
 	/// Zero-balance holdings are included; the caller decides whether an emptied
-	/// account still counts as a holder.
+	/// account still counts as a holder. Rows of a retired kind
+	/// ([`AccountCode::is_retired`]) are skipped by their code, before any parsing.
 	async fn share_holdings(&self, scope: &HoldingScope) -> Result<Vec<(LedgerAccountKey, u128)>, LedgerError>;
 
 	/// The cash plane's global posted invariant, summed straight from TigerBeetle (the
@@ -88,8 +89,8 @@ pub trait Ledger: Gateway {
 /// Which side of the cash invariant a USDT-ledger account counts on, by its kind — the
 /// domain's chart of accounts read as a conservation statement. The claims sides are
 /// the answer to "who is owed the custody": people directly, allocations (whose holders
-/// are people), the withdrawal transit, the book's cash escrow, and — until the data
-/// migration empties them — the retired singleton claims (#245).
+/// are people), the withdrawal transit, the book's cash escrow, and the retired singleton
+/// claims (#245), which the data migration emptied but which still exist.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CashSide {
 	/// `wallet:<net>` — the asset side.
@@ -102,17 +103,16 @@ pub enum CashSide {
 	Clearing,
 	/// `book_cash:<user>` — a person's cash resting in a buy order.
 	BookCash,
-	/// The retired `fund` (code 1) and `fee` (code 40) claims: legitimate balances
-	/// until the ownership data migration moves them onto the reserved allocations,
-	/// and zero after.
+	/// The retired `fund` (code 1) and `fee` (code 40) claims (#245). Zero since the
+	/// ownership data migration moved them onto the reserved allocations; still a side,
+	/// because TigerBeetle cannot delete an account and the conservation check must count
+	/// whatever is on every one of them.
 	RetiredClaims,
 }
 
 impl CashSide {
 	/// The side an account of kind `code` counts on; `None` for a kind that is not on
 	/// the USDT ledger at all (custody in the mocked bank, every unit account).
-	// The retired kinds are still rows in the map: a scan reads them back as what they are.
-	#[allow(deprecated)]
 	pub fn of(code: AccountCode) -> Option<Self> {
 		match code {
 			AccountCode::CryptoWallet => Some(Self::Custody),
@@ -120,16 +120,17 @@ impl CashSide {
 			AccountCode::ServiceClaim => Some(Self::ServiceClaims),
 			AccountCode::WithdrawalClearing => Some(Self::Clearing),
 			AccountCode::BookCash => Some(Self::BookCash),
-			AccountCode::Fund | AccountCode::FeeRevenue => Some(Self::RetiredClaims),
-			AccountCode::BankCustody | AccountCode::UserShares | AccountCode::SharesOutstanding | AccountCode::FeeShares | AccountCode::CompanyShares | AccountCode::BookShares => None,
+			AccountCode::RetiredFundClaim | AccountCode::RetiredFeeClaim => Some(Self::RetiredClaims),
+			AccountCode::BankCustody | AccountCode::UserShares | AccountCode::SharesOutstanding | AccountCode::FeeShares | AccountCode::RetiredCompanyStake | AccountCode::BookShares => None,
 		}
 	}
 }
 /// Which unit holdings a [`Ledger::share_holdings`] scan returns. The membership rule is
 /// the domain's ([`UnitHolder::of_holding`]): a holding is a product's `UserShares`,
-/// `BookShares` (a user's units resting in a sell are still theirs), `FeeShares` (the
-/// `fee` allocation's) or — until the data migration moves it — the retired company
-/// stake. Supply (`SharesOutstanding`) and every cash account are never holdings.
+/// `BookShares` (a user's units resting in a sell are still theirs) or `FeeShares` (the
+/// `fee` allocation's). Supply (`SharesOutstanding`), every cash account and the retired
+/// company stake (`shares_company:<svc>`, code 63 — it exists, holds zero, and no live key
+/// names it) are never holdings.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HoldingScope {
 	/// Every holder's account in one product — the cap table.
@@ -294,26 +295,21 @@ mod tests {
 	use super::*;
 
 	// Every kind on the USDT ledger has a side, and the retired singletons count as
-	// CLAIMS: what is on `fund` (1) and `fee` (40) until the ownership data migration is
-	// legitimate, so leaving them out would read as drift on every production scan
-	// between the first release and the migration. A kind on another ledger has none.
+	// CLAIMS: the accounts `fund` (1) and `fee` (40) exist for good, and whatever were on
+	// them would be owed to somebody. A kind on another ledger has none.
 	#[test]
-	#[allow(deprecated)]
 	fn every_usdt_ledger_kind_has_a_side_and_the_retired_claims_are_claims() {
 		use domain::{balance::Ledger as Plane, money::Network, users::UserId};
 		let user = UserId::new();
 		let keys = [
-			LedgerAccountKey::Fund,
 			LedgerAccountKey::CryptoWallet(Network::Bep20),
 			LedgerAccountKey::BankCustody,
 			LedgerAccountKey::UserClaim(user),
 			LedgerAccountKey::ServiceClaim(ServiceId::fee()),
-			LedgerAccountKey::FeeRevenue,
 			LedgerAccountKey::WithdrawalClearing,
 			LedgerAccountKey::UserShares(ServiceId::fee(), user),
 			LedgerAccountKey::SharesOutstanding(ServiceId::fee()),
 			LedgerAccountKey::FeeShares(ServiceId::fee()),
-			LedgerAccountKey::CompanyShares(ServiceId::fee()),
 			LedgerAccountKey::BookShares(ServiceId::fee(), user),
 			LedgerAccountKey::BookCash(user),
 		];
@@ -321,8 +317,9 @@ mod tests {
 			let side = CashSide::of(key.account_code());
 			assert_eq!(side.is_some(), key.ledger() == Plane::Usdt, "{}: a side iff on the USDT ledger", key.logical_key());
 		}
-		assert_eq!(CashSide::of(AccountCode::Fund), Some(CashSide::RetiredClaims));
-		assert_eq!(CashSide::of(AccountCode::FeeRevenue), Some(CashSide::RetiredClaims));
+		assert_eq!(CashSide::of(AccountCode::RetiredFundClaim), Some(CashSide::RetiredClaims));
+		assert_eq!(CashSide::of(AccountCode::RetiredFeeClaim), Some(CashSide::RetiredClaims));
+		assert_eq!(CashSide::of(AccountCode::RetiredCompanyStake), None, "a unit account, off the cash plane");
 		assert_eq!(CashSide::of(AccountCode::CryptoWallet), Some(CashSide::Custody));
 	}
 

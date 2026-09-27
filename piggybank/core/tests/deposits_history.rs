@@ -9,7 +9,6 @@
 //! the listing.
 
 use domain::{
-	balance::Party,
 	money::{Network, TxRef, Usdt},
 	users::UserId,
 };
@@ -28,8 +27,6 @@ fn unique_tx_ref() -> TxRef {
 }
 
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn list_by_user_returns_only_the_users_deposits_newest_first() {
 	let Some(pool) = pool().await else {
 		eprintln!("DATABASE_URL unset — skipping deposits-history test");
@@ -41,7 +38,7 @@ async fn list_by_user_returns_only_the_users_deposits_newest_first() {
 
 	let older = unique_tx_ref();
 	let newer = unique_tx_ref();
-	assert!(deposits.record(older.clone(), Party::User(user), Network::Bep20, usdt("125.5")).await.expect("record older"));
+	assert!(deposits.record(older.clone(), user, Network::Bep20, usdt("125.5")).await.expect("record older"));
 	// `created_at` defaults to the insert's transaction time; push the first row back a
 	// minute so "newest first" is deterministic even on a fast machine.
 	sqlx::query("UPDATE deposits SET created_at = created_at - interval '1 minute' WHERE tx_ref = $1")
@@ -49,16 +46,11 @@ async fn list_by_user_returns_only_the_users_deposits_newest_first() {
 		.execute(&pool)
 		.await
 		.expect("age the older row");
-	assert!(deposits.record(newer.clone(), Party::User(user), Network::Ton, usdt("7.25")).await.expect("record newer"));
+	assert!(deposits.record(newer.clone(), user, Network::Ton, usdt("7.25")).await.expect("record newer"));
 
-	// Neither the fund's own deposit nor another user's may appear in this user's history.
-	assert!(
-		deposits
-			.record(unique_tx_ref(), Party::Piggybank, Network::Bep20, usdt("1000"))
-			.await
-			.expect("record fund deposit")
-	);
-	assert!(deposits.record(unique_tx_ref(), Party::User(other), Network::Bep20, usdt("3")).await.expect("record other user"));
+	// Another user's deposit may not appear in this user's history. (The seed's historical
+	// `piggybank` rows are the same case, pinned over a pre-0047 schema in `ownership_contract`.)
+	assert!(deposits.record(unique_tx_ref(), other, Network::Bep20, usdt("3")).await.expect("record other user"));
 
 	let listed = deposits.list_by_user(user).await.expect("list");
 	assert_eq!(listed.len(), 2, "only the user's own deposits are listed");
@@ -72,7 +64,7 @@ async fn list_by_user_returns_only_the_users_deposits_newest_first() {
 
 	// The idempotency gate: a duplicate record is refused (`false`) and the listing is
 	// unchanged — the credit history can never double-count a chain tx.
-	assert!(!deposits.record(newer, Party::User(user), Network::Ton, usdt("7.25")).await.expect("duplicate record"));
+	assert!(!deposits.record(newer, user, Network::Ton, usdt("7.25")).await.expect("duplicate record"));
 	assert_eq!(
 		deposits.list_by_user(user).await.expect("list again").len(),
 		2,
