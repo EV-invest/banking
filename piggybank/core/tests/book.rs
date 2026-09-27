@@ -4,9 +4,13 @@
 //!
 //! The load-bearing behaviour is the money: an order is an ESCROW the relay moves, a
 //! fill is one linked delivery-versus-payment batch, and whatever the escrow did not
-//! spend comes back. Every test here drives the relay deterministically (`Relay::drain`)
-//! and then reads the ledger, because "the order row says filled" proves nothing about
-//! whose units and whose cash they are now.
+//! spend comes back. Every test here drives the relay deterministically and then reads
+//! the ledger, because "the order row says filled" proves nothing about whose units and
+//! whose cash they are now. Driving it deterministically takes two things: every test
+//! holds `common::outbox_serial()` for its whole life, since the suite's tests share one
+//! database and two relays draining it at once pick up the same row; and it drains
+//! through `common::drain_to_quiescence`, since one `drain` pass returns early on a
+//! transient failure (#294, #437).
 
 mod common;
 
@@ -38,12 +42,18 @@ use piggybank_core::{
 	ports::{AllocationRegistry, BookStore, DepositAddresses, OrderRecord, UserRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
-use tokio::sync::Notify;
+use tokio::sync::{MutexGuard, Notify};
 use uuid::Uuid;
 
 /// The fee allocation's claim (`service:fee`) is one platform-wide account, so a test that
 /// brackets it must not interleave with another that credits it. Every test that reads or
-/// credits it takes this exclusively; the rest trade fee-free and stay parallel.
+/// credits it takes this exclusively.
+///
+/// Kept, though the outbox fence in [`harness`] now serializes the whole suite and makes it
+/// redundant in this process: it states a requirement of its own — this bracket needs
+/// exclusivity even if the fence is ever narrowed. What neither lock reaches is another
+/// test BINARY: both are one-process `LazyLock`s, while `service:fee` lives in the shared
+/// TigerBeetle cluster (see the note on the bracket itself).
 static REVENUE: std::sync::LazyLock<tokio::sync::Mutex<()>> = std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 struct Harness {
@@ -59,9 +69,12 @@ struct Harness {
 	relay: Relay,
 	notify: Arc<Notify>,
 	feed: Arc<BookFeed>,
+	/// Held for the test's whole life — declared last so it is released after the relay.
+	_serial: MutexGuard<'static, ()>,
 }
 
 async fn harness() -> Option<Harness> {
+	let serial = common::outbox_serial().await;
 	let pool = common::pool().await?;
 	let ledger = common::seeded_ledger(&pool, "book tests").await?;
 	let notify = Arc::new(Notify::new());
@@ -78,6 +91,7 @@ async fn harness() -> Option<Harness> {
 		notify,
 		feed: BookFeed::new(),
 		pool,
+		_serial: serial,
 	})
 }
 
@@ -166,7 +180,7 @@ async fn issue_units(h: &Harness, service: &ServiceId, user: UserId, units: &str
 	)
 	.await
 	.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 }
 
 /// Cash on the user's claim: the buyer's side of every test starts here.
@@ -175,7 +189,7 @@ async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), Network::Bep20, usdt(amount))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 }
 
 // The order's own fields, spelled out so each test reads as the order it places.
@@ -273,12 +287,18 @@ async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fe
 	let (seller, buyer) = (provisioned_user(&h).await, provisioned_user(&h).await);
 	issue_units(&h, &service, seller, "100").await;
 	fund_user(&h, buyer, "100").await;
+	// The one global account this suite reads. `REVENUE` and the outbox fence are both
+	// one-process locks, so they order this bracket against the rest of THIS binary only —
+	// `service:fee` lives in the shared TigerBeetle cluster, where another test binary
+	// crediting a fee would land inside the bracket. Sequential test targets keep that from
+	// firing under `cargo test`; a per-test-process runner (nextest) or two `cargo test`
+	// invocations side by side would need a cluster per binary, not another mutex (#437).
 	let revenue_before = cash_of(&h, LedgerAccountKey::ServiceClaim(ServiceId::fee())).await;
 
 	// The seller rests 10 at 1.50: its units leave the holding for the book's escrow.
 	let ask = sell(&h, seller, &service, "1.5", "10").await;
 	assert_eq!(ask.order.state(), OrderState::Open);
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), seller)).await, shares("90"));
 	assert_eq!(units_of(&h, LedgerAccountKey::BookShares(service.clone(), seller)).await, shares("10"));
 	let resting = position(&h, seller, &service).await;
@@ -292,7 +312,7 @@ async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fe
 	assert_eq!(bid.order.average_fill_price(), Some(price("1.5")));
 	assert_eq!(bid.order.fee_paid(), usdt("0.15"));
 	assert_eq!(order(&h, &ask).await.order.state(), OrderState::Filled, "the maker filled too");
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Delivery versus payment: 10 units to the buyer, 15 USDT to the seller, 0.15 to the
 	// fund — and nothing left in either escrow.
@@ -352,7 +372,7 @@ async fn a_buy_below_its_limit_gets_the_price_improvement_back() {
 	issue_units(&h, &service, seller, "10").await;
 	fund_user(&h, buyer, "100").await;
 	sell(&h, seller, &service, "1", "10").await;
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Bid 1.20 for 10: the escrow takes 12 + 1 % = 12.12, the fill lands at the maker's
 	// 1.00 for 10 + 0.10 fee, and the 2.02 difference comes back on completion.
@@ -360,7 +380,7 @@ async fn a_buy_below_its_limit_gets_the_price_improvement_back() {
 	assert_eq!(bid.order.state(), OrderState::Filled);
 	assert_eq!(bid.order.notional_filled(), usdt("10"));
 	assert_eq!(bid.order.fee_paid(), usdt("0.1"));
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(buyer)).await, usdt("89.9"));
 	assert_eq!(cash_of(&h, LedgerAccountKey::BookCash(buyer)).await, Usdt::ZERO, "the price improvement was released");
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(seller)).await, usdt("10"));
@@ -387,7 +407,7 @@ async fn a_partial_fill_leaves_the_maker_resting_with_the_rest() {
 	assert_eq!((snapshot.asks[0].price, snapshot.asks[0].size, snapshot.asks[0].orders), (price("1"), shares("6"), 1));
 	assert_eq!(book_app::list_open_orders(&h.book, seller, Some(&service)).await.unwrap().len(), 1);
 
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	// Six units still in escrow, four delivered.
 	assert_eq!(units_of(&h, LedgerAccountKey::BookShares(service.clone(), seller)).await, shares("6"));
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), buyer)).await, shares("4"));
@@ -401,7 +421,7 @@ async fn an_ioc_fills_what_it_can_and_releases_the_rest() {
 	issue_units(&h, &service, seller, "5").await;
 	fund_user(&h, buyer, "100").await;
 	sell(&h, seller, &service, "1", "5").await;
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	let bid = place(&h, buyer, &service, Side::Buy, OrderKind::Limit, Tif::Ioc, Some("1"), "8").await.unwrap();
 	assert_eq!(
@@ -414,7 +434,7 @@ async fn an_ioc_fills_what_it_can_and_releases_the_rest() {
 	assert_eq!(bid.order.cancel_reason(), Some(CancelReason::IocRemainder));
 	assert_eq!(order(&h, &bid).await.order.cancel_reason(), Some(CancelReason::IocRemainder));
 	assert!(book_app::list_open_orders(&h.book, buyer, Some(&service)).await.unwrap().is_empty());
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	// 8 was escrowed, 5 spent, 3 released.
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(buyer)).await, usdt("95"));
 	assert_eq!(cash_of(&h, LedgerAccountKey::BookCash(buyer)).await, Usdt::ZERO);
@@ -423,7 +443,7 @@ async fn an_ioc_fills_what_it_can_and_releases_the_rest() {
 	let nothing = place(&h, buyer, &service, Side::Buy, OrderKind::Limit, Tif::Ioc, Some("1"), "1").await.unwrap();
 	assert_eq!((nothing.order.state(), nothing.order.filled()), (OrderState::Cancelled, Shares::ZERO));
 	assert_eq!(nothing.order.cancel_reason(), Some(CancelReason::IocRemainder));
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(buyer)).await, usdt("95"));
 }
 
@@ -469,14 +489,14 @@ async fn a_market_order_is_priced_off_the_best_quote_and_refused_on_an_empty_sid
 
 	sell(&h, seller, &service, "1", "5").await;
 	sell(&h, seller, &service, "1.04", "5").await;
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	// Best ask 1.00, 5 % slippage → limit 1.05, so both asks are reachable: 5 at 1.00,
 	// then 3 at 1.04, and the derived limit is what the row records.
 	let market = place(&h, buyer, &service, Side::Buy, OrderKind::Market, Tif::Ioc, None, "8").await.unwrap();
 	assert_eq!(market.order.price(), price("1.05"));
 	assert_eq!((market.order.state(), market.order.filled()), (OrderState::Filled, shares("8")));
 	assert_eq!(market.order.notional_filled(), usdt("8.12"));
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(buyer)).await, usdt("91.88"));
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), buyer)).await, shares("8"));
 
@@ -488,7 +508,7 @@ async fn a_market_order_is_priced_off_the_best_quote_and_refused_on_an_empty_sid
 	assert_eq!((leftover.order.state(), leftover.order.filled()), (OrderState::Cancelled, shares("2")));
 	assert_eq!(leftover.order.cancel_reason(), Some(CancelReason::MarketRemainder));
 	assert_eq!(order(&h, &leftover).await.order.cancel_reason(), Some(CancelReason::MarketRemainder));
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(buyer)).await, usdt("89.8"), "2 × 1.04 spent, the rest of the escrow back");
 	assert_eq!(cash_of(&h, LedgerAccountKey::BookCash(buyer)).await, Usdt::ZERO);
 
@@ -505,7 +525,7 @@ async fn cancelling_returns_the_escrow_and_is_idempotent() {
 	let stranger = provisioned_user(&h).await;
 	issue_units(&h, &service, seller, "10").await;
 	let ask = sell(&h, seller, &service, "2", "10").await;
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::BookShares(service.clone(), seller)).await, shares("10"));
 
 	// Not the stranger's to cancel.
@@ -516,7 +536,7 @@ async fn cancelling_returns_the_escrow_and_is_idempotent() {
 	assert_eq!(cancelled.order.state(), OrderState::Cancelled);
 	assert_eq!(cancelled.order.cancel_reason(), Some(CancelReason::User));
 	assert_eq!(order(&h, &ask).await.order.cancel_reason(), Some(CancelReason::User));
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), seller)).await, shares("10"), "every unit came back");
 	assert_eq!(units_of(&h, LedgerAccountKey::BookShares(service.clone(), seller)).await, Shares::ZERO);
 	assert_eq!(position(&h, seller, &service).await.units_in_orders, Shares::ZERO);
@@ -525,7 +545,7 @@ async fn cancelling_returns_the_escrow_and_is_idempotent() {
 	let again = book_app::cancel_order(&h.book, &h.notify, &h.feed, ask.order.id(), seller).await.unwrap();
 	assert_eq!(again.order.state(), OrderState::Cancelled);
 	assert_eq!(again.order.cancel_reason(), Some(CancelReason::User));
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), seller)).await, shares("10"));
 	assert_eq!(parked(&h, ask.order.id().raw()).await, Vec::<String>::new());
 }
@@ -545,7 +565,7 @@ async fn the_wallet_shows_the_escrow_of_resting_orders_and_total_does_not_move()
 	// book's escrow, and the wallet says so instead of showing an unexplained dip.
 	let bid = buy(&h, buyer, &service, "1.2", "10").await;
 	assert_eq!((bid.order.state(), bid.order.reserved()), (OrderState::Open, Locked::Cash(usdt("12.12"))));
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	let resting = wallet(&h, buyer).await;
 	assert_eq!(resting.in_orders, usdt("12.12"), "exactly the reserve");
 	assert_eq!(resting.available, usdt("87.88"), "available dropped by exactly the reserve");
@@ -556,7 +576,7 @@ async fn the_wallet_shows_the_escrow_of_resting_orders_and_total_does_not_move()
 	let sellers_before = wallet(&h, seller).await;
 	assert_eq!(sellers_before.invested, usdt("10"), "10 units at the seed NAV");
 	let ask = sell(&h, seller, &service, "1.5", "4").await;
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), seller)).await, shares("6"));
 	let sellers = wallet(&h, seller).await;
 	assert_eq!((sellers.invested, sellers.total), (usdt("10"), usdt("10")), "the escrowed 4 are still valued as the holder's");
@@ -564,7 +584,7 @@ async fn the_wallet_shows_the_escrow_of_resting_orders_and_total_does_not_move()
 	// Cancelling hands the escrow back and the figures return to where they started.
 	book_app::cancel_order(&h.book, &h.notify, &h.feed, bid.order.id(), buyer).await.unwrap();
 	book_app::cancel_order(&h.book, &h.notify, &h.feed, ask.order.id(), seller).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	let released = wallet(&h, buyer).await;
 	assert_eq!((released.available, released.in_orders, released.total), (usdt("100"), Usdt::ZERO, usdt("100")));
 	assert_eq!(wallet(&h, seller).await.invested, usdt("10"));
@@ -666,7 +686,7 @@ async fn a_client_order_id_makes_a_retry_land_once_and_a_reuse_a_conflict() {
 	let again = place_keyed(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, Some("1"), "3", &key).await.unwrap();
 	assert_eq!(again.order.id(), first.order.id(), "the retry is the same order");
 	assert_eq!(book_app::list_open_orders(&h.book, seller, Some(&service)).await.unwrap().len(), 1);
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::BookShares(service.clone(), seller)).await, shares("3"), "escrowed once");
 
 	let err = place_keyed(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, Some("1"), "4", &key).await.unwrap_err();
@@ -688,6 +708,8 @@ async fn a_raced_over_lock_is_refused_by_the_ledger_and_the_order_marked_rejecte
 
 	// The holding's non-negative flag refuses the second escrow; the relay parks the
 	// fact and takes the order off the book so nothing can ever fill against it.
+	// The park IS what this test pins, so the one-pass drain stays here: `drain_to_quiescence`
+	// reports a park raised during the call as a failure.
 	h.relay.drain().await;
 	assert_eq!(
 		units_of(&h, LedgerAccountKey::BookShares(service.clone(), seller)).await,

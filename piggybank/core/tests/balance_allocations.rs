@@ -3,7 +3,12 @@
 //! TigerBeetle replica is reachable (e.g. `nix run .#db` + `.#tb`), and skip
 //! otherwise so a DB-less `cargo test` still passes. Each test uses fresh random
 //! ids (user/service), so runs are isolated on shared infrastructure. The relay is
-//! driven explicitly via `Relay::drain` to apply committed events deterministically.
+//! driven explicitly to apply committed events deterministically: every test holds
+//! `common::outbox_serial()` for its whole life (the suite's tests share one database,
+//! and two relays draining it at once pick up the same row) and drains through
+//! `common::drain_to_quiescence`, because one `drain` pass returns early on a transient
+//! failure and leaves the caller reading a ledger its own rows have not reached (#294,
+//! #437). The three tests whose expected outcome IS a park keep the one-pass `drain`.
 //!
 //! Boundary authz (`require_permission`/`caller_id`) is the same path the live `UsersSvc`
 //! already uses; the load-bearing money invariant — the revoke rule — is exercised
@@ -36,7 +41,7 @@ use piggybank_core::{
 	},
 };
 use sqlx::PgPool;
-use tokio::sync::Notify;
+use tokio::sync::{MutexGuard, Notify};
 use uuid::Uuid;
 
 mod common;
@@ -48,9 +53,12 @@ struct Harness {
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
+	/// Held for the test's whole life — declared last so it is released after the relay.
+	_serial: MutexGuard<'static, ()>,
 }
 
 async fn harness() -> Option<Harness> {
+	let serial = common::outbox_serial().await;
 	let pool = common::pool().await?;
 	let ledger = common::seeded_ledger(&pool, "money-plane test").await?;
 
@@ -65,6 +73,7 @@ async fn harness() -> Option<Harness> {
 		ledger,
 		relay,
 		notify,
+		_serial: serial,
 	})
 }
 
@@ -181,7 +190,7 @@ async fn deposit_credits_once_and_is_idempotent_by_tx_ref() {
 		.await
 		.unwrap();
 	assert!(recorded, "first record is new");
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(claim(&h, &key).await, usdt("100"), "the deposit credited the user's claim");
 
 	// Re-recording the same chain tx is a no-op — no second event, no double credit.
@@ -189,7 +198,7 @@ async fn deposit_credits_once_and_is_idempotent_by_tx_ref() {
 		.await
 		.unwrap();
 	assert!(!again, "duplicate tx_ref is idempotent");
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(claim(&h, &key).await, usdt("100"), "no double credit on a duplicate");
 }
 
@@ -203,7 +212,7 @@ async fn deposit_credits_a_claim_backed_by_custody() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("250"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// The user's unified claim is isolated (random user); the rail's custody wallet is a
 	// shared singleton. Assert the direction that holds regardless of concurrent
@@ -221,7 +230,7 @@ async fn non_negative_flag_is_the_ledger_backstop() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("10"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Bypass the application check and over-debit the claim directly: TB's
 	// DebitsMustNotExceedCredits flag rejects it as InsufficientFunds.
@@ -246,7 +255,7 @@ async fn transfer_id_is_idempotent_no_double_move() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	let transfer = LedgerTransfer {
 		id: Uuid::new_v4().as_u128(),
@@ -434,11 +443,11 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("400"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// First subscription mints at the seed NAV (1.0): 200 cash → 200 units.
 	funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("200"), now).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(claim(&h, &user_claim).await, usdt("200"), "cash left the user's claim");
 	assert_eq!(claim(&h, &service_claim).await, usdt("200"), "cash entered the fund pool");
 	assert_eq!(units(&h, &user_shares).await, shares("200"), "units minted to the user");
@@ -451,7 +460,7 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 
 	// A second subscription prices at NAV 2.0: 100 cash → 50 units (fractional pricing).
 	funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("100"), now).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units(&h, &user_shares).await, shares("250"), "50 more units at NAV 2");
 	assert_eq!(claim(&h, &user_claim).await, usdt("100"), "cash dropped by the second subscription");
 
@@ -527,9 +536,9 @@ async fn fund_nav_history_lists_the_window_and_values_the_holder_through_it() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("400"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("200"), now_unix()).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	let sub_at = now_unix() - 4 * day;
 	sqlx::query("UPDATE subscriptions SET created_at = to_timestamp($2) WHERE user_id = $1")
 		.bind(user.raw())
@@ -615,15 +624,15 @@ async fn redeem_when_fund_is_liquid_auto_completes() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("100"), now).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Redeem 40 units at the seed NAV (1.0) → 40 cash. The fund claim (100) covers it, so
 	// it auto-settles in one request (a separate settle command, not a co-emitted event).
 	let r = funds_app::request_redemption(&fund_ports, &reds, user, service.clone(), shares("40"), now).await.unwrap();
 	assert_eq!(r.state(), RedemptionState::Completed, "a liquid redemption settles immediately");
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	assert_eq!(units(&h, &user_shares).await, shares("60"), "units burned");
 	assert_eq!(units(&h, &outstanding).await, shares("60"), "supply dropped with the burn");
@@ -656,9 +665,9 @@ async fn queued_short_redemption(
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	funds_app::subscribe(&fund_ports, subs, user, service.clone(), usdt("100"), now).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	// Any AUM over the 100-unit supply moves the NAV past the guard here, and the guarded
 	// post has no flag to lift it any more — the mark is written through the shared writer
 	// the owners' override uses, which is exactly what an executed override would do.
@@ -667,7 +676,7 @@ async fn queued_short_redemption(
 		.unwrap();
 	let r = funds_app::request_redemption(&fund_ports, reds, user, service.clone(), shares(units), now).await.unwrap();
 	assert_eq!(r.state(), RedemptionState::Queued, "a short fund queues the redemption");
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	r.id()
 }
 
@@ -694,13 +703,13 @@ async fn redeem_on_a_short_fund_queues_then_settles_with_profit() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(claim(&h, &service_claim).await, usdt("200"), "the fund topped up");
 
 	// Operator settles — priced at the settle-time NAV (2) and paid in full.
 	let settled = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, id, now).await.unwrap();
 	assert_eq!(settled.state(), RedemptionState::Completed);
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	assert_eq!(units(&h, &user_shares).await, Shares::ZERO, "all units burned at settle");
 	assert_eq!(claim(&h, &service_claim).await, Usdt::ZERO, "the fund paid out");
@@ -725,6 +734,8 @@ async fn settling_a_short_fund_parks_without_burning_or_paying() {
 	// Settle while the fund is STILL short (100 < 200) — the relay's payout pre-check parks
 	// the whole event. Burn-first ordering means nothing is applied: no half-burn, no cash.
 	funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, id, now).await.unwrap();
+	// The park IS what this test pins, so the one-pass drain stays here: `drain_to_quiescence`
+	// reports a park raised during the call as a failure.
 	h.relay.drain().await;
 	assert_eq!(units(&h, &user_shares).await, shares("100"), "units NOT burned (settle parked)");
 	assert_eq!(claim(&h, &user_claim).await, Usdt::ZERO, "no cash paid (settle parked)");
@@ -750,7 +761,7 @@ async fn cancelling_a_queued_redemption_returns_the_units() {
 	// The owner cancels — the relay voids the burn, releasing the locked units.
 	let cancelled = funds_app::cancel_redemption(&reds, &h.notify, id, user).await.unwrap();
 	assert_eq!(cancelled.state(), RedemptionState::Cancelled);
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units(&h, &user_shares).await, shares("100"), "units still held");
 	assert_eq!(units_available(&h, &user_shares).await, shares("100"), "the reservation lock was released");
 }
@@ -774,10 +785,12 @@ async fn a_parked_subscribe_cash_leg_leaves_no_cost_basis() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("50"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	let mut subscription = Subscription::open(SubscriptionId::new(), user, service.clone(), usdt("100"), Nav::SEED).unwrap();
 	subs.open(&mut subscription).await.unwrap();
+	// The park IS what this test pins, so the one-pass drain stays here: `drain_to_quiescence`
+	// reports a park raised during the call as a failure.
 	h.relay.drain().await;
 
 	// TB's flag parked the cash leg: no cash moved, no units minted, and — the fix — no basis.
@@ -814,7 +827,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Fire both at once; the shared `users` advisory lock inside each `open` serializes the two
 	// commits so they can never interleave a half-applied write. Both port bundles are bound
@@ -844,6 +857,8 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 	// At least one must succeed (100 covers a single 80-spend); the relay then applies the
 	// serialized reservations and parks the over-commit.
 	assert!(sub_res.is_ok() || wd_res.is_ok(), "at least one request must succeed (the claim covers 80)");
+	// The park IS what this test pins, so the one-pass drain stays here: `drain_to_quiescence`
+	// reports a park raised during the call as a failure.
 	h.relay.drain().await;
 
 	// Exactly one 80-spend landed — the other parked, never half-applied — so the claim shows
@@ -904,9 +919,9 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("100"), now).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("100")), "basis seeded by the subscribe");
 	assert_eq!(tracked_units(&h.pool, user, &service).await, Some(shares("100")), "units tracked on the projection");
 
@@ -920,18 +935,18 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 	let r2 = funds_app::request_redemption(&fund_ports, &reds, user, service.clone(), shares("30"), now).await.unwrap();
 	assert_eq!(r1.state(), RedemptionState::Queued, "short fund queues the first redemption");
 	assert_eq!(r2.state(), RedemptionState::Queued, "short fund queues the second redemption");
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Top the fund up so both settles' payouts clear the relay pre-check (2 × 120 = 240).
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("140"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Settle both back-to-back — the under-reduction bug surfaces on the SECOND settle.
 	funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, r1.id(), now).await.unwrap();
 	funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, r2.id(), now).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	assert_eq!(
 		cost_basis(&positions, user, &service).await,
@@ -975,7 +990,7 @@ async fn a_repeat_settle_reduces_the_cost_basis_exactly_once() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, id, now).await.unwrap();
 	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("70")), "one settle: basis 100 → 70");
 	assert_eq!(tracked_units(&h.pool, user, &service).await, Some(shares("70")), "one settle: units 100 → 70");
@@ -1032,12 +1047,12 @@ async fn settle_refuses_reduction_until_the_subscribe_projection_lands() {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// The auto-settle loses to the missing projection — the redeem is still accepted, queued.
 	let r = funds_app::request_redemption(&fund_ports, &reds, user, service.clone(), shares("30"), now).await.unwrap();
 	assert_eq!(r.state(), RedemptionState::Queued, "the raced auto-settle degrades to accepted-and-queued");
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// An operator settle before the projection lands is refused and fully rolled back.
 	let err = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, r.id(), now).await.unwrap_err();
@@ -1059,7 +1074,7 @@ async fn settle_refuses_reduction_until_the_subscribe_projection_lands() {
 	// …and the retried settle now applies exactly once, against the full denominator.
 	let settled = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, r.id(), now).await.unwrap();
 	assert_eq!(settled.state(), RedemptionState::Completed);
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("70")), "reduced against the landed projection (100 → 70)");
 	assert_eq!(tracked_units(&h.pool, user, &service).await, Some(shares("70")), "tracked units decremented once (100 → 70)");
 	assert_eq!(
@@ -1098,14 +1113,14 @@ async fn subscribe_refuses_an_investor_the_product_is_not_open_to_until_granted(
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(investor), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	let err = funds_app::subscribe(&fund_ports, &subs, investor, service.clone(), usdt("50"), now).await.unwrap_err();
 	assert!(
 		matches!(err, DomainError::Precondition(ref m) if m.contains("grant")),
 		"locked is its own kind of refusal: {err:?}"
 	);
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(investor)).await, usdt("100"), "refused before any money moved");
 	assert!(units(&h, &LedgerAccountKey::SharesOutstanding(service.clone())).await.is_zero(), "nothing minted");
 
@@ -1117,7 +1132,7 @@ async fn subscribe_refuses_an_investor_the_product_is_not_open_to_until_granted(
 	// A repeat grant overwrites the level, and `invest` opens the door for this investor.
 	h.allocations.grant_access(&service, investor, AllocationAccess::Invest, operator).await.unwrap();
 	funds_app::subscribe(&fund_ports, &subs, investor, service.clone(), usdt("50"), now).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units(&h, &LedgerAccountKey::UserShares(service.clone(), investor)).await, shares("50"), "minted once granted");
 
 	// The product is still locked for everyone else — the grant is per investor.
@@ -1125,7 +1140,7 @@ async fn subscribe_refuses_an_investor_the_product_is_not_open_to_until_granted(
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(stranger), Network::Bep20, usdt("10"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	let err = funds_app::subscribe(&fund_ports, &subs, stranger, service.clone(), usdt("10"), now).await.unwrap_err();
 	assert!(matches!(err, DomainError::Precondition(_)), "{err:?}");
 }
@@ -1151,11 +1166,11 @@ async fn an_invest_default_admits_anyone_and_lowering_it_never_traps_a_holder() 
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	h.allocations.set_access(&service, AllocationAccess::Invest).await.unwrap();
 	funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("100"), now).await.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(units(&h, &LedgerAccountKey::UserShares(service.clone(), user)).await, shares("100"));
 
 	// The operator locks the product down completely — hidden from everyone without a
@@ -1173,7 +1188,7 @@ async fn an_invest_default_admits_anyone_and_lowering_it_never_traps_a_holder() 
 		.await
 		.expect("a locked product must still redeem");
 	assert_eq!(redemption.state(), RedemptionState::Completed, "the fund's own claim covers it, so it settles at once");
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(user)).await, usdt("100"), "the investor's cash came back");
 }
 
@@ -1203,9 +1218,9 @@ async fn a_valuation_poster_cannot_redeem_from_that_fund_inside_the_cooldown() {
 		balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 			.await
 			.unwrap();
-		h.relay.drain().await;
+		common::drain_to_quiescence(&h.relay, &h.pool).await;
 		funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("100"), now).await.unwrap();
-		h.relay.drain().await;
+		common::drain_to_quiescence(&h.relay, &h.pool).await;
 	}
 	// 200 units outstanding; AUM 240 marks the fund at 1.2, inside the guard.
 	let sub = poster.raw().to_string();
@@ -1257,9 +1272,9 @@ async fn a_queued_redemption_is_refused_at_settle_once_its_owner_has_marked_the_
 		balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 			.await
 			.unwrap();
-		h.relay.drain().await;
+		common::drain_to_quiescence(&h.relay, &h.pool).await;
 		funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("100"), now).await.unwrap();
-		h.relay.drain().await;
+		common::drain_to_quiescence(&h.relay, &h.pool).await;
 	}
 	// Someone else marks the fund at 10 (AUM 2000 / 200 units — past the guard, through the
 	// shared writer), so a 50-unit redemption prices to 500 against a 200 claim and queues.
@@ -1270,7 +1285,7 @@ async fn a_queued_redemption_is_refused_at_settle_once_its_owner_has_marked_the_
 	let queued_by_other = funds_app::request_redemption(&fund_ports, &reds, other, service.clone(), shares("50"), now).await.unwrap();
 	assert_eq!(queued_by_poster.state(), RedemptionState::Queued);
 	assert_eq!(queued_by_other.state(), RedemptionState::Queued);
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	// Now the poster marks the fund themselves (10 → 10.5, inside the guard) and the fund is
 	// topped up so either settle could pay.
@@ -1280,7 +1295,7 @@ async fn a_queued_redemption_is_refused_at_settle_once_its_owner_has_marked_the_
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("1000"))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	common::drain_to_quiescence(&h.relay, &h.pool).await;
 
 	let err = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, queued_by_poster.id(), now)
 		.await
