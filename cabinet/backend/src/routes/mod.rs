@@ -154,8 +154,6 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/withdrawals/settle", post(admin::settle_withdrawal))
 		.route("/api/admin/withdrawals/fail", post(admin::fail_withdrawal))
 		.route("/api/admin/revenue", get(admin::fund_revenue))
-		.route("/api/admin/revenue/cancel", post(admin::cancel_revenue_payout))
-		.route("/api/admin/revenue/payouts", get(admin::revenue_payouts))
 		.route("/api/admin/outbox/parked", get(admin::parked_events))
 		.route("/api/admin/outbox/unpark", post(admin::unpark_event))
 		.route("/api/admin/cabinet", get(admin::cabinet_config))

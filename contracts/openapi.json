@@ -1182,65 +1182,6 @@
         }
       }
     },
-    "/banking.v1.BalanceService/CancelRevenuePayout": {
-      "post": {
-        "tags": [
-          "banking.v1.BalanceService"
-        ],
-        "summary": "CancelRevenuePayout",
-        "description": "HISTORY ONLY. Cancel a still-QUEUED revenue payout that predates #245 (refund to\n the retired revenue claim). Refuses a user's withdrawal, and refuses once\n processing — a broadcast may have landed. Nothing opens a new revenue payout.",
-        "operationId": "banking.v1.BalanceService.CancelRevenuePayout",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/banking.v1.CancelRevenuePayoutRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/banking.v1.Withdrawal"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/banking.v1.BalanceService/DispatchWithdrawal": {
       "post": {
         "tags": [
@@ -1706,65 +1647,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.RedemptionQueue"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/banking.v1.BalanceService/ListRevenuePayouts": {
-      "post": {
-        "tags": [
-          "banking.v1.BalanceService"
-        ],
-        "summary": "ListRevenuePayouts",
-        "description": "HISTORY ONLY. The revenue payouts opened before #245, newest first. Admin/Owner.",
-        "operationId": "banking.v1.BalanceService.ListRevenuePayouts",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/banking.v1.ListRevenuePayoutsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/banking.v1.WithdrawalList"
                 }
               }
             }
@@ -8503,17 +8385,6 @@
         "title": "CancelRedemptionRequest",
         "additionalProperties": false
       },
-      "banking.v1.CancelRevenuePayoutRequest": {
-        "type": "object",
-        "properties": {
-          "withdrawal_id": {
-            "type": "string",
-            "title": "withdrawal_id"
-          }
-        },
-        "title": "CancelRevenuePayoutRequest",
-        "additionalProperties": false
-      },
       "banking.v1.CancelWithdrawalRequest": {
         "type": "object",
         "properties": {
@@ -8622,11 +8493,6 @@
             "title": "state",
             "$ref": "#/components/schemas/banking.v1.ConsiliumState"
           },
-          "revenue_payout": {
-            "title": "revenue_payout",
-            "description": "EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,\n `fee_policy`, `holder_grant`, `seed_capital`) is set, decided by the kind. Named fields\n rather than a oneof because the surfaces read them by name and a oneof buys nothing\n here that the \"exactly one\" rule does not already give.",
-            "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
-          },
           "payload_hash": {
             "type": "string",
             "title": "payload_hash",
@@ -8718,7 +8584,7 @@
           },
           "valuation_override": {
             "title": "valuation_override",
-            "description": "The third terms sibling — see `revenue_payout`.",
+            "description": "A terms sibling — see the \"exactly one\" note above.",
             "$ref": "#/components/schemas/banking.v1.ValuationOverrideTerms"
           },
           "executed_valuation_id": {
@@ -8856,11 +8722,6 @@
           "state": {
             "title": "state",
             "$ref": "#/components/schemas/banking.v1.ConsiliumState"
-          },
-          "revenue_payout": {
-            "title": "revenue_payout",
-            "description": "Exactly one of the terms siblings is set — see `Consilium`.",
-            "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
           },
           "payload_hash": {
             "type": "string",
@@ -10194,11 +10055,6 @@
         "title": "ListRedemptionsRequest",
         "additionalProperties": false
       },
-      "banking.v1.ListRevenuePayoutsRequest": {
-        "type": "object",
-        "title": "ListRevenuePayoutsRequest",
-        "additionalProperties": false
-      },
       "banking.v1.ListSessionsRequest": {
         "type": "object",
         "properties": {
@@ -11029,12 +10885,12 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "description": "service | user, or `external` for an address. An order opened before #245 may read\n `piggybank` or `revenue` — the retired singleton claims; nothing opens one now."
+            "description": "service | user, or `external` for an address."
           },
           "id": {
             "type": "string",
             "title": "id",
-            "description": "The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the\n response carries what the order stored). Empty for addresses and the retired\n singletons."
+            "description": "The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the\n response carries what the order stored). Empty for addresses."
           },
           "network": {
             "type": "string",
@@ -11580,34 +11436,6 @@
         },
         "title": "RetireUnitsRequest",
         "additionalProperties": false
-      },
-      "banking.v1.RevenuePayoutTerms": {
-        "type": "object",
-        "properties": {
-          "network": {
-            "type": "string",
-            "title": "network",
-            "description": "Rail the payout ships on (BEP20 / POLYGON / TRC20 / TON)."
-          },
-          "address": {
-            "type": "string",
-            "title": "address",
-            "description": "Destination address, rendered in FULL wherever a human approves it — a truncated\n address in an approval mail is an invitation to approve the wrong one."
-          },
-          "amount": {
-            "type": "string",
-            "title": "amount",
-            "description": "Gross USDT to pay out, capped by FundRevenue.available at execution."
-          },
-          "memo": {
-            "type": "string",
-            "title": "memo",
-            "description": "Free-text note from the initiator, shown in the mail. Never interpreted."
-          }
-        },
-        "title": "RevenuePayoutTerms",
-        "additionalProperties": false,
-        "description": "The immutable subject of a revenue payout — HISTORY ONLY. Retired by #245: the\n platform's earnings are the `fee` allocation's, held by people, and cash leaves it by\n a holder's redemption or a `payment` out of `service:fee`. Consilia opened before the\n retirement still read (and, if approved, execute) through this. Amounts are decimal\n USDT STRINGS, as everywhere else on this wire."
       },
       "banking.v1.RevokeAllocationAccessRequest": {
         "type": "object",
@@ -12396,12 +12224,12 @@
           "holder_kind": {
             "type": "string",
             "title": "holder_kind",
-            "description": "`user` | `allocation`. Rows written before #245 may still read `company`; nothing\n writes it any more."
+            "description": "`user` | `allocation`. (The company stake's two historical rows never cross the\n wire: a lookup that lands on one is refused as a conflict, #245.)"
           },
           "holder_id": {
             "type": "string",
             "title": "holder_id",
-            "description": "The banking user id for `user`; the holding allocation's slug (`fee`) for\n `allocation`; empty on a historical `company` row. A client must never resolve an\n `allocation` holder as a user."
+            "description": "The banking user id for `user`; the holding allocation's slug (`fee`) for\n `allocation`. A client must never resolve an `allocation` holder as a user."
           },
           "units": {
             "type": "string",
@@ -12435,12 +12263,12 @@
           "source": {
             "type": "string",
             "title": "source",
-            "description": "Where the units came from — or went: `mint` (IssueUnits or an executed holder\n grant — supply grew by `units`) or `retire` (RetireUnits — burnt out of the\n holder's account, supply shrank by `units`). Rows written before #245 may read\n `company` (the retired TransferCompanyStake — moved out of the company's stake,\n supply unchanged). `units` is always the magnitude; the source is the direction.\n Always populated; a row that predates the field reads as `mint`."
+            "description": "Where the units came from — or went: `mint` (IssueUnits or an executed holder\n grant — supply grew by `units`) or `retire` (RetireUnits — burnt out of the\n holder's account, supply shrank by `units`). `units` is always the magnitude; the\n source is the direction.\n Always populated; a row that predates the field reads as `mint`."
           }
         },
         "title": "UnitIssuance",
         "additionalProperties": false,
-        "description": "One in-kind issuance: a mint or a retirement (`source`), or — on rows that predate\n #245 — a hand-over out of the company's stake.\n The holder is a flattened `UnitHolderRef`: a person, or the reserved allocation the\n fee accrual minted a product's fee class to."
+        "description": "One in-kind issuance: a mint or a retirement (`source`).\n The holder is a flattened `UnitHolderRef`: a person, or the reserved allocation the\n fee accrual minted a product's fee class to."
       },
       "banking.v1.UnparkEventRequest": {
         "type": "object",
@@ -12902,12 +12730,12 @@
           "source": {
             "type": "string",
             "title": "source",
-            "description": "user | revenue — which claim funds it"
+            "description": "user — which claim funds it (always a person's since #245)"
           }
         },
         "title": "WithdrawalQueueItem",
         "additionalProperties": false,
-        "description": "One withdrawal awaiting operator action. `email` is the mirrored identity email\n (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.\n\n A revenue payout opened before #245 shares this queue while it is still in flight: it\n needs the same dispatch/settle/fail actions, and an operator clearing the queue must\n see everything in flight against the rails. It carries `source = \"revenue\"` with\n `user_id`/`email` empty. Nothing opens a new one."
+        "description": "One withdrawal awaiting operator action. `email` is the mirrored identity email\n (may be empty if the bridge hasn't populated it); `created_at` is unix seconds."
       },
       "concierge.v1.AdminUserSummary": {
         "type": "object",
@@ -15155,10 +14983,6 @@
       "description": "FundsService — a user's investment in funds via the service currency (units/shares).\n\n Subscribing buys units at the current NAV; a holding's value is units × NAV, so\n profit comes from NAV rising, not from extra units. Redeeming is accept-and-queue:\n units are reserved immediately and the cash is priced + paid at settle (settle-time\n NAV). Every amount/unit/price is a decimal STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). Self-service RPCs act on the\n caller's own access-token `sub`. See docs/ARCHITECTURE.md."
     },
     {
-      "name": "banking.v1.WalletService",
-      "description": "WalletService — a user's own crypto wallet: one unified USDT balance, deposit\n addresses, and withdrawals. Networks (BEP20/Polygon/TRC20/TON) are a transaction attribute\n (where you deposit / where a withdrawal ships), never a balance dimension — the user\n holds a single fungible USDT balance, segmented by lifecycle.\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live from the\n authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS\n (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).\n A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even\n when the chosen rail is short on liquidity and queued until the treasury tops it up.\n The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody\n broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
-    },
-    {
       "name": "banking.v1.BalanceService",
       "description": "BalanceService — the bank's treasury and the platform's own allocations (operator\n surface).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events from\n Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated\n (allowlist) at the boundary. See docs/ARCHITECTURE.md.\n\n The platform holds no money of its own (#245): what it earns is the `fee` allocation's\n and what it was seeded with is the `fund` allocation's, and both are held by PEOPLE\n through units — so the treasury lists every allocation with its holders, and nothing\n here pays \"the fund\" out. Cash leaves a reserved allocation by a holder's redemption\n or by a payment the owners' consilium approved (`PaymentsService`)."
     },
@@ -15168,7 +14992,7 @@
     },
     {
       "name": "banking.v1.ConsiliumService",
-      "description": "ConsiliumService — multi-owner authorization over the platform's own money and its\n price: a payment out of a service claim (opened inside `PaymentsService.OpenPayment`),\n a NAV mark past the move guard, a change of fee terms beyond the house envelope, a new\n holder of a reserved allocation (`OpenHolderGrant`), and a seed of the platform's\n capital (`BalanceService.SeedCapital`). One owner opens a request; strictly more than\n half of ALL owners must each confirm it from their mailbox before anything happens.\n\n The kinds, as the `Consilium` message tells them apart (exactly one terms sibling is\n set): `revenue_payout` (HISTORY ONLY — retired by #245, nothing opens one), `payment`,\n `valuation_override`, `fee_policy`, `holder_grant`, `seed_capital`.\n\n WHY THE MONEY PLANE OWNS THIS. docs/ARCHITECTURE.md rejects letting a\n concierge-signed artifact authorize money movement, and a consilium verdict is\n exactly such an artifact. So the tally is computed, stored and verified here, against\n the owner roster this plane already mirrors (`0016_user_role.sql`). Concierge is used\n only to DELIVER the mail, over a typed payload it renders itself.\n\n QUORUM. `threshold = floor(N / 2) + 1` where N is the owner count at open. The\n initiator is in the denominator but gets NO vote and is never minted a token — so\n opening a request can never lower the bar the initiator has to clear. N \u003c 3 makes\n the threshold unreachable and is refused at open rather than parked forever.\n\n IMMUTABILITY. There is no edit RPC. `payload_hash` binds every approval to the exact\n terms shown in the mail; changing anything means cancel and reopen, and votes are not\n carried over. See docs/CONSILIUM.md for the full policy and threat model."
+      "description": "ConsiliumService — multi-owner authorization over the platform's own money and its\n price: a payment out of a service claim (opened inside `PaymentsService.OpenPayment`),\n a NAV mark past the move guard, a change of fee terms beyond the house envelope, a new\n holder of a reserved allocation (`OpenHolderGrant`), and a seed of the platform's\n capital (`BalanceService.SeedCapital`). One owner opens a request; strictly more than\n half of ALL owners must each confirm it from their mailbox before anything happens.\n\n The kinds, as the `Consilium` message tells them apart (exactly one terms sibling is\n set): `payment`, `valuation_override`, `fee_policy`, `holder_grant`, `seed_capital`.\n (`revenue_payout` was retired by #245 and left the contract with C-9; field 3 of\n `Consilium` and `ConsiliumInvitation` is reserved for it.)\n\n WHY THE MONEY PLANE OWNS THIS. docs/ARCHITECTURE.md rejects letting a\n concierge-signed artifact authorize money movement, and a consilium verdict is\n exactly such an artifact. So the tally is computed, stored and verified here, against\n the owner roster this plane already mirrors (`0016_user_role.sql`). Concierge is used\n only to DELIVER the mail, over a typed payload it renders itself.\n\n QUORUM. `threshold = floor(N / 2) + 1` where N is the owner count at open. The\n initiator is in the denominator but gets NO vote and is never minted a token — so\n opening a request can never lower the bar the initiator has to clear. N \u003c 3 makes\n the threshold unreachable and is refused at open rather than parked forever.\n\n IMMUTABILITY. There is no edit RPC. `payload_hash` binds every approval to the exact\n terms shown in the mail; changing anything means cancel and reopen, and votes are not\n carried over. See docs/CONSILIUM.md for the full policy and threat model."
     },
     {
       "name": "banking.v1.ConsiliumApprovalService",
@@ -15197,6 +15021,10 @@
     {
       "name": "banking.v1.UsersService",
       "description": "UsersService — investor accounts and their investments.\n\n Identity metadata is the Postgres control plane; money is read live from the\n authoritative TigerBeetle ledger and is NEVER re-bookkept in Postgres. Every\n RPC is authorized from the verified access-token Claims injected by core's\n inbound auth layer; self-service RPCs act on the caller's own `sub`, admin RPCs\n are gated by the hub's admin allowlist (config). See docs/ARCHITECTURE.md."
+    },
+    {
+      "name": "banking.v1.WalletService",
+      "description": "WalletService — a user's own crypto wallet: one unified USDT balance, deposit\n addresses, and withdrawals. Networks (BEP20/Polygon/TRC20/TON) are a transaction attribute\n (where you deposit / where a withdrawal ships), never a balance dimension — the user\n holds a single fungible USDT balance, segmented by lifecycle.\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live from the\n authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS\n (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).\n A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even\n when the chosen rail is short on liquidity and queued until the treasury tops it up.\n The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody\n broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
     },
     {
       "name": "concierge.v1.UserDirectory",

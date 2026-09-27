@@ -4,7 +4,6 @@ package banking.v1;
 
 import "banking/v1/allocations.proto";
 import "banking/v1/funds.proto";
-import "banking/v1/wallet.proto";
 
 // BalanceService — the bank's treasury and the platform's own allocations (operator
 // surface).
@@ -121,13 +120,9 @@ service BalanceService {
   // approve (`PaymentsService.OpenPayment` with source `{kind: "service", id: "fee"}`).
   rpc GetFundRevenue(GetFundRevenueRequest) returns (AllocationTreasury);
 
-  // HISTORY ONLY. Cancel a still-QUEUED revenue payout that predates #245 (refund to
-  // the retired revenue claim). Refuses a user's withdrawal, and refuses once
-  // processing — a broadcast may have landed. Nothing opens a new revenue payout.
-  rpc CancelRevenuePayout(CancelRevenuePayoutRequest) returns (Withdrawal);
-
-  // HISTORY ONLY. The revenue payouts opened before #245, newest first. Admin/Owner.
-  rpc ListRevenuePayouts(ListRevenuePayoutsRequest) returns (WithdrawalList);
+  // The cancel and list RPCs of the revenue payout #245 retired lived here;
+  // none ever reached production (`withdrawals.source = 'revenue'`: 0 rows), and both RPCs
+  // went with the contract step (C-9).
 }
 
 message ListParkedEventsRequest {}
@@ -177,11 +172,6 @@ message ListWithdrawalQueueRequest {}
 
 // One withdrawal awaiting operator action. `email` is the mirrored identity email
 // (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.
-//
-// A revenue payout opened before #245 shares this queue while it is still in flight: it
-// needs the same dispatch/settle/fail actions, and an operator clearing the queue must
-// see everything in flight against the rails. It carries `source = "revenue"` with
-// `user_id`/`email` empty. Nothing opens a new one.
 message WithdrawalQueueItem {
   string withdrawal_id = 1;
   string user_id = 2;
@@ -192,7 +182,7 @@ message WithdrawalQueueItem {
   string net_amount = 7;  // amount − fee — what ships on-chain
   string state = 8;       // queued | processing
   int64 created_at = 9;
-  string source = 10;     // user | revenue — which claim funds it
+  string source = 10;     // user — which claim funds it (always a person's since #245)
 }
 
 message WithdrawalQueue {
@@ -396,12 +386,6 @@ message MigrateDepositAddressToCustodianResponse {
 }
 
 message GetFundRevenueRequest {}
-
-message CancelRevenuePayoutRequest {
-  string withdrawal_id = 1;
-}
-
-message ListRevenuePayoutsRequest {}
 
 message SettleRedemptionRequest {
   string redemption_id = 1;

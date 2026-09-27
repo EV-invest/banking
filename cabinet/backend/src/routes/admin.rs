@@ -1057,7 +1057,7 @@ pub async fn fail_withdrawal(State(st): State<AppState>, jar: CookieJar, headers
 
 /// `GET /api/admin/revenue` — what the platform has earned: the `fee` allocation in the
 /// treasury's shape (cash, supply, price, holders). Admin/Owner at the plane
-/// (`RevenuePayout`); an Operator who may read the treasury is refused here. Nothing
+/// (`ConsiliumManage`); an Operator who may read the treasury is refused here. Nothing
 /// pays it out from this surface (#245): a holder redeems, or the owners approve a
 /// payment out of `service:fee` through `/api/admin/payments`.
 pub async fn fund_revenue(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AllocationTreasury>, ApiError> {
@@ -1065,30 +1065,6 @@ pub async fn fund_revenue(State(st): State<AppState>, jar: CookieJar) -> Result<
 	let token = require_money_token(&st, &jar).await?;
 	let revenue = st.grpc.fund_revenue(&token).await.map_err(|s| ApiError::read(s, "fund revenue unavailable"))?;
 	Ok(Json(revenue.into()))
-}
-
-/// `POST /api/admin/revenue/cancel` — HISTORY ONLY: cancel a payout queued before the
-/// kind was retired (#245). The hub refuses a user's withdrawal and refuses once
-/// processing.
-pub async fn cancel_revenue_payout(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Withdrawal>, ApiError> {
-	require_admin(&st, &jar).await?;
-	if !verify_csrf(&st, &jar, &headers) {
-		return Err(ApiError::Csrf);
-	}
-	let token = require_money_token(&st, &jar).await?;
-	let Some(id) = required(&parse_body(&body), "withdrawal_id") else {
-		return Err(ApiError::BadRequest("withdrawal_id is required".into()));
-	};
-	Ok(Json(st.grpc.cancel_revenue_payout(&token, &id).await?.into()))
-}
-
-/// `GET /api/admin/revenue/payouts` — HISTORY ONLY: the payouts opened before the kind
-/// was retired (#245), newest first.
-pub async fn revenue_payouts(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::WithdrawalList>, ApiError> {
-	require_admin(&st, &jar).await?;
-	let token = require_money_token(&st, &jar).await?;
-	let list = st.grpc.revenue_payouts(&token).await.map_err(|s| ApiError::read(s, "payout history unavailable"))?;
-	Ok(Json(list.into()))
 }
 
 // ── outbox (banking money plane) ────────────────────────────────────────────────

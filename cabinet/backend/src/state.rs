@@ -818,19 +818,6 @@ impl Grpc {
 		Ok(self.balance().get_fund_revenue(bearer(token, bk::GetFundRevenueRequest {})?).await?.into_inner())
 	}
 
-	/// HISTORY ONLY (#245): cancel a revenue payout queued before the kind was retired.
-	pub async fn cancel_revenue_payout(&self, token: &str, withdrawal_id: &str) -> Result<bk::Withdrawal, Status> {
-		let req = bk::CancelRevenuePayoutRequest {
-			withdrawal_id: withdrawal_id.to_string(),
-		};
-		Ok(self.balance().cancel_revenue_payout(bearer(token, req)?).await?.into_inner())
-	}
-
-	/// HISTORY ONLY (#245): the revenue payouts opened before the kind was retired.
-	pub async fn revenue_payouts(&self, token: &str) -> Result<bk::WithdrawalList, Status> {
-		Ok(self.balance().list_revenue_payouts(bearer(token, bk::ListRevenuePayoutsRequest {})?).await?.into_inner())
-	}
-
 	// ── consilium: multi-owner authorization over the platform's own money ──────
 	// The tally lives in the MONEY plane, against the owner roster this plane already
 	// mirrors: `docs/ARCHITECTURE.md` rejects letting a concierge-signed artifact

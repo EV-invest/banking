@@ -135,27 +135,6 @@ fn decision_from_proto(raw: i32) -> Result<VoteDecision, Status> {
 	}
 }
 
-/// The payout terms as the wire carries them, or `None` for a kind that is not a payout.
-/// History only (#245): nothing opens a payout, but the consilia that were open when the
-/// kind was retired still list and still execute.
-///
-/// No `_` arm: a new kind needs a field of its own on the contract, and this stops compiling
-/// rather than quietly rendering it as an absent payout — a request that reads as having no
-/// terms at all on the one screen an owner authorizes money from.
-fn payout_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerms> {
-	match terms {
-		ConsiliumTerms::RevenuePayout(terms) => Some(pb::RevenuePayoutTerms {
-			network: terms.network.as_str().to_owned(),
-			// In FULL, never truncated: a shortened address in an approval flow is an
-			// invitation to approve the wrong wallet.
-			address: terms.address.as_str().to_owned(),
-			amount: terms.amount.to_decimal_string(),
-			memo: terms.memo.clone(),
-		}),
-		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
-	}
-}
-
 /// The valuation-override terms as the wire carries them — the third of the "exactly one
 /// terms field is set" siblings. `None` for the other kinds, and NEVER an empty message:
 /// the cabinet treats an empty object as unrenderable, and `Option` is what the generated
@@ -253,7 +232,6 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 	pb::Consilium {
 		id: c.id().to_string(),
 		state: state_to_proto(c.state()),
-		revenue_payout: payout_terms_to_proto(c.terms()),
 		payment: payment_terms_to_proto(c.terms()),
 		valuation_override: valuation_override_terms_to_proto(c.terms()),
 		fee_policy: fee_policy_terms_to_proto(c.terms(), view.fee_policy.as_ref()),
@@ -297,7 +275,6 @@ fn invitation_to_proto(view: &InvitationView) -> pb::ConsiliumInvitation {
 	pb::ConsiliumInvitation {
 		consilium_id: view.consilium_id.to_string(),
 		state: state_to_proto(view.state),
-		revenue_payout: payout_terms_to_proto(&view.terms),
 		payment: payment_terms_to_proto(&view.terms),
 		valuation_override: valuation_override_terms_to_proto(&view.terms),
 		fee_policy: fee_policy_terms_to_proto(&view.terms, view.fee_policy.as_ref()),

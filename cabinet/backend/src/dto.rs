@@ -482,19 +482,17 @@ list_dto! { AllocationAccessGrantList from bk::AllocationAccessGrantList { grant
 
 /// One in-kind issuance — units moved with no cash behind them: minted (`source: mint`,
 /// by an operator or an executed holder grant) or burnt out of the holder's account
-/// (`source: retire`, supply shrank); rows that predate #245 may read `source: company`
-/// (moved out of the company's stake, supply unchanged). `units` is always the
-/// magnitude; `source` is the direction. `holder_id` is a BANKING user id for a `user`
-/// holder and the holding allocation's slug for an `allocation` holder (the `fee`
-/// allocation holding a product's fee class) — never resolve the latter as a user;
-/// empty on a historical `company` row. `state` is `queued` until the relay posts the
+/// (`source: retire`, supply shrank). `units` is always the magnitude; `source` is the
+/// direction. `holder_id` is a BANKING user id for a `user` holder and the holding
+/// allocation's slug for an `allocation` holder (the `fee` allocation holding a product's
+/// fee class) — never resolve the latter as a user. `state` is `queued` until the relay posts the
 /// leg, then `applied`; the console polls for the latter before it shows the holder
 /// their units.
 #[derive(Serialize)]
 pub struct UnitIssuance {
 	pub id: String,
 	pub service: String,
-	/// `user` | `allocation` (`company` on rows that predate #245).
+	/// `user` | `allocation`.
 	pub holder_kind: String,
 	pub holder_id: String,
 	pub units: String,
@@ -503,7 +501,7 @@ pub struct UnitIssuance {
 	/// `queued` | `applied`.
 	pub state: String,
 	pub created_at: String,
-	/// `mint` | `retire` (`company` on rows that predate #245).
+	/// `mint` | `retire`.
 	pub source: String,
 }
 
@@ -1635,29 +1633,6 @@ pub fn mask_email(email: &str) -> String {
 	}
 }
 
-/// The immutable subject of a revenue payout — HISTORY ONLY since #245 (nothing opens
-/// one; the consilia that were open still read). The address is carried in FULL — a
-/// truncated address on a surface where a human approves it is an invitation to approve
-/// the wrong one.
-#[derive(Default, Serialize)]
-pub struct RevenuePayoutTerms {
-	pub network: String,
-	pub address: String,
-	pub amount: String,
-	pub memo: String,
-}
-
-impl From<bk::RevenuePayoutTerms> for RevenuePayoutTerms {
-	fn from(t: bk::RevenuePayoutTerms) -> Self {
-		Self {
-			network: t.network,
-			address: t.address,
-			amount: t.amount,
-			memo: t.memo,
-		}
-	}
-}
-
 #[derive(Serialize)]
 pub struct ConsiliumVoter {
 	pub user_id: String,
@@ -1819,16 +1794,14 @@ impl From<bk::SeedCapitalTerms> for SeedCapitalTerms {
 
 /// One consilium in full — the owner-only view, with the per-voter breakdown.
 ///
-/// Exactly one of `revenue_payout`, `payment`, `valuation_override`, `fee_policy`,
-/// `holder_grant` and `seed_capital` describes the subject. `revenue_payout` keeps its
-/// always-present shape for the screens that predate the other kinds; the others are
-/// `null` on any other kind — never an empty object, which the invitation page treats as
-/// unrenderable — so a screen tells the kinds apart by which sibling is set.
+/// Exactly one of `payment`, `valuation_override`, `fee_policy`, `holder_grant` and
+/// `seed_capital` describes the subject; the others are `null` — never an empty object,
+/// which the invitation page treats as unrenderable — so a screen tells the kinds apart by
+/// which sibling is set. (`revenue_payout` left with the kind, #245 / C-9.)
 #[derive(Serialize)]
 pub struct Consilium {
 	pub id: String,
 	pub state: String,
-	pub revenue_payout: RevenuePayoutTerms,
 	pub payment: Option<ConsiliumPaymentTerms>,
 	pub valuation_override: Option<ValuationOverrideTerms>,
 	pub fee_policy: Option<ConsiliumFeePolicyTerms>,
@@ -1869,7 +1842,6 @@ impl From<bk::Consilium> for Consilium {
 		Self {
 			id: c.id,
 			state,
-			revenue_payout: c.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
 			payment: c.payment.map(ConsiliumPaymentTerms::from),
 			valuation_override: c.valuation_override.map(ValuationOverrideTerms::from),
 			fee_policy: c.fee_policy.map(ConsiliumFeePolicyTerms::from),
@@ -1907,7 +1879,6 @@ list_dto! { ConsiliumList from bk::ConsiliumList { items: Vec<Consilium> } }
 pub struct ConsiliumInvitation {
 	pub consilium_id: String,
 	pub state: String,
-	pub revenue_payout: RevenuePayoutTerms,
 	/// Set exactly when this is a PAYMENT consilium — see [`Consilium`].
 	pub payment: Option<ConsiliumPaymentTerms>,
 	/// Set exactly when this is a VALUATION-OVERRIDE consilium — see [`Consilium`].
@@ -1937,7 +1908,6 @@ impl From<bk::ConsiliumInvitation> for ConsiliumInvitation {
 		Self {
 			consilium_id: i.consilium_id,
 			state,
-			revenue_payout: i.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
 			payment: i.payment.map(ConsiliumPaymentTerms::from),
 			valuation_override: i.valuation_override.map(ValuationOverrideTerms::from),
 			fee_policy: i.fee_policy.map(ConsiliumFeePolicyTerms::from),
@@ -2538,8 +2508,7 @@ mod tests {
 	}
 
 	/// An issuance crosses with its `source` intact: the console tells a mint (supply
-	/// grew) from a historical hand-over of the company's stake (it did not) by this
-	/// field alone.
+	/// grew) from a retirement (it shrank) by this field alone.
 	#[test]
 	fn an_issuance_carries_its_source_and_holder() {
 		let issuance = UnitIssuance::from(bk::UnitIssuance {
@@ -2552,11 +2521,11 @@ mod tests {
 			cost_basis: "16250".into(),
 			state: "queued".into(),
 			created_at: 1_700_000_000,
-			source: "company".into(),
+			source: "retire".into(),
 		});
 		assert_eq!(
 			(issuance.holder_kind.as_str(), issuance.holder_id.as_str(), issuance.source.as_str(), issuance.state.as_str()),
-			("user", "d4d6", "company", "queued")
+			("user", "d4d6", "retire", "queued")
 		);
 		assert_eq!(
 			(issuance.units.as_str(), issuance.cost_basis.as_str(), issuance.created_at.as_str()),

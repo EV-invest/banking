@@ -116,12 +116,10 @@ message PaymentDestination {
 // fields let a screen link to the account.
 message PaymentEnd {
   string label = 1;
-  // service | user, or `external` for an address. An order opened before #245 may read
-  // `piggybank` or `revenue` — the retired singleton claims; nothing opens one now.
+  // service | user, or `external` for an address.
   string kind = 2;
   // The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the
-  // response carries what the order stored). Empty for addresses and the retired
-  // singletons.
+  // response carries what the order stored). Empty for addresses.
   string id = 3;
   // Set only when `kind` is `external`.
   string network = 4;

@@ -27,7 +27,6 @@ use crate::{
 		allocations::holding_to_proto,
 		funds::redemption_to_proto,
 		support::{caller_id, map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, resolve_target_user, unix_now},
-		wallet::withdrawal_to_proto,
 	},
 };
 
@@ -387,25 +386,6 @@ impl BalanceService for BalanceSvc {
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(allocation_treasury_to_proto(&fee)))
-	}
-
-	/// HISTORY ONLY (#245): a payout queued before the kind was retired is refunded to
-	/// the retired revenue claim. Nothing opens a new one.
-	async fn cancel_revenue_payout(&self, request: Request<pb::CancelRevenuePayoutRequest>) -> Result<Response<pb::Withdrawal>, Status> {
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
-		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
-		let payout = withdrawal_app::cancel_revenue_payout(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
-			.await
-			.map_err(map_err)?;
-		Ok(Response::new(withdrawal_to_proto(&payout)))
-	}
-
-	async fn list_revenue_payouts(&self, request: Request<pb::ListRevenuePayoutsRequest>) -> Result<Response<pb::WithdrawalList>, Status> {
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
-		let payouts = withdrawal_app::list_revenue_payouts(self.state.withdrawals.as_ref()).await.map_err(map_err)?;
-		Ok(Response::new(pb::WithdrawalList {
-			withdrawals: payouts.iter().map(withdrawal_to_proto).collect(),
-		}))
 	}
 
 	async fn rotate_deposit_address(&self, request: Request<pb::RotateDepositAddressRequest>) -> Result<Response<pb::RotateDepositAddressResponse>, Status> {
