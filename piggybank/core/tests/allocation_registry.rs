@@ -796,14 +796,14 @@ async fn a_company_row_written_before_the_retirement_still_reads_and_replays() {
 /// themselves `invest` on `fee` or `fund` and subscribe cash into the owners' money without
 /// a quorum, or close, re-back or cap a reserved allocation and lock its holders in. Every
 /// operator write on a reserved allocation is refused, and a subscription into one is
-/// refused before the catalog is even consulted — so what 0044 wrote stays as written.
+/// refused before the catalog is even consulted — so what 0045 wrote stays as written.
 #[tokio::test]
 async fn a_reserved_allocation_is_not_an_operators_to_manage_or_buy_into() {
 	let Some(h) = harness().await else { return };
 	let admin = provisioned_user(&h).await;
 	fund_user(&h, admin, "1000").await;
 	for reserved in [ServiceId::fee(), ServiceId::fund()] {
-		let before = h.allocations.find(&reserved).await.unwrap().expect("0044 wrote the reserved row");
+		let before = h.allocations.find(&reserved).await.unwrap().expect("0045 wrote the reserved row");
 		let forbidden = |err: DomainError, what: &str| {
 			assert!(matches!(err, DomainError::Forbidden(ref m) if m.contains("reserved")), "{reserved} {what}: got {err:?}");
 		};
@@ -850,7 +850,7 @@ async fn a_reserved_allocation_is_not_an_operators_to_manage_or_buy_into() {
 		assert_eq!(
 			(after.state(), after.access(), after.backing()),
 			(AllocationState::Open, AllocationAccess::Hidden, AllocationBacking::Cash),
-			"{reserved}: as 0044 wrote it"
+			"{reserved}: as 0045 wrote it"
 		);
 	}
 	// The same admin, with the same cash, still buys into an ordinary open product.
@@ -921,7 +921,7 @@ async fn the_fee_allocation_holds_a_products_fee_class_and_nothing_holds_a_reser
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("held by people")), "got {err:?}");
 	let err = issue(&h, &service, UnitHolder::Allocation(ServiceId::fund()), "1", None, "fund-holds").await.unwrap_err();
 	assert!(matches!(err, DomainError::Forbidden(ref m) if m.contains("fee accrual")), "got {err:?}");
-	// A person may hold the reserved allocations — migration 0044 registered them, hidden —
+	// A person may hold the reserved allocations — migration 0045 registered them, hidden —
 	// but only the owners seat them: the operator's mint is refused outright, and a
 	// product is not granted.
 	let owner = provisioned_user(&h).await;
@@ -932,7 +932,7 @@ async fn the_fee_allocation_holds_a_products_fee_class_and_nothing_holds_a_reser
 	let err = grant(&h, &service, UnitHolder::User(owner), "10", Some("10"), "grant-a-product").await.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("not a reserved allocation")), "got {err:?}");
 	for reserved in [ServiceId::fee(), ServiceId::fund()] {
-		let row = h.allocations.find(&reserved).await.unwrap().expect("0044 wrote the reserved row");
+		let row = h.allocations.find(&reserved).await.unwrap().expect("0045 wrote the reserved row");
 		assert_eq!(row.access(), AllocationAccess::Hidden);
 		assert_eq!(row.state(), AllocationState::Open);
 		grant(&h, &reserved, UnitHolder::User(owner), "10", Some("10"), "seed-holder").await.unwrap();

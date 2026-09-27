@@ -354,7 +354,7 @@ pub fn grant_key(service: &ServiceId, user: UserId) -> IdempotencyKey {
 ///
 /// Refused, in this order, before any of it: a malformed holder table; a holder that is
 /// not an active person; a reserved allocation the registry does not know (migration
-/// `0044` not applied); in-flight pendings on a retired account (a legacy transfer still
+/// `0045` not applied); in-flight pendings on a retired account (a legacy transfer still
 /// completing — wait); a pending step on an allocation that already has units
 /// outstanding (someone was seated before the migration, so the seed price would be
 /// wrong — the owners decide); a stale product mark behind a fee class (post a
@@ -380,7 +380,7 @@ async fn plan_allocation(ports: &MigrationPorts<'_>, table: &HolderTable, servic
 	// hang off; without it the allocation does not exist to the platform.
 	if ports.allocations.find(&service).await?.is_none() {
 		return Err(DomainError::Precondition(format!(
-			"the '{service}' allocation is not registered — migration 0044 (ownership expand) has not been applied"
+			"the '{service}' allocation is not registered — migration 0045 (ownership expand) has not been applied"
 		)));
 	}
 	let retired_balance = ports.ledger.balance(&retired_key).await?;

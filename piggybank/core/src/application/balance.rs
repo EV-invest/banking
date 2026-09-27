@@ -510,7 +510,7 @@ pub async fn allocation_treasury(ledger: &dyn Ledger, nav: &dyn NavMarks, alloca
 /// allocation people hold through units, priced at what it holds, and cash leaves it only
 /// by a holder's redemption. So the screen shows the allocation — the same line the
 /// treasury lists it as, for the one reserved slug. `NotFound` if the registry has no
-/// `fee` row (a database that predates migration `0044`).
+/// `fee` row (a database that predates migration `0045`).
 pub async fn fee_allocation(allocations: &dyn AllocationRegistry, ledger: &dyn Ledger, nav: &dyn NavMarks) -> Result<AllocationTreasury, DomainError> {
 	let fee = allocations_app::get(allocations, &ServiceId::fee()).await?;
 	allocation_treasury(ledger, nav, &fee).await

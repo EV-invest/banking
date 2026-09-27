@@ -29,10 +29,10 @@ reports `already applied`.
 There is **no rollback** once the chain has landed. Hence the dry run and the `yes`.
 
 Nor is the *tag* the ordinary rollback the spec assumes. The hub runs `sqlx::migrate!()`
-without `ignore_missing`: once the new pod has applied 0044/0045, a pod of the previous
-image refuses to boot (`VersionMissing(44)`) — the schema itself is backward compatible, the
+without `ignore_missing`: once the new pod has applied 0045/0046, a pod of the previous
+image refuses to boot (`VersionMissing(45)`) — the schema itself is backward compatible, the
 version ledger is not. Rolling the image back therefore needs
-`DELETE FROM _sqlx_migrations WHERE version IN (44, 45)` first, and only while no
+`DELETE FROM _sqlx_migrations WHERE version IN (45, 46)` first, and only while no
 `holder_grant` / `seed_capital` consilium row exists (the old `ConsiliumKind` parser would
 fail on it). The release is effectively one-way from the moment the new pod migrates.
 
@@ -63,7 +63,7 @@ fail on it). The release is effectively one-way from the moment the new pod migr
 
 ## Procedure (spec §4.3)
 
-1. R1 is in production; the pod is up; migration `0044` applied (the `fee` / `fund`
+1. R1 is in production; the pod is up; migration `0045` applied (the `fee` / `fund`
    allocation rows exist). Owners have handed over the holder table and the decision on
    any company stake.
 2. **Fresh marks.** Every product whose fee class the `fee` allocation holds must have a

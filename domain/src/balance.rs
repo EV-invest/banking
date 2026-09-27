@@ -95,7 +95,7 @@ impl ServiceId {
 
 	/// Whether this slug is one the platform reserves for itself ([`Self::fee`],
 	/// [`Self::fund`]). An operator cannot register a product under a reserved slug —
-	/// the rows exist from migration `0044` — and only a reserved allocation may hold
+	/// the rows exist from migration `0045` — and only a reserved allocation may hold
 	/// units of another product ([`crate::issuance::UnitHolder::Allocation`]).
 	pub fn is_reserved(&self) -> bool {
 		self.0 == RESERVED_FEE || self.0 == RESERVED_FUND
