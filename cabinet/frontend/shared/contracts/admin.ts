@@ -507,19 +507,16 @@ export type UnitIssuanceState = "queued" | "applied";
 
 /** Where the units came from — or went: `mint` (`/allocations/issue` or an executed
  *  holder grant — the supply grew by `units`) or `retire` (`/allocations/retire` — burned
- *  out of a holder, the supply SHRANK by `units`). `company` is history only: the retired
- *  stake hand-over (pre-#245), which nothing writes any more. Always populated; a row that
- *  predates the field reads as `mint`. */
-export type UnitIssuanceSource = "mint" | "retire" | "company";
+ *  out of a holder, the supply SHRANK by `units`). Always populated; a row that predates
+ *  the field reads as `mint`. */
+export type UnitIssuanceSource = "mint" | "retire";
 
 /** One in-kind issuance — a mint or a retirement — as the hub recorded it. */
 export interface UnitIssuance {
   id: string;
   service: string;
-  /** `company` only on rows written before #245; nothing writes it any more. */
-  holder_kind: UnitHolderKind | "company";
-  /** The banking user id for `user`; the holding allocation's slug for `allocation`;
-   *  empty on a historical `company` row. */
+  holder_kind: UnitHolderKind;
+  /** The banking user id for `user`; the holding allocation's slug for `allocation`. */
   holder_id: string;
   units: string;
   /** Decimal USDT per unit the mint was recorded at. */

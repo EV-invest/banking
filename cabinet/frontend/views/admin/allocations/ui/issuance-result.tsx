@@ -24,12 +24,9 @@ const COPY = {
   retire: { applied: "admin.alloc.retire.resultApplied", queued: "admin.alloc.retire.resultQueued" },
 } as const;
 
-// `company` is a source the hub no longer writes (#245); a row can still carry it, so it
-// keeps a label rather than rendering the bare key.
 const SOURCE: Record<UnitIssuanceSource, string> = {
   mint: "admin.alloc.issuance.source.mint",
   retire: "admin.alloc.issuance.source.retire",
-  company: "admin.alloc.issuance.source.company",
 };
 
 export function IssuanceResult({ outcome, kind }: { outcome: IssuanceOutcome; kind: keyof typeof COPY }) {

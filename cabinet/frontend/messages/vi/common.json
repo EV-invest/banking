@@ -403,10 +403,6 @@
     "en": "Pin cap",
     "t": "Ghim trần"
   },
-  "admin.alloc.issuance.source.company": {
-    "en": "from the company's stake",
-    "t": "từ phần nắm giữ của công ty"
-  },
   "admin.alloc.issuance.source.mint": {
     "en": "minted",
     "t": "đã phát hành"

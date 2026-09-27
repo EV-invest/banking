@@ -79,7 +79,6 @@
   "admin.alloc.icon.treasury": "Treasury",
   "admin.alloc.icon.venture": "Venture",
   "admin.alloc.icon.yield": "Yield",
-  "admin.alloc.issuance.source.company": "from the company's stake",
   "admin.alloc.issuance.source.mint": "minted",
   "admin.alloc.issuance.source.retire": "retired",
   "admin.alloc.issue.action": "Issue",
