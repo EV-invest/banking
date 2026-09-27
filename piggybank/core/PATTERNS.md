@@ -41,7 +41,7 @@ ledger (`= 2`):
 | --- | --- | --- | --- | --- |
 | **Treasury / custody** (assets) | `wallet:<net>` (10), `bank` (11) | debit (`debits − credits`) | `CreditsMustNotExceedDebits` | **per-rail** |
 | **Claims** (equity/liab) | `user:<uuid>` (20), `service:<id>` (30 — a product's, or the reserved `service:fee` / `service:fund`), `clearing` (50), `book_cash:<uuid>` (65) | credit (`credits − debits`) | `DebitsMustNotExceedCredits` | **network-agnostic** |
-| **Retired claims** (#245) | `fund` (1), `fee` (40) | credit | as above | replay-only: resolvable in `tb_accounts`, never credited by a new producer; emptied by `piggybank migrate-ownership`; the codes are never reused |
+| **Retired claims** (#245) | `fund` (1), `fee` (40) | credit | as above | history: the rows stay in `tb_accounts` at zero, no live key names them (the cash scan still counts them by code); the codes are never reused |
 
 A deposit is one balanced transfer **`Dr wallet:<net> / Cr <claim>`** (textbook Dr Cash
 / Cr customer-deposit) — there is no "external world" account. The flags are set **once
@@ -54,15 +54,16 @@ platform's own capital is the reserved **`fund`** allocation and its earnings th
 **`fee`** allocation (`ServiceId::fee()` / `ServiceId::fund()`, `domain/src/balance.rs`;
 registry rows from migration `0045`, `hidden`, `open`, `cash`) — see
 [Reserved allocations](#reserved-allocations--fee-and-fund-245). The old singletons
-`Party::Piggybank` / `Party::Revenue`, `LedgerAccountKey::Fund` / `FeeRevenue` /
-`CompanyShares`, `UnitHolder::Company`, `IssuanceSource::Company`,
-`TransferCode::CompanyStakeTransfer`, `LedgerEvent::CapitalSeeded` and
-`WithdrawalSource::Revenue` are `#[deprecated]` and **replay-only**: their serde tags sit
-in the outbox and the event log and pending transfers are open on their accounts, so the
-variants and the keys stay until the contract migration (C-9) removes them; a fee-bearing
-payload written before #245 carries no `payee` and defaults to the retired claim
-(`Party::legacy_fee_payee`) so a redelivery recomputes the same legs. On the wire a
-`Party` is `user | service` only; the retired kinds are refused by name.
+— the `piggybank` / `revenue` parties, the `fund` / `fee` claims, the company
+holder and its stake account, the seed and stake-hand-over events, the revenue payout —
+were removed with the contract step (C-9, migration `0047`) after the one-off data
+migration emptied them in production (2026-09-27). What stays is history: the TigerBeetle
+accounts (codes 1, 40, 63, reserved forever, `AccountCode::is_retired`) that scans step
+over by code; the seed's `deposits` rows and the company stake's two `unit_issuances`
+rows, left in place under `NOT VALID` CHECKs and read at the persistence boundary as
+history (`ports::issuance::StoredIssuance::RetiredCompany`); and the transfer codes 1, 52,
+54 (`TransferCode::RETIRED`). On the wire and in every column a `Party` is
+`user | service` only.
 
 A **third ledger** holds the **service currency** — fund units (`Ledger::Share`, `= 3`),
 see [Fund shares](#fund-shares--the-service-currency). It is independent: a unit transfer
@@ -198,24 +199,22 @@ The platform's own money is two ordinary allocations that people hold through un
   `seed_fund_capital`. The subscription id is `seed_subscription_id(tx_ref)`, so the
   deposit gate and the mint share one idempotency key.
 - **The treasury read** (`application/balance.rs::treasury`, `GetTreasury`) is
-  `Treasury { rails, bank, total_custody, held_by_users, allocations[], retired,
+  `Treasury { rails, bank, total_custody, held_by_users, allocations[],
   reserved_for_withdrawals }`: `held_by_users` is Σ `user:<id>` read through the same
   `cash_invariant` scan reconciliation asserts with, `allocations[]` is every registry row
   (the hidden `fee`/`fund` included) as `AllocationTreasury { service, title, access,
   claim {posted, reserved, available}, units_outstanding, nav, holders[] }`, and nothing is
   a remainder — the pre-#245 `held_for_clients = custody − fund − fee` is gone (wire fields
-  4..6 reserved). `retired` (what is still on the retired `fund`/`fee` claims) is read for
-  the operator's before/after snapshot and logged as a `warn!` by the RPC while non-zero;
-  it is not on the wire. `GetFundRevenue` is the same `AllocationTreasury` for the one
+  4..6 reserved). `GetFundRevenue` is the same `AllocationTreasury` for the one
   slug `fee` (`fee_allocation`), not a second computation.
 - **Migration path.** Expand (`0045` registry rows + `holder_service`, `0046` consilium
   kinds) → the one-off data command `piggybank migrate-ownership` moving the retired
   `fund`/`fee` claims onto `service:fund`/`service:fee` and minting the owners' holder table
   in one linked chain per allocation
-  ([`docs/RUNBOOK-ownership-migration.md`](../../docs/RUNBOOK-ownership-migration.md)) →
-  contract (C-9, not yet written: drop the retired variants, keys and `company` rows).
-  Until the data migration runs, `GetTreasury` warns while the retired claims hold cash and
-  reconciliation reports `fee` as **unheld value** (below).
+  ([`docs/RUNBOOK-ownership-migration.md`](../../docs/RUNBOOK-ownership-migration.md), run
+  2026-09-27, command since removed) → contract (C-9, `0047_ownership_contract.sql`: the
+  CHECKs narrowed to the live vocabulary, `NOT VALID` on `deposits` and `unit_issuances`
+  so the history stays; the retired variants, keys and replay branches removed).
 
 ## Fund shares — the service currency (`domain::subscriptions`, `domain::redemptions`, `FundsService`)
 
@@ -1078,7 +1077,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `Redeem` / `SettleRedemption` (cooldown) | the user / operator | as above | the redeeming user posted **no** mark for this fund within `VALUATION_REDEEM_COOLDOWN_SECS` (`failed_precondition` otherwise; checked at request and again at settle) |
 | `IssueUnits` / `RetireUnits` / `ListUnitHolders` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | `service` not reserved ∧ holder is a user (`Forbidden` otherwise) ∧ allocation registered (any state) ∧ user holder exists and is active ∧ fresh NAV ∧ (issue) issued + units ≤ cap / (retire) `closed` unless `force` ∧ holder's available units ≥ units; idempotent by `(service, idempotency_key)`, one key space for mints and retirements |
 | `RegisterAllocation` / `UpdateAllocation` / `SetAllocationState` / `SetAllocationUnitCap` / `SetAllocationAccess` / `SetAllocationBacking` / `Grant`/`RevokeAllocationAccess` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | `service` not reserved (`refuse_on_reserved` → `Forbidden`; a reserved slug cannot be registered either) |
-| `OpenHolderGrant` | an owner (`RevenuePayout` — the owner-surface permission the name stayed on — admits to the door; `Consilium::open` refuses a non-owner) | `require_permission` (RBAC matrix) | terms name a reserved allocation ∧ units > 0 ∧ grantee is an active mirrored user ∧ `fee`/`fund` prices fresh; executed by the owners' quorum through `issuance::grant_units` (cap ∧ fresh NAV re-checked at execution, idempotent by `holder-grant:<consilium>`) |
+| `OpenHolderGrant` | an owner (`ConsiliumManage` — the owner-surface permission — admits to the door; `Consilium::open` refuses a non-owner) | `require_permission` (RBAC matrix) | terms name a reserved allocation ∧ units > 0 ∧ grantee is an active mirrored user ∧ `fee`/`fund` prices fresh; executed by the owners' quorum through `issuance::grant_units` (cap ∧ fresh NAV re-checked at execution, idempotent by `holder-grant:<consilium>`) |
 | `SettleFeeShares` | operator (`AllocationManage`) | `require_permission` (RBAC matrix) | `0 < units ≤ FeeShares.available` ∧ the settler posted **no** mark for the product within `VALUATION_REDEEM_COOLDOWN_SECS` ∧ fresh NAV ∧ `service:<svc>.available ≥ cash + queued redemptions at that NAV` |
 | `PlaceOrder` | the user | `sub == user`, `is_access`, **not frozen**, **not read-only** | allocation visible ∧ `invest` (state ignored) ∧ `book_open` ∧ on tick/lot ∧ free units / claim ≥ escrow (TB flag backstop → `rejected`); idempotent by `client_order_id` |
 | `CancelOrder` | the user | `sub == user`, `is_access` | owns it ∧ state is resting (idempotent on cancelled) |
