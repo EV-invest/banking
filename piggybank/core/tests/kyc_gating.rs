@@ -30,7 +30,7 @@ use std::sync::{
 use async_trait::async_trait;
 use domain::{
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party},
+	balance::{LedgerAccountKey, Party, TransferCode},
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
@@ -42,7 +42,10 @@ use piggybank_core::{
 	infrastructure::{
 		custody::StubCustody, deposits::PgDeposits, nav::PgNav, outflow::PgOutflowPolicy, positions::PgFundPositions, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
 	},
-	ports::{DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{
+		DepositAddresses, UserRepository, WithdrawalRepository,
+		ledger::{Ledger, LedgerTransfer},
+	},
 };
 use sqlx::PgPool;
 use tokio::sync::{MutexGuard, Notify};
@@ -318,43 +321,37 @@ async fn a_verified_user_can_withdraw() {
 }
 
 /// A revenue payout pays the fund's own earned revenue out. There is no user behind it —
-/// `WithdrawalSource::Revenue` names the `fee` claim, not a person — so a KYC tier is not
-/// merely unchecked here, there is nothing to check. The gate must therefore stay out of
-/// this path entirely, and the payout is exercised end to end (funded by real retained
-/// fees) rather than asserted by reading the code.
+/// `WithdrawalSource::Revenue` names the retired `fee` claim, not a person — so a KYC tier
+/// is not merely unchecked here, there is nothing to check. The gate must therefore stay
+/// out of this path entirely, and the payout is exercised end to end rather than asserted
+/// by reading the code.
+///
+/// Retained fees no longer land on the claim this payout spends (they are the `fee`
+/// allocation's, #245) and the payout itself moves there in a later step, so the claim
+/// is funded directly here, the deposit shape (`Dr wallet / Cr fee`) — the balance an
+/// in-flight legacy payout would find.
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+// Drives the retired revenue claim on purpose: the payout still spends it until C-4.
 #[allow(deprecated)]
 async fn a_revenue_payout_is_not_gated_on_kyc() {
 	let Some(h) = harness().await else { return };
-	let user = user_at_tier(&h, 1).await;
 	let network = Network::Bep20;
 	let fee_account = LedgerAccountKey::FeeRevenue;
-	deposit(&h, user, network, "200").await;
-
-	// Two settled user withdrawals retain 1 USDT each — the payout minimum is 2 USDT, so
-	// this test funds the whole amount it then pays out rather than leaning on whatever
-	// the shared `fee` singleton happens to hold.
-	for _ in 0..2 {
-		let withdrawal = withdrawal_app::request_withdrawal(
-			&withdrawal_ports(&h),
-			&admission(&h, KycGate::ENFORCED),
-			WithdrawalId::new(),
-			user,
-			network,
-			destination(network),
-			usdt("50"),
-		)
+	// The payout minimum is 2 USDT: fund the whole amount rather than leaning on whatever
+	// the shared singleton happens to hold.
+	h.ledger
+		.post(&LedgerTransfer {
+			id: Uuid::new_v4().as_u128(),
+			debit: LedgerAccountKey::CryptoWallet(network),
+			credit: fee_account.clone(),
+			amount: usdt("2").base_units(),
+			code: TransferCode::WithdrawFee,
+			reference: 0,
+		})
 		.await
-		.expect("fund the fee claim");
-		common::drain_to_quiescence(&h.relay, &h.pool).await;
-		withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
-			.await
-			.expect("settle");
-		common::drain_to_quiescence(&h.relay, &h.pool).await;
-	}
+		.expect("fund the retired revenue claim");
 	let retained = Usdt::from_base_units(h.ledger.balance(&fee_account).await.unwrap().available());
-	assert!(retained >= usdt("2"), "the two settles retained the fees the payout spends, got {retained}");
+	assert!(retained >= usdt("2"), "the claim holds what the payout spends, got {retained}");
 
 	// No user id crosses this call at all — the proof that the verification gate cannot
 	// apply to it.

@@ -41,7 +41,7 @@ use crate::{
 	AppState,
 	application::{
 		allocations as allocations_app,
-		funds::FundPorts,
+		funds::{self as funds_app, FundPorts},
 		issuance::{self as issuance_app, IssueUnitsRequest, RetireUnitsRequest, UnitHoldersView},
 	},
 	ports::{
@@ -137,12 +137,16 @@ impl AllocationsService for AllocationsSvc {
 	async fn get_allocation(&self, request: Request<pb::GetAllocationRequest>) -> Result<Response<pb::Allocation>, Status> {
 		// Any authenticated user, any state — an investor holding units of a closed
 		// product still has to render it. A product hidden from THIS caller is NOT_FOUND,
-		// unless they hold AllocationManage: a question here, not a gate, because the
-		// handler serves everyone and merely widens for a manager.
+		// unless they hold AllocationManage — a question here, not a gate, because the
+		// handler serves everyone and merely widens for a manager — or unless they hold
+		// its units: a holder of the hidden `fee`/`fund` allocation reads the title of
+		// what they own (#245), the same as their position card shows its price.
 		let caller = caller_id(&request)?;
 		let unrestricted = holds_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
-		let record = allocations_app::get_for(self.state.allocations.as_ref(), &service, caller, unrestricted).await.map_err(map_err)?;
+		let record = funds_app::allocation_for_holder(self.state.allocations.as_ref(), self.state.ledger.as_ref(), &service, caller, unrestricted)
+			.await
+			.map_err(map_err)?;
 		Ok(Response::new(record_to_proto(&record)))
 	}
 
@@ -368,13 +372,26 @@ fn issuance_to_proto(record: &UnitIssuanceRecord) -> pb::UnitIssuance {
 	}
 }
 
+/// The cap table folded onto the wire's three-class summary until the contract step of
+/// #245 carries the holders themselves: people sum into `investor_units`, the `fee`
+/// allocation's line is `fee_units`, and the retired company stake — a line only until
+/// the data migration moves it — is `company_units`.
+// The retired holder is still a line of the table while its account holds anything.
+#[allow(deprecated)]
 fn holders_to_proto(view: &UnitHoldersView) -> pb::UnitHolders {
+	let sum = |pick: fn(&UnitHolder) -> bool| {
+		view.holders
+			.iter()
+			.filter(|line| pick(&line.holder))
+			.try_fold(Shares::ZERO, |acc, line| acc.checked_add(line.units))
+			.unwrap_or(Shares::ZERO)
+	};
 	pb::UnitHolders {
 		service: view.service.to_string(),
 		units_outstanding: view.units_outstanding.to_decimal_string(),
-		company_units: view.company_units.to_decimal_string(),
-		fee_units: view.fee_units.to_decimal_string(),
-		investor_units: view.investor_units.to_decimal_string(),
+		company_units: sum(|holder| matches!(holder, UnitHolder::Company)).to_decimal_string(),
+		fee_units: sum(|holder| matches!(holder, UnitHolder::Allocation(allocation) if *allocation == ServiceId::fee())).to_decimal_string(),
+		investor_units: sum(|holder| matches!(holder, UnitHolder::User(_))).to_decimal_string(),
 		queued_units: view.queued_units.to_decimal_string(),
 	}
 }

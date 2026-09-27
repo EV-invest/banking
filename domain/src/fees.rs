@@ -56,7 +56,7 @@ use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-	balance::ServiceId,
+	balance::{Party, ServiceId},
 	error::DomainError,
 	money::{Nav, Shares, Usdt},
 	push_field,
@@ -811,7 +811,7 @@ impl EmitsEvents for FeeAssessment {
 /// manager does this once for a whole period's fees, not once per holder.
 ///
 /// It is the mirror of a redemption settle: burn the fee units, then pay their value out
-/// of the fund's claim into fee revenue. Burn-first, so a fund short of cash parks before
+/// of the fund's claim into the `fee` allocation's. Burn-first, so a fund short of cash parks before
 /// any units are destroyed.
 #[derive(Clone, Debug)]
 pub struct FeeSettlement {
@@ -848,6 +848,7 @@ impl FeeSettlement {
 			units,
 			nav,
 			cash,
+			payee: Party::fee_payee(),
 		});
 		Ok(settlement)
 	}
@@ -911,13 +912,20 @@ pub enum FeeEvent {
 		cash: Usdt,
 	},
 	/// Accumulated fee units converted to cash (relay, burn-first: post
-	/// `Dr SharesOutstanding / Cr FeeShares`, then `Dr ServiceClaim / Cr FeeRevenue`).
+	/// `Dr SharesOutstanding / Cr FeeShares`, then `Dr ServiceClaim / Cr <payee claim>`).
+	///
+	/// `payee` is the claim the cash lands on — the `fee` allocation's, whose holders
+	/// are people (#245). It rides on the event rather than in the relay so a payload
+	/// written before the field existed (defaulting to the retired revenue claim it was
+	/// planned against) still re-plans to the SAME leg under at-least-once delivery.
 	SharesSettled {
 		settlement_id: FeeSettlementId,
 		service: ServiceId,
 		units: Shares,
 		nav: Nav,
 		cash: Usdt,
+		#[serde(default = "Party::legacy_fee_payee")]
+		payee: Party,
 	},
 }
 

@@ -165,7 +165,7 @@ async fn load_assessment_inputs(
 	let Some(accrual) = accruals.find(user, service).await? else {
 		return Ok(None);
 	};
-	let price = dealing_nav(nav, service, now_unix).await?;
+	let price = dealing_nav(nav, ledger, service, now_unix).await?;
 	let holding = ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?;
 	let escrowed = ledger.balance(&LedgerAccountKey::BookShares(service.clone(), user)).await?.posted;
 	let units = Shares::from_base_units(holding.posted)
@@ -220,6 +220,12 @@ pub async fn schedule_policy(ports: &FeePolicyPorts<'_>, requester: UserId, requ
 	// The registry is the same gate subscribe runs through: terms for an unregistered
 	// product are always a typo.
 	allocations_app::get(ports.allocations, &request.service).await?;
+	// A reserved allocation charges no fee: a charge moves units into the product's fee
+	// class, which the `fee` allocation holds — and `fee` cannot hold itself (the holder
+	// graph is reserved → product, one hop), so the units would have no holder.
+	if request.service.is_reserved() {
+		return Err(DomainError::Validation(format!("'{}' is a reserved allocation and charges no fee", request.service)));
+	}
 	if request.requested_effective_from_unix > now.saturating_add(fees::MAX_EFFECTIVE_FROM_HORIZON_SECS) {
 		return Err(DomainError::Validation("effective_from may be at most 366 days ahead".into()));
 	}
@@ -453,19 +459,22 @@ pub async fn list_fund_assessments(assessments: &dyn FeeAssessments, service: &S
 /// The manager's uncollected fee units in a fund, and what they are worth right now.
 pub async fn fee_shares(ledger: &dyn Ledger, nav: &dyn NavMarks, service: &ServiceId, now_unix: i64) -> Result<(Shares, Usdt), DomainError> {
 	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::FeeShares(service.clone())).await?.available());
-	let price = dealing_nav(nav, service, now_unix).await?;
+	let price = dealing_nav(nav, ledger, service, now_unix).await?;
 	Ok((units, price.value(units)?))
 }
 
-/// Convert accumulated fee units into fee revenue (operator). `units` defaults to the
-/// whole accumulated balance.
+/// Convert accumulated fee units into the `fee` allocation's cash (operator) — the
+/// product buying its fee class back from the `fee` allocation at the day's NAV, `Dr
+/// ServiceClaim(product) / Cr ServiceClaim(fee)`. `units` defaults to the whole
+/// accumulated balance.
 ///
 /// This is the **only** operation in the fee plane that moves cash, and it runs once per
 /// period for a whole fund rather than once per investor — which is the entire point of
 /// collecting in units. It is Read-First gated on the fund's claim covering the payout
 /// and **refuses** when short rather than queueing: unlike an investor's redemption,
 /// nobody is waiting on this, and a fee that cannot be paid today is simply left
-/// accumulating as units at no cost.
+/// accumulating as units at no cost — the `fee` allocation's holders keep their claim
+/// on the product through the units, whose value its NAV already carries.
 ///
 /// # The queue is reserved before the manager is paid
 ///
@@ -501,7 +510,7 @@ pub async fn settle_fee_shares(
 	if units > held {
 		return Err(DomainError::Validation("cannot settle more fee units than the fund has accumulated".into()));
 	}
-	let price = dealing_nav(nav, &service, now_unix).await?;
+	let price = dealing_nav(nav, ledger, &service, now_unix).await?;
 	let mut settlement = FeeSettlement::record(FeeSettlementId::new(), service.clone(), units, price)?;
 	let fund = ledger.balance(&LedgerAccountKey::ServiceClaim(service.clone())).await?;
 	let reserved = queued_redemption_cash(redemptions, &service, price).await?;

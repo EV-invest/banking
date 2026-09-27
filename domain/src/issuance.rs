@@ -73,7 +73,7 @@ pub const MAX_IDEMPOTENCY_KEY_LEN: usize = 64;
 /// a synthetic user would drag every investor-facing read (positions, fees, the
 /// activity feed) into special-casing one UUID. Only a reserved allocation may hold —
 /// see the module header and the gate in the aggregate's constructors.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "id", rename_all = "snake_case")]
 pub enum UnitHolder {
 	/// An investor: units land in their `UserShares` and their `fund_positions`
@@ -160,6 +160,32 @@ impl UnitHolder {
 				}
 				self.shares_key(service).map(drop)
 			}
+		}
+	}
+
+	/// The inverse of [`Self::shares_key`], widened to the book's escrow: which product
+	/// and which holder a Share-ledger account's units belong to. `BookShares` is the
+	/// user's — units resting in a sell are still theirs and still count in the supply
+	/// invariant — and the retired company account still answers, because a scan of the
+	/// map must be able to attribute its balance until the data migration moves it.
+	/// `None` for `SharesOutstanding` (the supply belongs to nobody) and every cash
+	/// account.
+	// The retired company account is still a row in the map: a scan reads it back as itself.
+	#[allow(deprecated)]
+	pub fn of_holding(key: &LedgerAccountKey) -> Option<(ServiceId, Self)> {
+		match key {
+			LedgerAccountKey::UserShares(service, user) | LedgerAccountKey::BookShares(service, user) => Some((service.clone(), Self::User(*user))),
+			LedgerAccountKey::FeeShares(service) => Some((service.clone(), Self::Allocation(ServiceId::fee()))),
+			LedgerAccountKey::CompanyShares(service) => Some((service.clone(), Self::Company)),
+			LedgerAccountKey::SharesOutstanding(_)
+			| LedgerAccountKey::Fund
+			| LedgerAccountKey::CryptoWallet(_)
+			| LedgerAccountKey::UserClaim(_)
+			| LedgerAccountKey::ServiceClaim(_)
+			| LedgerAccountKey::FeeRevenue
+			| LedgerAccountKey::WithdrawalClearing
+			| LedgerAccountKey::BankCustody
+			| LedgerAccountKey::BookCash(_) => None,
 		}
 	}
 
@@ -563,6 +589,23 @@ mod tests {
 		assert!(UnitHolder::from_parts("allocation", None, None).is_err());
 		assert!(UnitHolder::from_parts("user", Some(user), Some(ServiceId::fee())).is_err());
 		assert!(UnitHolder::from_parts("fund", None, None).is_err());
+	}
+
+	#[test]
+	#[allow(deprecated)]
+	fn a_holding_account_reads_back_as_its_product_and_holder() {
+		let user = UserId::new();
+		// The inverse of `shares_key` for every holder that has one...
+		for holder in [UnitHolder::User(user), fee(), UnitHolder::Company] {
+			let key = holder.shares_key(&svc()).unwrap();
+			assert_eq!(UnitHolder::of_holding(&key), Some((svc(), holder.clone())), "{key:?}");
+		}
+		// ...and the book's escrow is the user's, not the book's.
+		assert_eq!(UnitHolder::of_holding(&LedgerAccountKey::BookShares(svc(), user)), Some((svc(), UnitHolder::User(user))));
+		// Supply and cash have no holder.
+		assert_eq!(UnitHolder::of_holding(&LedgerAccountKey::SharesOutstanding(svc())), None);
+		assert_eq!(UnitHolder::of_holding(&LedgerAccountKey::ServiceClaim(svc())), None);
+		assert_eq!(UnitHolder::of_holding(&LedgerAccountKey::UserClaim(user)), None);
 	}
 
 	#[test]

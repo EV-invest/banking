@@ -20,9 +20,12 @@
 //! A management/performance fee never touches either layer while it is being charged:
 //! it moves *units* on the Share ledger, from the holder's `UserShares` to the product's
 //! fee class, `FeeShares` — the units the `fee` allocation holds in that product. Only
-//! the periodic bulk settlement of accumulated fee units crosses into cash (today still
-//! `Dr ServiceClaim / Cr FeeRevenue`, retargeted to the `fee` allocation's claim by the
-//! fee in-kind step of #245).
+//! the periodic bulk settlement of accumulated fee units crosses into cash, `Dr
+//! ServiceClaim / Cr ServiceClaim(fee)`: the product buys its fee class back from the
+//! `fee` allocation at the day's NAV. Every other fee the platform charges — the
+//! retained withdrawal fee, the book's taker fee — is paid to the same claim; the
+//! event that raises a fee names its payee ([`Party::fee_payee`]), so a payload written
+//! before #245 still replays to the retired claim it was posted against.
 //!
 //! **Retired accounts.** `Fund` (code 1), `FeeRevenue` (40) and `CompanyShares` (63)
 //! were claims and holdings with nobody behind them. Their variants, keys and codes
@@ -191,6 +194,24 @@ impl Party {
 			("service", Some(raw)) => Ok(Self::Service(ServiceId::parse(raw)?)),
 			_ => Err(DomainError::Validation(format!("invalid party: {kind}"))),
 		}
+	}
+
+	/// The party every fee the platform charges is paid to: the `fee` allocation, whose
+	/// holders are people (issue #245). Carried on each fee-bearing event rather than
+	/// decided by the relay, so the relay's plan is a function of the payload alone.
+	pub fn fee_payee() -> Self {
+		Self::Service(ServiceId::fee())
+	}
+
+	/// The serde default for the `payee` of a fee-bearing event whose payload predates
+	/// #245 and has no such field. Those events were planned onto the retired revenue
+	/// claim, and at-least-once delivery means an undrained or half-applied one may be
+	/// re-planned after the upgrade: it must recompute the SAME legs (same accounts, same
+	/// deterministic ids), or TigerBeetle answers `exists_with_different_*` and the row
+	/// parks forever. No producer names this party any more.
+	#[allow(deprecated)]
+	pub fn legacy_fee_payee() -> Self {
+		Self::Revenue
 	}
 
 	/// The network-agnostic, credit-normal claim account that holds this party's value.
@@ -572,6 +593,49 @@ impl LedgerAccountKey {
 			_ => None,
 		}
 	}
+
+	/// The inverse of [`Self::logical_key`]: read a `tb_accounts` row's key back into
+	/// the account it names. Total over every string `logical_key` can produce, the
+	/// retired ones included — the map rows exist and a scan of the map must be able to
+	/// say what each one is — and an error for anything else, so a foreign or corrupt
+	/// row is reported rather than silently attributed to an account it is not.
+	// The retired keys are still rows in the map: a scan reads them back as what they are.
+	#[allow(deprecated)]
+	pub fn parse_logical_key(raw: &str) -> Result<Self, DomainError> {
+		fn service_and_user(rest: &str) -> Result<(ServiceId, UserId), DomainError> {
+			// Neither a service slug nor a user id contains ':', so the one ':' in the
+			// remainder is the split point.
+			let (service, user) = rest.split_once(':').ok_or_else(|| DomainError::Validation(format!("malformed holding key: {rest}")))?;
+			Ok((ServiceId::parse(service)?, user_id(user)?))
+		}
+		match raw {
+			"fund" => Ok(Self::Fund),
+			"fee" => Ok(Self::FeeRevenue),
+			"clearing" => Ok(Self::WithdrawalClearing),
+			"bank" => Ok(Self::BankCustody),
+			_ => {
+				let (prefix, rest) = raw.split_once(':').ok_or_else(|| DomainError::Validation(format!("unknown logical key: {raw}")))?;
+				match prefix {
+					"wallet" => Network::parse(rest).map(Self::CryptoWallet),
+					"user" => user_id(rest).map(Self::UserClaim),
+					"service" => ServiceId::parse(rest).map(Self::ServiceClaim),
+					"shares" => service_and_user(rest).map(|(service, user)| Self::UserShares(service, user)),
+					"shares_outstanding" => ServiceId::parse(rest).map(Self::SharesOutstanding),
+					"shares_fee" => ServiceId::parse(rest).map(Self::FeeShares),
+					"shares_company" => ServiceId::parse(rest).map(Self::CompanyShares),
+					"book_shares" => service_and_user(rest).map(|(service, user)| Self::BookShares(service, user)),
+					"book_cash" => user_id(rest).map(Self::BookCash),
+					_ => Err(DomainError::Validation(format!("unknown logical key: {raw}"))),
+				}
+			}
+		}
+	}
+}
+
+fn user_id(raw: &str) -> Result<UserId, DomainError> {
+	uuid::Uuid::parse_str(raw)
+		.map(Id::from_raw)
+		.map_err(|_| DomainError::Validation(format!("invalid user id in logical key: {raw}")))
 }
 
 #[cfg(test)]
@@ -751,6 +815,64 @@ mod tests {
 			assert!(!RETIRED.contains(&key.account_code().code()), "{key:?} derives a retired code");
 			assert!(!matches!(key.logical_key().as_str(), "fund" | "fee"), "{key:?} derives a retired logical key");
 			assert!(!key.logical_key().starts_with("shares_company:"), "{key:?} derives a retired logical key");
+		}
+	}
+
+	#[test]
+	fn every_fee_is_paid_to_the_fee_allocation_and_a_legacy_payload_to_the_retired_claim() {
+		assert_eq!(Party::fee_payee(), Party::Service(ServiceId::fee()));
+		assert_eq!(Party::fee_payee().claim_key().logical_key(), "service:fee");
+		// The serde default for a pre-#245 payload keeps the legs a legacy event was posted
+		// with: the retired claim, never the successor.
+		#[allow(deprecated)]
+		{
+			assert_eq!(Party::legacy_fee_payee(), Party::Revenue);
+			assert_eq!(Party::legacy_fee_payee().claim_key(), LedgerAccountKey::FeeRevenue);
+		}
+		assert_ne!(Party::legacy_fee_payee().claim_key().logical_key(), Party::fee_payee().claim_key().logical_key());
+	}
+
+	#[test]
+	#[allow(deprecated)]
+	fn every_logical_key_parses_back_to_the_account_it_names() {
+		let uid = UserId::new();
+		let svc = ServiceId::parse("service_arb").unwrap();
+		let keys = [
+			LedgerAccountKey::Fund,
+			LedgerAccountKey::CryptoWallet(Network::Bep20),
+			LedgerAccountKey::CryptoWallet(Network::Ton),
+			LedgerAccountKey::UserClaim(uid),
+			LedgerAccountKey::ServiceClaim(svc.clone()),
+			LedgerAccountKey::ServiceClaim(ServiceId::fee()),
+			LedgerAccountKey::ServiceClaim(ServiceId::fund()),
+			LedgerAccountKey::FeeRevenue,
+			LedgerAccountKey::WithdrawalClearing,
+			LedgerAccountKey::BankCustody,
+			LedgerAccountKey::UserShares(svc.clone(), uid),
+			LedgerAccountKey::UserShares(ServiceId::fee(), uid),
+			LedgerAccountKey::SharesOutstanding(svc.clone()),
+			LedgerAccountKey::FeeShares(svc.clone()),
+			LedgerAccountKey::CompanyShares(svc.clone()),
+			LedgerAccountKey::BookShares(svc, uid),
+			LedgerAccountKey::BookCash(uid),
+		];
+		for key in keys {
+			let raw = key.logical_key();
+			assert_eq!(LedgerAccountKey::parse_logical_key(&raw).unwrap(), key, "{raw} does not round-trip");
+		}
+		// A row the chart of accounts does not know is an error, never a guess: the reserved
+		// claim words are exact, a holding needs both halves, and a stray prefix is foreign.
+		for foreign in [
+			"",
+			"fees",
+			"service:",
+			"shares:service_arb",
+			"shares:service_arb:not-a-uuid",
+			"user:",
+			"vault:bep20",
+			"wallet:btc",
+		] {
+			assert!(LedgerAccountKey::parse_logical_key(foreign).is_err(), "{foreign:?} parsed");
 		}
 	}
 

@@ -40,7 +40,7 @@ use piggybank_core::{
 	},
 	ports::{
 		BroadcastRequest, Custody, CustodyError, RedemptionRepository, UserRepository, WithdrawalRepository,
-		ledger::{CashInvariant, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion},
+		ledger::{CashInvariant, HoldingScope, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion},
 	},
 };
 use sqlx::PgPool;
@@ -621,6 +621,10 @@ impl Ledger for FailFeeLegOnce {
 
 	async fn transfer_exists(&self, id: u128) -> Result<bool, LedgerError> {
 		self.inner.transfer_exists(id).await
+	}
+
+	async fn share_holdings(&self, scope: &HoldingScope) -> Result<Vec<(LedgerAccountKey, u128)>, LedgerError> {
+		self.inner.share_holdings(scope).await
 	}
 
 	async fn post(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError> {

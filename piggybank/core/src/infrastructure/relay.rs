@@ -68,7 +68,7 @@ use crate::{
 /// Distinct salts deriving a withdrawal's deterministic TigerBeetle transfer ids from
 /// the (stable) withdrawal id. The reservation locks the gross against the user's claim
 /// into clearing; settle posts that pending and redistributes the net to the rail's
-/// custody and the fee to fee-revenue; fail/cancel void the pending (refund). A
+/// custody and the fee to the fee allocation's claim; fail/cancel void the pending (refund). A
 /// completion references the reservation's id as its `pending_id`.
 const CLEARING_RESERVE: &[u8] = b"withdraw:clearing";
 const CLEARING_SETTLE: &[u8] = b"withdraw:clearing:settle";
@@ -125,7 +125,7 @@ const PAYMENT_RESERVE_VOID: &[u8] = b"payment:reserve:void";
 const PAYMENT_TRANSFER: &[u8] = b"payment:transfer";
 
 /// Salts for a fee settlement's two posted legs — burning the accumulated fee units and
-/// paying their value out of the fund's claim into fee revenue. The *charge* itself needs
+/// paying their value out of the fund's claim into the fee allocation's. The *charge* itself needs
 /// no salt: it is a single leg, so it uses the event id directly, like a deposit.
 const FEE_SETTLE_BURN: &[u8] = b"fee:settle:burn";
 const FEE_SETTLE_PAYOUT: &[u8] = b"fee:settle:payout";
@@ -1044,14 +1044,13 @@ fn plan_issuance(event: IssuanceEvent, aggregate_id: Uuid, reference: u128) -> R
 ///   `rejected` so the matcher stops filling an order with nothing behind it.
 /// - **TradeExecuted** → ONE linked chain: `Dr UserShares(buyer) / Cr BookShares(seller)`
 ///   for the units, `Dr BookCash(buyer) / Cr UserClaim(seller)` for the cash, and — when
-///   the taker owes one — the fee out of the taker's side into `FeeRevenue`, which for a
-///   taking seller debits the claim the cash leg just credited (linked legs see each
-///   other's effect). Delivery versus payment: units and cash move together or not at
-///   all, and neither party can end up with both or neither.
+///   the taker owes one — the fee out of the taker's side into the event's `payee`
+///   claim (the `fee` allocation's; the retired revenue claim for a pre-#245 payload),
+///   which for a taking seller debits the claim the cash leg just credited (linked legs
+///   see each other's effect). Delivery versus payment: units and cash move together or
+///   not at all, and neither party can end up with both or neither.
 /// - **OrderReleased** → hand the unspent escrow back: `Dr UserShares / Cr BookShares`
 ///   or `Dr BookCash / Cr UserClaim`.
-// The taker fee still lands on the retired fee claim until C-2/C-4 retarget it to `service:fee`.
-#[allow(deprecated)]
 fn plan_book(event: BookEvent, aggregate_id: Uuid, reference: u128) -> PlannedOp {
 	match event {
 		BookEvent::OrderPlaced { service, user, locked, .. } => {
@@ -1106,6 +1105,7 @@ fn plan_book(event: BookEvent, aggregate_id: Uuid, reference: u128) -> PlannedOp
 			size,
 			notional,
 			fee,
+			payee,
 			..
 		} => {
 			let mut legs = vec![
@@ -1135,7 +1135,7 @@ fn plan_book(event: BookEvent, aggregate_id: Uuid, reference: u128) -> PlannedOp
 				legs.push(LedgerTransfer {
 					id: tid(aggregate_id, BOOK_FILL_FEE),
 					debit,
-					credit: LedgerAccountKey::FeeRevenue,
+					credit: payee.claim_key(),
 					amount: fee.base_units(),
 					code: TransferCode::BookFee,
 					reference,
@@ -1235,12 +1235,12 @@ fn void_burn(aggregate_id: Uuid, user: UserId, service: domain::balance::Service
 ///   under the application's own cap: a clawback larger than the holding is refused by
 ///   the ledger rather than driving a balance negative.
 /// - **SharesSettled** → **burn first, pay second**: post `Dr SharesOutstanding /
-///   Cr FeeShares` to destroy the units, then `Dr ServiceClaim / Cr FeeRevenue` for
-///   their value. Same ordering rule as a redemption settle, for the same reason — the
-///   payout leg is liquidity-gated in the pre-check above, so a short fund parks the
-///   whole event with nothing applied instead of burning units it cannot pay for.
-// The settlement still credits the retired fee claim; C-2 (fee in-kind) retargets it.
-#[allow(deprecated)]
+///   Cr FeeShares` to destroy the units, then `Dr ServiceClaim / Cr <payee claim>` for
+///   their value — the product buying its fee class back from the `fee` allocation at
+///   the day's NAV (a pre-#245 payload names the retired revenue claim instead). Same
+///   ordering rule as a redemption settle, for the same reason — the payout leg is
+///   liquidity-gated in the pre-check above, so a short fund parks the whole event with
+///   nothing applied instead of burning units it cannot pay for.
 fn plan_fee(event: FeeEvent, aggregate_id: Uuid, event_tid: u128, reference: u128) -> Vec<PlannedOp> {
 	match event {
 		FeeEvent::Charged { user, service, units, .. } => vec![PlannedOp {
@@ -1255,7 +1255,7 @@ fn plan_fee(event: FeeEvent, aggregate_id: Uuid, event_tid: u128, reference: u12
 				reference,
 			}),
 		}],
-		FeeEvent::SharesSettled { service, units, cash, .. } => vec![
+		FeeEvent::SharesSettled { service, units, cash, payee, .. } => vec![
 			PlannedOp {
 				role: "fee_burn",
 				transfer_id: tid(aggregate_id, FEE_SETTLE_BURN),
@@ -1274,7 +1274,7 @@ fn plan_fee(event: FeeEvent, aggregate_id: Uuid, event_tid: u128, reference: u12
 				action: LedgerAction::Post(LedgerTransfer {
 					id: tid(aggregate_id, FEE_SETTLE_PAYOUT),
 					debit: LedgerAccountKey::ServiceClaim(service),
-					credit: LedgerAccountKey::FeeRevenue,
+					credit: payee.claim_key(),
 					amount: cash.base_units(),
 					code: TransferCode::FeeSettle,
 					reference,
@@ -1383,8 +1383,9 @@ fn plan_payment(event: PaymentEvent, aggregate_id: Uuid, reference: u128) -> Vec
 ///   touched, so acceptance never depends on rail liquidity).
 /// - **Dispatched** → broadcast the net to custody (idempotent by withdrawal id).
 /// - **Settled** → post the clearing pending, then move net→`wallet:<net>` and (when
-///   non-zero) fee→`fee`. The `Cr wallet:<net>` is where rail liquidity is finally
-///   checked by the non-negative flag.
+///   non-zero) the retained fee→the event's `payee` claim (the `fee` allocation's; the
+///   retired revenue claim for a pre-#245 payload). The `Cr wallet:<net>` is where rail
+///   liquidity is finally checked by the non-negative flag.
 /// - **Failed/Cancelled** → void the clearing pending, refunding the source in full.
 ///
 /// The **source's claim** (`user:<uuid>`, or `fee` for a revenue payout) is the only
@@ -1392,8 +1393,6 @@ fn plan_payment(event: PaymentEvent, aggregate_id: Uuid, reference: u128) -> Vec
 /// point of one saga rather than two. TigerBeetle's non-negative flag on `fee` is
 /// therefore the same last-line backstop against paying out more than the fund earned
 /// that it is against over-spending a user's claim.
-// The withdrawal fee still lands on the retired fee claim until C-4 retargets it.
-#[allow(deprecated)]
 fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) -> Result<Vec<PlannedOp>, String> {
 	Ok(match event {
 		WithdrawalEvent::Requested { source, amount, .. } => vec![PlannedOp {
@@ -1421,7 +1420,14 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 				}),
 			}]
 		}
-		WithdrawalEvent::Settled { source, network, amount, fee, .. } => {
+		WithdrawalEvent::Settled {
+			source,
+			network,
+			amount,
+			fee,
+			payee,
+			..
+		} => {
 			let net = amount.checked_sub(fee).ok_or("withdrawal fee exceeds amount")?;
 			// Post the clearing reservation, then disburse: net leaves the rail's custody,
 			// the fee is retained. The Vec order matters — the post must land before the
@@ -1461,7 +1467,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 					action: LedgerAction::Post(LedgerTransfer {
 						id: tid(aggregate_id, FEE_REDISTRIBUTE),
 						debit: LedgerAccountKey::WithdrawalClearing,
-						credit: LedgerAccountKey::FeeRevenue,
+						credit: payee.claim_key(),
 						amount: fee.base_units(),
 						code: TransferCode::WithdrawFee,
 						reference,
@@ -1555,7 +1561,7 @@ async fn record_saga_step(pool: &PgPool, event_id: Uuid, leg: i32, role: &str, t
 #[cfg(test)]
 mod tests {
 	use domain::{
-		balance::ServiceId,
+		balance::{Party, ServiceId},
 		book::{OrderId, TradeId},
 		issuance::UnitIssuanceId,
 		money::{Nav, Shares, Usdt},
@@ -1641,8 +1647,6 @@ mod tests {
 	// ONE linked chain, and the fee leg comes off the taker's side — a taking seller pays
 	// it out of the claim the cash leg just credited, a taking buyer out of the escrow.
 	#[test]
-	// Pins the taker fee onto the retired fee claim until C-2 moves it.
-	#[allow(deprecated)]
 	fn a_trade_is_one_linked_chain_with_the_fee_on_the_takers_side() {
 		let (buyer, seller) = (UserId::new(), UserId::new());
 		let service = ServiceId::parse("service_arb").unwrap();
@@ -1660,6 +1664,7 @@ mod tests {
 			notional: Usdt::parse_decimal("3").unwrap(),
 			fee: Usdt::parse_decimal(fee).unwrap(),
 			nav: Nav::SEED,
+			payee: Party::fee_payee(),
 		};
 
 		let op = plan_book(event(Side::Sell, "0.003"), trade_id.raw(), trade_id.raw().as_u128());
@@ -1677,7 +1682,8 @@ mod tests {
 		);
 		assert_eq!(
 			(legs[2].debit.clone(), legs[2].credit.clone()),
-			(LedgerAccountKey::UserClaim(seller), LedgerAccountKey::FeeRevenue)
+			(LedgerAccountKey::UserClaim(seller), LedgerAccountKey::ServiceClaim(ServiceId::fee())),
+			"the taker's fee is paid to the fee allocation"
 		);
 		assert_eq!(op.transfer_id, legs[0].id, "the chain is identified by its first leg");
 
@@ -1812,6 +1818,99 @@ mod tests {
 		};
 
 		assert!(plan_payment(event, aggregate_id, aggregate_id.as_u128()).is_empty());
+	}
+
+	// A fee settlement pays the product's claim into the FEE ALLOCATION's, burn-first;
+	// and a payload written before the event carried a `payee` — an undrained or
+	// half-applied row from before the upgrade — re-plans onto the retired revenue claim
+	// it was posted against, with the same deterministic ids. Any other answer would make
+	// TigerBeetle refuse the redelivery as `exists_with_different_credit_account_id` and
+	// park the row for good.
+	#[test]
+	#[allow(deprecated)]
+	fn a_fee_settlement_pays_the_fee_allocation_and_a_legacy_payload_the_retired_claim() {
+		use domain::architecture::EmitsEvents;
+		let service = ServiceId::parse("service_arb").unwrap();
+		let settlement_id = domain::fees::FeeSettlementId::new();
+		let mut settlement = domain::fees::FeeSettlement::record(settlement_id, service.clone(), Shares::parse_decimal("10").unwrap(), Nav::SEED).unwrap();
+		let json = serde_json::to_string(&settlement.drain_events()[0]).unwrap();
+		assert!(json.contains(r#""payee":{"kind":"service","id":"fee"}"#), "{json}");
+
+		let ops = plan_fee(serde_json::from_str(&json).unwrap(), settlement_id.raw(), 7, settlement_id.raw().as_u128());
+		assert_eq!((ops[0].role, ops[1].role), ("fee_burn", "fee_payout"));
+		let LedgerAction::Post(payout) = &ops[1].action else { panic!("the payout is a posted leg") };
+		assert_eq!(payout.debit, LedgerAccountKey::ServiceClaim(service.clone()));
+		assert_eq!(payout.credit, LedgerAccountKey::ServiceClaim(ServiceId::fee()));
+
+		// The same event as it was written before #245: no `payee` at all.
+		let legacy_ops = plan_fee(serde_json::from_value(without_payee(&json)).unwrap(), settlement_id.raw(), 7, settlement_id.raw().as_u128());
+		let LedgerAction::Post(legacy_payout) = &legacy_ops[1].action else {
+			panic!("the payout is a posted leg")
+		};
+		assert_eq!(legacy_payout.credit, LedgerAccountKey::FeeRevenue, "a legacy settle replays to the retired revenue claim");
+		assert_eq!(legacy_payout.id, payout.id, "same deterministic id either way");
+		assert_eq!(legacy_payout.debit, payout.debit);
+	}
+
+	/// A stored payload as it looked before the fee events carried a `payee`.
+	fn without_payee(json: &str) -> serde_json::Value {
+		let mut legacy = serde_json::from_str::<serde_json::Value>(json).unwrap();
+		legacy.as_object_mut().unwrap().remove("payee");
+		legacy
+	}
+
+	// The same contract for the other two fee legs: the retained withdrawal fee and the
+	// book's taker fee land on the fee allocation, and a legacy payload on the retired claim.
+	#[test]
+	#[allow(deprecated)]
+	fn the_withdrawal_and_taker_fees_are_paid_to_the_fee_allocation_and_legacy_payloads_to_the_retired_claim() {
+		let withdrawal_id = domain::withdrawals::WithdrawalId::new();
+		let settled = WithdrawalEvent::Settled {
+			withdrawal_id,
+			source: WithdrawalSource::User(UserId::new()),
+			network: domain::money::Network::Bep20,
+			amount: Usdt::parse_decimal("100").unwrap(),
+			fee: Usdt::parse_decimal("1").unwrap(),
+			tx_ref: domain::money::TxRef::parse("0xabc").unwrap(),
+			payee: Party::fee_payee(),
+		};
+		let fee_leg = |event: WithdrawalEvent| {
+			let ops = plan_withdrawal(event, withdrawal_id.raw(), withdrawal_id.raw().as_u128()).unwrap();
+			let op = ops.into_iter().find(|op| op.role == "withdraw_fee").expect("a non-zero fee has its own leg");
+			let LedgerAction::Post(transfer) = op.action else { panic!("the fee is a posted leg") };
+			transfer
+		};
+		let json = serde_json::to_string(&settled).unwrap();
+		assert_eq!(fee_leg(serde_json::from_str(&json).unwrap()).credit, LedgerAccountKey::ServiceClaim(ServiceId::fee()));
+		let legacy_leg = fee_leg(serde_json::from_value(without_payee(&json)).unwrap());
+		assert_eq!(legacy_leg.credit, LedgerAccountKey::FeeRevenue);
+		assert_eq!(legacy_leg.id, tid(withdrawal_id.raw(), FEE_REDISTRIBUTE));
+
+		let trade_id = TradeId::new();
+		let trade = BookEvent::TradeExecuted {
+			trade_id,
+			service: ServiceId::parse("service_arb").unwrap(),
+			buyer: UserId::new(),
+			seller: UserId::new(),
+			buy_order_id: OrderId::new(),
+			sell_order_id: OrderId::new(),
+			taker_side: Side::Buy,
+			size: Shares::parse_decimal("2").unwrap(),
+			price: domain::book::Price::parse_decimal("1.5").unwrap(),
+			notional: Usdt::parse_decimal("3").unwrap(),
+			fee: Usdt::parse_decimal("0.003").unwrap(),
+			nav: Nav::SEED,
+			payee: Party::fee_payee(),
+		};
+		let fee_leg = |event: BookEvent| {
+			let LedgerAction::PostLinked(legs) = plan_book(event, trade_id.raw(), trade_id.raw().as_u128()).action else {
+				panic!("a trade is a linked chain")
+			};
+			legs[2].clone()
+		};
+		let json = serde_json::to_string(&trade).unwrap();
+		assert_eq!(fee_leg(serde_json::from_str(&json).unwrap()).credit, LedgerAccountKey::ServiceClaim(ServiceId::fee()));
+		assert_eq!(fee_leg(serde_json::from_value(without_payee(&json)).unwrap()).credit, LedgerAccountKey::FeeRevenue);
 	}
 
 	// Guards the redemption settle leg order documented on the aggregate and PATTERNS:

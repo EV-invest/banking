@@ -698,7 +698,7 @@ async fn redeem_on_a_short_fund_queues_then_settles_with_profit() {
 	assert_eq!(claim(&h, &service_claim).await, usdt("200"), "the fund topped up");
 
 	// Operator settles — priced at the settle-time NAV (2) and paid in full.
-	let settled = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, id, now).await.unwrap();
+	let settled = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, id, now).await.unwrap();
 	assert_eq!(settled.state(), RedemptionState::Completed);
 	h.relay.drain().await;
 
@@ -724,7 +724,7 @@ async fn settling_a_short_fund_parks_without_burning_or_paying() {
 
 	// Settle while the fund is STILL short (100 < 200) — the relay's payout pre-check parks
 	// the whole event. Burn-first ordering means nothing is applied: no half-burn, no cash.
-	funds_app::settle_redemption(&reds, &nav_repo, &h.notify, id, now).await.unwrap();
+	funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, id, now).await.unwrap();
 	h.relay.drain().await;
 	assert_eq!(units(&h, &user_shares).await, shares("100"), "units NOT burned (settle parked)");
 	assert_eq!(claim(&h, &user_claim).await, Usdt::ZERO, "no cash paid (settle parked)");
@@ -929,8 +929,8 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 	h.relay.drain().await;
 
 	// Settle both back-to-back — the under-reduction bug surfaces on the SECOND settle.
-	funds_app::settle_redemption(&reds, &nav_repo, &h.notify, r1.id(), now).await.unwrap();
-	funds_app::settle_redemption(&reds, &nav_repo, &h.notify, r2.id(), now).await.unwrap();
+	funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, r1.id(), now).await.unwrap();
+	funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, r2.id(), now).await.unwrap();
 	h.relay.drain().await;
 
 	assert_eq!(
@@ -976,13 +976,13 @@ async fn a_repeat_settle_reduces_the_cost_basis_exactly_once() {
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	funds_app::settle_redemption(&reds, &nav_repo, &h.notify, id, now).await.unwrap();
+	funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, id, now).await.unwrap();
 	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("70")), "one settle: basis 100 → 70");
 	assert_eq!(tracked_units(&h.pool, user, &service).await, Some(shares("70")), "one settle: units 100 → 70");
 
 	// The application-layer retry: still Completed, the projection untouched — and no NAV
 	// staleness check, so an idempotent retry succeeds even long after the mark.
-	let repeat = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, id, now + funds_app::MAX_NAV_AGE_SECS + 100)
+	let repeat = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, id, now + funds_app::MAX_NAV_AGE_SECS + 100)
 		.await
 		.unwrap();
 	assert_eq!(repeat.state(), RedemptionState::Completed, "a repeat settle stays the idempotent no-op");
@@ -1040,7 +1040,7 @@ async fn settle_refuses_reduction_until_the_subscribe_projection_lands() {
 	h.relay.drain().await;
 
 	// An operator settle before the projection lands is refused and fully rolled back.
-	let err = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, r.id(), now).await.unwrap_err();
+	let err = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, r.id(), now).await.unwrap_err();
 	assert!(matches!(err, DomainError::Conflict(_)), "projection lag refuses the settle, got {err:?}");
 	assert_eq!(reds.find_by_id(r.id()).await.unwrap().unwrap().state(), RedemptionState::Queued, "the refused settle rolled back");
 	assert!(cost_basis(&positions, user, &service).await.is_none(), "nothing written against the absent row");
@@ -1057,7 +1057,7 @@ async fn settle_refuses_reduction_until_the_subscribe_projection_lands() {
 		.unwrap();
 
 	// …and the retried settle now applies exactly once, against the full denominator.
-	let settled = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, r.id(), now).await.unwrap();
+	let settled = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, r.id(), now).await.unwrap();
 	assert_eq!(settled.state(), RedemptionState::Completed);
 	h.relay.drain().await;
 	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("70")), "reduced against the landed projection (100 → 70)");
@@ -1282,13 +1282,17 @@ async fn a_queued_redemption_is_refused_at_settle_once_its_owner_has_marked_the_
 		.unwrap();
 	h.relay.drain().await;
 
-	let err = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, queued_by_poster.id(), now).await.unwrap_err();
+	let err = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, queued_by_poster.id(), now)
+		.await
+		.unwrap_err();
 	assert!(matches!(&err, DomainError::Precondition(reason) if reason.contains("posted a valuation")), "got {err:?}");
 	assert_eq!(
 		reds.find_by_id(queued_by_poster.id()).await.unwrap().unwrap().state(),
 		RedemptionState::Queued,
 		"refused, not failed: it settles once the cooldown ages out"
 	);
-	let settled = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, queued_by_other.id(), now).await.unwrap();
+	let settled = funds_app::settle_redemption(&reds, &nav_repo, h.ledger.as_ref(), &h.notify, queued_by_other.id(), now)
+		.await
+		.unwrap();
 	assert_eq!(settled.state(), RedemptionState::Completed, "the other investor's redemption settles at the poster's price");
 }
