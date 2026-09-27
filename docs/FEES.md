@@ -152,8 +152,8 @@ operator — some of its reads answer, the management calls do not — and is ou
 for a whole fund rather than once per investor — the entire point of collecting in units.
 The product buys its fee class back at the **day's dealing NAV**: `Dr SharesOutstanding /
 Cr FeeShares` burns the class, `Dr service:<svc> / Cr service:fee` pays the `fee`
-allocation (`Party::fee_payee()`, carried on the `SharesSettled` event; a payload written
-before #245 replays to the retired revenue claim it was planned against). The `fee`
+allocation (`Party::fee_payee()`, carried on the `SharesSettled` event as a required
+`payee` field, `domain/src/fees.rs`). The `fee`
 holders' NAV does not move — units of the product left, cash of the same value arrived
 (`tests/ownership_fee.rs`). It is Read-First gated on the fund's claim covering the payout
 **plus** what the product's queued redemptions would cost at the same NAV, and **refuses**
@@ -171,7 +171,7 @@ every product's fee class at that product's NAV, over the `fee` supply), paid ou
 `service:fee`, and **refused rather than queued** when the cash cannot cover it — the
 holder settles fee units into cash first, or redeems fewer. The cooldown on a `fee`
 redemption is the cooldown on every product `fee` holds a class in. There is no other
-road out: the pre-#245 revenue payout is history only (`piggybank/core/PATTERNS.md`
+road out: the pre-#245 revenue payout was removed (`piggybank/core/PATTERNS.md`
 § "Revenue payout — retired").
 
 ## Changing the terms
