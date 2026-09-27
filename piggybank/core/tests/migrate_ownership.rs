@@ -14,8 +14,11 @@
 //!    the base unit, at NAV 1.00; the reconciliation is clean; the holders have positions
 //!    and can redeem out of the allocation's own cash.
 //! 3. **A second run is a no-op**, and a different holder table is refused.
-//! 4. **Refusals happen before anything moves**: a table that does not add up, an unknown
-//!    or disabled person, a company stake under `keep`.
+//! 4. **Either id names a holder**: the table in concierge ids (what the admin console
+//!    shows) plans exactly the chain the table in banking ids plans, and a rerun in the
+//!    other form is the same no-op.
+//! 5. **Refusals happen before anything moves**: a table that does not add up, an unknown
+//!    or disabled person, one person named twice in two forms, a company stake under `keep`.
 //!
 //! The reserved allocations are one per ledger, so every test that plans or runs the
 //! migration shares the same two holders (seated once per binary) and runs serially under
@@ -38,7 +41,7 @@ use piggybank_core::{
 	application::{
 		funds as funds_app,
 		issuance::UnitHolding,
-		migrate_ownership::{self as migrate_app, CompanyStake, HolderShare, HolderTable, MigrationPlan, MigrationPorts, RunReport, StepStatus},
+		migrate_ownership::{self as migrate_app, CompanyStake, HolderIdForm, HolderShare, HolderTable, MigrationPlan, MigrationPorts, RunReport, StepStatus},
 	},
 	infrastructure::{
 		allocations::PgAllocations,
@@ -157,13 +160,29 @@ fn company_shares(service: &ServiceId) -> LedgerAccountKey {
 	LedgerAccountKey::CompanyShares(service.clone())
 }
 
-/// A real `users` row at KYC tier 1 — a holder must be an active person.
+/// A real `users` row at KYC tier 1 — a holder must be an active person — with the
+/// concierge id the lifecycle bridge mirrors, so the table can name them either way.
 async fn person(h: &Harness) -> UserId {
 	let subject = AuthSubject::parse(&format!("mig-{}", Uuid::new_v4())).unwrap();
 	let email = Email::parse(&format!("m{}@example.com", Uuid::new_v4().simple())).unwrap();
 	let user = h.users.provision(subject, email, true).await.unwrap().id();
 	common::set_kyc_level(&h.pool, user, 1).await;
+	sqlx::query("UPDATE users SET concierge_user_id = $2 WHERE id = $1")
+		.bind(user.raw())
+		.bind(Uuid::new_v4())
+		.execute(&h.pool)
+		.await
+		.unwrap();
 	user
+}
+
+/// The id `/cabinet/admin/users` shows for `user`.
+async fn concierge_id(h: &Harness, user: UserId) -> Uuid {
+	sqlx::query_scalar("SELECT concierge_user_id FROM users WHERE id = $1")
+		.bind(user.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap()
 }
 
 /// The two holders every test in this binary names: 80 % / 20 % of both allocations.
@@ -174,8 +193,15 @@ async fn holders(h: &Harness) -> (UserId, UserId) {
 	*HOLDERS.get_or_init(|| async { (person(h).await, person(h).await) }).await
 }
 
+/// A table naming people by their banking ids.
 fn table(fund: &[(UserId, u32)], fee: &[(UserId, u32)]) -> HolderTable {
-	let rows = |shares: &[(UserId, u32)]| {
+	let raw = |shares: &[(UserId, u32)]| shares.iter().map(|(user, bps)| (user.raw(), *bps)).collect::<Vec<_>>();
+	table_of_ids(&raw(fund), &raw(fee))
+}
+
+/// A table naming people by whatever id the operator pasted.
+fn table_of_ids(fund: &[(Uuid, u32)], fee: &[(Uuid, u32)]) -> HolderTable {
+	let rows = |shares: &[(Uuid, u32)]| {
 		shares
 			.iter()
 			.map(|(user_id, share_bps)| HolderShare {
@@ -189,6 +215,30 @@ fn table(fund: &[(UserId, u32)], fee: &[(UserId, u32)]) -> HolderTable {
 
 fn house_table(a: UserId, b: UserId) -> HolderTable {
 	table(&[(a, 8000), (b, 2000)], &[(a, 8000), (b, 2000)])
+}
+
+/// [`house_table`] as the operator copies it off the admin console: concierge ids.
+async fn house_table_in_concierge_ids(h: &Harness, a: UserId, b: UserId) -> HolderTable {
+	let (ca, cb) = (concierge_id(h, a).await, concierge_id(h, b).await);
+	table_of_ids(&[(ca, 8000), (cb, 2000)], &[(ca, 8000), (cb, 2000)])
+}
+
+/// One mint as a plan will post it: holder, share, units, idempotency key, transfer id.
+type GrantIds = (UserId, u32, Shares, String, u128);
+
+/// What a plan will write, id for id: equal for two tables means one chain.
+fn chain_ids(plan: &MigrationPlan) -> Vec<(u128, Vec<GrantIds>)> {
+	[&plan.fund, &plan.fee]
+		.iter()
+		.map(|step| {
+			let grants = step
+				.grants
+				.iter()
+				.map(|g| (g.user, g.share_bps, g.units, g.idempotency_key.as_str().to_owned(), g.transfer_id))
+				.collect();
+			(step.claim_transfer_id, grants)
+		})
+		.collect()
 }
 
 /// A registered, open product admitting every investor.
@@ -328,8 +378,24 @@ async fn the_migration_seats_the_holders_and_empties_the_retired_claims_once() {
 	let expected_fee_units = [planned.fee.grants[0].units, planned.fee.grants[1].units];
 	let expected_fund_units = [planned.fund.grants[0].units, planned.fund.grants[1].units];
 
-	// ── run ─────────────────────────────────────────────────────────────────────
-	let report = run(&h, &planned).await;
+	// The same table as the operator copies it off the console — concierge ids — is the
+	// same plan to the id: keys and ids are derived from the banking user.
+	let by_concierge = house_table_in_concierge_ids(&h, a, b).await;
+	let planned_by_concierge = plan(&h, &by_concierge, CompanyStake::Keep).await.unwrap();
+	assert_eq!(chain_ids(&planned_by_concierge), chain_ids(&planned), "one table, two id forms, one chain");
+	assert_eq!(
+		planned_by_concierge.holders.iter().map(|r| (r.form, r.user)).collect::<Vec<_>>(),
+		[(HolderIdForm::Concierge, a), (HolderIdForm::Concierge, b)],
+		"each concierge id resolved to its banking user"
+	);
+	assert_eq!(
+		planned.holders.iter().map(|r| (r.form, r.user)).collect::<Vec<_>>(),
+		[(HolderIdForm::Banking, a), (HolderIdForm::Banking, b)]
+	);
+	assert!(planned_by_concierge.to_string().contains(&format!("concierge {} -> banking {a}", concierge_id(&h, a).await)));
+
+	// ── run (from the concierge-id plan; the checks below are against the banking one) ──
+	let report = run(&h, &planned_by_concierge).await;
 	assert!(report.fund.chain_posted && report.fee.chain_posted);
 	assert_eq!((report.fund.rows_written, report.fee.rows_written), (2, 2));
 	assert!(report.company_retired.is_empty());
@@ -401,6 +467,10 @@ async fn the_migration_seats_the_holders_and_empties_the_retired_claims_once() {
 	assert_eq!(report.after.fee.units_outstanding, usdt_as_units(fee_value), "nothing minted twice");
 	assert_eq!(report.after.fund.units_outstanding, usdt_as_units(fund_before));
 	assert_reconciled(&scan(&h).await, "after the second run");
+	// …and in the form the run was made with: the same no-op.
+	let again = plan(&h, &by_concierge, CompanyStake::Keep).await.unwrap();
+	assert!(again.is_noop(), "a rerun in concierge ids after a run in them is a no-op");
+	assert_eq!(chain_ids(&again), chain_ids(&plan(&h, &house, CompanyStake::Keep).await.unwrap()));
 
 	// A table naming someone else where the ledger already minted to `b`: refused.
 	let stranger = person(&h).await;
@@ -458,9 +528,17 @@ async fn a_bad_holder_table_is_refused_before_anything_moves() {
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("twice")), "{err:?}");
 	assert!(HolderTable::parse_json(r#"{"fee": [], "fund": []}"#).is_err(), "an empty table");
 
-	let nobody = UserId::new();
-	let err = plan(&h, &table(&[(nobody, 10_000)], &[(a, 10_000)]), CompanyStake::Keep).await.unwrap_err();
-	assert!(matches!(err, DomainError::NotFound { entity: "user", .. }), "{err:?}");
+	// Neither a concierge nor a banking id: named in the refusal as written.
+	let nobody = Uuid::new_v4();
+	let err = plan(&h, &table_of_ids(&[(a.raw(), 10_000)], &[(nobody, 10_000)]), CompanyStake::Keep).await.unwrap_err();
+	assert!(matches!(err, DomainError::NotFound { entity: "user", ref id } if *id == nobody.to_string()), "{err:?}");
+
+	// One person twice — once by concierge id, once by banking id — is a duplicate only
+	// the lookup can see.
+	let err = plan(&h, &table_of_ids(&[(a.raw(), 5000), (concierge_id(&h, a).await, 5000)], &[(b.raw(), 10_000)]), CompanyStake::Keep)
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("twice") && m.contains(&a.to_string())), "{err:?}");
 
 	let disabled = person(&h).await;
 	h.users.disable(disabled).await.unwrap();
