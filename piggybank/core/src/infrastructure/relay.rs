@@ -1571,6 +1571,47 @@ mod tests {
 
 	use super::*;
 
+	// A subscription — an investor's, or the depositor's into `fund` that a seed opens —
+	// is the one planned event that puts cash on an allocation's claim AND mints the units
+	// that own it, and the two legs must name the same allocation: cash on `service:X`
+	// with units of `Y` would be value on `X` nobody holds. There is no transit account
+	// to zero out: every leg is a direct double entry, so a chain can never create value —
+	// only put it where nobody holds it, which is the ledger-state finding the
+	// reconciliation's unheld-value check reports.
+	#[test]
+	fn a_subscription_credits_the_allocation_whose_units_it_mints() {
+		for service in [ServiceId::parse("trading").unwrap(), ServiceId::fund()] {
+			let subscriber = UserId::new();
+			let id = Uuid::new_v4();
+			let ops = plan_subscription(
+				SubscriptionEvent::Subscribed {
+					subscription_id: domain::subscriptions::SubscriptionId::from_raw(id),
+					user: subscriber,
+					service: service.clone(),
+					cash: Usdt::parse_decimal("100").unwrap(),
+					nav: Nav::SEED,
+					units: Shares::parse_decimal("100").unwrap(),
+				},
+				id,
+				id.as_u128(),
+			);
+			let [cash, mint] = ops.as_slice() else { panic!("a subscription is a cash leg then a mint") };
+			let (LedgerAction::Post(cash), LedgerAction::Post(mint)) = (&cash.action, &mint.action) else {
+				panic!("both legs are posted, so a parked cash leg leaves the money on the subscriber's own claim")
+			};
+			assert_eq!(cash.debit, LedgerAccountKey::UserClaim(subscriber), "{service}: the cash is the subscriber's");
+			assert_eq!(cash.credit, LedgerAccountKey::ServiceClaim(service.clone()), "{service}: it lands on the allocation's claim");
+			assert_eq!(mint.debit, LedgerAccountKey::UserShares(service.clone(), subscriber), "{service}: the subscriber holds the units");
+			assert_eq!(
+				mint.credit,
+				LedgerAccountKey::SharesOutstanding(service.clone()),
+				"{service}: of the same allocation the cash went to"
+			);
+			assert_eq!(cash.debit.ledger(), cash.credit.ledger(), "{service}: a leg never crosses ledgers");
+			assert_eq!(mint.debit.ledger(), mint.credit.ledger(), "{service}: a leg never crosses ledgers");
+		}
+	}
+
 	// A mint grows supply; a (historical) hand-over of the company's stake moves units
 	// between two holders and leaves `SharesOutstanding` alone. Same event, two legs, told
 	// apart by the source — and by the transfer id, so a reconciler can tell them from the

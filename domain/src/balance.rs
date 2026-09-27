@@ -322,6 +322,28 @@ impl AccountCode {
 			Self::BookCash => 65,
 		}
 	}
+
+	/// The inverse of [`Self::code`]: the kind a `tb_accounts` row's number names, or
+	/// `None` for a number no kind has ever carried. Total over the retired codes — the
+	/// rows exist and a scan of the map must be able to say what each one is.
+	pub const fn from_code(code: u16) -> Option<Self> {
+		Some(match code {
+			1 => Self::Fund,
+			10 => Self::CryptoWallet,
+			11 => Self::BankCustody,
+			20 => Self::UserClaim,
+			30 => Self::ServiceClaim,
+			40 => Self::FeeRevenue,
+			50 => Self::WithdrawalClearing,
+			60 => Self::UserShares,
+			61 => Self::SharesOutstanding,
+			62 => Self::FeeShares,
+			63 => Self::CompanyShares,
+			64 => Self::BookShares,
+			65 => Self::BookCash,
+			_ => return None,
+		})
+	}
 }
 
 /// Which side an account's balance is normal on — drives the non-negative flag and
@@ -926,6 +948,10 @@ mod tests {
 		let mut deduped = sorted.to_vec();
 		deduped.dedup();
 		assert_eq!(deduped.len(), account_codes.len(), "an account code is reused");
+		for code in account_codes {
+			assert_eq!(AccountCode::from_code(code).map(AccountCode::code), Some(code), "code {code} does not read back as itself");
+		}
+		assert_eq!(AccountCode::from_code(2), None, "a number no kind carries reads back as nothing");
 
 		let transfer_codes = [
 			TransferCode::SeedCapital,

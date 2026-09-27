@@ -104,6 +104,12 @@ pub trait AllocationRegistry: Repository<Aggregate = Allocation> + Reader<Aggreg
 	/// at least `view`. `include_unlisted` lifts both filters — every row in every
 	/// state at every level, each still carrying the caller's honest effective level.
 	async fn list_for(&self, caller: UserId, include_unlisted: bool) -> Result<Vec<AllocationRecord>, DomainError>;
+
+	/// Every registered allocation — every state, every level, the hidden reserved ones
+	/// included — ordered by `service`. Caller-agnostic: this is the platform's own
+	/// picture of what it runs (the treasury, the reconciliation), not a catalog anyone
+	/// is shown, so no access level is computed or applied.
+	async fn list_all(&self) -> Result<Vec<Allocation>, DomainError>;
 }
 
 /// A catalog row as one caller sees it — the aggregate, the level that caller

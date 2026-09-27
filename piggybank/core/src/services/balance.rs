@@ -40,9 +40,32 @@ impl BalanceSvc {
 
 #[tonic::async_trait]
 impl BalanceService for BalanceSvc {
+	/// The treasury, on the wire the pre-#245 view still has until the contract step
+	/// (C-7) gives the allocations a field. Three figures keep their names and change
+	/// their meaning to the honest one: `held_for_clients` is what people hold DIRECTLY
+	/// (Σ `user:<id>` claims), no longer the remainder `custody − fund − fee`;
+	/// `fund_capital` and `fee_revenue` are the `fund` / `fee` allocation's cash plus
+	/// whatever the data migration has yet to move off the retired singleton claim of
+	/// the same name — so the operator's snapshot reads the same before and after it.
+	/// The allocations' holders, supply and price are read (every treasury call
+	/// verifies them) but not yet serialised.
 	async fn get_treasury(&self, request: Request<pb::GetTreasuryRequest>) -> Result<Response<pb::Treasury>, Status> {
 		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
-		let t = balance_app::treasury(self.state.ledger.as_ref(), self.state.custody.as_ref()).await.map_err(map_err)?;
+		let t = balance_app::treasury(&balance_app::TreasuryPorts {
+			ledger: self.state.ledger.as_ref(),
+			custody: self.state.custody.as_ref(),
+			allocations: self.state.allocations.as_ref(),
+			nav: self.state.nav.as_ref(),
+		})
+		.await
+		.map_err(map_err)?;
+		let allocation_cash = |service: ServiceId| t.allocations.iter().find(|a| a.service == service).map(|a| a.claim.posted).unwrap_or(Usdt::ZERO);
+		let fund_capital = allocation_cash(ServiceId::fund())
+			.checked_add(t.retired.fund)
+			.ok_or_else(|| Status::internal("fund capital overflows"))?;
+		let fee_revenue = allocation_cash(ServiceId::fee())
+			.checked_add(t.retired.fee_revenue)
+			.ok_or_else(|| Status::internal("fee revenue overflows"))?;
 		Ok(Response::new(pb::Treasury {
 			rails: t
 				.rails
@@ -60,9 +83,9 @@ impl BalanceService for BalanceSvc {
 				.collect(),
 			bank: t.bank.to_decimal_string(),
 			total_custody: t.total_custody.to_decimal_string(),
-			fund_capital: t.fund_capital.to_decimal_string(),
-			fee_revenue: t.fee_revenue.to_decimal_string(),
-			held_for_clients: t.held_for_clients.to_decimal_string(),
+			fund_capital: fund_capital.to_decimal_string(),
+			fee_revenue: fee_revenue.to_decimal_string(),
+			held_for_clients: t.held_by_users.to_decimal_string(),
 			reserved_for_withdrawals: t.reserved_for_withdrawals.to_decimal_string(),
 		}))
 	}
@@ -354,18 +377,13 @@ impl BalanceService for BalanceSvc {
 	/// the contract step (C-7) to have a field.
 	async fn get_fund_revenue(&self, request: Request<pb::GetFundRevenueRequest>) -> Result<Response<pb::FundRevenue>, Status> {
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
-		let fee = balance_app::fee_allocation(
-			self.state.allocations.as_ref(),
-			self.state.ledger.as_ref(),
-			self.state.nav.as_ref(),
-			self.state.issuances.as_ref(),
-		)
-		.await
-		.map_err(map_err)?;
+		let fee = balance_app::fee_allocation(self.state.allocations.as_ref(), self.state.ledger.as_ref(), self.state.nav.as_ref())
+			.await
+			.map_err(map_err)?;
 		Ok(Response::new(pb::FundRevenue {
-			earned: fee.cash.to_decimal_string(),
-			available: fee.available.to_decimal_string(),
-			pending_payout: fee.reserved.to_decimal_string(),
+			earned: fee.claim.posted.to_decimal_string(),
+			available: fee.claim.available.to_decimal_string(),
+			pending_payout: fee.claim.reserved.to_decimal_string(),
 			rails: Vec::new(),
 		}))
 	}

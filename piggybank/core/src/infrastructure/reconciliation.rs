@@ -3,17 +3,30 @@
 //! The outbox relay can **park** a money-moving event into a distinct terminal state
 //! (`outbox.parked_at`, see [`super::outbox`]) when it hits a non-retryable failure. A
 //! parked event is no longer dropped, but it still needs a watcher: this periodic job is
-//! the design's reconciliation seam (PATTERNS.md § Reconciliation). It asserts three
+//! the design's reconciliation seam (PATTERNS.md § Reconciliation). It asserts four
 //! things and **alerts** (a Sentry-shipped `error!`) on any drift, without mutating money
 //! — TB is authoritative, so recovery is an operator/treasury action, not an auto-write:
 //!
 //!   1. **Global cash invariant** — `sum(custody) == sum(claims)` on the USDT ledger,
-//!      read straight from TigerBeetle ([`Ledger::cash_invariant`]).
+//!      read straight from TigerBeetle ([`Ledger::cash_invariant`]), the claims broken
+//!      down by whose they are: `Σ user + Σ service + clearing + book cash + retired
+//!      == Σ custody`. The retired `fund`/`fee` singletons count as claims — what is on
+//!      them until the ownership data migration is legitimate, not drift — and value on
+//!      an account of no known kind is its own finding.
 //!   2. **Clearing vs control-plane** — the `clearing` account's reserved (pending +
 //!      posted) balance vs the gross of every `queued`/`processing` withdrawal in
 //!      Postgres; a mismatch means a withdrawal whose reserve parked (nothing locked) or a
 //!      stranded reservation.
-//!   3. **Parked-row scan** — every `outbox.parked_at` row, surfaced with its
+//!   3. **Every unit at a holder, per allocation** (#245) — for each allocation the
+//!      registry knows, `Σ holder units == SharesOutstanding` read off the Share ledger
+//!      ([`ownership_app::allocation_ownership`]). Double entry makes this hold by
+//!      construction, so a mismatch is an inconsistency: an alert. Alongside it, **value
+//!      without a holder** — cash or product units on an allocation no unit of which is
+//!      outstanding — is a `warn!` and a counter
+//!      ([`telemetry::note_unheld_allocation_value`]), NOT an alert: it is the expected
+//!      state of `fee` between the first ownership release and the data migration that
+//!      seats its holders, and should be zero everywhere after.
+//!   4. **Parked-row scan** — every `outbox.parked_at` row, surfaced with its
 //!      `last_error` and whether it has been flagged for compensation.
 //!
 //! It is **read-only** and idempotent, so running it on every standby is harmless; it is
@@ -21,12 +34,16 @@
 
 use std::{sync::Arc, time::Duration};
 
-use domain::balance::LedgerAccountKey;
+use domain::balance::{LedgerAccountKey, ServiceId};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
-use crate::{infrastructure::outbox, ports::ledger::Ledger};
+use crate::{
+	application::ownership::{self as ownership_app, AllocationOwnership},
+	infrastructure::{outbox, telemetry},
+	ports::{AllocationRegistry, ledger::Ledger},
+};
 
 /// How often the reconciliation scan runs. Discrepancies are rare and operator-resolved,
 /// so a slow cadence is fine; the relay (sub-second) owns the hot path.
@@ -35,20 +52,30 @@ const SCAN_INTERVAL: Duration = Duration::from_secs(60);
 /// One reconciliation pass over the cash plane. The fields are raw 18-dp USDT base units
 /// and the parked-row count, so a caller (a test, the run loop) can assert on the outcome
 /// without scraping logs.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ReconReport {
 	pub custody: u128,
 	pub claims: u128,
+	/// Claims on accounts of a kind the breakdown does not name — value the chart of
+	/// accounts cannot attribute to anyone.
+	pub unclassified_claims: u128,
 	pub clearing_reserved: u128,
 	pub clearing_expected: u128,
+	/// Allocations whose supply is not what their holders add up to, even on a second
+	/// look — an inconsistency, alerted.
+	pub units_drift: Vec<ServiceId>,
+	/// Allocations holding value while no unit of them is outstanding — reported, counted,
+	/// not alerted (see the module header).
+	pub unheld: Vec<ServiceId>,
 	pub parked_rows: usize,
 	pub uncompensated_parked: usize,
 }
 
 impl ReconReport {
-	/// Whether every checked invariant held (no operator action needed).
+	/// Whether every checked invariant held (no operator action needed). Unheld value is
+	/// not an invariant: a clean report can still list allocations nobody holds yet.
 	pub fn clean(&self) -> bool {
-		self.custody == self.claims && self.clearing_reserved == self.clearing_expected && self.parked_rows == 0
+		self.custody == self.claims && self.unclassified_claims == 0 && self.clearing_reserved == self.clearing_expected && self.units_drift.is_empty() && self.parked_rows == 0
 	}
 }
 
@@ -56,11 +83,12 @@ impl ReconReport {
 pub struct Reconciliation {
 	pool: PgPool,
 	ledger: Arc<dyn Ledger>,
+	allocations: Arc<dyn AllocationRegistry>,
 }
 
 impl Reconciliation {
-	pub fn new(pool: PgPool, ledger: Arc<dyn Ledger>) -> Self {
-		Self { pool, ledger }
+	pub fn new(pool: PgPool, ledger: Arc<dyn Ledger>, allocations: Arc<dyn AllocationRegistry>) -> Self {
+		Self { pool, ledger, allocations }
 	}
 
 	pub async fn run(self, shutdown: CancellationToken) {
@@ -81,13 +109,30 @@ impl Reconciliation {
 	pub async fn scan(&self) -> Result<ReconReport, sqlx::Error> {
 		let mut report = ReconReport::default();
 
-		// (1) Global cash invariant — sum(custody) == sum(claims), straight from TB.
+		// (1) Global cash invariant — sum(custody) == sum(claims), straight from TB, with
+		// the claims named by whose they are so the alert says where the drift is.
 		match self.ledger.cash_invariant().await {
 			Ok(inv) => {
 				report.custody = inv.custody;
 				report.claims = inv.claims;
+				report.unclassified_claims = inv.unclassified();
 				if !inv.balanced() {
-					error!(custody = %inv.custody, claims = %inv.claims, "reconciliation: CASH INVARIANT BROKEN — sum(custody) != sum(claims)");
+					error!(
+						custody = %inv.custody,
+						claims = %inv.claims,
+						user_claims = %inv.user_claims,
+						service_claims = %inv.service_claims,
+						clearing = %inv.clearing,
+						book_cash = %inv.book_cash,
+						retired_claims = %inv.retired_claims,
+						"reconciliation: CASH INVARIANT BROKEN — sum(custody) != sum(claims)"
+					);
+				}
+				if report.unclassified_claims != 0 {
+					error!(
+						unclassified = %report.unclassified_claims,
+						"reconciliation: CLAIMS OF UNKNOWN KIND — value on a USDT-ledger account the chart of accounts cannot attribute to anyone"
+					);
 				}
 			}
 			// A read failure leaves custody/claims at 0, so `clean()` would read the cash leg
@@ -121,7 +166,19 @@ impl Reconciliation {
 			Err(err) => warn!("reconciliation: clearing balance read failed: {err}"),
 		}
 
-		// (3) Parked-row scan — every event the relay moved to the parked terminal state.
+		// (3) Every unit at a holder, per allocation. The registry is the list — the
+		// platform's own picture of what it runs, hidden reserved rows included — and the
+		// ledger is the witness. A registry read failure skips the check this pass and says
+		// so, like a clearing read failure: the next pass retries.
+		match self.allocations.list_all().await {
+			Ok(allocations) =>
+				for allocation in allocations {
+					self.check_allocation(allocation.service().clone(), &mut report).await;
+				},
+			Err(err) => warn!("reconciliation: allocation registry read failed, per-allocation supply not verified this pass: {err}"),
+		}
+
+		// (4) Parked-row scan — every event the relay moved to the parked terminal state.
 		let parked = outbox::parked_rows(&self.pool).await?;
 		report.parked_rows = parked.len();
 		report.uncompensated_parked = parked.iter().filter(|r| !r.compensated).count();
@@ -139,8 +196,55 @@ impl Reconciliation {
 		}
 
 		if report.clean() {
-			info!(custody = %report.custody, "reconciliation: clean — invariants hold, no parked rows");
+			info!(custody = %report.custody, unheld = report.unheld.len(), "reconciliation: clean — invariants hold, no parked rows");
 		}
 		Ok(report)
 	}
+
+	/// One allocation's supply against its holders, and whether anyone holds what it
+	/// holds. Each account is read at its own instant, so a mint landing between the
+	/// holders' scan and the supply read tears the picture by exactly that mint; a
+	/// mismatch is therefore re-read once before it is alerted, which a real drift
+	/// survives and a race between two reads milliseconds apart does not. A ledger read
+	/// failure is a skip with a warning, never a finding.
+	async fn check_allocation(&self, service: ServiceId, report: &mut ReconReport) {
+		let mut ownership = match ownership_app::allocation_ownership(self.ledger.as_ref(), service.clone()).await {
+			Ok(ownership) => ownership,
+			Err(err) => {
+				warn!(%service, "reconciliation: allocation ownership read failed, not verified this pass: {err}");
+				return;
+			}
+		};
+		if !ownership.units_reconcile() {
+			ownership = match ownership_app::allocation_ownership(self.ledger.as_ref(), service.clone()).await {
+				Ok(ownership) => ownership,
+				Err(err) => {
+					warn!(%service, "reconciliation: allocation ownership re-read failed, not verified this pass: {err}");
+					return;
+				}
+			};
+		}
+		if !ownership.units_reconcile() {
+			report.units_drift.push(service.clone());
+			error!(
+				%service,
+				outstanding = %ownership.units_outstanding.to_decimal_string(),
+				held = %ownership.held_units().to_decimal_string(),
+				holders = ownership.holders.len(),
+				"reconciliation: SUPPLY DRIFT — units outstanding != sum of holders' units (a unit nobody holds, or held beyond the supply)"
+			);
+		}
+		if ownership.is_unheld() {
+			report.unheld.push(service.clone());
+			note_unheld(&ownership);
+		}
+	}
+}
+
+fn note_unheld(ownership: &AllocationOwnership) {
+	telemetry::note_unheld_allocation_value(
+		ownership.service.as_str(),
+		&ownership.claim.posted.to_decimal_string(),
+		ownership.product_units.iter().filter(|(_, units)| !units.is_zero()).count(),
+	);
 }

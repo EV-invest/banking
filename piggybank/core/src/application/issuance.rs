@@ -32,11 +32,9 @@
 //! have no cash in the fund's claim, so the redeem path has to know before the first
 //! holder asks to be paid out of it.
 
-use std::collections::HashMap;
-
 use domain::{
 	allocations::{AllocationBacking, AllocationState},
-	balance::{LedgerAccountKey, ServiceId},
+	balance::ServiceId,
 	error::DomainError,
 	issuance::{IdempotencyKey, IssuanceSource, UnitHolder, UnitIssuance, UnitIssuanceId},
 	money::{Shares, Usdt},
@@ -46,12 +44,13 @@ use crate::{
 	application::{
 		allocations as allocations_app,
 		funds::{self as funds_app, FundPorts},
+		ownership as ownership_app,
 	},
 	ports::{
 		UnitIssuanceRepository, UserRepository,
 		allocations::AllocationRegistry,
 		issuance::{IssueOutcome, UnitIssuanceRecord},
-		ledger::{HoldingScope, Ledger},
+		ledger::Ledger,
 	},
 };
 
@@ -373,43 +372,20 @@ impl RequestIdentity<'_> {
 /// product no registry entry backs is a cap table for a fund that does not exist.
 ///
 /// The holders are summed from the ledger's holding accounts (the retired company stake
-/// among them, as its own line, until the data migration moves it). The sum is read at
-/// one instant per account, so it can differ from `units_outstanding` by a mint landing
-/// mid-scan — a read-only view over a moving ledger reports both figures and lets the
-/// reader compare, rather than failing or inventing a remainder.
+/// among them, as its own line, until the data migration moves it) by
+/// [`ownership_app::allocation_ownership`], the one read of who holds an allocation.
+/// The sum is read at one instant per account, so it can differ from
+/// `units_outstanding` by a mint landing mid-scan — a read-only view over a moving
+/// ledger reports both figures and lets the reader compare, rather than failing or
+/// inventing a remainder.
 pub async fn unit_holders(allocations: &dyn AllocationRegistry, ledger: &dyn Ledger, issuances: &dyn UnitIssuanceRepository, service: ServiceId) -> Result<UnitHoldersView, DomainError> {
 	allocations_app::get(allocations, &service).await?;
-	let outstanding = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
 	let queued = issuances.queued_mint_units(&service).await?;
-	let mut by_holder: HashMap<UnitHolder, Shares> = HashMap::new();
-	for (key, units) in ledger.share_holdings(&HoldingScope::Product(service.clone())).await? {
-		if units == 0 {
-			continue;
-		}
-		let Some((_, holder)) = UnitHolder::of_holding(&key) else { continue };
-		let line = by_holder.entry(holder).or_insert(Shares::ZERO);
-		*line = line
-			.checked_add(Shares::from_base_units(units))
-			.ok_or_else(|| DomainError::Repository("a holder's units overflow".into()))?;
-	}
-	let mut holders: Vec<UnitHolding> = by_holder.into_iter().map(|(holder, units)| UnitHolding { holder, units }).collect();
-	holders.sort_by(|a, b| b.units.cmp(&a.units).then_with(|| holder_identity(&a.holder).cmp(&holder_identity(&b.holder))));
+	let ownership = ownership_app::allocation_ownership(ledger, service).await?;
 	Ok(UnitHoldersView {
-		service,
-		units_outstanding: outstanding,
-		holders,
+		service: ownership.service,
+		units_outstanding: ownership.units_outstanding,
+		holders: ownership.holders,
 		queued_units: queued,
 	})
-}
-
-/// The holder as its columns spell it — the tie-breaker of the cap table's order.
-fn holder_identity(holder: &UnitHolder) -> (&'static str, String) {
-	(
-		holder.kind_str(),
-		holder
-			.user_id()
-			.map(|u| u.to_string())
-			.or_else(|| holder.service_id().map(ToString::to_string))
-			.unwrap_or_default(),
-	)
 }

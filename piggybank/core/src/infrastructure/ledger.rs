@@ -14,7 +14,7 @@ use std::{sync::Arc, time::Duration};
 use async_trait::async_trait;
 use domain::{
 	architecture::Gateway,
-	balance::{LedgerAccountKey, Normal},
+	balance::{AccountCode, LedgerAccountKey, Normal},
 };
 use sqlx::PgPool;
 use tigerbeetle as tb;
@@ -22,14 +22,12 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::tigerbeetle::TigerBeetle,
-	ports::ledger::{CashInvariant, CompletionKind, HoldingScope, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion},
+	ports::ledger::{CashInvariant, CashSide, CompletionKind, HoldingScope, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion},
 };
 
-/// The USDT cash ledger id (`Ledger::Usdt`) and the `wallet:<net>` custody account code
-/// (`AccountCode::CryptoWallet`) — the two constants `cash_invariant` keys off to split
-/// the cash plane into custody (this code) vs claims (every other account on the ledger).
+/// The USDT cash ledger id (`Ledger::Usdt`) — the plane `cash_invariant` scans; each
+/// row's `code` then says which side of the invariant it counts on (`CashSide`).
 const USDT_LEDGER_ID: i32 = 1;
-const CRYPTO_WALLET_CODE: i32 = 10;
 /// The Share ledger id (`Ledger::Share`) — the plane `share_holdings` scans.
 const SHARE_LEDGER_ID: i32 = 3;
 
@@ -403,26 +401,31 @@ impl Ledger for TbLedger {
 		// Every cash-plane account id lives in the id-map; pull the USDT-ledger rows with
 		// their code so we can split custody (wallet) from claims, then read the posted
 		// balances straight from TB (authoritative) and sum each side on its natural side.
+		// Keyed by the row's `code`, not by parsing its key: a row written under a key
+		// format this build no longer spells (the per-rail claims migration `0004` left
+		// behind) still carries the kind it was created with, and the conservation check
+		// must count it rather than fail on it.
 		let rows = sqlx::query_as::<_, (Vec<u8>, i32)>("SELECT tb_account_id, code FROM tb_accounts WHERE ledger = $1")
 			.bind(USDT_LEDGER_ID)
 			.fetch_all(&self.pool)
 			.await
 			.map_err(|e| LedgerError::Unavailable(format!("cash-plane account scan: {e}")))?;
 		if rows.is_empty() {
-			return Ok(CashInvariant { custody: 0, claims: 0 });
+			return Ok(CashInvariant::default());
 		}
 		let mut ids = Vec::with_capacity(rows.len());
-		let mut is_custody = std::collections::HashMap::with_capacity(rows.len());
+		let mut side_of = std::collections::HashMap::with_capacity(rows.len());
 		for (bytes, code) in &rows {
 			let id = u128_from_be(bytes)?;
 			ids.push(id);
-			is_custody.insert(id, *code == CRYPTO_WALLET_CODE);
+			let side = u16::try_from(*code).ok().and_then(AccountCode::from_code).and_then(CashSide::of);
+			side_of.insert(id, side);
 		}
 		// One `lookup_accounts` is capped at `LOOKUP_ACCOUNTS_MAX`; the cash plane grows
 		// one `UserClaim` account per user, so at scale this id set exceeds the cap. Chunk
 		// it and accumulate each side across pages — an unchunked read would fail wholesale
 		// and silently disable the only global conservation check.
-		let (mut custody, mut claims) = (0u128, 0u128);
+		let mut inv = CashInvariant::default();
 		for chunk in ids.chunks(LOOKUP_ACCOUNTS_MAX) {
 			let call = self
 				.tb
@@ -433,16 +436,29 @@ impl Ledger for TbLedger {
 				.await?
 				.map_err(|e| LedgerError::Unavailable(format!("lookup_accounts: {e:?}")))?;
 			for account in accounts {
-				if *is_custody.get(&account.id).unwrap_or(&false) {
+				let side = side_of.get(&account.id).copied().flatten();
+				if side == Some(CashSide::Custody) {
 					// Custody is debit-normal: posted = debits − credits.
-					custody = custody.saturating_add(account.debits_posted.saturating_sub(account.credits_posted));
-				} else {
-					// Claims are credit-normal: posted = credits − debits.
-					claims = claims.saturating_add(account.credits_posted.saturating_sub(account.debits_posted));
+					inv.custody = inv.custody.saturating_add(account.debits_posted.saturating_sub(account.credits_posted));
+					continue;
 				}
+				// Claims are credit-normal: posted = credits − debits. Every non-custody
+				// account is a claim for the global check; only the known kinds are also
+				// attributed, so an account of an unknown kind shows up as unclassified.
+				let posted = account.credits_posted.saturating_sub(account.debits_posted);
+				inv.claims = inv.claims.saturating_add(posted);
+				let bucket = match side {
+					Some(CashSide::UserClaims) => &mut inv.user_claims,
+					Some(CashSide::ServiceClaims) => &mut inv.service_claims,
+					Some(CashSide::Clearing) => &mut inv.clearing,
+					Some(CashSide::BookCash) => &mut inv.book_cash,
+					Some(CashSide::RetiredClaims) => &mut inv.retired_claims,
+					Some(CashSide::Custody) | None => continue,
+				};
+				*bucket = bucket.saturating_add(posted);
 			}
 		}
-		Ok(CashInvariant { custody, claims })
+		Ok(inv)
 	}
 }
 

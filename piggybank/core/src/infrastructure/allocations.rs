@@ -42,6 +42,10 @@ const SELECT_BY_SERVICE: &str = "SELECT id, service, title, summary, state, unit
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM allocations WHERE service = $1";
+const SELECT_ALL: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, backing, \
+	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
+	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
+	 FROM allocations ORDER BY service";
 const SELECT_BY_SERVICE_FOR_UPDATE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, backing, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
@@ -424,6 +428,11 @@ impl AllocationRegistry for PgAllocations {
 			.await
 			.map_err(repo_err)?;
 		rows.into_iter().map(AllocationForCallerRow::into_record).collect()
+	}
+
+	async fn list_all(&self) -> Result<Vec<Allocation>, DomainError> {
+		let rows = sqlx::query_as::<_, AllocationRow>(SELECT_ALL).fetch_all(&self.pool).await.map_err(repo_err)?;
+		rows.into_iter().map(AllocationRow::into_domain).collect()
 	}
 }
 
