@@ -36,15 +36,27 @@
 //! mint's amount back from the ledger and writes the rows from that — never from what a
 //! re-run would compute, because fees may have accrued in between. There is no rollback
 //! after the chain lands, which is why the plan is printed, confirmed and reconciled.
+//!
+//! **Which id names a holder.** The operator copies ids off `/cabinet/admin/users`, which
+//! lists the identity plane's (concierge) ids, while the ledger, the rows and every id
+//! below are keyed by the banking `users.id`. The table accepts either: each id is looked
+//! up as a concierge id first and as a banking id second — the order the admin RPCs use
+//! (`services::support::resolve_target_user`) — before anything else is read, and the
+//! plan prints the pair. Every deterministic id and key is derived from the **banking**
+//! id only, so a table in concierge ids and the same table in banking ids plan the same
+//! chain, and a rerun in the other form is the same no-op.
 
-use std::{collections::HashSet, fmt};
+use std::{
+	collections::{HashMap, HashSet, hash_map::Entry},
+	fmt,
+};
 
 use domain::{
 	balance::{LedgerAccountKey, ServiceId, TransferCode},
 	error::DomainError,
 	issuance::{IdempotencyKey, IssuanceSource, UnitHolder, UnitIssuance, UnitIssuanceId},
 	money::{Nav, Shares, Usdt},
-	users::UserId,
+	users::{ConciergeUserId, UserId},
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -78,8 +90,41 @@ pub struct MigrationPorts<'a> {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct HolderShare {
-	pub user_id: UserId,
+	/// The person as the operator named them: the concierge id `/cabinet/admin/users`
+	/// shows, or the banking `users.id`. Resolved by [`plan`], never used as a key as is.
+	pub user_id: Uuid,
 	pub share_bps: u32,
+}
+
+/// Which of the two ids a holder-table line was matched by.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HolderIdForm {
+	/// The identity plane's id, mirrored in `users.concierge_user_id`.
+	Concierge,
+	/// The banking `users.id` itself.
+	Banking,
+}
+
+/// A holder-table id and the banking user it resolved to.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ResolvedHolder {
+	pub given: Uuid,
+	pub form: HolderIdForm,
+	pub user: UserId,
+}
+
+/// One line of an allocation's table after resolution: a banking user and their share.
+#[derive(Clone, Copy, Debug)]
+struct Seat {
+	user: UserId,
+	share_bps: u32,
+}
+
+/// The holder table in banking users, plus every distinct id the operator gave.
+struct ResolvedTable {
+	fund: Vec<Seat>,
+	fee: Vec<Seat>,
+	holders: Vec<ResolvedHolder>,
 }
 
 /// The owners' input: who holds `fee` and who holds `fund`, each table summing to
@@ -130,10 +175,65 @@ impl HolderTable {
 		}
 		Ok(())
 	}
+}
 
-	fn for_allocation(&self, service: &ServiceId) -> &[HolderShare] {
-		if *service == ServiceId::fund() { &self.fund } else { &self.fee }
+/// Resolve one holder-table id: concierge first, banking second. Unknown under both is
+/// refused with the id as the operator wrote it.
+async fn resolve_holder(users: &dyn UserRepository, given: Uuid) -> Result<ResolvedHolder, DomainError> {
+	if let Some(target) = users.resolve_issuance_by_concierge_id(ConciergeUserId::from_raw(given)).await? {
+		return Ok(ResolvedHolder {
+			given,
+			form: HolderIdForm::Concierge,
+			user: target.user_id,
+		});
 	}
+	match users.resolve_issuance_by_banking_id(UserId::from_raw(given)).await? {
+		Some(target) => Ok(ResolvedHolder {
+			given,
+			form: HolderIdForm::Banking,
+			user: target.user_id,
+		}),
+		None => Err(DomainError::NotFound {
+			entity: "user",
+			id: given.to_string(),
+		}),
+	}
+}
+
+/// Both tables resolved to banking users, the distinct ids in table order for the plan
+/// to print. Two lines naming the
+/// same person in different forms are the duplicate [`HolderTable::validate`] could not
+/// see before the lookup.
+async fn resolve_table(users: &dyn UserRepository, table: &HolderTable) -> Result<ResolvedTable, DomainError> {
+	let mut resolved: HashMap<Uuid, ResolvedHolder> = HashMap::new();
+	let mut order = Vec::new();
+	for row in table.fund.iter().chain(&table.fee) {
+		if let Entry::Vacant(slot) = resolved.entry(row.user_id) {
+			let holder = resolve_holder(users, row.user_id).await?;
+			slot.insert(holder);
+			order.push(holder);
+		}
+	}
+	let seats = |name: &str, rows: &[HolderShare]| -> Result<Vec<Seat>, DomainError> {
+		let mut seen: HashMap<UserId, Uuid> = HashMap::with_capacity(rows.len());
+		rows.iter()
+			.map(|row| {
+				let user = resolved[&row.user_id].user;
+				if let Some(first) = seen.insert(user, row.user_id) {
+					return Err(DomainError::Validation(format!(
+						"holders.json: '{name}' lists banking user {user} twice ({first} and {} name the same person)",
+						row.user_id
+					)));
+				}
+				Ok(Seat { user, share_bps: row.share_bps })
+			})
+			.collect()
+	};
+	Ok(ResolvedTable {
+		fund: seats("fund", &table.fund)?,
+		fee: seats("fee", &table.fee)?,
+		holders: order,
+	})
 }
 
 /// The owners' decision on a product's retired company stake (`CompanyShares(svc)`,
@@ -260,6 +360,8 @@ pub struct CompanyStep {
 /// The whole plan, as printed to the operator and as executed.
 #[derive(Clone, Debug)]
 pub struct MigrationPlan {
+	/// Every id the holder table named and the banking user it resolved to.
+	pub holders: Vec<ResolvedHolder>,
 	pub fund: AllocationStep,
 	pub fee: AllocationStep,
 	/// Every product whose company stake the run retires (`--company retire`), or has
@@ -352,9 +454,10 @@ pub fn grant_key(service: &ServiceId, user: UserId) -> IdempotencyKey {
 
 /// Read everything, move nothing: the plan a dry run prints and a run executes.
 ///
-/// Refused, in this order, before any of it: a malformed holder table; a holder that is
-/// not an active person; a reserved allocation the registry does not know (migration
-/// `0044` not applied); in-flight pendings on a retired account (a legacy transfer still
+/// Refused, in this order, before any of it: a malformed holder table; an id that is
+/// neither a concierge nor a banking user id, or two ids naming one person in the same
+/// table (all before the ledger is read); a holder that is not an active person; a reserved allocation the registry does not know (migration
+/// `0045` not applied); in-flight pendings on a retired account (a legacy transfer still
 /// completing — wait); a pending step on an allocation that already has units
 /// outstanding (someone was seated before the migration, so the seed price would be
 /// wrong — the owners decide); a stale product mark behind a fee class (post a
@@ -362,25 +465,31 @@ pub fn grant_key(service: &ServiceId, user: UserId) -> IdempotencyKey {
 /// differs from the one an earlier run applied (some mints exist, some do not).
 pub async fn plan(ports: &MigrationPorts<'_>, table: &HolderTable, company: CompanyStake, now_unix: i64) -> Result<MigrationPlan, DomainError> {
 	table.validate()?;
-	for row in table.fund.iter().chain(&table.fee) {
-		issuance_app::require_holder(ports.allocations, ports.users, &UnitHolder::User(row.user_id)).await?;
+	let resolved = resolve_table(ports.users, table).await?;
+	for holder in &resolved.holders {
+		issuance_app::require_holder(ports.allocations, ports.users, &UnitHolder::User(holder.user)).await?;
 	}
 	// The retired keys are exactly what this migration empties: it is their one
 	// remaining producer of debits.
 	#[allow(deprecated)]
-	let fund = plan_allocation(ports, table, ServiceId::fund(), LedgerAccountKey::Fund, now_unix).await?;
+	let fund = plan_allocation(ports, &resolved.fund, ServiceId::fund(), LedgerAccountKey::Fund, now_unix).await?;
 	#[allow(deprecated)]
-	let fee = plan_allocation(ports, table, ServiceId::fee(), LedgerAccountKey::FeeRevenue, now_unix).await?;
+	let fee = plan_allocation(ports, &resolved.fee, ServiceId::fee(), LedgerAccountKey::FeeRevenue, now_unix).await?;
 	let company = plan_company_stakes(ports, company).await?;
-	Ok(MigrationPlan { fund, fee, company })
+	Ok(MigrationPlan {
+		holders: resolved.holders,
+		fund,
+		fee,
+		company,
+	})
 }
 
-async fn plan_allocation(ports: &MigrationPorts<'_>, table: &HolderTable, service: ServiceId, retired_key: LedgerAccountKey, now_unix: i64) -> Result<AllocationStep, DomainError> {
+async fn plan_allocation(ports: &MigrationPorts<'_>, shares: &[Seat], service: ServiceId, retired_key: LedgerAccountKey, now_unix: i64) -> Result<AllocationStep, DomainError> {
 	// The registry row is what the mints' `holder_service` and the treasury's listing
 	// hang off; without it the allocation does not exist to the platform.
 	if ports.allocations.find(&service).await?.is_none() {
 		return Err(DomainError::Precondition(format!(
-			"the '{service}' allocation is not registered — migration 0044 (ownership expand) has not been applied"
+			"the '{service}' allocation is not registered — migration 0045 (ownership expand) has not been applied"
 		)));
 	}
 	let retired_balance = ports.ledger.balance(&retired_key).await?;
@@ -418,12 +527,11 @@ async fn plan_allocation(ports: &MigrationPorts<'_>, table: &HolderTable, servic
 	}
 	holdings.sort_by(|a, b| a.product.as_str().cmp(b.product.as_str()));
 
-	let shares = table.for_allocation(&service);
 	let mut grants = Vec::with_capacity(shares.len());
 	let mut assigned = Usdt::ZERO;
 	for (index, share) in shares.iter().enumerate() {
-		let issuance_id = UnitIssuanceId::from_raw(migration_id(&format!("{service}:{}", share.user_id)));
-		let idempotency_key = grant_key(&service, share.user_id);
+		let issuance_id = UnitIssuanceId::from_raw(migration_id(&format!("{service}:{}", share.user)));
+		let idempotency_key = grant_key(&service, share.user);
 		let transfer_id = issuance_mint_id(issuance_id.raw());
 		let row = ports.issuances.find_by_key(&service, &idempotency_key).await?;
 		let posted = ports.ledger.transfer_amount(transfer_id).await?;
@@ -431,7 +539,7 @@ async fn plan_allocation(ports: &MigrationPorts<'_>, table: &HolderTable, servic
 			// Applied and recorded: the row is the record, and it must be the ledger's.
 			(Some(record), Some(amount)) => {
 				let units = Shares::from_base_units(amount);
-				if !record.issuance.matches_request(&UnitHolder::User(share.user_id), IssuanceSource::Mint, units) {
+				if !record.issuance.matches_request(&UnitHolder::User(share.user), IssuanceSource::Mint, units) {
 					return Err(DomainError::Conflict(format!(
 						"'{service}': the row under '{}' does not match the mint on the ledger ({} units) — inspect before rerunning",
 						idempotency_key.as_str(),
@@ -464,7 +572,7 @@ async fn plan_allocation(ports: &MigrationPorts<'_>, table: &HolderTable, servic
 			}
 		};
 		grants.push(Grant {
-			user: share.user_id,
+			user: share.user,
 			share_bps: share.share_bps,
 			units,
 			issuance_id,
@@ -512,7 +620,7 @@ async fn plan_allocation(ports: &MigrationPorts<'_>, table: &HolderTable, servic
 	// The cash leg is the first leg of the chain, and the chain is idempotent on it: its
 	// id names the holder table it was posted with, so the chain and the mints stand or
 	// fall together and a chain for one table can never be mistaken for another's.
-	let roster: Vec<String> = shares.iter().map(|share| share.user_id.to_string()).collect();
+	let roster: Vec<String> = shares.iter().map(|share| share.user.to_string()).collect();
 	Ok(AllocationStep {
 		claim_transfer_id: migration_id(&format!("{service}:claim:{}", roster.join(","))).as_u128(),
 		service,
@@ -667,6 +775,13 @@ pub async fn read_after(ports: &MigrationPorts<'_>) -> Result<AfterRun, DomainEr
 
 impl fmt::Display for MigrationPlan {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		writeln!(f, "== holders (as given -> banking user) ==")?;
+		for holder in &self.holders {
+			match holder.form {
+				HolderIdForm::Concierge => writeln!(f, "  concierge {} -> banking {}", holder.given, holder.user)?,
+				HolderIdForm::Banking => writeln!(f, "  banking {} (given as a banking id)", holder.user)?,
+			}
+		}
 		for step in [&self.fund, &self.fee] {
 			writeln!(f, "== {} ==", step.service)?;
 			writeln!(
@@ -771,8 +886,8 @@ fn holder_label(holder: &UnitHolder) -> String {
 mod tests {
 	use super::*;
 
-	fn table(fund: &[(UserId, u32)], fee: &[(UserId, u32)]) -> HolderTable {
-		let rows = |shares: &[(UserId, u32)]| {
+	fn table(fund: &[(Uuid, u32)], fee: &[(Uuid, u32)]) -> HolderTable {
+		let rows = |shares: &[(Uuid, u32)]| {
 			shares
 				.iter()
 				.map(|(user_id, share_bps)| HolderShare {
@@ -786,7 +901,7 @@ mod tests {
 
 	#[test]
 	fn a_holder_table_must_assign_the_whole_allocation_to_distinct_people() {
-		let (a, b) = (UserId::new(), UserId::new());
+		let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
 		assert!(table(&[(a, 8000), (b, 2000)], &[(a, 10_000)]).validate().is_ok());
 		assert!(table(&[(a, 8000), (b, 1000)], &[(a, 10_000)]).validate().is_err(), "9 000 bps is not the whole allocation");
 		assert!(table(&[(a, 8000), (b, 3000)], &[(a, 10_000)]).validate().is_err(), "11 000 bps is more than the whole allocation");
@@ -797,7 +912,7 @@ mod tests {
 
 	#[test]
 	fn the_table_parses_from_the_operators_json_and_refuses_unknown_keys() {
-		let (a, b) = (UserId::new(), UserId::new());
+		let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
 		let raw = format!(r#"{{"fee": [{{"user_id": "{a}", "share_bps": 8000}}, {{"user_id": "{b}", "share_bps": 2000}}], "fund": [{{"user_id": "{a}", "share_bps": 10000}}]}}"#);
 		let parsed = HolderTable::parse_json(&raw).unwrap();
 		assert_eq!(parsed, table(&[(a, 10_000)], &[(a, 8000), (b, 2000)]));

@@ -86,12 +86,12 @@ pub enum ConsiliumKind {
 	/// Units of a reserved allocation (`fee`, `fund`) minted to a person — the owners
 	/// seating a new holder of the platform's own money (#245). Not a cash move, but it
 	/// dilutes every existing holder pro rata, so it is theirs to decide.
-	/// `0045_consilium_holder_grant.sql` widens the CHECK in this same commit.
+	/// `0046_consilium_holder_grant.sql` widens the CHECK in this same commit.
 	HolderGrant,
 	/// A chain-proven arrival on the treasury booked as a named person's deposit and their
 	/// subscription into `fund` (#245). The chain proves the dollar arrived, not whose it
 	/// is: attributing it seats a holder of the platform's capital, so it is the owners'
-	/// call rather than the first administrator's to claim it. `0045` widens the CHECK.
+	/// call rather than the first administrator's to claim it. `0046` widens the CHECK.
 	SeedCapital,
 }
 

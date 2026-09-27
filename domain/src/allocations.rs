@@ -54,7 +54,7 @@ pub struct AllocationTag;
 
 /// The surrogate id of the reserved **fee** allocation ([`ServiceId::fee`]).
 ///
-/// Fixed rather than minted, because the row is written by migration `0044`, not by an
+/// Fixed rather than minted, because the row is written by migration `0045`, not by an
 /// operator: the literal is `uuid5(NAMESPACE_OID, "evbanking:allocation:fee")`, spelled
 /// out here so the domain stays free of the v5 feature, and pinned by a hub test that
 /// re-derives it and greps the migration for the same bytes.
@@ -398,7 +398,7 @@ impl Allocation {
 	/// investors stay separate operator decisions. Raises `Registered`.
 	///
 	/// A reserved slug ([`ServiceId::is_reserved`]) is refused: the `fee` and `fund`
-	/// allocations are the platform's own, written once by migration `0044` with fixed
+	/// allocations are the platform's own, written once by migration `0045` with fixed
 	/// ids and hidden access, and an operator "registering" one would either collide with
 	/// that row or — on a database that predates it — create a public product wearing a
 	/// name every fee and seed leg is about to credit.

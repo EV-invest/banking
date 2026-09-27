@@ -52,7 +52,7 @@ over-spent claim or negative custody.
 person's (`user:<uuid>`), or an allocation's (`service:<id>`) whose units people hold. The
 platform's own capital is the reserved **`fund`** allocation and its earnings the reserved
 **`fee`** allocation (`ServiceId::fee()` / `ServiceId::fund()`, `domain/src/balance.rs`;
-registry rows from migration `0044`, `hidden`, `open`, `cash`) — see
+registry rows from migration `0045`, `hidden`, `open`, `cash`) — see
 [Reserved allocations](#reserved-allocations--fee-and-fund-245). The old singletons
 `Party::Piggybank` / `Party::Revenue`, `LedgerAccountKey::Fund` / `FeeRevenue` /
 `CompanyShares`, `UnitHolder::Company`, `IssuanceSource::Company`,
@@ -145,7 +145,7 @@ without that backfill the gate would retroactively lock existing investors out o
 
 The platform's own money is two ordinary allocations that people hold through units.
 `ServiceId::fee()` / `ServiceId::fund()` (`domain/src/balance.rs`) are reserved slugs:
-`Allocation::register` refuses them, migration `0044` wrote the two rows (fixed ids
+`Allocation::register` refuses them, migration `0045` wrote the two rows (fixed ids
 `FEE_ALLOCATION_ID` / `FUND_ALLOCATION_ID`, `open`, `hidden`, `cash`), and
 `ServiceId::is_reserved` is the one predicate every gate below reads.
 
@@ -208,7 +208,7 @@ The platform's own money is two ordinary allocations that people hold through un
   the operator's before/after snapshot and logged as a `warn!` by the RPC while non-zero;
   it is not on the wire. `GetFundRevenue` is the same `AllocationTreasury` for the one
   slug `fee` (`fee_allocation`), not a second computation.
-- **Migration path.** Expand (`0044` registry rows + `holder_service`, `0045` consilium
+- **Migration path.** Expand (`0045` registry rows + `holder_service`, `0046` consilium
   kinds) → the one-off data command `piggybank migrate-ownership` moving the retired
   `fund`/`fee` claims onto `service:fund`/`service:fee` and minting the owners' holder table
   in one linked chain per allocation

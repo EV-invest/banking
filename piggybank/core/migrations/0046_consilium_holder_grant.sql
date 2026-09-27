@@ -1,4 +1,4 @@
--- 0045: the fifth and sixth consilium kinds — a holder grant: units of a reserved
+-- 0046: the fifth and sixth consilium kinds — a holder grant: units of a reserved
 -- allocation (`fee`, `fund`) minted to a person on the owners' quorum; and a seed of
 -- capital: a chain-proven arrival on the treasury attributed to a person as their deposit
 -- and their subscription into `fund`, on the same quorum (#245, phase 1).
@@ -14,7 +14,7 @@
 -- write of it.
 --
 -- WHY A CONSILIUM AT ALL. The `fee` and `fund` allocations are the platform's own money,
--- held by people through units (0044). Minting units of them is how a holder is seated —
+-- held by people through units (0045). Minting units of them is how a holder is seated —
 -- and it dilutes every holder already there. `IssueUnits` used to let one
 -- `AllocationManage` holder do that on their own say-so; from here on the direct RPC
 -- refuses a reserved allocation and the mint happens only as the effect of an executed

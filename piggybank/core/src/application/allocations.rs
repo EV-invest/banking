@@ -6,7 +6,7 @@
 //! filtered to what that user may see, with the unrestricted view behind the same
 //! permission.
 //!
-//! The reserved `fee` and `fund` allocations (#245) are registered by migration 0044 and
+//! The reserved `fee` and `fund` allocations (#245) are registered by migration 0045 and
 //! are NOT an operator's to manage: every write here refuses them first
 //! ([`refuse_on_reserved`]). Their holders are seated by the owners' quorum, their state,
 //! access, backing and cap are what the migration wrote, and a single `AllocationManage`

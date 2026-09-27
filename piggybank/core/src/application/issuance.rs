@@ -115,7 +115,7 @@ pub struct UnitHolding {
 /// so it runs before any read could fail for a reason that hides it); the allocation
 /// must be registered, in any state; the holder must exist — a user (units minted to a
 /// UUID nobody can sign in as are units nobody can redeem) or a registered reserved
-/// allocation (the `fee` row migration `0044` wrote); the NAV must be fresh, because it
+/// allocation (the `fee` row migration `0045` wrote); the NAV must be fresh, because it
 /// is recorded on the row and blended into the holder's high-water mark; and the cap
 /// must hold
 /// ([`Allocation::ensure_capacity`](domain::allocations::Allocation::ensure_capacity)),

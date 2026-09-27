@@ -1,4 +1,4 @@
--- 0044: every unit of value has a holder — the EXPAND half (#245, phase 1).
+-- 0045: every unit of value has a holder — the EXPAND half (#245, phase 1).
 --
 -- The fund's own money has lived on two claim singletons with nobody behind them:
 -- `fund` (seed capital, TB code 1) and `fee` (retained fees, code 40), plus the company's

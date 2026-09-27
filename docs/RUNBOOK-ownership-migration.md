@@ -29,10 +29,10 @@ reports `already applied`.
 There is **no rollback** once the chain has landed. Hence the dry run and the `yes`.
 
 Nor is the *tag* the ordinary rollback the spec assumes. The hub runs `sqlx::migrate!()`
-without `ignore_missing`: once the new pod has applied 0044/0045, a pod of the previous
-image refuses to boot (`VersionMissing(44)`) — the schema itself is backward compatible, the
+without `ignore_missing`: once the new pod has applied 0045/0046, a pod of the previous
+image refuses to boot (`VersionMissing(45)`) — the schema itself is backward compatible, the
 version ledger is not. Rolling the image back therefore needs
-`DELETE FROM _sqlx_migrations WHERE version IN (44, 45)` first, and only while no
+`DELETE FROM _sqlx_migrations WHERE version IN (45, 46)` first, and only while no
 `holder_grant` / `seed_capital` consilium row exists (the old `ConsiliumKind` parser would
 fail on it). The release is effectively one-way from the moment the new pod migrates.
 
@@ -41,18 +41,24 @@ fail on it). The release is effectively one-way from the moment the new pod migr
 ```json
 {
   "fund": [
-    {"user_id": "<banking user uuid>", "share_bps": 8000},
-    {"user_id": "<banking user uuid>", "share_bps": 2000}
+    {"user_id": "<user id>", "share_bps": 8000},
+    {"user_id": "<user id>", "share_bps": 2000}
   ],
   "fee": [
-    {"user_id": "<banking user uuid>", "share_bps": 8000},
-    {"user_id": "<banking user uuid>", "share_bps": 2000}
+    {"user_id": "<user id>", "share_bps": 8000},
+    {"user_id": "<user id>", "share_bps": 2000}
   ]
 }
 ```
 
-- `user_id` is the **banking** `users.id` (not the concierge id); every person must exist
-  and be active.
+- `user_id` is either the id `/cabinet/admin/users` shows (the concierge id) or the
+  banking `users.id` — the command accepts both, and the two may be mixed. Each id is
+  looked up as a concierge id first, then as a banking id; an id that is neither is
+  refused before the ledger is read. Every person must be active.
+- Everything the migration derives (issuance keys, transfer ids) comes from the
+  **banking** id the lookup lands on, so the same table in either form is the same run:
+  a rerun in the other form is a no-op, not a second migration. Two lines naming one
+  person in two forms are refused as a duplicate.
 - Shares are basis points; each table must add up to exactly `10000`, nobody twice, no
   zero shares.
 - Units are `floor(value × bps / 10000)` per holder; the **last holder listed** takes the
@@ -63,7 +69,7 @@ fail on it). The release is effectively one-way from the moment the new pod migr
 
 ## Procedure (spec §4.3)
 
-1. R1 is in production; the pod is up; migration `0044` applied (the `fee` / `fund`
+1. R1 is in production; the pod is up; migration `0045` applied (the `fee` / `fund`
    allocation rows exist). Owners have handed over the holder table and the decision on
    any company stake.
 2. **Fresh marks.** Every product whose fee class the `fee` allocation holds must have a
@@ -105,7 +111,9 @@ fail on it). The release is effectively one-way from the moment the new pod migr
 
 ## What is printed
 
-- `=== migrate-ownership: plan ===` — per allocation: the retired balance that moves,
+- `=== migrate-ownership: plan ===` — first every id the table named and the banking user
+  it resolved to (`concierge <id> -> banking <id>`, or `banking <id> (given as a banking
+  id)`) — check these against the console; then per allocation: the retired balance that moves,
   the allocation's claim before, each priced fee class, the value, the status
   (`PENDING` / `already applied` / `nothing to migrate`) and every holder's units with
   `[minted]` / `[row]` markers; then every company stake and what happens to it.
@@ -118,7 +126,8 @@ fail on it). The release is effectively one-way from the moment the new pod migr
 ## When it exits 1
 
 - **Before anything moved** (a refusal from the plan): the message names the cause — a
-  table that does not add up, an unknown or disabled person, a stale mark, a non-zero
+  table that does not add up, an unknown or disabled person (the id as written), one
+  person named twice in two id forms, a stale mark, a non-zero
   company stake under `keep`, units already outstanding on `fee` / `fund` (someone was
   seated before the migration: the owners decide), in-flight pendings on a retired
   account, or a table that differs from an applied run. Fix the input or the state and
