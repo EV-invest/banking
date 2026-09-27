@@ -164,6 +164,8 @@ impl TonDepositWatcher {
 		}
 	}
 
+	// A treasury arrival still credits the retired fund party until C-3 rewires the watchers.
+	#[allow(deprecated)]
 	async fn scan_once(&self) -> Result<(), WatcherError> {
 		let network = Network::Ton;
 		let cursor = self.cursor(network).await?;
@@ -262,6 +264,8 @@ impl TonDepositWatcher {
 		Ok(())
 	}
 
+	// Same: the retired parties keep their discriminators and refusals until C-3/C-4.
+	#[allow(deprecated)]
 	async fn credit(&self, party: Party, network: Network, transfer: &JettonDeposit) -> Result<(), WatcherError> {
 		let amount = Usdt::from_onchain(network, transfer.amount).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {

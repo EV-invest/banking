@@ -51,7 +51,9 @@ impl HealthService for Health {
 
 		// TigerBeetle: a cheap `lookup_accounts` on a seeded claims account (`Fund`). A
 		// closed/stalled cluster surfaces as `Err` (the gateway bounds the call), so this
-		// distinguishes "process up" from "ledger reachable".
+		// distinguishes "process up" from "ledger reachable". The retired singleton is
+		// still the account boot seeds; the probe moves with `seed_singletons` (C-3).
+		#[allow(deprecated)]
 		let ledger_ok = self.ledger.balance(&LedgerAccountKey::Fund).await.is_ok();
 
 		// Outbox pipeline depth: any parked row needs operator intervention (BANK-FAULT-01),

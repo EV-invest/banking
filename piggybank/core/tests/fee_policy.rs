@@ -380,6 +380,8 @@ async fn cash_of(h: &Harness, key: LedgerAccountKey) -> Usdt {
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_year_of_holding_costs_two_percent_of_units_and_moves_no_cash_at_all() {
 	let _no_sweeping = no_sweeping().await;
 	let _revenue = exclusive_revenue().await;
@@ -584,6 +586,8 @@ async fn a_fund_with_no_policy_is_never_charged() {
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
 	let _no_sweeping = no_sweeping().await;
 	let _revenue = exclusive_revenue().await;
@@ -757,6 +761,8 @@ async fn a_partial_escrow_defers_the_uncollectable_fee_into_debt_until_the_units
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_settlement_the_fund_cannot_cover_is_refused_not_queued() {
 	let _no_sweeping = no_sweeping().await;
 	let _revenue = exclusive_revenue().await;
@@ -806,6 +812,8 @@ async fn a_settlement_the_fund_cannot_cover_is_refused_not_queued() {
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_queued_redemption_is_reserved_before_the_manager_is_paid() {
 	let _no_sweeping = no_sweeping().await;
 	let _revenue = exclusive_revenue().await;

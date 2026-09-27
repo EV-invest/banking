@@ -65,6 +65,8 @@ pub struct Treasury {
 /// Record an on-chain deposit, **idempotent by `tx_ref`** (see [`Deposits::record`]).
 /// Returns `true` if newly recorded, `false` for a duplicate; the relay is nudged
 /// only when a new event was committed.
+// The retired fee party is still refused by name until C-4 removes it from the wire.
+#[allow(deprecated)]
 pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError> {
 	if amount.is_zero() {
 		return Err(DomainError::Validation("deposit amount must be positive".into()));
@@ -129,6 +131,8 @@ pub async fn record_verified_arrival(
 /// at `RecordDeposit` rather than silently recorded under the party the chain names, so an
 /// operator who asserted "capital" learns the assertion was wrong. The sweep is refused by
 /// the shared attribution, as everywhere.
+// Seed still credits the retired fund claim; C-3 makes it a deposit + subscription into `fund`.
+#[allow(deprecated)]
 pub async fn seed_fund_capital(
 	deposits: &dyn Deposits,
 	custody: &dyn Custody,
@@ -198,6 +202,8 @@ async fn verify_arrival(
 /// user's own deposit address, and that dollar is already in `wallet:<net>` behind a claim.
 /// Crediting it again would invent fund capital and break `sum(custody) == sum(claims)`, so a
 /// treasury arrival is only capital when it came from outside every wallet we control.
+// A treasury arrival is still attributed to the retired fund party until C-3.
+#[allow(deprecated)]
 async fn attribute(custody: &dyn Custody, addresses: &dyn DepositAddresses, network: Network, transfer: &InboundTransfer) -> Result<Party, DomainError> {
 	if let Some(user) = addresses.owner_of(network, &transfer.to).await? {
 		return Ok(Party::User(user));
@@ -230,6 +236,8 @@ async fn attribute(custody: &dyn Custody, addresses: &dyn DepositAddresses, netw
 /// (hot-wallet address + real on-chain USDT/gas) **best-effort** — an unwired rail or
 /// a chain-RPC failure leaves those fields `None`; the ledger read must never fail
 /// because a chain node is down.
+// The retired singleton claims are still read for `held_for_clients` until C-5 replaces it.
+#[allow(deprecated)]
 pub async fn treasury(ledger: &dyn Ledger, custody: &dyn Custody) -> Result<Treasury, DomainError> {
 	let mut rails = Vec::with_capacity(Network::ALL.len());
 	let mut total_custody = Usdt::ZERO;
@@ -309,6 +317,8 @@ pub struct RevenueRail {
 /// users' derived addresses, which the hot wallet cannot spend. A treasury read failure
 /// degrades to the TB view (best-effort, like the treasury screen) — a flaky node
 /// must not blank the page.
+// Revenue is still the retired fee claim until C-2 moves earnings into the `fee` allocation.
+#[allow(deprecated)]
 pub async fn fund_revenue(ledger: &dyn Ledger, custody: &dyn Custody, configured: &[Network]) -> Result<FundRevenue, DomainError> {
 	let claim = ledger.balance(&LedgerAccountKey::FeeRevenue).await?;
 	let earned = Usdt::from_base_units(claim.posted);

@@ -216,6 +216,8 @@ async fn demote(h: &Harness, user: UserId) {
 
 /// Credit the fund's earned revenue directly, the deposit shape (`Dr wallet / Cr fee`).
 /// `fee` is a global singleton, so every assertion about it here is a DELTA.
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn fund_revenue(h: &Harness, amount: &str) {
 	h.ledger
 		.post(&LedgerTransfer {
@@ -232,6 +234,8 @@ async fn fund_revenue(h: &Harness, amount: &str) {
 
 /// Move earned revenue back out of the `fee` claim — how a competing spend leaves a payout
 /// with nothing behind it by the time it executes.
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn drain_revenue(h: &Harness, base_units: u128) {
 	h.ledger
 		.post(&LedgerTransfer {
@@ -725,6 +729,8 @@ async fn reaching_quorum_creates_exactly_one_payout_and_executing_twice_creates_
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_payout_the_revenue_no_longer_covers_lands_in_execution_failed() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
@@ -819,6 +825,8 @@ async fn editing_the_terms_after_approval_cannot_spend_the_approval() {
 }
 
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn an_impossible_payout_is_refused_at_open_not_after_a_72h_vote() {
 	let _lock = exclusive_governance().await;
 	let Some(h) = harness().await else { return };
@@ -1235,6 +1243,8 @@ async fn the_shared_token_specification_holds_on_this_side() {
 /// relay has applied the reservation — and the governance history still reads with a payout
 /// sitting beside it.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_readable() {
 	use domain::{
 		balance::Party,
@@ -1344,6 +1354,8 @@ async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_rea
 /// The owners' mails name the RECIPIENT, a duplicate order is refused before a quorum is
 /// seated, and a quorum's refusal closes the order it was over in the same transaction.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_refused_payment_consilium_closes_its_order_and_its_mails_name_the_recipient() {
 	use domain::{
 		balance::Party,
@@ -1441,6 +1453,8 @@ async fn a_refused_payment_consilium_closes_its_order_and_its_mails_name_the_rec
 /// Driven directly rather than through `execute` so each closer's outcome can be read off
 /// the returned value rather than off the consilium row it would be recorded on.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() {
 	use domain::{
 		balance::{Party, ServiceId},

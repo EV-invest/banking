@@ -396,6 +396,8 @@ impl Ledger for TbLedger {
 /// (the per-rail treasury), plus the network-agnostic fund-capital, fee-revenue and
 /// withdrawal-clearing claims and the mocked bank custody. Per-user/-service claim
 /// accounts are created lazily on first transfer.
+// The retired singleton claims are still ensured: pending transfers resolve them and the data migration debits them (C-3/C-9).
+#[allow(deprecated)]
 pub async fn seed_singletons(ledger: &dyn Ledger) -> Result<(), LedgerError> {
 	use domain::money::Network;
 	for network in Network::ALL {

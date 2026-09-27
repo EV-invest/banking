@@ -52,6 +52,29 @@ pub type AllocationId = Id<AllocationTag>;
 /// Phantom tag making [`AllocationId`] a distinct, incompatible identity type.
 pub struct AllocationTag;
 
+/// The surrogate id of the reserved **fee** allocation ([`ServiceId::fee`]).
+///
+/// Fixed rather than minted, because the row is written by migration `0044`, not by an
+/// operator: the literal is `uuid5(NAMESPACE_OID, "evbanking:allocation:fee")`, spelled
+/// out here so the domain stays free of the v5 feature, and pinned by a hub test that
+/// re-derives it and greps the migration for the same bytes.
+pub const FEE_ALLOCATION_ID: AllocationId = AllocationId::from_raw(uuid::Uuid::from_u128(0x680240f5_1c41_58e2_987c_e52dbe2faa01));
+/// The surrogate id of the reserved **fund** allocation ([`ServiceId::fund`]):
+/// `uuid5(NAMESPACE_OID, "evbanking:allocation:fund")`. See [`FEE_ALLOCATION_ID`].
+pub const FUND_ALLOCATION_ID: AllocationId = AllocationId::from_raw(uuid::Uuid::from_u128(0x7533b905_9200_5ffb_b053_844c9c8da99a));
+
+/// The fixed id a reserved slug's registry row carries, `None` for an ordinary product
+/// (whose id the application layer mints).
+pub fn reserved_allocation_id(service: &ServiceId) -> Option<AllocationId> {
+	if *service == ServiceId::fee() {
+		Some(FEE_ALLOCATION_ID)
+	} else if *service == ServiceId::fund() {
+		Some(FUND_ALLOCATION_ID)
+	} else {
+		None
+	}
+}
+
 /// Lifecycle of an investable product.
 ///
 /// `Closed` deliberately still permits redemptions: an operator winding a product down
@@ -373,7 +396,16 @@ impl Allocation {
 	/// [`DEFAULT_UNIT_CAP`] and at [`AllocationAccess::DEFAULT`] — a registration never
 	/// opens for business in the same step, so listing, sizing, funding and admitting
 	/// investors stay separate operator decisions. Raises `Registered`.
+	///
+	/// A reserved slug ([`ServiceId::is_reserved`]) is refused: the `fee` and `fund`
+	/// allocations are the platform's own, written once by migration `0044` with fixed
+	/// ids and hidden access, and an operator "registering" one would either collide with
+	/// that row or — on a database that predates it — create a public product wearing a
+	/// name every fee and seed leg is about to credit.
 	pub fn register(id: AllocationId, service: ServiceId, title: &str, summary: &str, icon: AllocationIcon) -> Result<Self, DomainError> {
+		if service.is_reserved() {
+			return Err(DomainError::Validation(format!("'{service}' is a reserved allocation and cannot be registered")));
+		}
 		let title = validate_title(title)?;
 		let summary = validate_summary(summary)?;
 		let mut allocation = Self {
@@ -845,6 +877,18 @@ mod tests {
 
 	fn registered() -> Allocation {
 		Allocation::register(AllocationId::new(), svc(), "EV Trading", "Systematic crypto trading", AllocationIcon::Trading).unwrap()
+	}
+
+	#[test]
+	fn a_reserved_slug_cannot_be_registered() {
+		for reserved in [ServiceId::fee(), ServiceId::fund()] {
+			let err = Allocation::register(AllocationId::new(), reserved.clone(), "Mine", "", AllocationIcon::Fund).unwrap_err();
+			assert!(matches!(err, DomainError::Validation(ref m) if m.contains("reserved")), "{reserved}: {err:?}");
+			// The row still rehydrates: the migration writes it, the registry reads it back.
+			assert!(reserved_allocation_id(&reserved).is_some());
+		}
+		assert_eq!(reserved_allocation_id(&svc()), None);
+		assert_ne!(FEE_ALLOCATION_ID, FUND_ALLOCATION_ID);
 	}
 
 	#[test]

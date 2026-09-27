@@ -17,8 +17,8 @@
 //! investor ─ FundsService.Subscribe ────▶ refused unless open AND `invest` for the caller
 //! investor ─ FundsService.Redeem ───────▶ allowed while open OR closed, at ANY access
 //! operator ─ SetAllocationUnitCap ▶ supply  (how many units may ever be issued)
-//! operator ─ IssueUnits ─────────▶ units minted IN KIND to a user or the company
-//! operator ─ TransferCompanyStake ▶ the company's units handed to a user, supply unchanged
+//! operator ─ IssueUnits ─────────▶ units minted IN KIND to a user or the fee allocation
+//! operator ─ TransferCompanyStake ▶ retired (#245): FAILED_PRECONDITION
 //! operator ─ RetireUnits ────────▶ a holder's units burnt IN KIND, supply shrinks
 //! operator ─ SetAllocationBacking ▶ cash | in_kind — whether Redeem may pay out
 //! investor ─ FundsService.Redeem ───────▶ refused while `in_kind` (sell on the book instead)
@@ -39,10 +39,9 @@
 //! [`FundsService`](crate::banking::v1::funds_service_client::FundsServiceClient) and
 //! `BalanceService`, keyed by the same `service` slug this registry owns. The one
 //! exception is `IssueUnits`: supply an operator mints **in kind** — no cash leg — to a
-//! [`holder`] that is an investor or the company itself, for a product registered
-//! against an asset that already has owners — and `TransferCompanyStake`, the way those
-//! units come back out of the company to a named user without the supply moving — and
-//! `RetireUnits`, the mint's mirror. Its vocabularies ([`holder`], [`issuance_source`],
+//! [`holder`] that is an investor or the reserved `fee` allocation, for a product
+//! registered against an asset that already has owners — and `RetireUnits`, the mint's
+//! mirror. (`TransferCompanyStake` is retired with the company holder, #245.) Its vocabularies ([`holder`], [`issuance_source`],
 //! [`issuance_state`]) are pinned here like the others, as is [`backing`]: whether a
 //! product's units have the fund's cash behind them, which is what decides whether
 //! `Redeem` may pay them out.
@@ -242,17 +241,21 @@ pub mod backing {
 /// units to.
 ///
 /// The hub's `domain::issuance::UnitHolder` stores exactly these
-/// (`unit_holder_strings_are_canonical` guards that side). `company` is a holder in its
-/// own right, not a user with a well-known id: it has no `users` row, no position and no
-/// P&L, so a client must never try to resolve its (empty) `holder_id` as a user.
+/// (`unit_holder_strings_are_canonical` guards that side). Only a `user` row's
+/// `holder_id` is a user: an `allocation` row's is the holding allocation's slug, and a
+/// `company` row's is empty — a client must never resolve either as a user.
 pub mod holder {
 	/// An investor; `holder_id` is their banking user id.
 	pub const USER: &str = "user";
-	/// The fund's own stake; `holder_id` is empty.
+	/// The fund's own stake; `holder_id` is empty. Retired (#245): no new issuance names
+	/// it, but the rows that do are still served and must still render.
 	pub const COMPANY: &str = "company";
+	/// A reserved allocation (`fee` | `fund`) holding units of this product — the
+	/// product's fee class is held by `fee`; `holder_id` is that allocation's slug.
+	pub const ALLOCATION: &str = "allocation";
 
 	/// Every holder kind.
-	pub const ALL: [&str; 2] = [USER, COMPANY];
+	pub const ALL: [&str; 3] = [USER, COMPANY, ALLOCATION];
 
 	/// Whether `kind` is one this contract defines.
 	pub fn is_known(kind: &str) -> bool {
@@ -271,7 +274,7 @@ pub mod holder {
 pub mod issuance_source {
 	/// Minted in kind (`IssueUnits`).
 	pub const MINT: &str = "mint";
-	/// Handed over out of the company's stake (`TransferCompanyStake`).
+	/// Handed over out of the company's stake (`TransferCompanyStake`, retired — historical rows only).
 	pub const COMPANY: &str = "company";
 	/// Burnt out of the holder's account (`RetireUnits`).
 	pub const RETIRE: &str = "retire";
@@ -397,9 +400,12 @@ mod tests {
 	fn the_holder_vocabulary_is_closed_and_canonical() {
 		// Byte-identical with `domain::issuance::UnitHolder::kind_str`
 		// (`unit_holder_strings_are_canonical` guards the other side).
-		assert_eq!(holder::ALL, ["user", "company"]);
+		assert_eq!(holder::ALL, ["user", "company", "allocation"]);
 		assert!(holder::ALL.iter().all(|h| holder::is_known(h)));
+		// A reserved allocation is a holder of kind `allocation`, named by `holder_id` —
+		// its slug is never a kind of its own.
 		assert!(!holder::is_known("fund"));
+		assert!(!holder::is_known("fee"));
 		assert!(!holder::is_known(""));
 		assert!(!holder::is_known("Company"), "the wire form is lowercase");
 	}

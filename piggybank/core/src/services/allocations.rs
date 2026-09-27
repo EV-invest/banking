@@ -10,13 +10,12 @@
 //! (`AllocationsService::issue_units`) mints units **in kind**, with no cash leg: it is a
 //! registry decision about who holds what, made by the same manager who sizes the
 //! product, so it lives beside the cap rather than on the investor's dealing surface.
-//! [`TransferCompanyStake`] is the same decision in reverse — the company's seeded
-//! units handed to a named user, supply untouched — and [`RetireUnits`] is the mint's
-//! mirror, a holder's units burnt. They and [`ListUnitHolders`] are the only handlers
-//! here that read the ledger or notify the relay.
+//! [`RetireUnits`] is the mint's mirror, a holder's units burnt. They and
+//! [`ListUnitHolders`] are the only handlers here that read the ledger or notify the
+//! relay. `TransferCompanyStake` is retired with the company holder (#245) and answers
+//! `FAILED_PRECONDITION` until the proto drops it.
 //!
 //! [`IssueUnits`]: AllocationsService::issue_units
-//! [`TransferCompanyStake`]: AllocationsService::transfer_company_stake
 //! [`RetireUnits`]: AllocationsService::retire_units
 //! [`ListUnitHolders`]: AllocationsService::list_unit_holders
 //!
@@ -43,7 +42,7 @@ use crate::{
 	application::{
 		allocations as allocations_app,
 		funds::FundPorts,
-		issuance::{self as issuance_app, IssueUnitsRequest, RetireUnitsRequest, TransferCompanyStakeRequest, UnitHoldersView},
+		issuance::{self as issuance_app, IssueUnitsRequest, RetireUnitsRequest, UnitHoldersView},
 	},
 	ports::{
 		allocations::{AllocationAccessGrant, AllocationRecord},
@@ -77,13 +76,18 @@ impl AllocationsSvc {
 	/// concierge id; resolve the way every admin RPC does, so the units land on (or leave)
 	/// the money-plane row the holder redeems from. `NOT_FOUND` here is the existence
 	/// gate the use case repeats.
+	///
+	/// The `company` arm of the oneof is refused at the boundary: the company is retired
+	/// as a holder (#245), and until the proto drops the arm (C-7) a console still able to
+	/// send it must hear why — the domain would refuse it too, but as a validation error
+	/// about a holder rather than a precondition about a retired command.
 	async fn resolve_holder(&self, holder: Option<WireHolder>) -> Result<UnitHolder, Status> {
 		match holder {
 			Some(WireHolder::UserId(raw)) => Ok(UnitHolder::User(resolve_target_user(&self.state, &raw).await?)),
-			Some(WireHolder::Company(true)) => Ok(UnitHolder::Company),
+			Some(WireHolder::Company(true)) => Err(Status::failed_precondition("retired: the company is no longer a unit holder — issue to a person (#245)")),
 			// `company: false` names nobody: a malformed request, never a mint to — or a
 			// burn of — nobody's units.
-			Some(WireHolder::Company(false)) | None => Err(Status::invalid_argument("holder is required: a user_id, or company = true")),
+			Some(WireHolder::Company(false)) | None => Err(Status::invalid_argument("holder is required: a user_id")),
 		}
 	}
 }
@@ -289,38 +293,14 @@ impl AllocationsService for AllocationsSvc {
 		Ok(Response::new(issuance_to_proto(&record)))
 	}
 
+	/// Retired with the company holder (#245): the company no longer holds a stake to
+	/// hand over. Still gated on the permission so an unauthenticated probe learns
+	/// nothing it would not have learnt before; the proto arm goes in C-7.
 	async fn transfer_company_stake(&self, request: Request<pb::TransferCompanyStakeRequest>) -> Result<Response<pb::UnitIssuance>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
-		let req = request.into_inner();
-		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		// Resolved the way `issue_units` resolves a user holder: the console carries the
-		// concierge id, the units land on the banking row.
-		let user = resolve_target_user(&self.state, &req.user_id).await?;
-		let units = Shares::parse_decimal(&req.units).map_err(map_err)?;
-		let cost_basis = optional(&req.cost_basis).map(Usdt::parse_decimal).transpose().map_err(map_err)?;
-		let idempotency_key = IdempotencyKey::parse(&req.idempotency_key).map_err(map_err)?;
-		let ports = FundPorts {
-			allocations: self.state.allocations.as_ref(),
-			ledger: self.state.ledger.as_ref(),
-			nav: self.state.nav.as_ref(),
-			relay: &self.state.relay_notify,
-		};
-		let record = issuance_app::transfer_company_stake(
-			&ports,
-			self.state.issuances.as_ref(),
-			self.state.users.as_ref(),
-			TransferCompanyStakeRequest {
-				service,
-				user,
-				units,
-				cost_basis,
-				idempotency_key,
-			},
-			unix_now(),
-		)
-		.await
-		.map_err(map_err)?;
-		Ok(Response::new(issuance_to_proto(&record)))
+		Err(Status::failed_precondition(
+			"retired: the company no longer holds a stake to transfer — issue units to a person (#245)",
+		))
 	}
 
 	async fn retire_units(&self, request: Request<pb::RetireUnitsRequest>) -> Result<Response<pb::UnitIssuance>, Status> {
@@ -372,7 +352,13 @@ fn issuance_to_proto(record: &UnitIssuanceRecord) -> pb::UnitIssuance {
 		id: issuance.id().to_string(),
 		service: issuance.service().to_string(),
 		holder_kind: issuance.holder().kind_str().to_owned(),
-		holder_id: issuance.holder().user_id().map(|user| user.to_string()).unwrap_or_default(),
+		// The holder's identity as `holder_kind` says to read it: a user's id, an
+		// allocation's slug, nothing for the retired company (see `contracts::allocation::holder`).
+		holder_id: match issuance.holder() {
+			UnitHolder::User(user) => user.to_string(),
+			UnitHolder::Allocation(service) => service.to_string(),
+			_ => String::new(),
+		},
 		units: issuance.units().to_decimal_string(),
 		nav: issuance.nav().to_decimal_string(),
 		cost_basis: issuance.cost_basis().to_decimal_string(),
@@ -491,11 +477,14 @@ mod tests {
 	use super::*;
 
 	#[test]
+	// The retired company holder and source are still wire vocabulary: stored rows carry
+	// them, and a client must keep recognising them until the contract migration.
+	#[allow(deprecated)]
 	fn domain_holders_and_issuance_states_match_the_wire_contract() {
 		// The three vocabularies an in-kind issuance crosses the wire with, held to the same
 		// standard as state/access/icon: the hub stores the domain enum, consumers match on
 		// the wire constants, and drift between them is a test failure, not a mystery.
-		let holders = [UnitHolder::User(UserId::new()), UnitHolder::Company];
+		let holders = [UnitHolder::User(UserId::new()), UnitHolder::Company, UnitHolder::Allocation(ServiceId::fee())];
 		let as_wire: Vec<&str> = holders.iter().map(|holder| holder.kind_str()).collect();
 		assert_eq!(as_wire.as_slice(), wire_holder::ALL.as_slice(), "the domain holder kinds and the wire vocabulary have drifted");
 		for kind in wire_holder::ALL {

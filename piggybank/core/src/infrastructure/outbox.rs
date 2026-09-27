@@ -61,6 +61,8 @@ pub async fn lock_claim(conn: &mut PgConnection, claim: &LedgerAccountKey) -> Re
 /// A `_` arm is right here (unlike the exhaustive matches elsewhere in the domain): a new
 /// account key needs no decision, because the general formula already names it correctly and
 /// uniquely.
+// The retired fee claim keeps its historical lock name so in-flight payouts serialize as before (C-4).
+#[allow(deprecated)]
 fn claim_lock_name(claim: &LedgerAccountKey) -> Uuid {
 	match claim {
 		LedgerAccountKey::UserClaim(user) => user.raw(),
@@ -78,6 +80,8 @@ fn claim_lock_key(claim: &LedgerAccountKey) -> i64 {
 /// for one user's claim in [`lock_user`], and would diverge PG from TB the same way, so
 /// they serialize on one target too. The claim is a singleton with no row of its own,
 /// hence a fixed v5 UUID standing in as the lock's name rather than a real id.
+// Revenue payouts still spend the retired fee claim until C-4.
+#[allow(deprecated)]
 pub async fn lock_revenue_claim(conn: &mut PgConnection) -> Result<(), DomainError> {
 	lock_claim(conn, &LedgerAccountKey::FeeRevenue).await
 }
@@ -293,6 +297,8 @@ mod tests {
 	use super::*;
 
 	#[test]
+	// Pins the lock names of the retired claims, which in-flight rows still take.
+	#[allow(deprecated)]
 	fn the_generalized_claim_lock_keeps_the_keys_the_old_helpers_computed() {
 		// The formulas below are written out rather than called, on purpose: they are what
 		// every deployed binary computes today, so this test fails the moment `claim_lock_name`

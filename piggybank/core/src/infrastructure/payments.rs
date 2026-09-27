@@ -290,6 +290,8 @@ pub(crate) async fn detail_of(conn: &mut PgConnection, to: &PaymentDestination) 
 			.await
 			.map_err(repo_err)?
 			.map(EndDetail::ProductTitle),
+		// Retired parties still appear in stored orders until C-9.
+		#[allow(deprecated)]
 		Some(Party::Piggybank | Party::Revenue) | None => None,
 	})
 }
@@ -999,6 +1001,8 @@ impl PaymentFeed for PgPayments {
 			match order.terms().to().party() {
 				Some(Party::User(user)) => user_ids.push(user.raw()),
 				Some(Party::Service(service)) => services.push(service.as_str().to_owned()),
+				// Retired parties still appear in stored orders until C-9.
+				#[allow(deprecated)]
 				Some(Party::Piggybank | Party::Revenue) | None => {}
 			}
 		}
@@ -1034,6 +1038,8 @@ impl PaymentFeed for PgPayments {
 				let destination_detail = match order.terms().to().party() {
 					Some(Party::User(user)) => email_by_user.get(&user.raw()).cloned().map(EndDetail::Mailbox),
 					Some(Party::Service(service)) => title_by_service.get(service.as_str()).cloned().map(EndDetail::ProductTitle),
+					// Retired parties still appear in stored orders until C-9.
+					#[allow(deprecated)]
 					Some(Party::Piggybank | Party::Revenue) | None => None,
 				};
 				Ok(PaymentView {

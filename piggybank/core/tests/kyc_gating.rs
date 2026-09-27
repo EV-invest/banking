@@ -323,6 +323,8 @@ async fn a_verified_user_can_withdraw() {
 /// this path entirely, and the payout is exercised end to end (funded by real retained
 /// fees) rather than asserted by reading the code.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_revenue_payout_is_not_gated_on_kyc() {
 	let Some(h) = harness().await else { return };
 	let user = user_at_tier(&h, 1).await;

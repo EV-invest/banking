@@ -356,6 +356,8 @@ async fn relayed_kinds(pool: &PgPool, order: PaymentId) -> Vec<String> {
 /// Opening an order writes it, its seat and its events in one transaction — and puts NOTHING
 /// in the outbox, because an order that has not been approved has moved no money.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn opening_an_order_materializes_its_consent_seat_and_relays_nothing() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -387,6 +389,8 @@ async fn opening_an_order_materializes_its_consent_seat_and_relays_nothing() {
 /// where the two can first disagree. Each mismatch is refused BEFORE a row is written, by
 /// name, rather than surfacing as the foreign-key string the schema would otherwise answer.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn open_refuses_a_seat_that_is_not_the_one_the_terms_call_for() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -425,6 +429,8 @@ async fn open_refuses_a_seat_that_is_not_the_one_the_terms_call_for() {
 /// CLOSED — with one seat there is nobody to escalate to, so the exhausted token is a refusal
 /// rather than a detector.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn five_wrong_codes_burn_the_consent_and_close_the_order() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -474,6 +480,8 @@ async fn five_wrong_codes_burn_the_consent_and_close_the_order() {
 /// The happy path, and the two idempotency rules the retry contract rests on: the same answer
 /// again is a no-op, a different one is a conflict.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn the_right_code_approves_the_order_and_reserves_its_source() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -528,6 +536,8 @@ async fn the_right_code_approves_the_order_and_reserves_its_source() {
 /// recorded by the quorum rather than by a token, and execution is idempotent for the same
 /// effect and a conflict for a different one.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_fund_owned_order_is_carried_by_its_consilium() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -576,6 +586,8 @@ async fn a_fund_owned_order_is_carried_by_its_consilium() {
 /// The admin feed's filters, the expiry sweep, and the rule that only the operator who opened
 /// an order may withdraw it.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn the_feed_filters_and_the_sweep_close_what_nobody_answered() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -706,6 +718,8 @@ async fn let_the_backoff_run(pool: &PgPool, order: PaymentId) {
 /// delivered stands: the row says sent, never withdrawn, and its secrets were stripped at
 /// delivery.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn withdrawing_or_expiring_an_order_withdraws_the_consent_mail_the_relay_has_not_taken() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -802,6 +816,8 @@ async fn withdrawing_or_expiring_an_order_withdraws_the_consent_mail_the_relay_h
 /// or void it — a withdrawal's fail void, by another name. `fund` is a global singleton
 /// shared with every other suite, so every figure here is a DELTA.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_failed_execution_releases_the_reservation_it_was_holding() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -879,6 +895,8 @@ async fn a_failed_execution_releases_the_reservation_it_was_holding() {
 /// debited, so a second approved order against the same claim contends with a reservation
 /// rather than with a stale read. Only the settlement posts it.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn an_approved_payment_reserves_its_source_and_then_settles_it() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -946,6 +964,8 @@ async fn an_approved_payment_reserves_its_source_and_then_settles_it() {
 /// right the code. The seat fails closed and takes the order with it: with one seat there is
 /// nobody to re-issue the request to.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn revoking_the_investors_sessions_voids_a_pending_consent() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -994,6 +1014,8 @@ async fn revoking_the_investors_sessions_voids_a_pending_consent() {
 /// between must win: the approved order fails closed instead of settling, and — because it
 /// was reserved at approval — releases its reservation on the way out.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_revocation_between_consent_and_execution_fails_the_payment_closed() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -1048,6 +1070,8 @@ async fn a_revocation_between_consent_and_execution_fails_the_payment_closed() {
 /// theirs — so it must not be able to consent. The address is re-read from the projection
 /// the bridge maintains, by the same digest the seat froze at open.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_changed_mailbox_voids_a_pending_consent() {
 	let _guard = exclusive_payments().await;
 	let Some(pool) = common::pool().await else {
@@ -1205,6 +1229,8 @@ async fn consent_credentials(pool: &PgPool, payment: PaymentId) -> (String, Stri
 /// back from TigerBeetle. The settlement is recorded only once the relay has applied the
 /// reservation — the inline execute after the consent finds it pending and records nothing.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn an_investors_internal_payment_is_consented_to_by_mail_and_settles_once_reserved() {
 	let _guard = exclusive_payments().await;
 	let Some(a) = app("payments consent flow").await else { return };
@@ -1317,6 +1343,8 @@ async fn an_investors_external_payment_creates_one_withdrawal_under_the_derived_
 /// The refusals at OPEN: an external payment from a source the withdrawal saga cannot pay
 /// from, a source that cannot cover the amount, and an unwired mailer.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn an_order_that_could_never_execute_is_refused_at_open() {
 	let _guard = exclusive_payments().await;
 	let Some(a) = app("payments open refusals").await else { return };
@@ -1384,6 +1412,8 @@ async fn an_order_that_could_never_execute_is_refused_at_open() {
 /// A revocation between consent and execution: the execution path reads the moved pin
 /// BEFORE creating anything, fails the order closed and releases the reservation.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn a_revocation_after_consent_fails_execution_closed_and_releases_the_reserve() {
 	let _guard = exclusive_payments().await;
 	let Some(a) = app("payments revoked consent").await else { return };
@@ -1419,6 +1449,8 @@ async fn a_revocation_after_consent_fails_execution_closed_and_releases_the_rese
 /// the attempt is an error, not a recorded failure, so the order is still `approved` when
 /// the operator lifts the pause and the sweeper comes back to it.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn an_operator_pause_holds_an_approved_order_without_closing_it() {
 	let _guard = exclusive_payments().await;
 	let Some(a) = app("payments read-only pause").await else { return };
@@ -1581,6 +1613,8 @@ async fn a_revocation_inside_the_execution_window_cancels_the_queued_withdrawal(
 
 /// The expiry half of the sweep, and the initiator's withdrawal closing the consilium with it.
 #[tokio::test]
+// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
+#[allow(deprecated)]
 async fn the_sweep_expires_what_nobody_consented_to() {
 	let _guard = exclusive_payments().await;
 	let Some(a) = app("payments expiry sweep").await else { return };
