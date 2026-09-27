@@ -32,12 +32,17 @@ the dispatch-time read and the broadcast), not the norm — but the recovery bel
 the same.
 
 A queued or processing row is **not always a user's** withdrawal. A **revenue payout** —
-the fund moving its own earned money (retained fees + settled 2-and-20) to an external
-wallet — rides this same saga and appears in this same queue; the console labels it *Fund
-revenue* in place of an email, and `ListWithdrawalQueue` reports `source: revenue`. The
-recovery steps below are identical, with one wording change: **Fail** refunds the `fee`
-claim rather than a user, so nobody is waiting on support — but the cardinal rule is
-unchanged, because the chain does not care whose money it was.
+the fund moving its own earned money to an external wallet — rode this same saga and
+appears in this same queue; the console labels it *Fund revenue* in place of an email, and
+`ListWithdrawalQueue` reports `source: revenue`. **Retired since #245**: nothing opens a
+new one (the platform's earnings are the `fee` allocation, and cash leaves it by a
+holder's redemption or an owners' payment order), but a row queued before the retirement
+still dispatches, settles, fails or is cancelled (`CancelRevenuePayout` /
+`ListRevenuePayouts` are history-only RPCs). The recovery steps below are identical, with
+one wording change: **Fail** refunds the retired `fee` claim (TB code 40) rather than a
+user, so nobody is waiting on support — but the cardinal rule is unchanged, because the
+chain does not care whose money it was. A payment order's L1 withdrawal (opened out of an
+investor's own claim, `source: user`) is an ordinary user row here.
 
 ## Step 1 — prove the broadcast never happened
 

@@ -239,10 +239,10 @@ fn cooling_off_refusal(kind: ConsiliumKind, remaining_secs: i64) -> DomainError 
 /// deposits, withdrawals, subscriptions, reconciliation — over a feature that is off by
 /// default and orthogonal to all of them; a self-inflicted outage is a worse failure than
 /// the one it reports. Refusing here fails exactly the one operation that cannot work, names
-/// why, and leaves every other path running. It is safe to be this strict only because the
-/// direct single-admin payout RPC is now closed (see `services/balance.rs`): there is no
-/// bypass to fall back on, so an operator who needs to pay revenue out has to wire the
-/// mailer rather than route around governance.
+/// why, and leaves every other path running. It is safe to be this strict only because no
+/// consilium kind has a single-admin bypass (the direct payout RPC is gone from the
+/// contract, #245): an operator who needs a payment, a mark, a fee change, a grant or a
+/// seed approved has to wire the mailer rather than route around governance.
 pub(crate) fn require_governance_mail(wired: bool) -> Result<(), DomainError> {
 	if wired {
 		return Ok(());

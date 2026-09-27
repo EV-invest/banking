@@ -1,11 +1,22 @@
 # Consilium — multi-owner authorization
 
-Two things in this platform must never be one person's decision: paying the fund's
-own earned money out, and taking someone's ownership away. Both are gated by a
-**consilium** — a quorum of fund owners who each confirm from their mailbox.
+Two things in this platform must never be one person's decision: moving, repricing or
+re-owning the platform's own money — a payment out of an allocation's pooled claim, a NAV
+mark past the move guard, a change of fee terms beyond the house envelope, a new holder of
+the `fee` / `fund` allocations, the attribution of a treasury arrival as somebody's seed —
+and taking someone's ownership away. All are gated by a **consilium** — a quorum of fund
+owners who each confirm from their mailbox.
+
+The kinds, as `ConsiliumKind` (`domain/src/consilium.rs`) spells them: `payment`,
+`valuation_override`, `fee_policy`, `holder_grant`, `seed_capital` — and `revenue_payout`,
+**history only** since #245 (nothing opens one; `open_revenue_payout` refuses, consilia
+opened before the retirement still list and execute). The platform holds no money outside
+an allocation held by people, so "pay the fund out" is not a thing a quorum can do: cash
+leaves `fee` / `fund` by a holder's redemption or by a payment order out of `service:fee` /
+`service:fund` (§ Payments).
 
 This document is the policy. It is written before the code because the failure modes
-here are not bugs you notice in staging: they are a payout that left, or an owner who
+here are not bugs you notice in staging: they are a payment that left, or an owner who
 lost their seat, and neither can be undone.
 
 ---
@@ -17,13 +28,13 @@ The platform already splits **money** (`banking`) from **identity/ownership**
 
 | Decision | Authorizing plane | Why there |
 | --- | --- | --- |
-| Pay fund revenue out on-chain | **banking** (`piggybank-core`) | The money plane must be able to _audit its own authorization_. `docs/ARCHITECTURE.md` explicitly rejects letting a concierge-signed artifact authorize money movement; a consilium verdict is exactly such an artifact, so it is computed, stored and verified in the money plane. |
+| Move, reprice or re-own the platform's own money (a payment out of an allocation's claim, a valuation override, fee terms, a holder grant, a seed) | **banking** (`piggybank-core`) | The money plane must be able to _audit its own authorization_. `docs/ARCHITECTURE.md` explicitly rejects letting a concierge-signed artifact authorize money movement; a consilium verdict is exactly such an artifact, so it is computed, stored and verified in the money plane. |
 | Remove a fund owner | **concierge** | Ownership is `Role::Owner`, a concierge-owned fact. Only concierge may mutate it, and the one-way bridge (concierge → banking) must stay one-way. |
 
 Neither plane trusts the other's verdict. What crosses the seam is only:
 
 - **the roster**, which banking already mirrors locally (`0016_user_role.sql`) — so a
-  payout never needs a live call to concierge at the moment it is authorized;
+  consilium never needs a live call to concierge at the moment it is authorized;
 - **outbound mail**, which banking asks concierge to send over one new
   service-token-gated RPC, because concierge already owns the only mailer
   (`lettre` + `notification_deliveries` + backoff + daily budget), and standing up a
@@ -56,7 +67,7 @@ lower the bar you have to clear.
 | 6   | 4         | 5      | 4 of 5               |
 | 7   | 4         | 6      | 4 of 6               |
 
-**A fund with fewer than 3 owners can never pay itself out.** That is a real
+**A fund with fewer than 3 owners can never carry a consilium.** That is a real
 consequence of the chosen rule, not an oversight, and it is why owner removal
 enforces a floor (below). The open RPC refuses with an explicit error rather than
 creating a request that can never reach quorum.
@@ -67,21 +78,25 @@ The table reads `N` as the owner count and `voters` as `N − 1`, which is only 
 because **the initiator is necessarily one of the `N`**. That fact is enforced in a place
 the RBAC matrix does not suggest, so it is worth stating plainly:
 
-- The **RPC boundary** gates `OpenRevenuePayout` on `Permission::RevenuePayout`, and the
-  matrix (`domain::authz::grants`) grants that to **`Admin` *and* `Owner`** — role-granting
-  is the identity plane's concern, so the money plane treats the two as equivalent
-  capability-wise. An admin with no seat therefore clears the boundary.
+- The **RPC boundary** gates each open on an operator permission — `OpenHolderGrant` on
+  `Permission::RevenuePayout` (the owner-surface permission the name stayed on,
+  `services/consilium.rs`), `OpenValuationOverride` on `ValuationPost`, `OpenPayment` on
+  `PaymentOpen`, `ScheduleFeePolicy` on `AllocationManage`, `SeedCapital` on
+  `CapitalManage` — and the matrix (`domain::authz::grants`) grants those to **`Admin`
+  *and* `Owner`** — role-granting is the identity plane's concern, so the money plane
+  treats the two as equivalent capability-wise. An admin with no seat therefore clears the
+  boundary.
 - The **domain** then refuses them: `Consilium::open` rejects an initiator absent from the
   snapshotted roster with `Forbidden("only a fund owner may open a consilium")`, covered by
   the `only_an_owner_may_open` unit test.
 
 So the permission is necessary but not sufficient, and there is **no case in which a
-non-owner opens a payout and all `N` owners vote**. `voters = N − 1` always.
+non-owner opens a consilium and all `N` owners vote**. `voters = N − 1` always.
 
 This asymmetry is deliberate and load-bearing, and it looks like an inconsistency to anyone
 reading only the matrix — which is exactly the risk. Do not "reconcile" it by letting the
 domain accept a non-owner initiator: that would make `voters = N`, silently change the
-arithmetic the table describes, and let a principal with no seat spend the fund's revenue
+arithmetic the table describes, and let a principal with no seat move the owners' money
 by proposing it. If the two ever need to agree, tighten the matrix, not the domain.
 
 ### Owner removal is a different rule
@@ -97,13 +112,14 @@ would let either owner unilaterally expel the other. Path (b) therefore addition
 requires **at least one eligible peer voter**; with two owners only path (a) exists.
 
 **Two different floors live in this feature, and they are not interchangeable.** The
-**payout** floor is **3** — below it `floor(N/2)+1` is unreachable, and it is what
-`OwnerList.below_payout_floor` reports. The **removal** floor is **2** — how far the
-roster may actually shrink. A reader who assumes one constant will get one of them
-wrong; a fund of exactly 2 is legal, and simply cannot pay out until it admits a third.
+**consilium** floor is **3** — below it `floor(N/2)+1` is unreachable for a consilium of
+any kind, and it is what `OwnerList.below_payout_floor` reports (the field kept its name).
+The **removal** floor is **2** — how far the roster may actually shrink. A reader who
+assumes one constant will get one of them wrong; a fund of exactly 2 is legal, and simply
+cannot carry a consilium until it admits a third.
 
 **Floor.** A removal may not leave fewer than **2** owners. Dropping to 2 does suspend
-payouts — the table above shows why — but that is a *recoverable* state: two owners can
+every consilium — the table above shows why — but that is a *recoverable* state: two owners can
 still admit a third and resume. An earlier draft of this policy set the floor at 3, and
 it was wrong: at exactly 3 owners it made a bad actor unremovable forever, because
 removal was blocked by the floor and admission (below) needs their agreement. A
@@ -134,10 +150,10 @@ grant" check to replay. Any third writer would be the whole mechanism's back doo
 
 | Fund state | What is possible |
 | --- | --- |
-| 2 owners | admit a third (both must agree); no payouts; no removal except self-acceptance |
+| 2 owners | admit a third (both must agree); no consilium of any kind; no removal except self-acceptance |
 | 3 owners, one bad actor | the two honest owners remove them (peer set is non-empty, unanimity of one), leaving 2; then admit a replacement |
-| 3 owners, two colluding | the same move, pointed the other way — they can expel the third and then admit whoever they like. The payout supermajority does not protect a minority against a majority, and nothing here does. The cooling-off period below is what makes it visible. |
-| N ≥ 3 | payouts at `floor(N/2)+1`; removal and admission as above |
+| 3 owners, two colluding | the same move, pointed the other way — they can expel the third and then admit whoever they like. The consilium supermajority does not protect a minority against a majority, and nothing here does. The cooling-off period below is what makes it visible. |
+| N ≥ 3 | consilia at `floor(N/2)+1`; removal and admission as above |
 
 **Residual, and stated honestly:** a fund of 2 whose owners disagree is stuck until one
 of them accepts removal — there is no third party to break the tie, and inventing one
@@ -149,16 +165,16 @@ deadlock to the backdoor.
 Each rule above behaves exactly as written. Their *composition* is weaker than the
 strongest of them, and it would be dishonest to leave that implicit.
 
-The payout rule alone is a supermajority: reaching quorum needs the initiator plus
+The consilium rule alone is a supermajority: reaching quorum needs the initiator plus
 `threshold` others, i.e. `floor(N/2) + 2` of `N` — unanimity at N=3 and N=4, 4 of 5,
 5 of 6, 5 of 7. No minority can clear it. But the roster is reachable by a lesser bar:
 
-1. Owners A, B, C. A and B are a bare majority and **cannot** pay out — at N=3 a payout
-   needs both peers, and C would refuse.
+1. Owners A, B, C. A and B are a bare majority and **cannot** carry a consilium — at N=3
+   it needs both peers, and C would refuse.
 2. A opens a removal of C. The peer set is `{B}`, so **one** REMOVE carries it. C is
    expelled, and C never had a vote that mattered.
 3. N=2. A admits a puppet with B's agreement. N=3. Repeat until the roster is theirs.
-4. A opens a payout. It now passes on the rule as written.
+4. A opens a payment out of `service:fee`. It now passes on the rule as written.
 
 So the operative bound is not "a supermajority of owners" — it is **"any group that can
 survive one removal round"**, which at N=3 is a bare 2 of 3. This is majority governance.
@@ -166,15 +182,16 @@ Nothing in this document protects a minority of owners against a determined majo
 and no arrangement of quorums can: whoever holds the majority holds the roster.
 
 **What we do instead of pretending otherwise — a cooling-off period.** An executed
-admission or removal blocks opening a payout consilium for 48 hours, and voids any
-payout consilium already open. That does not stop the capture above; it makes it
-*visible before the money can move*. The expelled owner receives their removal mail and
-has two days in which no payout can be authorized — time to raise it with a human, or
-to act. Capture becomes noticed rather than silent and instant, which is the honest
-thing a mechanism can buy here.
+admission or removal blocks opening **any** consilium for 48 hours
+(`require_settled_roster`, every kind: `application/consilium.rs`, `fees.rs`,
+`payments.rs`) and voids any consilium already open (`void_open_for_roster_change`). That
+does not stop the capture above; it makes it *visible before the money can move*. The
+expelled owner receives their removal mail and has two days in which no consilium can be
+authorized — time to raise it with a human, or to act. Capture becomes noticed rather than
+silent and instant, which is the honest thing a mechanism can buy here.
 
 The cost is real and accepted: a legitimate roster change also delays a legitimate
-payout by two days.
+consilium by two days.
 
 ---
 
@@ -254,7 +271,7 @@ previously had to keep synchronised by hand, across two id spaces that hold diff
 values for the same person (concierge ids and banking ids).
 
 **The consequence is that on a fresh installation banking's owner surfaces are dead** —
-no payout can be opened, no governance RPC answers — until concierge has seated the owners
+no consilium can be opened, no governance RPC answers — until concierge has seated the owners
 and the bridge has carried `ROLE_CHANGED` across. That is the design, not a defect: the
 identity plane seats, the money plane follows. There is deliberately no way to make the
 money plane believe in an owner the identity plane has not persisted.
@@ -291,7 +308,7 @@ power: it can withhold a quorum, never manufacture one.
    lag, and because their vote arrives by emailed token rather than a session, revoking
    sessions does not stop them. Monitor bridge lag; treat a wedged bridge as a
    governance incident, not just a staleness one.
-2. **Quorum-lowering.** Kicking owners after opening a payout cannot shrink the
+2. **Quorum-lowering.** Kicking owners after opening a consilium cannot shrink the
    frozen `threshold`, and the kicked owner's vote is voided by (1).
 3. **Roster stuffing.** An owner added after the request opened is not in the
    snapshot and gets no token, so new owners cannot be minted to reach quorum.
@@ -360,19 +377,22 @@ once, here, and each plane's tests assert against this table:
 
 14. **TOCTOU on the tally.** The count and the transition to `Approved` happen in one
     Postgres transaction with `SELECT … FOR UPDATE` on the request row.
-15. **Double payout.** Execution is idempotent: the withdrawal id is
-    `uuid_v5(request_id, "consilium:revenue-payout")`, so a retried execution
-    re-creates the same row and the existing saga treats it as a no-op.
-    the effect is written once (`ConsiliumEffect`, projected onto
-    `executed_withdrawal_id`).
-16. **Concurrent approved payouts overdrawing revenue.** At most **one** open
+15. **Double execution.** Idempotent per kind: the retired payout's withdrawal id
+    `uuid_v5(request_id, "consilium:revenue-payout")`, a mark's id
+    `uuid_v5(…, "consilium:valuation-override")`, a grant's key `holder-grant:<consilium>`
+    (`issuance::grant_units`), a seed's subscription id `seed_subscription_id(tx_ref)`; a
+    payment's `record_approval` and a fee change's `schedule_approved` are idempotent on
+    the row. The effect is written once (`ConsiliumEffect`, projected onto
+    `executed_*_id`).
+16. **Concurrent approved consilia overdrawing one claim.** At most **one** open
     consilium **per source claim** — `consilium_single_open_per_source_idx ON
-    consilium (source_claim) WHERE state = 'open'`. Every payout spends `fee`, so
-    over payout rows this is the same single key the original
-    `ON consilium ((TRUE))` index used: "one open payout at a time" is unchanged.
-    What it no longer does is block a request over a different claim. This removes
-    the race rather than trying to win it. Insufficient revenue at execution is still handled:
-    the existing solvency Read-First rejects it, the request lands in
+    consilium (source_claim) WHERE state = 'open'`. `source_claim()` per kind
+    (`domain/src/consilium.rs`): a payment — the order's source; an override — the
+    product's `service:<id>`; a fee change — `FeeShares(svc)`; a grant —
+    `service:<fee|fund>`; a seed — `service:fund`; the retired payout — the retired `fee`
+    claim. What the index does not do is block a request over a different claim. This
+    removes the race rather than trying to win it. Insufficient cover at execution is
+    still handled: the existing solvency Read-First rejects it, the request lands in
     `ExecutionFailed` with the reason visible to owners, and nothing retries silently.
 17. **Stale approvals.** Requests expire after 72h. An expired request can never
     execute, even if a vote arrives late.
@@ -419,13 +439,15 @@ once, here, and each plane's tests assert against this table:
 
 ### There is no way around it
 
-28. **The direct payout RPC.** `BalanceService.RequestRevenuePayout` used to move the
-    fund's revenue on ONE Admin/Owner's say-so, gated on `Permission::RevenuePayout` —
-    the same permission that merely lets someone *open* a consilium. Any principal who
-    could propose a payout could equally well skip the proposal and take the money, so
-    the whole mechanism was decorative. The RPC now refuses with `FAILED_PRECONDITION`
-    and names `ConsiliumService.OpenRevenuePayout` as the only route.
-    `CancelRevenuePayout` is untouched: cancelling refunds, and is not the hazard.
+28. **The direct payout RPC.** HISTORY. `BalanceService.RequestRevenuePayout` used to
+    move the fund's revenue on ONE Admin/Owner's say-so, gated on
+    `Permission::RevenuePayout` — the same permission that merely lets someone *open* a
+    consilium. Any principal who could propose a payout could equally well skip the
+    proposal and take the money, so the whole mechanism was decorative. Both
+    `BalanceService.RequestRevenuePayout` and `ConsiliumService.OpenRevenuePayout` are
+    gone from the contract with #245: there is no direct payout and no payout consilium;
+    the fund's earnings are the `fee` allocation, held by people. `CancelRevenuePayout` /
+    `ListRevenuePayouts` remain for the rows queued before the retirement.
 29. **A mechanism that silently does nothing.** Every approval token reaches its owner
     through exactly one route — the `consilium_mail` queue drained into concierge. On a
     build where that seam is not compiled in, a consilium would open, mail nobody, and
@@ -438,9 +460,9 @@ once, here, and each plane's tests assert against this table:
 
 ## Payments
 
-The consilium above authorizes ONE thing: the fund's earned revenue leaving on-chain. A
-**payment order** (`domain/src/payments.rs`, `PaymentsService`) generalizes the money move
-without generalizing the authorization: it names two ends of the platform and an amount, and
+A consilium authorizes a decision over the owners' money; a **payment order**
+(`domain/src/payments.rs`, `PaymentsService`) generalizes the money move without
+generalizing the authorization: it names two ends of the platform and an amount, and
 the policy below decides who must agree. The consilium stays exactly what it is — a payment
 out of fund-owned money simply opens one.
 
@@ -450,28 +472,28 @@ out of fund-owned money simply opens one.
 | --- | --- | --- |
 | an external wallet address | **L1** `external` | a `Withdrawal` (the ordinary saga: queue, dispatch, watchers, reaper) |
 | a product's pooled claim `service:<id>` | **L2** `service` | one posted transfer |
-| any other internal claim (`piggybank`, `revenue`, `user:<id>`) | **L3** `internal` | one posted transfer |
+| `user:<id>` (the retired `piggybank` / `revenue` kinds are refused by name at the RPC, `services/payments.rs`) | **L3** `internal` | one posted transfer |
 
 The tier is never supplied. A caller-supplied tier would be a second statement of a fact the
 destination already makes, and the only interesting failure is the one where the two disagree.
 An external *source* is unrepresentable: money cannot arrive from an address by anyone's
 say-so — that is a deposit, which a chain watcher attests.
 
-An **L1 payment leaves only from an investor's claim or from `revenue`.** The withdrawal saga
-has exactly those two sources; the fund's pooled capital and a product's pooled funds cannot
-be paid out on-chain directly and `OpenPayment` refuses rather than teaching the saga two new
-sources for a request nobody has made. Move the money to a claim the saga can pay from first.
+An **L1 payment leaves only from an investor's claim.** An allocation's pooled money — a
+product's or the reserved `fee`/`fund` — has no `WithdrawalSource` (#237) and `OpenPayment`
+refuses it: cash leaves a reserved allocation through a holder's redemption and their own
+withdrawal (`application/payments.rs`).
 
 ### The requirement is a function of the SOURCE, and nothing else
 
 | source | who must agree | how |
 | --- | --- | --- |
-| `piggybank`, `revenue`, `service:<id>` (fund-owned) | the **owner consilium**, at every tier | opened inside `OpenPayment`; `ConsiliumTerms::Payment` carries the order's id inside the hashed subject |
+| `service:<id>` — a product's, or the reserved `fee` / `fund` (`domain/src/payments.rs`) | the **owner consilium**, at every tier | opened inside `OpenPayment`; `ConsiliumTerms::Payment` carries the order's id inside the hashed subject |
 | `user:<id>` (an investor's own claim) | **that investor**, at every tier | one emailed consent seat — token, code, 72h, five attempts, the table in "One specification for both planes" |
 
-There is deliberately **no cell in which one admin moves fund money alone**. `fee → user:<x>`
-on a single say-so would be the revenue payout the consilium closed, reopened through the back
-door: the recipient can then withdraw under their own authority. The matrix
+There is deliberately **no cell in which one admin moves fund money alone**. `service:fee → user:<x>`
+on a single say-so would be the retired revenue payout reopened through the back door: the
+recipient can then withdraw under their own authority. The matrix
 (`Permission::PaymentOpen`, Admin and Owner) gates *proposing*; the source decides who
 authorizes.
 
@@ -546,10 +568,11 @@ Both approval mails leave through the same `consilium_mail` queue, written in th
 transaction as the seat they carry a token for, drained by the singleton worker into
 concierge's relay. Three kinds, three templates: `PAYOUT_APPROVAL` (a rail and an address),
 `PAYMENT_APPROVAL` (two ends in words, for the owners) and `PAYMENT_CONSENT` (the same, for the
-one investor whose money it is). A payment is never rendered through the payout template — it
-would name the wrong claim and the wrong rail on the one mail whose job is to state what is
-being approved. The consent mail names the subject's identity-plane id in its typed payload,
-and concierge refuses it unless that id is the addressee, so the money plane cannot fan one
+one investor whose money it is) — `PAYOUT_APPROVAL` is history: nothing opens a payout; a
+holder grant and a seed borrow `PAYMENT_APPROVAL` (§ Holder grant and seed capital). A
+payment is never rendered through the payout template — it would name the wrong claim and
+the wrong rail on the one mail whose job is to state what is being approved. The consent
+mail names the subject's identity-plane id in its typed payload, and concierge refuses it unless that id is the addressee, so the money plane cannot fan one
 consent out to a second mailbox. Beside the canonical label the destination carries what a
 person recognises it by — the receiving investor's masked mailbox, the product's title — so
 "investor 8f3e…" is not approved for the wrong person; the label alone is what the digest
@@ -600,7 +623,7 @@ marking. The owners approve an AUM, which is the figure an operator actually kno
 | moment | gate | why |
 | --- | --- | --- |
 | open | `ValuationPost` at the RPC boundary; the initiator must hold an owner seat (the domain refuses otherwise) | the poster proposes, the owners decide — the second actor is the vote, not a second permission that would recreate the flag one role over |
-| open | a wired governance mailer; a settled roster (48h cooling-off) | the same two a revenue payout applies: repricing every redemption is the same class of decision as paying the fund out |
+| open | a wired governance mailer; a settled roster (48h cooling-off) | the same two every kind applies: repricing every redemption is the same class of decision as moving the owners' money |
 | open | the allocation exists (any state); `units_outstanding > 0` | so the vote is over a computable price, refused now rather than after 72h of approving |
 | open | one open request per `service:<id>` claim | `source_claim()` is the fund's claim, so the override queues behind (or blocks) a payment out of the same claim — the owners must not vote on the price and on a drain of the pool at once |
 | execute | the kind-agnostic checks every consilium passes (hash, live roster, grace, roster change) | unchanged |
@@ -615,8 +638,11 @@ binds a direct poster.
 A subject who posted a mark for a fund within `VALUATION_REDEEM_COOLDOWN_SECS` (7 days)
 cannot redeem from that fund — refused with `failed_precondition` at **request** and
 again at **settle**, because settle is where the cash is priced and a queued redemption
-can outlive a later inflating mark. Fee settlement is deliberately not gated: its cash
-lands in `fee`, whose only exit is already a consilium.
+can outlive a later inflating mark. The same cooldown binds `SettleFeeShares` on that
+product (`application/fees.rs`, #245 M-1): converting one's own mark into the `fee`
+holders' cash is the move it exists to stop. A reserved allocation takes no mark of its
+own, so its cooldown is the cooldown on **every product it holds a class in**
+(`refuse_recent_poster`, `application/funds.rs`, H-3).
 
 ### What was rejected
 
@@ -667,7 +693,7 @@ this section covers only how the kind sits in the consilium.
   `max(requested, now + 24h)` (or `now` if the product has no holders), and enqueues one
   `FeePolicyNotice` to every holder — in the transaction that records the effect
   (`executed_fee_policy_change_id`). The sweeper then promotes the change into
-  `fee_policies` once the moment arrives. The same execution gates apply as to a payout:
+  `fee_policies` once the moment arrives. The same execution gates apply as to every kind:
   hash re-verified, quorum re-checked against the live roster, roster change voids,
   staleness grace.
 - **Every non-approval verdict** — rejection, expiry, withdrawal, voiding after a roster
@@ -707,9 +733,17 @@ quorum and never one administrator's write.
   written by the same `balance::seed_fund_capital` the RPC used to call directly; it is
   idempotent by the reference, so the carrying vote and the sweeper cannot book twice, and a
   re-execution repairs a first attempt that died between the deposit and the subscription.
-  `SeedCapital` (the RPC) now only OPENS this consilium, with the caller as depositor and
-  `expected_amount` required; until the contract step adds `depositor_user_id` and
-  `consilium_id` to the wire, the consilium id is in the log line.
+  `SeedCapital` (the RPC, `CapitalManage` admits to the door; the caller must hold a seat —
+  checked FIRST at open, ahead of the chain and deposit-log gates, so an admin with no seat
+  cannot probe them) OPENS this consilium over `depositor_user_id` (resolved like any admin
+  target; empty = the caller) with `expected_amount` required, and answers
+  `{recorded: false, amount, consilium_id}` (`balance.proto`).
+- **Open gates for a grant:** a wired mailer, a settled roster, an active mirrored user, the
+  allocation registered, its price fresh (`open_holder_grant`); execution re-runs the cap,
+  NAV and active-user checks through `grant_units`, and the backing stays `cash`. A holder
+  LEAVES only by redemption at the allocation's derived NAV; `IssueUnits`/`RetireUnits` and
+  every registry write refuse a reserved slug (`refuse_on_reserved`). Effect ids on the
+  wire: `executed_issuance_id`, `executed_subscription_id` (`consilium.proto`).
 - **Source claim**, both: the allocation's own `service:<fee|fund>`, so one open grant per
   reserved allocation, one open seed, serialized against a payment out of that claim.
 - **Mail.** Both borrow `PAYMENT_APPROVAL` for the invitation and `PAYOUT_OUTCOME` for the

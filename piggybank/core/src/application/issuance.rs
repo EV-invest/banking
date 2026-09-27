@@ -15,8 +15,8 @@
 //! [`retire_units`] is the mint's mirror — a holder's units burnt with no cash leg —
 //! with a Read-First on what the holder has free and a closed-door gate that `force`
 //! overrides. The hand-over out of the company's stake (`TransferCompanyStake`) is
-//! retired with the company holder itself (#245): the RPC answers `FAILED_PRECONDITION`,
-//! and the rows it wrote stay readable.
+//! retired with the company holder itself (#245): the RPC is gone from the contract, and
+//! the rows it wrote stay readable.
 //!
 //! **The reserved allocations are not the operator's to mint.** `fee` and `fund` are the
 //! platform's own money, held by people (#245); a unit of either dilutes every holder

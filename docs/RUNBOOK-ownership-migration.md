@@ -28,6 +28,14 @@ reports `already applied`.
 
 There is **no rollback** once the chain has landed. Hence the dry run and the `yes`.
 
+Nor is the *tag* the ordinary rollback the spec assumes. The hub runs `sqlx::migrate!()`
+without `ignore_missing`: once the new pod has applied 0044/0045, a pod of the previous
+image refuses to boot (`VersionMissing(44)`) — the schema itself is backward compatible, the
+version ledger is not. Rolling the image back therefore needs
+`DELETE FROM _sqlx_migrations WHERE version IN (44, 45)` first, and only while no
+`holder_grant` / `seed_capital` consilium row exists (the old `ConsiliumKind` parser would
+fail on it). The release is effectively one-way from the moment the new pod migrates.
+
 ## Input: `holders.json`
 
 ```json
@@ -64,24 +72,28 @@ There is **no rollback** once the chain has landed. Hence the dry run and the `y
 3. **Snapshot before**: `/cabinet/admin/treasury` (the `retired` figures and each
    allocation's line) and the C-0 snapshot. The outbox must be drained (no parked rows,
    nothing pending on `fund` / `fee` — the command refuses in-flight pendings).
-4. Copy the table into the pod and **dry-run**. The classifier blocks `kubectl exec` on
-   production from a session — the operator runs these by hand:
+4. Feed the table over stdin and **dry-run**. The classifier blocks `kubectl exec` on
+   production from a session — the operator runs these by hand. Not `kubectl cp`: the
+   image is the binaries plus `fakeNss` (`flake.nix`, `containers.piggybank`) — no `tar`,
+   no `/tmp`, no `PATH` — so the file goes in as stdin and the binary is called by its
+   absolute path; the pod has two containers, so `-c` names the hub's
+   (`ev-banking-piggybank`, `gitops/clusters/rpi5/apps/banking/manifests.yaml`):
 
    ```sh
-   kubectl -n apps cp holders.json deploy/ev-banking-piggybank:/tmp/holders.json -c piggybank
-   kubectl -n apps exec deploy/ev-banking-piggybank -c piggybank -- \
-     piggybank migrate-ownership --holders /tmp/holders.json --dry-run
+   kubectl -n apps exec -i deploy/ev-banking-piggybank -c ev-banking-piggybank -- \
+     /bin/piggybank migrate-ownership --holders /dev/stdin --dry-run < holders.json
    ```
 
    The command uses the pod's own env (`DATABASE_URL`, `TIGERBEETLE_*`) and touches
    neither gRPC nor the relay; the server keeps running beside it. Read the plan: the
    retired balances, `fee`'s value (cash + priced fee classes), every holder's units, the
    company stakes, and `ledger before`. It must match the snapshot.
-5. **Run** — the owner confirms with `yes` on stdin (or `--yes` when scripted):
+5. **Run** — with the table on stdin the interactive `yes` would read EOF and cancel, so
+   the confirmation is the flag; the owner has read the dry run:
 
    ```sh
-   kubectl -n apps exec -it deploy/ev-banking-piggybank -c piggybank -- \
-     piggybank migrate-ownership --holders /tmp/holders.json [--company retire]
+   kubectl -n apps exec -i deploy/ev-banking-piggybank -c ev-banking-piggybank -- \
+     /bin/piggybank migrate-ownership --holders /dev/stdin --yes [--company retire] < holders.json
    ```
 
 6. Read `=== applied ===`, `=== ledger after ===` and `=== reconciliation ===`. Exit 0
