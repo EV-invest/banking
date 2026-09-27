@@ -905,7 +905,9 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 	}
 }
 
-// Replays `CapitalSeeded` onto the retired fund claim (no producer; C-3 reshapes seed).
+/// A deposit credits the party the chain named; a `CapitalSeeded` row — no producer since
+/// #234, retired with #245 — still replays onto the retired `Fund` claim it was posted
+/// against, so an outbox row written before the deploy posts under its original id.
 #[allow(deprecated)]
 fn plan_balance(event: LedgerEvent, event_tid: u128, reference: u128) -> PlannedOp {
 	match event {
@@ -1818,6 +1820,46 @@ mod tests {
 		};
 
 		assert!(plan_payment(event, aggregate_id, aggregate_id.as_u128()).is_empty());
+	}
+
+	// A seed is a deposit to the depositor plus an ordinary subscription (#245): the
+	// balance plan credits the person's claim and nothing else. A `capital_seeded` row
+	// written before #234 retired the event — still parked, or replayed by an operator —
+	// must keep planning onto the retired `Fund` claim under the same id, or TigerBeetle
+	// would refuse the redelivery as a different credit account and park it for good.
+	#[test]
+	#[allow(deprecated)]
+	fn a_deposit_credits_the_depositor_and_a_legacy_seed_payload_the_retired_fund_claim() {
+		let depositor = UserId::new();
+		let event_tid = Uuid::new_v4().as_u128();
+		let deposit = plan_balance(
+			LedgerEvent::Deposited {
+				party: Party::User(depositor),
+				network: domain::money::Network::Bep20,
+				amount: Usdt::parse_decimal("250.5").unwrap(),
+			},
+			event_tid,
+			7,
+		);
+		let LedgerAction::Post(leg) = &deposit.action else { panic!("a deposit is one posted leg") };
+		assert_eq!(deposit.role, "deposit");
+		assert_eq!(leg.credit, LedgerAccountKey::UserClaim(depositor), "the depositor's own claim, never the fund's");
+		assert_eq!(leg.debit, LedgerAccountKey::CryptoWallet(domain::money::Network::Bep20));
+		assert_eq!(leg.code, TransferCode::Deposit);
+
+		let legacy = serde_json::to_string(&LedgerEvent::CapitalSeeded {
+			network: domain::money::Network::Bep20,
+			amount: Usdt::parse_decimal("1000").unwrap(),
+		})
+		.unwrap();
+		assert!(legacy.contains(r#""type":"capital_seeded""#), "the wire tag the old rows carry: {legacy}");
+		let replay = plan_balance(serde_json::from_str(&legacy).unwrap(), event_tid, 7);
+		let LedgerAction::Post(leg) = &replay.action else { panic!("a seed is one posted leg") };
+		assert_eq!(replay.role, "seed");
+		assert_eq!(leg.id, event_tid, "same deterministic id as the original post");
+		assert_eq!(leg.credit, LedgerAccountKey::Fund, "a legacy seed replays onto the retired fund claim");
+		assert_eq!(leg.code, TransferCode::SeedCapital);
+		assert_eq!(leg.amount, Usdt::parse_decimal("1000").unwrap().base_units());
 	}
 
 	// A fee settlement pays the product's claim into the FEE ALLOCATION's, burn-first;

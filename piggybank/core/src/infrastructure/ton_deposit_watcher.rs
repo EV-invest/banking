@@ -10,6 +10,13 @@
 //! the relay then posts `Dr wallet:ton / Cr user-claim`; the watcher never touches
 //! TigerBeetle, so money is still written last, in the relay.
 //!
+//! USDT arriving at the **treasury** from outside is watched but never credited (#245):
+//! the chain names the wallet, not the person, and every claim needs a holder. It is
+//! reported at `error!` with a counter (`telemetry`) — and by the treasury drift watch
+//! as a surplus until an operator attributes it with `SeedCapital` (a deposit to that
+//! person, and their subscription into `fund`), quoting `<hash>:piggybank` as the
+//! reference — the same shape the custody adapter resolves back to the treasury.
+//!
 //! **Finality.** TON is fast and categorical: toncenter only surfaces transactions from
 //! committed masterchain blocks, so anything `/jetton/transfers` returns is already final —
 //! there is no N-confirmations counter (unlike BEP20).
@@ -31,7 +38,11 @@
 //! watermark up to `now - LOOKBACK_SECS` (see [`next_watermark`]), which is where a rail
 //! carrying traffic already sits.
 
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{
+	collections::HashSet,
+	sync::{Arc, Mutex},
+	time::Duration,
+};
 
 use domain::{
 	balance::Party,
@@ -49,6 +60,7 @@ use crate::{
 	infrastructure::{
 		deposits::PgDeposits,
 		rails::{WatcherError, now_unix_secs, repo},
+		telemetry,
 		ton_custody::TonCustody,
 		ton_rpc::{JettonDeposit, TonRpc},
 	},
@@ -58,13 +70,14 @@ use crate::{
 ///
 /// The TON sweep sends USDT **from a user's derived deposit address to the treasury**, and
 /// that dollar is already counted in `wallet:ton` from the moment the deposit was credited —
-/// the ledger tracks what we control, not which of our wallets holds it. Crediting the
-/// arrival again would post a second `Dr wallet:ton / Cr fund` for one dollar, inventing
-/// capital and breaking the global `sum(custody) == sum(claims)` invariant.
+/// the ledger tracks what we control, not which of our wallets holds it. Reporting the
+/// arrival as unattributed would ask an operator to seed it, and that seed would post a
+/// second `Dr wallet:ton` for one dollar, inventing money and breaking the global
+/// `sum(custody) == sum(claims)` invariant.
 ///
 /// A missing source is treated as NOT external: the indexer omits it for a mint, and the
-/// safe failure here is to skip a real injection (visible, and recordable by hand) rather
-/// than to double-count one.
+/// safe failure here is to stay quiet about a real injection (visible on the drift watch,
+/// and seedable by hand) rather than to prompt a double count.
 ///
 /// `ours` is every wallet we control on this rail, lowercased raw `0:<hex>` — derived
 /// deposit addresses, the gas station, and the treasury itself.
@@ -92,9 +105,17 @@ pub struct TonDepositWatcher {
 	relay: Arc<Notify>,
 	rpc: TonRpc,
 	config: TonConfig,
-	/// Resolves the treasury + gas-station addresses so an operator's out-of-band top-up of
-	/// the hot wallet becomes a ledger fact. `None` leaves the watcher user-deposits-only.
+	/// Resolves the treasury + gas-station addresses so an out-of-band arrival on the hot
+	/// wallet is seen and reported (never credited — see the module doc) and the sweep is
+	/// told apart from it. `None` leaves the watcher user-deposits-only.
 	custody: Option<Arc<TonCustody>>,
+	/// Treasury arrivals already reported this process. The cycle re-reads
+	/// `LOOKBACK_SECS` below the watermark every time, so without this one arrival would
+	/// be filed as an incident on every poll for fifteen minutes; with it, once per process
+	/// (a restart inside the window re-reports it once more, which is the honest side to
+	/// err on). Bounded by the traffic a hot wallet receives from outside — operator
+	/// top-ups, not user deposits.
+	reported_treasury_arrivals: Mutex<HashSet<String>>,
 }
 
 impl TonDepositWatcher {
@@ -108,6 +129,7 @@ impl TonDepositWatcher {
 			rpc,
 			config,
 			custody,
+			reported_treasury_arrivals: Mutex::new(HashSet::new()),
 		}
 	}
 
@@ -164,14 +186,13 @@ impl TonDepositWatcher {
 		}
 	}
 
-	// A treasury arrival still credits the retired fund party until C-3 rewires the watchers.
-	#[allow(deprecated)]
 	async fn scan_once(&self) -> Result<(), WatcherError> {
 		let network = Network::Ton;
 		let cursor = self.cursor(network).await?;
 		let watched = self.watched_addresses(network).await?;
 		// The treasury is drained as one more owner: jettons arriving there from outside our
-		// own wallets are the fund's capital, and nothing else in the system would record them.
+		// own wallets are money the ledger does not describe, and nothing else in the system
+		// would notice them (the drift watch reports the surplus, not the transfer).
 		let (treasury, gas_station) = match self.treasury_addresses().await {
 			Some((treasury, gas_station)) => (Some(treasury), gas_station),
 			None => (None, None),
@@ -181,10 +202,10 @@ impl TonDepositWatcher {
 			self.set_cursor(network, now_unix_secs()).await?;
 			return Ok(());
 		}
-		// `None` marks the treasury owner — its arrivals credit the fund, not a user.
+		// `None` marks the treasury owner — its arrivals are reported, never credited.
 		let owners: Vec<(&String, Option<UserId>)> = watched.iter().map(|(a, u)| (a, Some(*u))).chain(treasury.iter().map(|t| (t, None))).collect();
 		// Every wallet we control, folded to the one case the indexer's `source` is folded to.
-		// The treasury credit is gated on a sender outside this set.
+		// The treasury report is gated on a sender outside this set.
 		let ours: HashSet<String> = watched
 			.iter()
 			.map(|(a, _)| a.to_lowercase())
@@ -225,13 +246,12 @@ impl TonDepositWatcher {
 					// ignore exactly as for one we credit, or the cursor would stall on it.
 					high = high.max(transfer.now);
 					match user {
-						Some(user) => self.credit(Party::User(*user), network, transfer).await?,
+						Some(user) => self.credit(*user, network, transfer).await?,
 						// The sweep also lands here — from OUR derived address — and that dollar is
-						// already `wallet:ton` behind a user's claim. Crediting it would invent
-						// capital and break `sum(custody) == sum(claims)`; only outside money counts.
-						None if is_external_source(transfer.source.as_deref(), &ours) => {
-							self.credit(Party::Piggybank, network, transfer).await?;
-						}
+						// already `wallet:ton` behind a user's claim; only outside money is news, and
+						// even that is reported rather than credited (#245): the chain names the
+						// wallet, not the person, and a claim needs a holder.
+						None if is_external_source(transfer.source.as_deref(), &ours) => self.report_treasury_arrival(network, transfer)?,
 						None => {}
 					}
 				}
@@ -264,43 +284,46 @@ impl TonDepositWatcher {
 		Ok(())
 	}
 
-	// Same: the retired parties keep their discriminators and refusals until C-3/C-4.
-	#[allow(deprecated)]
-	async fn credit(&self, party: Party, network: Network, transfer: &JettonDeposit) -> Result<(), WatcherError> {
+	async fn credit(&self, user: UserId, network: Network, transfer: &JettonDeposit) -> Result<(), WatcherError> {
 		let amount = Usdt::from_onchain(network, transfer.amount).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {
 			return Ok(());
 		}
-		// The recipient discriminator below. `piggybank` is a reserved word here: it is not a
-		// uuid, so it can never collide with a user's key for the same hash. Anything recording
-		// a treasury arrival by hand MUST use this same shape, or the two references describe
-		// one transfer under two keys and the dollar is credited twice.
-		let recipient = match &party {
-			Party::User(user) => user.to_string(),
-			Party::Piggybank => "piggybank".to_string(),
-			Party::Service(service) => service.as_str().to_owned(),
-			// The fee claim holds money the fund EARNED off dollars already on the ledger; a
-			// chain arrival is new custody. Refusing here rather than minting a discriminator
-			// keeps `record_deposit`'s refusal from being reachable only by a caller that first
-			// invented a `tx_ref` shape for a deposit that must not exist.
-			Party::Revenue => return Err(WatcherError::Credit("a chain deposit cannot credit the fee claim".into())),
-		};
-		let is_capital = matches!(party, Party::Piggybank);
 		// Disambiguate per recipient like the BEP20/TRC20 watchers: `deposits.tx_ref` is a global
 		// key, so compose the on-chain transaction hash with the credited user. In practice each
 		// incoming jetton transfer is its own transaction on the recipient's jetton wallet (so the
 		// hash is already unique), but the user id makes two transfers under one hash — an indexer
 		// quirk — impossible to collapse across users. The user id (a 36-char uuid) keeps the key
 		// well under `TxRef`'s length cap regardless of the indexer's hash encoding, and is stable
-		// across re-scans (the address→user map is fixed), so idempotency holds.
+		// across re-scans (the address→user map is fixed), so idempotency holds. A treasury
+		// arrival recorded by hand uses the reserved `piggybank` word in this position instead
+		// (`ton_custody::PIGGYBANK_RECIPIENT`) — never a uuid, so the two can never collide.
+		let recipient = user.to_string();
 		let tx_ref = TxRef::parse(&format!("{}:{recipient}", transfer.tx_hash)).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, party, network, amount)
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
-		if newly && is_capital {
-			info!(tx = %transfer.tx_hash, source = transfer.source.as_deref().unwrap_or("?"), "ton deposit watcher: credited an out-of-band treasury top-up as fund capital");
-		} else if newly {
+		if newly {
 			info!(recipient, tx = %transfer.tx_hash, "ton deposit watcher: credited on-chain jetton USDT deposit");
+		}
+		Ok(())
+	}
+
+	/// File an outside arrival on the treasury as an incident, once per process: the
+	/// counter and the `error!` live in `telemetry`, this only dedupes across the
+	/// `LOOKBACK_SECS` re-scans. Nothing is written to the ledger — see the module doc.
+	fn report_treasury_arrival(&self, network: Network, transfer: &JettonDeposit) -> Result<(), WatcherError> {
+		let amount = Usdt::from_onchain(network, transfer.amount).map_err(|e| WatcherError::Decode(e.to_string()))?;
+		if amount.is_zero() {
+			return Ok(());
+		}
+		let first_sighting = self
+			.reported_treasury_arrivals
+			.lock()
+			.unwrap_or_else(std::sync::PoisonError::into_inner)
+			.insert(transfer.tx_hash.clone());
+		if first_sighting {
+			telemetry::note_unattributed_treasury_inflow(network.as_str(), &transfer.tx_hash, transfer.source.as_deref().unwrap_or("?"), &amount.to_decimal_string());
 		}
 		Ok(())
 	}
@@ -379,7 +402,8 @@ mod tests {
 
 	/// The invariant-critical case, mirroring the EVM watcher's. The sweep arrives at the
 	/// treasury looking exactly like an operator top-up, and only the sender separates them:
-	/// credit a consolidation and one dollar is booked twice as fund capital.
+	/// report a consolidation as an unattributed inflow and an operator seeds a dollar that
+	/// is already on the ledger.
 	#[test]
 	fn only_a_sender_outside_our_own_wallets_is_new_capital() {
 		let deposit_address = "0:aaaa000000000000000000000000000000000000000000000000000000000001";
@@ -391,7 +415,8 @@ mod tests {
 		assert!(!is_external_source(Some(deposit_address), &ours));
 		assert!(!is_external_source(Some(gas_station), &ours));
 		assert!(!is_external_source(Some(treasury), &ours));
-		// The operator's own wallet funding the rail — the one arrival that is new capital.
+		// The operator's own wallet funding the rail — the one arrival that is new money,
+		// reported for the operator to seed under their own name.
 		assert!(is_external_source(Some("0:7d133d4e425c8e00de015513a44e66e6d163b21e71720aec7579965e5de28c55"), &ours));
 		// A source the indexer omitted is never assumed external: skipping a real injection is
 		// recoverable by hand, double-counting one is not.

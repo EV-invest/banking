@@ -9,10 +9,21 @@
 //! performance fee. The relay posts the cash move and the unit mint, then the projection.
 
 use async_trait::async_trait;
-use domain::{architecture::Repository, error::DomainError, subscriptions::Subscription};
+use domain::{
+	architecture::Repository,
+	balance::ServiceId,
+	error::DomainError,
+	money::{Nav, Shares, Usdt},
+	subscriptions::{Subscription, SubscriptionId},
+	users::UserId,
+};
 use sqlx::{PgConnection, PgPool};
+use uuid::Uuid;
 
-use crate::{infrastructure::outbox, ports::SubscriptionRepository};
+use crate::{
+	infrastructure::{fees::parse_units, outbox},
+	ports::SubscriptionRepository,
+};
 
 pub struct PgSubscriptions {
 	pool: PgPool,
@@ -30,6 +41,29 @@ impl Repository for PgSubscriptions {
 
 fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())
+}
+
+#[derive(sqlx::FromRow)]
+struct SubscriptionRow {
+	id: Uuid,
+	user_id: Uuid,
+	service: String,
+	cash: String,
+	nav: String,
+	units: String,
+}
+
+impl SubscriptionRow {
+	fn into_domain(self) -> Result<Subscription, DomainError> {
+		Ok(Subscription::rehydrate(
+			SubscriptionId::from_raw(self.id),
+			UserId::from_raw(self.user_id),
+			ServiceId::parse(&self.service)?,
+			Usdt::from_base_units(parse_units(&self.cash, "subscription cash")?),
+			Nav::from_base_units(parse_units(&self.nav, "subscription nav")?),
+			Shares::from_base_units(parse_units(&self.units, "subscription units")?),
+		))
+	}
 }
 
 async fn insert_row(conn: &mut PgConnection, subscription: &Subscription) -> Result<(), DomainError> {
@@ -57,5 +91,14 @@ impl SubscriptionRepository for PgSubscriptions {
 		outbox::drain_to_outbox(&mut tx, subscription, true).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(())
+	}
+
+	async fn find_by_id(&self, id: SubscriptionId) -> Result<Option<Subscription>, DomainError> {
+		let row = sqlx::query_as::<_, SubscriptionRow>("SELECT id, user_id, service, cash, nav, units FROM subscriptions WHERE id = $1")
+			.bind(id.raw())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		row.map(SubscriptionRow::into_domain).transpose()
 	}
 }

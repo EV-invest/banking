@@ -1,5 +1,6 @@
 //! `balance` context — company-money RPCs (all admin-gated): treasury reads,
-//! chain-proven arrival recording (a deposit, or the fund's own capital), the operator
+//! chain-proven arrival recording (a deposit, or the caller's seed of the `fund`
+//! allocation), the operator
 //! withdrawal lifecycle, and fund valuation + redemption settlement.
 //!
 //! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large
@@ -8,7 +9,7 @@
 
 use domain::{
 	authz::Permission,
-	balance::ServiceId,
+	balance::{Party, ServiceId},
 	money::{Network, TxRef, Usdt},
 };
 use evbanking_auth::claims_of;
@@ -65,27 +66,46 @@ impl BalanceService for BalanceSvc {
 		}))
 	}
 
+	/// Seed the platform's capital: the caller's chain-proven transfer into the treasury,
+	/// booked as THEIR deposit and subscribed into the `fund` allocation (#245).
+	///
+	/// The depositor is the caller: the wire carries no `depositor_user_id` yet (the
+	/// contract step of #245 adds one so an owner can attribute another person's
+	/// transfer), and an operator who seeds under their own name is the honest default —
+	/// the units land with the person who pressed the button, never on a claim nobody
+	/// holds.
 	async fn seed_capital(&self, request: Request<pb::SeedCapitalRequest>) -> Result<Response<pb::SeedCapitalResponse>, Status> {
 		require_permission(&self.state, &request, Permission::CapitalManage).await?;
+		let depositor = caller_id(&request)?;
 		let req = request.into_inner();
 		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
 		let network = Network::parse(&req.network).map_err(map_err)?;
 		// Empty means "whatever the chain says"; a value is an assertion the chain must match.
 		let expected_amount = optional(&req.expected_amount).map(Usdt::parse_decimal).transpose().map_err(map_err)?;
-		let arrival = balance_app::seed_fund_capital(
-			self.state.deposits.as_ref(),
-			self.state.custody.as_ref(),
-			self.state.deposit_addresses.as_ref(),
-			&self.state.relay_notify,
+		let seeded = balance_app::seed_fund_capital(
+			&balance_app::SeedPorts {
+				deposits: self.state.deposits.as_ref(),
+				custody: self.state.custody.as_ref(),
+				addresses: self.state.deposit_addresses.as_ref(),
+				subscriptions: self.state.subscriptions.as_ref(),
+				funds: funds_app::FundPorts {
+					allocations: self.state.allocations.as_ref(),
+					ledger: self.state.ledger.as_ref(),
+					nav: self.state.nav.as_ref(),
+					relay: &self.state.relay_notify,
+				},
+			},
+			depositor,
 			tx_ref,
 			network,
 			expected_amount,
+			unix_now(),
 		)
 		.await
 		.map_err(map_err)?;
 		Ok(Response::new(pb::SeedCapitalResponse {
-			recorded: arrival.recorded,
-			amount: arrival.amount.to_decimal_string(),
+			recorded: seeded.recorded,
+			amount: seeded.amount.to_decimal_string(),
 		}))
 	}
 
@@ -107,11 +127,14 @@ impl BalanceService for BalanceSvc {
 		)
 		.await
 		.map_err(map_err)?;
+		// Always a person: the chain names a deposit address's owner, and a treasury
+		// arrival is refused upstream (it is attributed by hand, through `SeedCapital`).
+		let party = Party::User(arrival.user);
 		Ok(Response::new(pb::RecordDepositResponse {
 			recorded: arrival.recorded,
 			amount: arrival.amount.to_decimal_string(),
-			party_kind: arrival.party.kind_str().to_owned(),
-			party_id: arrival.party.id_str().unwrap_or_default(),
+			party_kind: party.kind_str().to_owned(),
+			party_id: party.id_str().unwrap_or_default(),
 		}))
 	}
 

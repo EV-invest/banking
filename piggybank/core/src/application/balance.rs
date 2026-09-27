@@ -1,5 +1,5 @@
-//! Balance use cases — record chain-proven arrivals (a user's deposit, the fund's own
-//! capital), read the treasury and the fund's revenue.
+//! Balance use cases — record chain-proven arrivals (a user's deposit, the capital a
+//! person seeds the platform with), read the treasury and the fund's revenue.
 //!
 //! Commands validate and hand the fact to the [`Deposits`] port, whose adapter is
 //! its own atomic unit (one Postgres transaction: the gate row + the outbox event),
@@ -10,15 +10,26 @@
 //! chain transaction and the amount and the credited party are read back from it. There
 //! is no path that credits a claim from a number an operator typed — the last one
 //! (`SeedCapital` with a free amount and no dedup key) was removed in issue #234.
+//!
+//! Nothing here credits a claim nobody holds (#245). USDT that reaches a treasury hot
+//! wallet from outside is *somebody's* — the person who sent it — and is booked as their
+//! deposit, followed by their subscription into the `fund` allocation
+//! ([`seed_fund_capital`]); the retired fund-owned party is never written again.
 
 use domain::{
 	balance::{LedgerAccountKey, Party},
 	error::DomainError,
 	money::{Network, TxRef, Usdt},
+	subscriptions::{Subscription, SubscriptionId},
+	users::UserId,
 };
 use tokio::sync::Notify;
+use uuid::Uuid;
 
-use crate::ports::{Custody, Deposits, custody::InboundTransfer, deposit_addresses::DepositAddresses, ledger::Ledger};
+use crate::{
+	application::funds::{self as funds_app, FundPorts},
+	ports::{Custody, Deposits, SubscriptionRepository, custody::InboundTransfer, deposit_addresses::DepositAddresses, ledger::Ledger},
+};
 
 /// Per-rail on-chain liquidity (the treasury / Layer 2). `custody` is
 /// TigerBeetle-authoritative; the funding fields are the operator's chain view,
@@ -65,7 +76,7 @@ pub struct Treasury {
 /// Record an on-chain deposit, **idempotent by `tx_ref`** (see [`Deposits::record`]).
 /// Returns `true` if newly recorded, `false` for a duplicate; the relay is nudged
 /// only when a new event was committed.
-// The retired fee party is still refused by name until C-4 removes it from the wire.
+// The retired parties are refused by name until C-4/C-9 remove them from the type.
 #[allow(deprecated)]
 pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError> {
 	if amount.is_zero() {
@@ -80,17 +91,42 @@ pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxR
 	if matches!(party, Party::Revenue) {
 		return Err(DomainError::Validation("the fee claim is credited by settling a fee, never by a deposit".into()));
 	}
+	// The retired `Fund` claim has nobody behind it (#245). Capital is a person's deposit
+	// plus their subscription into the `fund` allocation — `seed_fund_capital` — so no
+	// caller, however privileged, can put a dollar on a claim without a holder.
+	if matches!(party, Party::Piggybank) {
+		return Err(DomainError::Validation(
+			"the fund's capital is seeded by its depositor — record it with SeedCapital, naming who sent it".into(),
+		));
+	}
 	let recorded = deposits.record(tx_ref, party, network, amount).await?;
 	if recorded {
 		relay.notify_one();
 	}
 	Ok(recorded)
 }
+
+/// Whose money a confirmed transfer is, decided by the address it landed on.
+///
+/// An application-layer answer rather than a [`Party`]: the treasury is not a party
+/// anyone is credited as — its arrivals are attributed to a person by the operator who
+/// knows who sent them (see [`seed_fund_capital`]) or refused (see
+/// [`record_verified_arrival`]) — so the type that names it cannot be the type a deposit
+/// is recorded against.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Arrival {
+	/// Landed on this user's derived deposit address: their deposit.
+	User(UserId),
+	/// Landed on the rail's treasury hot wallet from outside every wallet we control.
+	Treasury,
+}
+
 /// What a verified arrival turned out to be, once the chain had its say.
 #[derive(Debug)]
 pub struct VerifiedArrival {
 	pub recorded: bool,
-	pub party: Party,
+	/// The person whose claim the deposit credits.
+	pub user: UserId,
 	pub amount: Usdt,
 }
 
@@ -104,6 +140,10 @@ pub struct VerifiedArrival {
 /// Read-First against the chain, then the ordinary idempotent `record_deposit`, so a
 /// hand-verified arrival and a scanned one collapse onto the same `tx_ref` and one transfer
 /// can never be booked twice.
+///
+/// A transfer that landed on the TREASURY is refused here: the chain proves the dollar
+/// arrived but not whose it is, and this path credits only whom the chain names. The
+/// operator who knows the sender attributes it with `SeedCapital` instead.
 pub async fn record_verified_arrival(
 	deposits: &dyn Deposits,
 	custody: &dyn Custody,
@@ -113,48 +153,132 @@ pub async fn record_verified_arrival(
 	network: Network,
 	expected_amount: Option<Usdt>,
 ) -> Result<VerifiedArrival, DomainError> {
-	let (party, transfer) = verify_arrival(custody, addresses, network, &tx_ref, expected_amount).await?;
-	let recorded = record_deposit(deposits, relay, tx_ref, party.clone(), network, transfer.amount).await?;
+	let (arrival, transfer) = verify_arrival(custody, addresses, network, &tx_ref, expected_amount).await?;
+	let user = match arrival {
+		Arrival::User(user) => user,
+		Arrival::Treasury => {
+			return Err(DomainError::Validation(format!(
+				"{} is the {network} treasury, so the chain cannot say whose deposit this is — attribute it to its sender with SeedCapital",
+				transfer.to
+			)));
+		}
+	};
+	let recorded = record_deposit(deposits, relay, tx_ref, Party::User(user), network, transfer.amount).await?;
 	Ok(VerifiedArrival {
 		recorded,
-		party,
+		user,
 		amount: transfer.amount,
 	})
 }
 
-/// Record the fund's own capital, proven against the chain the same way as any arrival.
+/// The driven ports a seed borrows: the arrival's evidence (chain + address ownership),
+/// the deposit gate it is recorded through, the dealing ports the subscription is priced
+/// and gated with, and the store it is opened in.
+pub struct SeedPorts<'a> {
+	pub deposits: &'a dyn Deposits,
+	pub custody: &'a dyn Custody,
+	pub addresses: &'a dyn DepositAddresses,
+	pub subscriptions: &'a dyn SubscriptionRepository,
+	pub funds: FundPorts<'a>,
+}
+
+/// What a seed did: whether THIS call recorded the arrival (`false` is the idempotent
+/// repeat), the amount the chain reported, and the subscription the depositor's units
+/// come from — `None` on a repeat that found the mint already there, `Some` on the one
+/// that had to open it (see [`seed_fund_capital`]).
+#[derive(Debug)]
+pub struct SeededCapital {
+	pub recorded: bool,
+	pub amount: Usdt,
+	pub subscription: Option<Subscription>,
+}
+
+/// Seed the platform's capital: a chain-proven arrival on the treasury, booked as
+/// `depositor`'s deposit and at once subscribed into the `fund` allocation (#245).
 ///
-/// [`record_verified_arrival`] with one more assertion: the transfer the reference names
-/// must be the fund's money — an external sender paying INTO the rail's treasury. A transfer
-/// that landed on a user's deposit address is that user's deposit, and booking it as
-/// capital would hand the fund a dollar it owes to someone; it is refused here and pointed
-/// at `RecordDeposit` rather than silently recorded under the party the chain names, so an
-/// operator who asserted "capital" learns the assertion was wrong. The sweep is refused by
-/// the shared attribution, as everywhere.
-// Seed still credits the retired fund claim; C-3 makes it a deposit + subscription into `fund`.
-#[allow(deprecated)]
+/// [`record_verified_arrival`]'s evidence with the opposite verdict on where the money
+/// landed: the transfer the reference names must have reached the rail's treasury from an
+/// external sender. One that landed on a user's deposit address is that user's deposit —
+/// booking it under someone else would hand the depositor a dollar owed to that user — so
+/// it is refused and pointed at `RecordDeposit`. The sweep is refused by the shared
+/// attribution, as everywhere.
+///
+/// Two ordinary facts, no new kind of money move: the deposit (`Dr wallet:<net> /
+/// Cr user:<depositor>`) and a subscription into `fund` at its computed NAV, exactly the
+/// legs an investor's subscription posts. The relay drains them in commit order, so the
+/// cash leg finds the deposit already credited; the subscription is therefore opened
+/// **without** the Read-First balance check an investor's subscribe runs (the deposit is
+/// the balance, and it is not on the ledger yet) — TigerBeetle's non-negative flag stays
+/// the backstop, and a parked cash leg leaves the money on the depositor's own claim,
+/// where every dollar still has a holder.
+///
+/// Idempotent by `tx_ref`: the deposit gate admits a reference once, and the subscription's
+/// id is derived from the same reference, so a double mint is impossible even under a
+/// race. A repeat reports `recorded: false` and normally mints nothing — unless the first
+/// call recorded the deposit and died before opening the subscription, which is the one
+/// state a repeat repairs: the mint is missing under its deterministic id, the deposit is
+/// this depositor's, so the subscription is opened now, priced at the current NAV and
+/// through the same gates. A reference recorded under another person's name is refused
+/// rather than minted to the caller.
+///
+/// The subscription is priced and gated **before** the deposit is recorded, so a `fund`
+/// that is not dealing or a stale price refuses with nothing written. The one gate an
+/// investor's subscribe runs that this does not is the catalog's access level: `fund` is
+/// hidden from everyone by design, and the person who seeds it becomes its holder by the
+/// act itself — the operator's permission to seed is the admission.
 pub async fn seed_fund_capital(
-	deposits: &dyn Deposits,
-	custody: &dyn Custody,
-	addresses: &dyn DepositAddresses,
-	relay: &Notify,
+	ports: &SeedPorts<'_>,
+	depositor: UserId,
 	tx_ref: TxRef,
 	network: Network,
 	expected_amount: Option<Usdt>,
-) -> Result<VerifiedArrival, DomainError> {
-	let (party, transfer) = verify_arrival(custody, addresses, network, &tx_ref, expected_amount).await?;
-	if !matches!(party, Party::Piggybank) {
+	now_unix: i64,
+) -> Result<SeededCapital, DomainError> {
+	let (arrival, transfer) = verify_arrival(ports.custody, ports.addresses, network, &tx_ref, expected_amount).await?;
+	if let Arrival::User(_) = arrival {
 		return Err(DomainError::Validation(format!(
-			"{} is a user's deposit address, so this transfer is that user's deposit, not fund capital — record it with RecordDeposit",
+			"{} is a user's deposit address, so this transfer is that user's deposit, not seed capital — record it with RecordDeposit",
 			transfer.to
 		)));
 	}
-	let recorded = record_deposit(deposits, relay, tx_ref, party.clone(), network, transfer.amount).await?;
-	Ok(VerifiedArrival {
+	let subscription_id = seed_subscription_id(&tx_ref);
+	let mut subscription = funds_app::price_fund_seed(&ports.funds, subscription_id, depositor, transfer.amount, now_unix).await?;
+	let recorded = record_deposit(ports.deposits, ports.funds.relay, tx_ref.clone(), Party::User(depositor), network, transfer.amount).await?;
+	if !recorded {
+		// The deposit and the subscription are two commits: a process that died between
+		// them left the cash on the depositor's own claim with no units against it. A repeat
+		// is where that gets fixed — the id is a function of the reference, so the mint the
+		// first call meant to open is the one looked up here, and one exists at most once.
+		if ports.subscriptions.find_by_id(subscription_id).await?.is_some() {
+			return Ok(SeededCapital {
+				recorded: false,
+				amount: transfer.amount,
+				subscription: None,
+			});
+		}
+		// Only the person the deposit was booked to can be minted against it: opening the
+		// subscription under another name would pull that person's own cash into `fund`
+		// and leave the first depositor's on their claim.
+		if !ports.deposits.list_by_user(depositor).await?.iter().any(|deposit| deposit.tx_ref == tx_ref) {
+			return Err(DomainError::Conflict(format!(
+				"{} was already recorded as another person's deposit — its fund subscription can only be opened for them",
+				tx_ref.as_str()
+			)));
+		}
+		tracing::warn!(tx_ref = %tx_ref.as_str(), %depositor, "seed capital: the deposit was recorded but its fund subscription was never opened — re-opening it");
+	}
+	ports.subscriptions.open(&mut subscription).await?;
+	ports.funds.relay.notify_one();
+	Ok(SeededCapital {
 		recorded,
-		party,
 		amount: transfer.amount,
+		subscription: Some(subscription),
 	})
+}
+
+/// The seed subscription's id, a function of the chain reference: one transfer, one mint.
+fn seed_subscription_id(tx_ref: &TxRef) -> SubscriptionId {
+	SubscriptionId::from_raw(Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("seed:{}", tx_ref.as_str()).as_bytes()))
 }
 
 /// The chain's account of a reference: the transfer it names and whose money it is.
@@ -168,7 +292,7 @@ async fn verify_arrival(
 	network: Network,
 	tx_ref: &TxRef,
 	expected_amount: Option<Usdt>,
-) -> Result<(Party, InboundTransfer), DomainError> {
+) -> Result<(Arrival, InboundTransfer), DomainError> {
 	let transfer = custody
 		.inbound_transfer(network, tx_ref)
 		.await
@@ -191,8 +315,8 @@ async fn verify_arrival(
 			expected.to_decimal_string()
 		)));
 	}
-	let party = attribute(custody, addresses, network, &transfer).await?;
-	Ok((party, transfer))
+	let arrival = attribute(custody, addresses, network, &transfer).await?;
+	Ok((arrival, transfer))
 }
 
 /// Decide whose money a confirmed transfer is, from its recipient — and refuse anything that
@@ -200,13 +324,11 @@ async fn verify_arrival(
 ///
 /// The treasury case carries the one subtlety: the sweep also lands there, moving USDT from a
 /// user's own deposit address, and that dollar is already in `wallet:<net>` behind a claim.
-/// Crediting it again would invent fund capital and break `sum(custody) == sum(claims)`, so a
-/// treasury arrival is only capital when it came from outside every wallet we control.
-// A treasury arrival is still attributed to the retired fund party until C-3.
-#[allow(deprecated)]
-async fn attribute(custody: &dyn Custody, addresses: &dyn DepositAddresses, network: Network, transfer: &InboundTransfer) -> Result<Party, DomainError> {
+/// Crediting it again would invent custody and break `sum(custody) == sum(claims)`, so a
+/// treasury arrival only counts when it came from outside every wallet we control.
+async fn attribute(custody: &dyn Custody, addresses: &dyn DepositAddresses, network: Network, transfer: &InboundTransfer) -> Result<Arrival, DomainError> {
 	if let Some(user) = addresses.owner_of(network, &transfer.to).await? {
-		return Ok(Party::User(user));
+		return Ok(Arrival::User(user));
 	}
 	let funding = custody
 		.treasury_funding(network)
@@ -228,7 +350,7 @@ async fn attribute(custody: &dyn Custody, addresses: &dyn DepositAddresses, netw
 			"this transfer is the sweep consolidating funds already on the ledger, not new capital".into(),
 		));
 	}
-	Ok(Party::Piggybank)
+	Ok(Arrival::Treasury)
 }
 
 /// The treasury, read live from TigerBeetle (Read-First): per-rail liquidity plus the

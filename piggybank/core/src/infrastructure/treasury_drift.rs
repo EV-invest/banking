@@ -12,8 +12,10 @@
 //!
 //! **Alert-only, never a write.** The house rule for reconciliation, and doubly right here: a
 //! chain read can be stale, throttled or reorged, and a job that "corrected" the ledger from one
-//! would post money on the strength of a flaky node. The credit path is the deposit watcher,
-//! which is idempotent per transaction; this only says the two sides disagree.
+//! would post money on the strength of a flaky node. The credit path is the deposit watcher
+//! (a user's address) or an operator's `SeedCapital` (the treasury, attributed to the person
+//! who sent it — the watchers report such an arrival and never credit it, #245), each
+//! idempotent per transaction; this only says the two sides disagree.
 //!
 //! **The comparison.** `wallet:<net>` counts every USDT we control on the rail, wherever it sits
 //! — the sweep moving funds from a deposit address to the treasury is invisible to it. So the

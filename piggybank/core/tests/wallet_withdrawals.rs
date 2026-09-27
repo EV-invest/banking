@@ -409,8 +409,6 @@ async fn a_frozen_user_cannot_request_a_withdrawal() {
 }
 
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
@@ -439,8 +437,8 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	h.relay.drain().await;
 	assert_eq!(bal(&h, &claim).await.locked, big, "the gross is reserved while queued");
 
-	// The treasury tops up the TON rail past the net; the worker then dispatches it.
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, Network::Ton, big)
+	// Another investor's deposit puts liquidity on the TON rail past the net; the worker then dispatches it.
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), Network::Ton, big)
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -631,8 +629,6 @@ async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
 /// queued while the treasury is short on-chain, and a second sweep no-ops (the state is
 /// no longer `queued`; dispatch itself is idempotent).
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
@@ -642,7 +638,7 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	let network = Network::Ton;
 	deposit(&h, user, Network::Bep20, "100").await;
 	// A small top-up so the TB TON gate covers the net without dwarfing the shared rail.
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("60"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("60"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -696,8 +692,6 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 /// Lifting the freeze lets the very next sweep dispatch it — proving the freeze was the only
 /// thing holding an otherwise-dispatchable withdrawal.
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
@@ -706,7 +700,7 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 	// the shared TON rail out of a huge dispatch (mirrors the sibling dispatcher test).
 	let network = Network::Ton;
 	deposit(&h, user, Network::Bep20, "100").await;
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("60"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("60"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -759,8 +753,6 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 /// top-up. TRC20 keeps this test's rows off the rails the other dispatcher test tops
 /// up, and the ~50 on-chain cap keeps any parallel test's huge queued grosses out.
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
 	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
@@ -769,7 +761,7 @@ async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
 	deposit(&h, user, Network::Bep20, "200").await;
 	// The TB rail covers every net individually — the on-chain view is the binding
 	// budget, so what's proven is the running deduction, not a static shortfall.
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("200"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("200"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -838,8 +830,6 @@ async fn deposit_address_is_stable_per_user_and_network() {
 /// it, which is what proves the tier was the only thing holding an otherwise-dispatchable
 /// withdrawal.
 #[tokio::test]
-// Drives the retired fund/fee parties on purpose: this flow moves in a later #245 step.
-#[allow(deprecated)]
 async fn the_dispatcher_skips_a_queued_withdrawal_whose_owner_lost_their_tier() {
 	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
@@ -848,7 +838,7 @@ async fn the_dispatcher_skips_a_queued_withdrawal_whose_owner_lost_their_tier() 
 	// (mirrors the sibling dispatcher tests).
 	let network = Network::Ton;
 	deposit(&h, user, Network::Bep20, "100").await;
-	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("60"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(UserId::new()), network, usdt("60"))
 		.await
 		.unwrap();
 	h.relay.drain().await;

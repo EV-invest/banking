@@ -446,19 +446,20 @@ impl Ledger for TbLedger {
 	}
 }
 
-/// Ensure the fund's singleton accounts exist at boot: a custody wallet per network
-/// (the per-rail treasury), plus the network-agnostic fund-capital, fee-revenue and
-/// withdrawal-clearing claims and the mocked bank custody. Per-user/-service claim
-/// accounts are created lazily on first transfer.
-// The retired singleton claims are still ensured: pending transfers resolve them and the data migration debits them (C-3/C-9).
-#[allow(deprecated)]
+/// Ensure the singleton accounts exist at boot: a custody wallet per network (the
+/// per-rail treasury), the network-agnostic withdrawal-clearing account and the mocked
+/// bank custody. Per-user/-service claim accounts are created lazily on first transfer.
+///
+/// The retired `Fund` and `FeeRevenue` claims (#245) are no longer seeded: nothing new
+/// posts to them, and what still does — a replayed outbox row, an in-flight payment's
+/// completion, the data migration's debit — goes through [`Ledger::post`], which
+/// resolves-or-creates both sides of a transfer, so a ledger that has never seen them
+/// gets them at that moment and one that has keeps them. Production has both.
 pub async fn seed_singletons(ledger: &dyn Ledger) -> Result<(), LedgerError> {
 	use domain::money::Network;
 	for network in Network::ALL {
 		ledger.ensure_account(&LedgerAccountKey::CryptoWallet(network)).await?;
 	}
-	ledger.ensure_account(&LedgerAccountKey::Fund).await?;
-	ledger.ensure_account(&LedgerAccountKey::FeeRevenue).await?;
 	ledger.ensure_account(&LedgerAccountKey::WithdrawalClearing).await?;
 	ledger.ensure_account(&LedgerAccountKey::BankCustody).await?;
 	Ok(())

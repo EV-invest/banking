@@ -8,11 +8,19 @@
 //! strand a phantom basis.
 
 use async_trait::async_trait;
-use domain::{architecture::Repository, error::DomainError, subscriptions::Subscription};
+use domain::{
+	architecture::Repository,
+	error::DomainError,
+	subscriptions::{Subscription, SubscriptionId},
+};
 
 #[async_trait]
 pub trait SubscriptionRepository: Repository<Aggregate = Subscription> {
 	/// Persist a brand-new subscription, drain its `Subscribed` event, and upsert the
 	/// user's `fund_positions` cost basis / high-water mark — atomically.
 	async fn open(&self, subscription: &mut Subscription) -> Result<(), DomainError>;
+
+	/// Load a subscription by id (no lock; for queries) — a caller that derives the id
+	/// from its input asks this whether its mint already exists.
+	async fn find_by_id(&self, id: SubscriptionId) -> Result<Option<Subscription>, DomainError>;
 }

@@ -13,6 +13,7 @@
 //! reader every price in this module and beyond goes through.
 
 use domain::{
+	allocations::AllocationAccess,
 	balance::{LedgerAccountKey, ServiceId, ValuationId},
 	error::DomainError,
 	issuance::UnitHolder,
@@ -302,6 +303,33 @@ pub async fn subscribe(ports: &FundPorts<'_>, subscriptions: &dyn SubscriptionRe
 	subscriptions.open(&mut subscription).await?;
 	ports.relay.notify_one();
 	Ok(subscription)
+}
+
+/// Price and gate a seed of the `fund` allocation — `depositor` subscribing `cash` into it
+/// — without opening it: the caller records the chain-proven deposit the cash comes from
+/// first, then opens what this returns (see `balance::seed_fund_capital`), so a refusal
+/// here leaves nothing written.
+///
+/// The gates are [`subscribe`]'s minus two, each left out for a reason spelled here:
+///
+/// * **The catalog's access level.** `fund` is `hidden` from everyone (#245) — a holder
+///   reads it through [`allocation_for_holder`], never through the catalog — so
+///   `require_subscribable` would refuse every depositor. The state gate it also runs is
+///   kept: a `fund` an operator closed takes no seed. `Invest` is asserted in its place
+///   because the operator's permission to seed is the admission.
+/// * **The Read-First balance check.** The cash is the deposit being recorded alongside,
+///   not yet on the ledger; TigerBeetle's non-negative flag stays the backstop and a
+///   parked cash leg leaves the money on the depositor's own claim.
+///
+/// The price is [`dealing_nav`], as for any deal — the seed NAV while `fund` has no supply,
+/// its computed value per unit after — and the unit cap applies as to any subscription.
+pub async fn price_fund_seed(ports: &FundPorts<'_>, id: SubscriptionId, depositor: UserId, cash: Usdt, now_unix: i64) -> Result<Subscription, DomainError> {
+	let service = ServiceId::fund();
+	let allocation = allocations_app::get(ports.allocations, &service).await?;
+	allocation.ensure_subscribable(AllocationAccess::Invest)?;
+	let price = dealing_nav(ports.nav, ports.ledger, &service, now_unix).await?;
+	allocation.ensure_capacity(issued_units(ports.ledger, &service).await?, Shares::from_cash(cash, price)?)?;
+	Subscription::open(id, depositor, service, cash, price)
 }
 
 /// Units the ledger considers issued for `service` — settled **plus in-flight inflow**.
