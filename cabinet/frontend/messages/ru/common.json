@@ -595,10 +595,6 @@
     "en": "Status",
     "t": "Статус"
   },
-  "admin.col.transaction": {
-    "en": "Transaction",
-    "t": "Транзакция"
-  },
   "admin.col.user": {
     "en": "User",
     "t": "Аккаунт"
@@ -1491,10 +1487,6 @@
     "en": "The fee allocation",
     "t": "Аллокация комиссий"
   },
-  "admin.revenue.footnote": {
-    "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
-    "t": "Выплата проходит по той же саге, что и вывод пользователя, поэтому она также появляется в очереди выводов для отправки и исполнения. Отменить можно только выплату, которая ещё стоит в очереди: после начала обработки транзакция могла уже уйти в сеть, и её аннулирование привело бы к двойной оплате."
-  },
   "admin.revenue.grant.intro": {
     "en": "Seat a person on the fee allocation. The owners are asked; the units are minted only when more than half of them agree.",
     "t": "Назначить человека держателем аллокации комиссий. Решают владельцы: юниты выпускаются, только когда согласится больше половины."
@@ -1507,29 +1499,13 @@
     "en": "Propose holder grant",
     "t": "Предложить назначение держателя"
   },
-  "admin.revenue.inFlight": {
-    "en": "In flight",
-    "t": "В пути"
-  },
   "admin.revenue.navPosted": {
     "en": "marked {ago}",
     "t": "оценено {ago}"
   },
-  "admin.revenue.noPayouts": {
-    "en": "No payouts yet",
-    "t": "Выплат пока нет"
-  },
-  "admin.revenue.noPayoutsHintConsilium": {
-    "en": "Nothing opens a revenue payout any more: a holder redeems, or the owners approve a payment out of the fee allocation. Payouts opened before that change appear here.",
-    "t": "Выплаты выручки больше не открываются: держатель погашает юниты, либо владельцы одобряют платёж из аллокации комиссий. Здесь показаны выплаты, открытые до этого изменения."
-  },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the platform's own money. Client balances and the fund allocation are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "Это собственные деньги платформы. Балансы клиентов и аллокация капитала — отдельные требования леджера, сюда не входят и с этого экрана недоступны."
-  },
-  "admin.revenue.payouts": {
-    "en": "Payouts",
-    "t": "Выплаты"
   },
   "admin.revenue.subtitle": {
     "en": "What the platform earned — the fee allocation: its cash, its units and who holds them",
@@ -2267,10 +2243,6 @@
     "en": "Your decision",
     "t": "Ваше решение"
   },
-  "approval.destination": {
-    "en": "Destination address",
-    "t": "Адрес получателя"
-  },
   "approval.expired.title": {
     "en": "The deadline for this request has passed",
     "t": "Срок ответа на этот запрос истёк"
@@ -2407,10 +2379,6 @@
     "en": "The link itself may be perfectly fine — this looks like a problem reaching us. Try again in a moment.",
     "t": "Сама ссылка, скорее всего, в порядке — похоже на проблему со связью. Попробуйте ещё раз через минуту."
   },
-  "approval.memo": {
-    "en": "Memo",
-    "t": "Memo"
-  },
   "approval.network": {
     "en": "Network",
     "t": "Сеть"
@@ -2426,10 +2394,6 @@
   "approval.payloadHash": {
     "en": "Request fingerprint",
     "t": "Отпечаток запроса"
-  },
-  "approval.payloadHashHint": {
-    "en": "The fingerprint is taken over the amount, the address, the network and the memo above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
-    "t": "Отпечаток вычислен по сумме, адресу, сети и memo выше. Он проверяется заново перед переводом денег, поэтому изменить запрос после вашего согласия невозможно."
   },
   "approval.payment.approve": {
     "en": "Approve this payment",
@@ -2474,30 +2438,6 @@
   "approval.payment.to": {
     "en": "To",
     "t": "Куда"
-  },
-  "approval.payout.approve": {
-    "en": "Approve this payout",
-    "t": "Подтвердить выплату"
-  },
-  "approval.payout.decided.approvedTitle": {
-    "en": "You approved this payout",
-    "t": "Вы подтвердили эту выплату"
-  },
-  "approval.payout.decided.freshBody": {
-    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
-    "t": "Ваш ответ записан. Больше здесь делать нечего — выплата пройдёт, когда согласится достаточно владельцев."
-  },
-  "approval.payout.decided.rejectedTitle": {
-    "en": "You rejected this payout",
-    "t": "Вы отклонили эту выплату"
-  },
-  "approval.payout.lead": {
-    "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
-    "t": "{initiator} просит выплатить деньги, которые заработал фонд. Выплата собственных средств фонда никогда не решается одним человеком, поэтому нужно согласие владельцев."
-  },
-  "approval.payout.title": {
-    "en": "Approve a fund payout",
-    "t": "Подтверждение выплаты фонда"
   },
   "approval.reject": {
     "en": "Reject",
@@ -3127,10 +3067,6 @@
     "en": "Payment",
     "t": "Платёж"
   },
-  "consilium.kind.revenue_payout": {
-    "en": "Revenue payout",
-    "t": "Выплата дохода"
-  },
   "consilium.kind.seed_capital": {
     "en": "Seed capital",
     "t": "Стартовый капитал"
@@ -3212,8 +3148,8 @@
     "t": "Прошлые запросы"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout or a payment order — marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
-    "t": "Перемещение денег фонда — выплата дохода или платёжное поручение, — оценка фонда за пределами защиты от скачка NAV и изменение того, что взимает продукт. По одному запросу за раз, и никогда не решение одного человека."
+    "en": "Moving money the fund owns by a payment order, marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
+    "t": "Перемещение денег фонда платёжным поручением, оценка фонда за пределами защиты от скачка NAV и изменение того, что взимает продукт. По одному запросу за раз, и никогда не решение одного человека."
   },
   "consilium.payout.tally": {
     "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}}",

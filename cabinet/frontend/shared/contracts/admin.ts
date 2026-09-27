@@ -628,23 +628,6 @@ export interface WithdrawalQueue {
 // Nothing pays it out from that surface any more: a holder redeems, or the owners approve
 // a payment out of `service:fee` on the Payments screen.
 
-/** A payout opened before the kind was retired — HISTORY ONLY. Shaped exactly like a
- *  user withdrawal (same saga, same states); `fee` is always `"0"`. */
-export interface RevenuePayout {
-  id: string;
-  network: string;
-  address: string;
-  amount: string;
-  fee: string;
-  net_amount: string;
-  state: string;
-  tx_ref: string;
-}
-
-export interface RevenuePayoutList {
-  withdrawals: RevenuePayout[];
-}
-
 // ── cabinet (platform config + money-plane read-only) ───────────────────────────
 export interface FeatureFlag {
   key: string;

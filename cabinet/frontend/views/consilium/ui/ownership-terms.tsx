@@ -3,8 +3,8 @@
 // The two ownership consilia's terms (#245), as the owners' room shows them beside the
 // tally. A holder grant seats a person on a reserved allocation: the allocation, the
 // person and the units are the whole of the hashed subject. A seed attributes a chain
-// transfer to a person: the reference is shown in FULL, the same rule as a payout's
-// address — an owner who checks it here and approves it from their mailbox must be
+// transfer to a person: the reference is shown in FULL, the same rule as an external
+// payment's address — an owner who checks it here and approves it from their mailbox must be
 // looking at the same characters (policy 13).
 
 import type { Locale, Translate } from "@evinvest/i18n";

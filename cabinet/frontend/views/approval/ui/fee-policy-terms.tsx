@@ -2,7 +2,7 @@
 
 // A change of fee terms, as the owners' approval page shows it: the product gets the top
 // of the card, the five fields now and proposed beneath, and everything past the separator
-// is context. The third sibling of `payout-terms.tsx` and `payment-terms.tsx`.
+// is context. A sibling of `payment-terms.tsx` and `valuation-terms.tsx`.
 //
 // Policy 12–13 shape it: everything the digest covers — the product, both sets of terms,
 // the reason and the requested moment — is on screen before the code field is.

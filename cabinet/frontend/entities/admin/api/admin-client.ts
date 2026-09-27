@@ -33,8 +33,6 @@ import type {
   Redemption,
   RedemptionQueue,
   RetireUnitsBody,
-  RevenuePayout,
-  RevenuePayoutList,
   SeedCapitalBody,
   SeedCapitalProposal,
   Treasury,
@@ -239,13 +237,8 @@ export const failWithdrawal = (withdrawalId: string, reason: string): Promise<{ 
 // ── revenue (the reserved `fee` allocation) ──────────────────────────────────────
 // What the platform has earned, in the treasury's own shape (#245): the `fee`
 // allocation's claim, supply, price and holders. Paying it OUT is a payment order
-// (`entities/payment`) authorised by the owners' consilium, or a holder's redemption;
-// the payout list and its cancel are HISTORY — payouts opened before the kind retired.
+// (`entities/payment`) authorised by the owners' consilium, or a holder's redemption.
 export const fetchFundRevenue = (): Promise<AllocationTreasury> => getJson("/api/admin/revenue");
-
-export const fetchRevenuePayouts = (): Promise<RevenuePayoutList> => getJson("/api/admin/revenue/payouts");
-
-export const cancelRevenuePayout = (withdrawalId: string): Promise<RevenuePayout> => postJson("/api/admin/revenue/cancel", { withdrawal_id: withdrawalId });
 
 // ── fees ────────────────────────────────────────────────────────────────────────
 export const fetchFeePolicies = (): Promise<FeePolicyList> => getJson("/api/admin/fees/policies");

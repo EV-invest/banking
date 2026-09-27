@@ -595,10 +595,6 @@
     "en": "Status",
     "t": "Trạng thái"
   },
-  "admin.col.transaction": {
-    "en": "Transaction",
-    "t": "Giao dịch"
-  },
   "admin.col.user": {
     "en": "User",
     "t": "Người dùng"
@@ -1491,10 +1487,6 @@
     "en": "The fee allocation",
     "t": "Phân bổ phí"
   },
-  "admin.revenue.footnote": {
-    "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
-    "t": "Một khoản chi trả chạy cùng quy trình saga như lệnh rút của người dùng, nên nó cũng xuất hiện trong hàng đợi Rút tiền để gửi lệnh và tất toán. Chỉ khoản chi trả còn đang xếp hàng mới có thể hủy — khi đã chuyển sang xử lý, giao dịch có thể đã lên mạng và việc hủy sẽ dẫn tới trả trùng."
-  },
   "admin.revenue.grant.intro": {
     "en": "Seat a person on the fee allocation. The owners are asked; the units are minted only when more than half of them agree.",
     "t": "Đưa một người vào phân bổ phí. Các chủ sở hữu sẽ được hỏi; đơn vị chỉ được phát hành khi hơn một nửa đồng ý."
@@ -1507,29 +1499,13 @@
     "en": "Propose holder grant",
     "t": "Đề xuất cấp quyền nắm giữ"
   },
-  "admin.revenue.inFlight": {
-    "en": "In flight",
-    "t": "Đang thực hiện"
-  },
   "admin.revenue.navPosted": {
     "en": "marked {ago}",
     "t": "đã định giá {ago}"
   },
-  "admin.revenue.noPayouts": {
-    "en": "No payouts yet",
-    "t": "Chưa có khoản chi trả nào"
-  },
-  "admin.revenue.noPayoutsHintConsilium": {
-    "en": "Nothing opens a revenue payout any more: a holder redeems, or the owners approve a payment out of the fee allocation. Payouts opened before that change appear here.",
-    "t": "Không còn khoản chi trả doanh thu nào được mở: người nắm giữ rút vốn, hoặc các chủ sở hữu duyệt một khoản thanh toán từ phân bổ phí. Các khoản chi trả mở trước thay đổi này hiện ở đây."
-  },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the platform's own money. Client balances and the fund allocation are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "Đây là tiền riêng của nền tảng. Số dư khách hàng và phân bổ vốn là các quyền riêng trên sổ cái, không nằm ở đây — và không thể truy cập từ màn hình này."
-  },
-  "admin.revenue.payouts": {
-    "en": "Payouts",
-    "t": "Các khoản chi trả"
   },
   "admin.revenue.subtitle": {
     "en": "What the platform earned — the fee allocation: its cash, its units and who holds them",
@@ -2267,10 +2243,6 @@
     "en": "Your decision",
     "t": "Quyết định của bạn"
   },
-  "approval.destination": {
-    "en": "Destination address",
-    "t": "Địa chỉ đích"
-  },
   "approval.expired.title": {
     "en": "The deadline for this request has passed",
     "t": "Hạn chót của yêu cầu này đã qua"
@@ -2407,10 +2379,6 @@
     "en": "The link itself may be perfectly fine — this looks like a problem reaching us. Try again in a moment.",
     "t": "Bản thân liên kết có thể hoàn toàn bình thường — đây có vẻ là sự cố khi kết nối tới chúng tôi. Hãy thử lại sau một lát."
   },
-  "approval.memo": {
-    "en": "Memo",
-    "t": "Memo"
-  },
   "approval.network": {
     "en": "Network",
     "t": "Mạng"
@@ -2426,10 +2394,6 @@
   "approval.payloadHash": {
     "en": "Request fingerprint",
     "t": "Dấu vân tay của yêu cầu"
-  },
-  "approval.payloadHashHint": {
-    "en": "The fingerprint is taken over the amount, the address, the network and the memo above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
-    "t": "Dấu vân tay được tính trên số tiền, địa chỉ, mạng và memo ở trên. Nó được kiểm tra lại trước khi bất kỳ khoản tiền nào được chuyển, nên một yêu cầu không thể bị sửa sau khi bạn đã đồng ý."
   },
   "approval.payment.approve": {
     "en": "Approve this payment",
@@ -2474,30 +2438,6 @@
   "approval.payment.to": {
     "en": "To",
     "t": "Tới"
-  },
-  "approval.payout.approve": {
-    "en": "Approve this payout",
-    "t": "Phê duyệt khoản chi trả này"
-  },
-  "approval.payout.decided.approvedTitle": {
-    "en": "You approved this payout",
-    "t": "Bạn đã phê duyệt khoản chi trả này"
-  },
-  "approval.payout.decided.freshBody": {
-    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
-    "t": "Câu trả lời của bạn đã được ghi nhận. Không còn gì phải làm ở đây — khoản chi trả sẽ được thực hiện khi có đủ chủ sở hữu đồng ý."
-  },
-  "approval.payout.decided.rejectedTitle": {
-    "en": "You rejected this payout",
-    "t": "Bạn đã từ chối khoản chi trả này"
-  },
-  "approval.payout.lead": {
-    "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
-    "t": "{initiator} đề nghị chi trả số tiền quỹ đã kiếm được. Chi trả tiền của chính quỹ không bao giờ là quyết định của một người, nên cần các chủ sở hữu đồng ý."
-  },
-  "approval.payout.title": {
-    "en": "Approve a fund payout",
-    "t": "Phê duyệt một khoản chi trả của quỹ"
   },
   "approval.reject": {
     "en": "Reject",
@@ -3127,10 +3067,6 @@
     "en": "Payment",
     "t": "Thanh toán"
   },
-  "consilium.kind.revenue_payout": {
-    "en": "Revenue payout",
-    "t": "Chi trả doanh thu"
-  },
   "consilium.kind.seed_capital": {
     "en": "Seed capital",
     "t": "Vốn hạt giống"
@@ -3212,8 +3148,8 @@
     "t": "Các yêu cầu trước đây"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout or a payment order — marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
-    "t": "Chuyển tiền thuộc quỹ — chi trả doanh thu hoặc lệnh thanh toán —, định giá một quỹ vượt chốt chặn biến động NAV và thay đổi mức phí một sản phẩm thu. Mỗi lần một yêu cầu, và không bao giờ là quyết định của một người."
+    "en": "Moving money the fund owns by a payment order, marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
+    "t": "Chuyển tiền thuộc quỹ bằng lệnh thanh toán, định giá một quỹ vượt chốt chặn biến động NAV và thay đổi mức phí một sản phẩm thu. Mỗi lần một yêu cầu, và không bao giờ là quyết định của một người."
   },
   "consilium.payout.tally": {
     "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}}",

@@ -4,7 +4,7 @@
 // one status with the plane's own prose in the body. `shared/lib/api-client.ts` passes prose
 // it did not author through unkeyed and in whatever language the backend chose — correct as
 // a default, and not good enough here: these are the three sentences an operator meets when
-// the fund's own payout is refused, and each one has a different thing they should do next.
+// a move of the fund's own money is refused, and each one has a different thing they should do next.
 //
 // So the message is classified rather than echoed, and what the classifier extracts is the
 // FACTS inside it — how long the cooling-off has left, how many owners the fund has — so the
@@ -42,7 +42,7 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * Classify a refused attempt to open a consilium — a payout, a payment, any kind: the
+ * Classify a refused attempt to open a consilium — a payment, a NAV mark, any kind: the
  * money plane words the three refusals the same way for each, save for the noun.
  *
  * Returns null for anything not recognised — including every ordinary failure (offline, a

@@ -2,8 +2,8 @@
 
 // A NAV mark's terms, as the owners' approval page shows them: the AUM and the product get
 // the top of the card, because those two are exactly what `payload_hash` covers and what
-// the reader is agreeing to (policy 12–13). The third sibling of `payout-terms.tsx` and
-// `payment-terms.tsx` — a consilium carries one of the three.
+// the reader is agreeing to (policy 12–13). A sibling of `payment-terms.tsx` — a
+// consilium carries exactly one kind's terms.
 //
 // The product is its slug only. This page is reached from an email with no session, so
 // there is no catalog to resolve a title from — and the slug is what the digest binds.

@@ -595,10 +595,6 @@
     "en": "Status",
     "t": "Status"
   },
-  "admin.col.transaction": {
-    "en": "Transaction",
-    "t": "Transaktion"
-  },
   "admin.col.user": {
     "en": "User",
     "t": "Nutzer"
@@ -1491,10 +1487,6 @@
     "en": "The fee allocation",
     "t": "Die Gebühren-Allokation"
   },
-  "admin.revenue.footnote": {
-    "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
-    "t": "Eine Ausschüttung durchläuft dieselbe Saga wie die Auszahlung eines Nutzers und erscheint daher auch in der Auszahlungs-Warteschlange zum Versenden und Abrechnen. Nur eine noch wartende Ausschüttung lässt sich stornieren — ist sie in Arbeit, kann eine Übertragung bereits angekommen sein, und ein Widerruf würde doppelt zahlen."
-  },
   "admin.revenue.grant.intro": {
     "en": "Seat a person on the fee allocation. The owners are asked; the units are minted only when more than half of them agree.",
     "t": "Eine Person in der Gebühren-Allokation einsetzen. Die Eigentümer werden gefragt; die Anteile werden erst geprägt, wenn mehr als die Hälfte zustimmt."
@@ -1507,29 +1499,13 @@
     "en": "Propose holder grant",
     "t": "Halter-Zuteilung vorschlagen"
   },
-  "admin.revenue.inFlight": {
-    "en": "In flight",
-    "t": "Unterwegs"
-  },
   "admin.revenue.navPosted": {
     "en": "marked {ago}",
     "t": "bewertet {ago}"
   },
-  "admin.revenue.noPayouts": {
-    "en": "No payouts yet",
-    "t": "Noch keine Ausschüttungen"
-  },
-  "admin.revenue.noPayoutsHintConsilium": {
-    "en": "Nothing opens a revenue payout any more: a holder redeems, or the owners approve a payment out of the fee allocation. Payouts opened before that change appear here.",
-    "t": "Es werden keine Ertragsauszahlungen mehr eröffnet: Ein Halter löst ein, oder die Eigentümer genehmigen eine Zahlung aus der Gebühren-Allokation. Vor dieser Änderung eröffnete Auszahlungen erscheinen hier."
-  },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the platform's own money. Client balances and the fund allocation are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "Das ist das eigene Geld der Plattform. Kundenguthaben und die Kapital-Allokation sind separate Ledger-Ansprüche, hier nicht enthalten — und von diesem Bildschirm aus nicht erreichbar."
-  },
-  "admin.revenue.payouts": {
-    "en": "Payouts",
-    "t": "Ausschüttungen"
   },
   "admin.revenue.subtitle": {
     "en": "What the platform earned — the fee allocation: its cash, its units and who holds them",
@@ -2267,10 +2243,6 @@
     "en": "Your decision",
     "t": "Ihre Entscheidung"
   },
-  "approval.destination": {
-    "en": "Destination address",
-    "t": "Zieladresse"
-  },
   "approval.expired.title": {
     "en": "The deadline for this request has passed",
     "t": "Die Frist für diesen Antrag ist abgelaufen"
@@ -2407,10 +2379,6 @@
     "en": "The link itself may be perfectly fine — this looks like a problem reaching us. Try again in a moment.",
     "t": "Der Link selbst ist womöglich völlig in Ordnung — das sieht nach einem Problem beim Erreichen unseres Servers aus. Versuchen Sie es gleich noch einmal."
   },
-  "approval.memo": {
-    "en": "Memo",
-    "t": "Memo"
-  },
   "approval.network": {
     "en": "Network",
     "t": "Netzwerk"
@@ -2426,10 +2394,6 @@
   "approval.payloadHash": {
     "en": "Request fingerprint",
     "t": "Fingerabdruck des Antrags"
-  },
-  "approval.payloadHashHint": {
-    "en": "The fingerprint is taken over the amount, the address, the network and the memo above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
-    "t": "Der Fingerabdruck wird über Betrag, Adresse, Netzwerk und das Memo oben gebildet. Er wird erneut geprüft, bevor Geld bewegt wird, sodass ein Antrag nach Ihrer Zustimmung nicht mehr geändert werden kann."
   },
   "approval.payment.approve": {
     "en": "Approve this payment",
@@ -2474,30 +2438,6 @@
   "approval.payment.to": {
     "en": "To",
     "t": "An"
-  },
-  "approval.payout.approve": {
-    "en": "Approve this payout",
-    "t": "Diese Auszahlung freigeben"
-  },
-  "approval.payout.decided.approvedTitle": {
-    "en": "You approved this payout",
-    "t": "Sie haben diese Auszahlung freigegeben"
-  },
-  "approval.payout.decided.freshBody": {
-    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
-    "t": "Ihre Antwort wurde festgehalten. Hier gibt es nichts weiter zu tun — die Auszahlung erfolgt, sobald genügend Eigentümer zugestimmt haben."
-  },
-  "approval.payout.decided.rejectedTitle": {
-    "en": "You rejected this payout",
-    "t": "Sie haben diese Auszahlung abgelehnt"
-  },
-  "approval.payout.lead": {
-    "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
-    "t": "{initiator} bittet darum, vom Fonds verdientes Geld auszuzahlen. Das eigene Geld des Fonds auszuzahlen ist nie die Entscheidung einer einzelnen Person, deshalb müssen die Eigentümer zustimmen."
-  },
-  "approval.payout.title": {
-    "en": "Approve a fund payout",
-    "t": "Eine Auszahlung des Fonds freigeben"
   },
   "approval.reject": {
     "en": "Reject",
@@ -3127,10 +3067,6 @@
     "en": "Payment",
     "t": "Zahlung"
   },
-  "consilium.kind.revenue_payout": {
-    "en": "Revenue payout",
-    "t": "Ertragsauszahlung"
-  },
   "consilium.kind.seed_capital": {
     "en": "Seed capital",
     "t": "Startkapital"
@@ -3212,8 +3148,8 @@
     "t": "Frühere Anträge"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout or a payment order — marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
-    "t": "Geld des Fonds bewegen — eine Ertragsauszahlung oder ein Zahlungsauftrag —, einen Fonds über den NAV-Bewegungsschutz hinaus bewerten und ändern, was ein Produkt berechnet. Ein Antrag nach dem anderen, und nie die Entscheidung einer einzelnen Person."
+    "en": "Moving money the fund owns by a payment order, marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
+    "t": "Geld des Fonds per Zahlungsauftrag bewegen, einen Fonds über den NAV-Bewegungsschutz hinaus bewerten und ändern, was ein Produkt berechnet. Ein Antrag nach dem anderen, und nie die Entscheidung einer einzelnen Person."
   },
   "consilium.payout.tally": {
     "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}}",
