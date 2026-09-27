@@ -11,12 +11,10 @@
 //! `ON CONFLICT DO NOTHING`: a lost race writes nothing — the event drain is gated on
 //! the insert having landed — and the adapter hands back the row the winner wrote.
 //!
-//! `record_applied` is the one exception to "the relay stamps `applied`": the one-off
-//! ownership data migration (#245) posts its mints to TigerBeetle itself, as one linked
-//! chain per allocation, before it writes the row — so the row is born `applied`, with
-//! the holder's projection ([`project_holder_position`], the same code the relay runs)
-//! in the same transaction, and no outbox event, because there is no leg left for the
-//! relay to post.
+//! A row naming the retired company stake (`holder_kind = 'company'` or
+//! `source = 'company'`, both pre-#245 history) is read as
+//! [`StoredIssuance::RetiredCompany`] here, at the boundary, and never reaches the
+//! domain's parsers, which refuse those words.
 
 use async_trait::async_trait;
 use domain::{
@@ -32,7 +30,7 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::{fee_accrual, outbox, rails::now_unix_i64},
-	ports::issuance::{IssueOutcome, UnitIssuanceRecord, UnitIssuanceRepository},
+	ports::issuance::{IssueOutcome, RetiredCompanyIssuance, RetiredCompanyMovement, StoredIssuance, UnitIssuanceRecord, UnitIssuanceRepository},
 };
 
 /// sqlx 0.9 accepts only `&'static str` SQL (its injection guardrail), so the shared
@@ -77,7 +75,34 @@ struct IssuanceRow {
 	applied_at: Option<i64>,
 }
 
+/// The retired vocabulary, spelled once. The `unit_issuances` CHECKs refuse both on a new
+/// row since 0047; the rows that hold them are history.
+const RETIRED_COMPANY: &str = "company";
+
 impl IssuanceRow {
+	/// The row as a lookup answers it: live, or the retired company history.
+	fn into_stored(self) -> Result<StoredIssuance, DomainError> {
+		let movement = match (self.holder_kind.as_str(), self.source.as_str(), self.holder_id) {
+			(RETIRED_COMPANY, "mint", None) => Some(RetiredCompanyMovement::MintedToCompany),
+			("user", RETIRED_COMPANY, Some(user)) => Some(RetiredCompanyMovement::HandedTo(UserId::from_raw(user))),
+			(RETIRED_COMPANY, _, _) | (_, RETIRED_COMPANY, _) => {
+				return Err(DomainError::Repository(format!("issuance {} names the retired company stake in a shape it never had", self.id)));
+			}
+			_ => None,
+		};
+		let Some(movement) = movement else {
+			return self.into_record().map(StoredIssuance::Live);
+		};
+		Ok(StoredIssuance::RetiredCompany(RetiredCompanyIssuance {
+			id: UnitIssuanceId::from_raw(self.id),
+			service: ServiceId::parse(&self.service)?,
+			movement,
+			units: Shares::from_base_units(parse_units(&self.units, "issuance units")?),
+			created_at: self.created_at,
+			applied_at: self.applied_at,
+		}))
+	}
+
 	fn into_record(self) -> Result<UnitIssuanceRecord, DomainError> {
 		let issuance = UnitIssuance::rehydrate(UnitIssuanceSnapshot {
 			id: UnitIssuanceId::from_raw(self.id),
@@ -110,14 +135,14 @@ fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())
 }
 
-async fn find_by_key(conn: &mut PgConnection, service: &ServiceId, key: &IdempotencyKey) -> Result<Option<UnitIssuanceRecord>, DomainError> {
+async fn find_by_key(conn: &mut PgConnection, service: &ServiceId, key: &IdempotencyKey) -> Result<Option<StoredIssuance>, DomainError> {
 	sqlx::query_as::<_, IssuanceRow>(SELECT_BY_KEY)
 		.bind(service.as_str())
 		.bind(key.as_str())
 		.fetch_optional(conn)
 		.await
 		.map_err(repo_err)?
-		.map(IssuanceRow::into_record)
+		.map(IssuanceRow::into_stored)
 		.transpose()
 }
 
@@ -153,7 +178,14 @@ impl UnitIssuanceRepository for PgUnitIssuances {
 				.await?
 				.ok_or_else(|| DomainError::Repository("issuance key conflicted but no row was found".into()))?;
 			tx.commit().await.map_err(repo_err)?;
-			return Ok(IssueOutcome::Existing(existing));
+			return match existing {
+				StoredIssuance::Live(existing) => Ok(IssueOutcome::Existing(existing)),
+				StoredIssuance::RetiredCompany(_) => Err(DomainError::Conflict(format!(
+					"idempotency key '{}' already names a historical company-stake issuance on '{}'",
+					issuance.idempotency_key().as_str(),
+					issuance.service()
+				))),
+			};
 		}
 		outbox::drain_to_outbox(&mut tx, issuance, true).await?;
 		let recorded = sqlx::query_as::<_, IssuanceRow>(SELECT_BY_ID)
@@ -166,60 +198,18 @@ impl UnitIssuanceRepository for PgUnitIssuances {
 		Ok(IssueOutcome::Recorded(recorded))
 	}
 
-	async fn record_applied(&self, issuance: &UnitIssuance) -> Result<bool, DomainError> {
-		if issuance.state() != IssuanceState::Applied {
-			return Err(DomainError::Validation("only an issuance whose leg has already posted can be recorded as applied".into()));
-		}
-		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		let inserted = sqlx::query(
-			"INSERT INTO unit_issuances (id, service, holder_kind, holder_id, holder_service, source, units, nav, cost_basis, idempotency_key, state, applied_at) \
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now()) \
-			 ON CONFLICT (service, idempotency_key) DO NOTHING",
-		)
-		.bind(issuance.id().raw())
-		.bind(issuance.service().as_str())
-		.bind(issuance.holder().kind_str())
-		.bind(issuance.holder().user_id().map(|user| user.raw()))
-		.bind(issuance.holder().service_id().map(ServiceId::as_str))
-		.bind(issuance.source().as_str())
-		.bind(issuance.units().base_units().to_string())
-		.bind(issuance.nav().base_units().to_string())
-		.bind(issuance.cost_basis().base_units().to_string())
-		.bind(issuance.idempotency_key().as_str())
-		.bind(issuance.state().as_str())
-		.execute(&mut *tx)
-		.await
-		.map_err(repo_err)?
-		.rows_affected();
-		if inserted == 1 {
-			project_holder_position(
-				&mut tx,
-				issuance.holder(),
-				issuance.source(),
-				issuance.service(),
-				issuance.units(),
-				issuance.nav(),
-				issuance.cost_basis(),
-			)
-			.await
-			.map_err(repo_err)?;
-		}
-		tx.commit().await.map_err(repo_err)?;
-		Ok(inserted == 1)
-	}
-
-	async fn find_by_key(&self, service: &ServiceId, key: &IdempotencyKey) -> Result<Option<UnitIssuanceRecord>, DomainError> {
+	async fn find_by_key(&self, service: &ServiceId, key: &IdempotencyKey) -> Result<Option<StoredIssuance>, DomainError> {
 		let mut conn = self.pool.acquire().await.map_err(repo_err)?;
 		find_by_key(&mut conn, service, key).await
 	}
 
-	async fn find_by_id(&self, id: UnitIssuanceId) -> Result<Option<UnitIssuanceRecord>, DomainError> {
+	async fn find_by_id(&self, id: UnitIssuanceId) -> Result<Option<StoredIssuance>, DomainError> {
 		sqlx::query_as::<_, IssuanceRow>(SELECT_BY_ID)
 			.bind(id.raw())
 			.fetch_optional(&self.pool)
 			.await
 			.map_err(repo_err)?
-			.map(IssuanceRow::into_record)
+			.map(IssuanceRow::into_stored)
 			.transpose()
 	}
 
@@ -248,16 +238,12 @@ impl UnitIssuanceRepository for PgUnitIssuances {
 /// NAV would be — an investor handed units in kind is measured for performance fees from
 /// the price they were handed them at — after the management accrual on the old basis has
 /// been settled ([`fee_accrual::carry_accrual`], the obligation every writer of
-/// `cost_basis` carries). An allocation holder (and the retired company one) gets no
-/// projection: there is no investor to report P&L or charge fees to. Whether the units
-/// were minted or (historically) came out of the company's stake, the recipient's position
-/// gains the same units and basis; a **retirement** runs the seller's side of a trade
+/// `cost_basis` carries). An allocation holder gets no projection: there is no investor to
+/// report P&L or charge fees to. A **retirement** runs the seller's side of a trade
 /// instead — units off, basis down pro rata (clamped at zero), high-water mark untouched,
 /// because nothing was realised at any price.
 ///
-/// Two writers: the relay, once the mint it posted has landed (`project_issuance`), and
-/// the ownership data migration, which posts its own mints and records the row applied
-/// ([`UnitIssuanceRepository::record_applied`]).
+/// One writer: the relay, once the leg it posted has landed (`project_issuance`).
 pub(crate) async fn project_holder_position(
 	tx: &mut PgConnection,
 	holder: &UnitHolder,
@@ -274,10 +260,7 @@ pub(crate) async fn project_holder_position(
 		.await
 		.map_err(|err| sqlx::Error::Protocol(format!("carry fee accrual before issuance basis change: {err}")))?;
 	match source {
-		// A hand-over row still in the outbox across the deploy projects like the mint it
-		// is from the recipient's side.
-		#[allow(deprecated)]
-		IssuanceSource::Mint | IssuanceSource::Company => {
+		IssuanceSource::Mint => {
 			sqlx::query(
 				"INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5) \
 				 ON CONFLICT (user_id, service) DO UPDATE SET \

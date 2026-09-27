@@ -27,7 +27,6 @@ use crate::{
 		allocations::holding_to_proto,
 		funds::redemption_to_proto,
 		support::{caller_id, map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, resolve_target_user, unix_now},
-		wallet::withdrawal_to_proto,
 	},
 };
 
@@ -62,13 +61,6 @@ impl BalanceService for BalanceSvc {
 		})
 		.await
 		.map_err(map_err)?;
-		if !t.retired.fund.is_zero() || !t.retired.fee_revenue.is_zero() {
-			tracing::warn!(
-				retired_fund = %t.retired.fund.to_decimal_string(),
-				retired_fee_revenue = %t.retired.fee_revenue.to_decimal_string(),
-				"the retired fund/fee claims still hold cash: the ownership data migration (`piggybank migrate-ownership`) has not run"
-			);
-		}
 		Ok(Response::new(pb::Treasury {
 			rails: t
 				.rails
@@ -165,7 +157,7 @@ impl BalanceService for BalanceSvc {
 			recorded: arrival.recorded,
 			amount: arrival.amount.to_decimal_string(),
 			party_kind: party.kind_str().to_owned(),
-			party_id: party.id_str().unwrap_or_default(),
+			party_id: party.id_str(),
 		}))
 	}
 
@@ -363,9 +355,8 @@ impl BalanceService for BalanceSvc {
 				.into_iter()
 				.map(|w| pb::WithdrawalQueueItem {
 					withdrawal_id: w.id.to_string(),
-					source: if w.source.is_revenue() { "revenue".to_owned() } else { "user".to_owned() },
-					// Empty for a revenue payout — the fund owns it, no user does.
-					user_id: w.source.user().map(|u| u.to_string()).unwrap_or_default(),
+					source: "user".to_owned(),
+					user_id: w.source.user().to_string(),
 					email: w.email,
 					network: w.network.as_str().to_owned(),
 					address: w.address,
@@ -382,30 +373,11 @@ impl BalanceService for BalanceSvc {
 	/// lists it as — cash, supply, price and holders. Nothing here pays it out: a holder
 	/// is paid by redeeming, and a payment out of its claim is the owners' consilium.
 	async fn get_fund_revenue(&self, request: Request<pb::GetFundRevenueRequest>) -> Result<Response<pb::AllocationTreasury>, Status> {
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
+		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
 		let fee = balance_app::fee_allocation(self.state.allocations.as_ref(), self.state.ledger.as_ref(), self.state.nav.as_ref())
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(allocation_treasury_to_proto(&fee)))
-	}
-
-	/// HISTORY ONLY (#245): a payout queued before the kind was retired is refunded to
-	/// the retired revenue claim. Nothing opens a new one.
-	async fn cancel_revenue_payout(&self, request: Request<pb::CancelRevenuePayoutRequest>) -> Result<Response<pb::Withdrawal>, Status> {
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
-		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
-		let payout = withdrawal_app::cancel_revenue_payout(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
-			.await
-			.map_err(map_err)?;
-		Ok(Response::new(withdrawal_to_proto(&payout)))
-	}
-
-	async fn list_revenue_payouts(&self, request: Request<pb::ListRevenuePayoutsRequest>) -> Result<Response<pb::WithdrawalList>, Status> {
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
-		let payouts = withdrawal_app::list_revenue_payouts(self.state.withdrawals.as_ref()).await.map_err(map_err)?;
-		Ok(Response::new(pb::WithdrawalList {
-			withdrawals: payouts.iter().map(withdrawal_to_proto).collect(),
-		}))
 	}
 
 	async fn rotate_deposit_address(&self, request: Request<pb::RotateDepositAddressRequest>) -> Result<Response<pb::RotateDepositAddressResponse>, Status> {

@@ -48,25 +48,22 @@ pub async fn lock_claim(conn: &mut PgConnection, claim: &LedgerAccountKey) -> Re
 
 /// The advisory-lock name for a claim.
 ///
-/// THE TWO NAMED ARMS ARE FROZEN, NOT STYLE. A rolling deploy runs the old binary and the
-/// new one against one database; if the new one derived a different name for the user claim
-/// or for `fee`, a withdraw on the old binary and a subscribe on the new one would take two
-/// DIFFERENT locks and stop serializing — the exact divergence this lock exists to prevent,
-/// arriving silently and only during a deploy. So the two names every released binary has
-/// been taking are reproduced here verbatim, and the general formula covers the claims that
-/// have never had a lock. `the_generalized_claim_lock_keeps_the_keys_the_old_helpers_computed`
-/// pins both against a rewrite.
+/// THE NAMED ARM IS FROZEN, NOT STYLE. A rolling deploy runs the old binary and the new one
+/// against one database; if the new one derived a different name for the user claim, a
+/// withdraw on the old binary and a subscribe on the new one would take two DIFFERENT locks
+/// and stop serializing — the exact divergence this lock exists to prevent, arriving
+/// silently and only during a deploy. So the name every released binary has been taking is
+/// reproduced here verbatim, and the general formula covers every other claim.
+/// `the_generalized_claim_lock_keeps_the_keys_the_old_helpers_computed` pins it against a
+/// rewrite. (The retired `fee` claim had a frozen name of its own until #245 retired the
+/// revenue payout that took it; nothing spends that claim any more.)
 ///
 /// A `_` arm is right here (unlike the exhaustive matches elsewhere in the domain): a new
 /// account key needs no decision, because the general formula already names it correctly and
 /// uniquely.
-// The retired fee claim keeps its historical lock name so the payouts replayed against it
-// serialize as they always did.
-#[allow(deprecated)]
 fn claim_lock_name(claim: &LedgerAccountKey) -> Uuid {
 	match claim {
 		LedgerAccountKey::UserClaim(user) => user.raw(),
-		LedgerAccountKey::FeeRevenue => Uuid::new_v5(&Uuid::NAMESPACE_OID, b"withdrawal:revenue-claim"),
 		other => Uuid::new_v5(&Uuid::NAMESPACE_OID, other.logical_key().as_bytes()),
 	}
 }
@@ -286,13 +283,11 @@ mod tests {
 	use super::*;
 
 	#[test]
-	// Pins the lock names of the retired claims, which in-flight rows still take.
-	#[allow(deprecated)]
 	fn the_generalized_claim_lock_keeps_the_keys_the_old_helpers_computed() {
 		// The formulas below are written out rather than called, on purpose: they are what
 		// every deployed binary computes today, so this test fails the moment `claim_lock_name`
-		// is "simplified" into a uniform v5 over `logical_key()` and the two live locks quietly
-		// move to new targets.
+		// is "simplified" into a uniform v5 over `logical_key()` and the live lock quietly
+		// moves to a new target.
 		let user = Uuid::new_v4();
 		assert_eq!(
 			claim_lock_key(&LedgerAccountKey::UserClaim(UserId::from_raw(user))),
@@ -300,13 +295,16 @@ mod tests {
 			"lock_user keyed the raw user id"
 		);
 		assert_eq!(
-			claim_lock_key(&LedgerAccountKey::FeeRevenue),
-			advisory_key(Uuid::new_v5(&Uuid::NAMESPACE_OID, b"withdrawal:revenue-claim")),
-			"the retired lock_revenue_claim keyed this fixed v5 name"
+			claim_lock_key(&LedgerAccountKey::ServiceClaim(domain::balance::ServiceId::fee())),
+			advisory_key(Uuid::new_v5(&Uuid::NAMESPACE_OID, b"service:fee")),
+			"every other claim is a v5 over its logical key"
 		);
 		// And distinct claims still get distinct targets, or the generalization would have
 		// serialized unrelated writers against each other.
-		assert_ne!(claim_lock_key(&LedgerAccountKey::FeeRevenue), claim_lock_key(&LedgerAccountKey::Fund));
+		assert_ne!(
+			claim_lock_key(&LedgerAccountKey::ServiceClaim(domain::balance::ServiceId::fee())),
+			claim_lock_key(&LedgerAccountKey::ServiceClaim(domain::balance::ServiceId::fund()))
+		);
 		assert_ne!(
 			claim_lock_key(&LedgerAccountKey::UserClaim(UserId::from_raw(user))),
 			claim_lock_key(&LedgerAccountKey::UserClaim(UserId::from_raw(Uuid::new_v4())))

@@ -1,5 +1,13 @@
 # Runbook — ownership data migration (`piggybank migrate-ownership`)
 
+> **Historical reference.** Executed in production on 2026-09-27 (v1.0.0): the retired
+> `fund` claim moved onto `service:fund`, the retired `fee` claim was already empty, and
+> the reconciliation came back clean. The command, its module
+> (`application/migrate_ownership.rs`) and its tests were removed with the contract step
+> (C-9, migration `0047_ownership_contract.sql`); `piggybank migrate-ownership` now
+> refuses by name. Nothing below can be run against a current build — it is kept as the
+> record of what was done.
+
 One-off, operator-run, after the first ownership release (#245, phase 1) is in
 production and **before** the contract migration that removes the retired accounts.
 Background: [`piggybank/core/PATTERNS.md`](../piggybank/core/PATTERNS.md) §Money plane

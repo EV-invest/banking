@@ -92,9 +92,7 @@ export const TAG = {
   adminUnitHolders: "admin.allocations.holders",
   /** The user directory and a single user's detail. */
   adminUsers: "admin.users",
-  /** The `fee` allocation's treasury view and the payout history. A payout also moves `adminQueue` (it
-   *  joins the operator withdrawal queue) and `adminTreasury` (it debits a claim), so
-   *  the mutation names all three rather than this one alone. */
+  /** The `fee` allocation's treasury view: its claim, supply, price and holders. */
   adminRevenue: "admin.revenue",
   /** Fee terms, accumulated units and the charge history. Settling moves the fee units
    *  AND the revenue figure, so a settle names this and `adminRevenue` together. */

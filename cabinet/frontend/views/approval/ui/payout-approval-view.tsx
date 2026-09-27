@@ -14,9 +14,8 @@
 //     exactly these values, and an owner who was shown a truncated address approved
 //     something else.
 //
-// A consilium carries one of several things — a revenue payout (history since #245), a
-// payment order (`invitation.payment`, docs/CONSILIUM.md § Payments), a NAV mark past the
-// move guard (`invitation.valuation_override`, banking#232), a change of a product's fee
+// A consilium carries one of several things — a payment order (`invitation.payment`,
+// docs/CONSILIUM.md § Payments), a NAV mark past the move guard (`invitation.valuation_override`, banking#232), a change of a product's fee
 // terms (`invitation.fee_policy`, docs/FEES.md § Changing the terms), a person seated on
 // a reserved allocation (`invitation.holder_grant`) or a seed of the platform's capital
 // (`invitation.seed_capital`, both #245). The page is the same in every case; only the
@@ -58,7 +57,6 @@ import {
 import { FeePolicyTermsBlock, renderableFeePolicy } from "@/views/approval/ui/fee-policy-terms";
 import { HolderGrantTermsBlock, SeedCapitalTermsBlock, renderableHolderGrant, renderableSeedCapital } from "@/views/approval/ui/ownership-terms";
 import { PaymentTermsBlock, renderablePayment } from "@/views/approval/ui/payment-terms";
-import { PayoutTerms } from "@/views/approval/ui/payout-terms";
 import { ValuationTermsBlock, renderableValuation } from "@/views/approval/ui/valuation-terms";
 
 export function PayoutApprovalView({ token }: { token: string }) {
@@ -160,12 +158,11 @@ export function PayoutApprovalView({ token }: { token: string }) {
   const feePolicy = invitation.fee_policy ?? null;
   const grant = invitation.holder_grant ?? null;
   const seed = invitation.seed_capital ?? null;
-  const payout = invitation.revenue_payout;
-  // The terms an owner is agreeing to must actually be on screen. The BFF fills a missing
-  // payout with `unwrap_or_default()`, which is empty strings — and an empty string is not
+  // The terms an owner is agreeing to must actually be on screen. An empty string is not
   // nullish, so a `?? "-"` renders nothing at all while the Approve button stays live. That
   // is precisely the approval-of-something-unseen policy 12/13 exists to prevent, so a
-  // request whose amount or address did not arrive is not offered for decision at all.
+  // request whose terms did not arrive — or whose kind this page does not know — is not
+  // offered for decision at all.
   const renderable = valuation
     ? renderableValuation(valuation)
     : payment
@@ -174,10 +171,9 @@ export function PayoutApprovalView({ token }: { token: string }) {
         ? renderableFeePolicy(feePolicy)
         : grant
           ? renderableHolderGrant(grant)
-          : seed
-            ? renderableSeedCapital(seed)
-            : Boolean(payout?.amount?.trim()) && Boolean(payout?.address?.trim());
-  const words = valuation ? "approval.valuation" : payment ? "approval.payment" : feePolicy ? "approval.feePolicy" : grant ? "approval.holderGrant" : seed ? "approval.seedCapital" : "approval.payout";
+          : seed !== null && renderableSeedCapital(seed);
+  // Past the `renderable` guard below, the last arm can only be a seed.
+  const words = valuation ? "approval.valuation" : payment ? "approval.payment" : feePolicy ? "approval.feePolicy" : grant ? "approval.holderGrant" : "approval.seedCapital";
   const burned = !settled && (invitation.attempts_remaining ?? 0) <= 0;
   const expired = !settled && hasExpired(invitation.expires_at);
   const threshold = invitation.threshold ?? 0;
@@ -213,10 +209,8 @@ export function PayoutApprovalView({ token }: { token: string }) {
             <FeePolicyTermsBlock terms={feePolicy} payloadHash={invitation.payload_hash} />
           ) : grant ? (
             <HolderGrantTermsBlock terms={grant} payloadHash={invitation.payload_hash} />
-          ) : seed ? (
-            <SeedCapitalTermsBlock terms={seed} payloadHash={invitation.payload_hash} />
           ) : (
-            <PayoutTerms payout={payout} payloadHash={invitation.payload_hash} />
+            seed && <SeedCapitalTermsBlock terms={seed} payloadHash={invitation.payload_hash} />
           )}
 
           <div className="flex flex-col gap-2.5">

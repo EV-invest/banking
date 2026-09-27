@@ -71,8 +71,7 @@ pub struct PaymentTag;
 /// token lives for, because they close the same gap: a human has to read a mail and act.
 pub const TTL_SECS: i64 = 72 * 60 * 60;
 
-/// The longest reason an initiator may attach, **in bytes**, matching
-/// [`crate::consilium::MAX_MEMO_BYTES`]. Bytes, not characters, because the limit exists to
+/// The longest reason an initiator may attach, **in bytes**. Bytes, not characters, because the limit exists to
 /// bound what a mail and a column carry, and both count bytes.
 pub const MAX_REASON_BYTES: usize = 500;
 
@@ -81,8 +80,7 @@ pub const MAX_REASON_BYTES: usize = 500;
 /// It is a newtype rather than a bare `String` because it is **hashed into the payload the
 /// approver signs**: an unvalidated reason would be a way to put a control character (and
 /// therefore a forged line) into the one mail whose whole job is to state the facts of a
-/// money move. The rules are [`crate::consilium::RevenuePayoutTerms::new`]'s, for the same
-/// reason and enforced at the same edge.
+/// money move.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct PaymentReason(String);
@@ -123,7 +121,7 @@ impl core::fmt::Display for PaymentReason {
 /// types rather than one symmetrical one.
 /// ADJACENTLY tagged, not internally. [`Party`] is itself tagged on `kind`, and an internal
 /// tag would splice the two maps together: the inner `kind` overwrites the outer one, so
-/// `Internal(Party::Revenue)` serializes as `{"kind":"revenue",…}` — a value that has lost
+/// `Internal(Party::Service(_))` serializes as `{"kind":"service",…}` — a value that has lost
 /// which VARIANT it is and cannot be read back. `PaymentEvent::Opened` carries these bytes
 /// into `event_log`, and `ConsiliumTerms::Payment` into `consilium.terms`, so a shape that
 /// only survives one direction is an audit row nobody can ever load.
@@ -143,9 +141,6 @@ impl PaymentDestination {
 			Self::External { .. } => PaymentTier::External,
 			Self::Internal(Party::Service(_)) => PaymentTier::Service,
 			Self::Internal(Party::User(_)) => PaymentTier::Internal,
-			// Retired destinations an in-flight order may still name.
-			#[allow(deprecated)]
-			Self::Internal(Party::Piggybank | Party::Revenue) => PaymentTier::Internal,
 		}
 	}
 
@@ -333,8 +328,8 @@ pub struct PaymentTerms {
 
 impl PaymentTerms {
 	/// The domain-separation prefix, included in the digest so a hash over these terms can
-	/// never collide with one taken over another subject — including a
-	/// [`crate::consilium::RevenuePayoutTerms`] whose fields happen to encode alike.
+	/// never collide with one taken over another subject whose fields happen to encode
+	/// alike.
 	///
 	/// FROZEN. Every `payload_hash` ever stored was taken over an encoding starting with
 	/// these bytes; changing one of them invalidates every live approval at once.
@@ -421,9 +416,6 @@ impl PaymentTerms {
 		match &self.from {
 			Party::User(user) => PaymentApproval::SubjectConsent(*user),
 			Party::Service(_) => PaymentApproval::OwnerConsilium,
-			// The retired singletons are still a source an in-flight order may name.
-			#[allow(deprecated)]
-			Party::Piggybank | Party::Revenue => PaymentApproval::OwnerConsilium,
 		}
 	}
 
@@ -437,12 +429,12 @@ impl PaymentTerms {
 		let mut out = Vec::with_capacity(Self::DOMAIN.len() + 160);
 		out.extend_from_slice(Self::DOMAIN);
 		push_field(&mut out, self.from.kind_str().as_bytes());
-		push_field(&mut out, self.from.id_str().unwrap_or_default().as_bytes());
+		push_field(&mut out, self.from.id_str().as_bytes());
 		match &self.to {
 			PaymentDestination::Internal(party) => {
 				push_field(&mut out, b"internal");
 				push_field(&mut out, party.kind_str().as_bytes());
-				push_field(&mut out, party.id_str().unwrap_or_default().as_bytes());
+				push_field(&mut out, party.id_str().as_bytes());
 			}
 			PaymentDestination::External { network, address } => {
 				push_field(&mut out, b"external");
@@ -466,17 +458,12 @@ impl PaymentTerms {
 /// The reserved allocations get the names an operator uses out loud; a product and an
 /// investor keep their id, because "a service" and "an investor" are not answers to
 /// "which one".
-#[allow(deprecated)]
 fn party_label(party: &Party) -> String {
 	match party {
 		Party::Service(service) if *service == ServiceId::fee() => "the fee allocation".to_owned(),
 		Party::Service(service) if *service == ServiceId::fund() => "the fund allocation".to_owned(),
 		Party::Service(service) => format!("the {service} product"),
 		Party::User(user) => format!("investor {user}"),
-		// Retired sources, still named in the history and in any order opened before the
-		// migration; the words stay so an old approval reads as it did.
-		Party::Piggybank => "the fund's pooled capital".to_owned(),
-		Party::Revenue => "the fund's earned revenue".to_owned(),
 	}
 }
 
@@ -1093,24 +1080,6 @@ mod tests {
 		let user = UserId::new();
 		assert_eq!(terms(Party::User(user), external()).source_label(), format!("investor {user}"));
 		assert_eq!(terms(fee(), PaymentDestination::Internal(fund())).destination_label(), "the fund allocation");
-	}
-
-	#[test]
-	#[allow(deprecated)]
-	fn a_retired_source_still_reads_as_the_owners_money() {
-		// An order opened before the migration names `piggybank` or `revenue` in its terms.
-		// It must still load, still need the owner consilium, still settle on the retired
-		// singleton claim and still read as it did when it was approved.
-		for (source, claim, label) in [
-			(Party::Piggybank, LedgerAccountKey::Fund, "the fund's pooled capital"),
-			(Party::Revenue, LedgerAccountKey::FeeRevenue, "the fund's earned revenue"),
-		] {
-			let legacy = terms(source.clone(), external());
-			assert_eq!(legacy.requirement(), PaymentApproval::OwnerConsilium);
-			assert_eq!(legacy.source_claim(), claim);
-			assert_eq!(legacy.source_label(), label);
-			assert_eq!(PaymentDestination::Internal(source).tier(), PaymentTier::Internal);
-		}
 	}
 
 	#[test]

@@ -10,9 +10,9 @@
 //!   1. **Global cash invariant** — `sum(custody) == sum(claims)` on the USDT ledger,
 //!      read straight from TigerBeetle ([`Ledger::cash_invariant`]), the claims broken
 //!      down by whose they are: `Σ user + Σ service + clearing + book cash + retired
-//!      == Σ custody`. The retired `fund`/`fee` singletons count as claims — what is on
-//!      them until the ownership data migration is legitimate, not drift — and value on
-//!      an account of no known kind is its own finding.
+//!      == Σ custody`. The retired `fund`/`fee` accounts (codes 1/40) still exist in
+//!      TigerBeetle and count as claims by code — zero since the ownership data migration
+//!      of 2026-09-27 — and value on an account of no known kind is its own finding.
 //!   2. **Clearing vs control-plane** — the `clearing` account's reserved (pending +
 //!      posted) balance vs the gross of every `queued`/`processing` withdrawal in
 //!      Postgres; a mismatch means a withdrawal whose reserve parked (nothing locked) or a
@@ -23,9 +23,9 @@
 //!      construction, so a mismatch is an inconsistency: an alert. Alongside it, **value
 //!      without a holder** — cash or product units on an allocation no unit of which is
 //!      outstanding — is a `warn!` and a counter
-//!      ([`telemetry::note_unheld_allocation_value`]), NOT an alert: it is the expected
-//!      state of `fee` between the first ownership release and the data migration that
-//!      seats its holders, and should be zero everywhere after.
+//!      ([`telemetry::note_unheld_allocation_value`]), NOT an alert: fees can settle into
+//!      an allocation before a holder grant seats anyone, which loses nothing — the owners
+//!      decide whose it is. After the 2026-09-27 data migration it reads zero everywhere.
 //!   4. **Parked-row scan** — every `outbox.parked_at` row, surfaced with its
 //!      `last_error` and whether it has been flagged for compensation.
 //!

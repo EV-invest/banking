@@ -322,13 +322,12 @@ fn issuance_to_proto(record: &UnitIssuanceRecord) -> pb::UnitIssuance {
 	}
 }
 
-/// The holder's identity as `holder_kind` says to read it: a user's id, an allocation's
-/// slug, nothing for the retired company (see `contracts::allocation::holder`).
+/// The holder's identity as `holder_kind` says to read it: a user's id or an allocation's
+/// slug (see `contracts::allocation::holder`).
 fn holder_id_string(holder: &UnitHolder) -> String {
 	match holder {
 		UnitHolder::User(user) => user.to_string(),
 		UnitHolder::Allocation(service) => service.to_string(),
-		_ => String::new(),
 	}
 }
 
@@ -457,14 +456,11 @@ mod tests {
 	use super::*;
 
 	#[test]
-	// The retired company holder and source are still wire vocabulary: stored rows carry
-	// them, and a client must keep recognising them until the contract migration.
-	#[allow(deprecated)]
 	fn domain_holders_and_issuance_states_match_the_wire_contract() {
 		// The three vocabularies an in-kind issuance crosses the wire with, held to the same
 		// standard as state/access/icon: the hub stores the domain enum, consumers match on
 		// the wire constants, and drift between them is a test failure, not a mystery.
-		let holders = [UnitHolder::User(UserId::new()), UnitHolder::Company, UnitHolder::Allocation(ServiceId::fee())];
+		let holders = [UnitHolder::User(UserId::new()), UnitHolder::Allocation(ServiceId::fee())];
 		let as_wire: Vec<&str> = holders.iter().map(|holder| holder.kind_str()).collect();
 		assert_eq!(as_wire.as_slice(), wire_holder::ALL.as_slice(), "the domain holder kinds and the wire vocabulary have drifted");
 		for kind in wire_holder::ALL {
@@ -480,7 +476,7 @@ mod tests {
 		for state in wire_issuance_state::ALL {
 			assert_eq!(IssuanceState::parse(state).unwrap().as_str(), state);
 		}
-		let sources = [IssuanceSource::Mint, IssuanceSource::Company, IssuanceSource::Retire];
+		let sources = [IssuanceSource::Mint, IssuanceSource::Retire];
 		let as_wire: Vec<&str> = sources.iter().map(|source| source.as_str()).collect();
 		assert_eq!(
 			as_wire.as_slice(),

@@ -85,8 +85,7 @@ export function resignOwnership(confirmEmail: string): Promise<void> {
 /**
  * Ask the owners to seat a person on a reserved allocation (#245): `units` of `fee` or
  * `fund` minted to `user_id` once the quorum carries. The only route in — an operator's
- * mint refuses the reserved allocations, and `/api/consilium/revenue-payout` this client
- * used to post to is closed at the plane.
+ * mint refuses the reserved allocations.
  */
 export function openHolderGrant(body: HolderGrantTerms): Promise<Consilium> {
   return postJson<Consilium>("/api/consilium/holder-grant", body);

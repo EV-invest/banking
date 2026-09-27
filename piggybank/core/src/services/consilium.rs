@@ -135,27 +135,6 @@ fn decision_from_proto(raw: i32) -> Result<VoteDecision, Status> {
 	}
 }
 
-/// The payout terms as the wire carries them, or `None` for a kind that is not a payout.
-/// History only (#245): nothing opens a payout, but the consilia that were open when the
-/// kind was retired still list and still execute.
-///
-/// No `_` arm: a new kind needs a field of its own on the contract, and this stops compiling
-/// rather than quietly rendering it as an absent payout — a request that reads as having no
-/// terms at all on the one screen an owner authorizes money from.
-fn payout_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerms> {
-	match terms {
-		ConsiliumTerms::RevenuePayout(terms) => Some(pb::RevenuePayoutTerms {
-			network: terms.network.as_str().to_owned(),
-			// In FULL, never truncated: a shortened address in an approval flow is an
-			// invitation to approve the wrong wallet.
-			address: terms.address.as_str().to_owned(),
-			amount: terms.amount.to_decimal_string(),
-			memo: terms.memo.clone(),
-		}),
-		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
-	}
-}
-
 /// The valuation-override terms as the wire carries them — the third of the "exactly one
 /// terms field is set" siblings. `None` for the other kinds, and NEVER an empty message:
 /// the cabinet treats an empty object as unrenderable, and `Option` is what the generated
@@ -166,7 +145,7 @@ fn valuation_override_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::Valua
 			service: terms.service.to_string(),
 			aum: terms.aum.to_decimal_string(),
 		}),
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
+		ConsiliumTerms::Payment(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
 	}
 }
 
@@ -178,7 +157,7 @@ fn valuation_override_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::Valua
 /// disagree about what an owner approved.
 fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPaymentTerms> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
+		ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
 		ConsiliumTerms::Payment(subject) => Some(pb::ConsiliumPaymentTerms {
 			payment_id: subject.payment_id.to_string(),
 			tier: subject.terms.tier().as_str().to_owned(),
@@ -199,7 +178,7 @@ fn holder_grant_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::HolderGrant
 			user_id: terms.user.to_string(),
 			units: terms.units.to_decimal_string(),
 		}),
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::SeedCapital(_) => None,
+		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::SeedCapital(_) => None,
 	}
 }
 
@@ -214,7 +193,7 @@ fn seed_capital_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::SeedCapital
 			amount: terms.amount.to_decimal_string(),
 			depositor_user_id: terms.depositor.to_string(),
 		}),
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) => None,
+		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) | ConsiliumTerms::HolderGrant(_) => None,
 	}
 }
 
@@ -222,7 +201,7 @@ fn seed_capital_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::SeedCapital
 /// presentation (product title, holder count) the repository reads beside it.
 fn fee_policy_terms_to_proto(terms: &ConsiliumTerms, detail: Option<&FeePolicyDetail>) -> Option<pb::ConsiliumFeePolicyTerms> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
+		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::HolderGrant(_) | ConsiliumTerms::SeedCapital(_) => None,
 		ConsiliumTerms::FeePolicy(subject) => {
 			let from = subject.from.unwrap_or(FeePolicy::NONE);
 			Some(pb::ConsiliumFeePolicyTerms {
@@ -253,7 +232,6 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 	pb::Consilium {
 		id: c.id().to_string(),
 		state: state_to_proto(c.state()),
-		revenue_payout: payout_terms_to_proto(c.terms()),
 		payment: payment_terms_to_proto(c.terms()),
 		valuation_override: valuation_override_terms_to_proto(c.terms()),
 		fee_policy: fee_policy_terms_to_proto(c.terms(), view.fee_policy.as_ref()),
@@ -297,7 +275,6 @@ fn invitation_to_proto(view: &InvitationView) -> pb::ConsiliumInvitation {
 	pb::ConsiliumInvitation {
 		consilium_id: view.consilium_id.to_string(),
 		state: state_to_proto(view.state),
-		revenue_payout: payout_terms_to_proto(&view.terms),
 		payment: payment_terms_to_proto(&view.terms),
 		valuation_override: valuation_override_terms_to_proto(&view.terms),
 		fee_policy: fee_policy_terms_to_proto(&view.terms, view.fee_policy.as_ref()),
@@ -327,15 +304,15 @@ fn approval_err(err: DomainError) -> Status {
 
 #[tonic::async_trait]
 impl ConsiliumService for ConsiliumSvc {
-	/// Seat a holder of a reserved allocation (#245). Gated on `RevenuePayout` — the
-	/// permission every owner-only surface of this service shares (opening was once a
-	/// payout, and the name stayed) — and NOT on `AllocationManage`: an operator who sizes
+	/// Seat a holder of a reserved allocation (#245). Gated on `ConsiliumManage` — the
+	/// permission every owner-only surface of this service shares
+	/// — and NOT on `AllocationManage`: an operator who sizes
 	/// products has no say over who holds the owners' money, and the domain refuses an
 	/// initiator without a seat whatever admitted them here. The person is resolved the
 	/// way every admin RPC resolves a target, so the units land on the money-plane row
 	/// they redeem from.
 	async fn open_holder_grant(&self, request: Request<pb::OpenHolderGrantRequest>) -> Result<Response<pb::Consilium>, Status> {
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
+		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
 		let initiator = caller_id(&request)?;
 		let terms = request.into_inner().terms.ok_or_else(|| Status::invalid_argument("terms are required"))?;
 		let allocation = ServiceId::parse(&terms.allocation).map_err(map_err)?;
@@ -386,7 +363,7 @@ impl ConsiliumService for ConsiliumSvc {
 	}
 
 	async fn cancel_consilium(&self, request: Request<pb::CancelConsiliumRequest>) -> Result<Response<pb::Consilium>, Status> {
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
+		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
 		let caller = caller_id(&request)?;
 		let id = parse_consilium_id(&request.get_ref().consilium_id)?;
 		let view = consilium_app::cancel(self.state.consilia.as_ref(), id, caller, unix_now()).await.map_err(map_err)?;
@@ -394,14 +371,14 @@ impl ConsiliumService for ConsiliumSvc {
 	}
 
 	async fn get_consilium(&self, request: Request<pb::GetConsiliumRequest>) -> Result<Response<pb::Consilium>, Status> {
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
+		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
 		let id = parse_consilium_id(&request.get_ref().consilium_id)?;
 		let view = consilium_app::find(self.state.consilia.as_ref(), id).await.map_err(map_err)?;
 		Ok(Response::new(consilium_to_proto(&view)))
 	}
 
 	async fn list_consilia(&self, request: Request<pb::ListConsiliaRequest>) -> Result<Response<pb::ConsiliumList>, Status> {
-		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
+		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
 		let requested = request.get_ref().limit;
 		let limit = if requested == 0 { DEFAULT_LIST_LIMIT } else { requested.min(MAX_LIST_LIMIT) };
 		let views = consilium_app::list(self.state.consilia.as_ref(), i64::from(limit)).await.map_err(map_err)?;

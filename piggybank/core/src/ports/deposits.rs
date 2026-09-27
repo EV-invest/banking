@@ -12,7 +12,6 @@
 
 use async_trait::async_trait;
 use domain::{
-	balance::Party,
 	error::DomainError,
 	money::{Network, TxRef, Usdt},
 	users::UserId,
@@ -24,7 +23,7 @@ pub trait Deposits: Send + Sync {
 	/// a second record of the same chain tx impossible, so the credit happens at most
 	/// once even under concurrent recorders. Returns `true` if newly recorded,
 	/// `false` for a duplicate.
-	async fn record(&self, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError>;
+	async fn record(&self, tx_ref: TxRef, user: UserId, network: Network, amount: Usdt) -> Result<bool, DomainError>;
 
 	/// The caller's credited on-chain deposits, newest first — a projection read of
 	/// the idempotency-gate rows where `party_kind = 'user'`.

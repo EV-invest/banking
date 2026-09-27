@@ -8,9 +8,9 @@ and taking someone's ownership away. All are gated by a **consilium** — a quor
 owners who each confirm from their mailbox.
 
 The kinds, as `ConsiliumKind` (`domain/src/consilium.rs`) spells them: `payment`,
-`valuation_override`, `fee_policy`, `holder_grant`, `seed_capital` — and `revenue_payout`,
-**history only** since #245 (nothing opens one; `open_revenue_payout` refuses, consilia
-opened before the retirement still list and execute). The platform holds no money outside
+`valuation_override`, `fee_policy`, `holder_grant`, `seed_capital`. A sixth,
+`revenue_payout`, was retired in #245 and removed from the enum, the contract and the
+`consilium.kind` CHECK (`0047_ownership_contract.sql`). The platform holds no money outside
 an allocation held by people, so "pay the fund out" is not a thing a quorum can do: cash
 leaves `fee` / `fund` by a holder's redemption or by a payment order out of `service:fee` /
 `service:fund` (§ Payments).
@@ -79,8 +79,7 @@ because **the initiator is necessarily one of the `N`**. That fact is enforced i
 the RBAC matrix does not suggest, so it is worth stating plainly:
 
 - The **RPC boundary** gates each open on an operator permission — `OpenHolderGrant` on
-  `Permission::RevenuePayout` (the owner-surface permission the name stayed on,
-  `services/consilium.rs`), `OpenValuationOverride` on `ValuationPost`, `OpenPayment` on
+  `Permission::ConsiliumManage` (the owner-surface permission, `services/consilium.rs`), `OpenValuationOverride` on `ValuationPost`, `OpenPayment` on
   `PaymentOpen`, `ScheduleFeePolicy` on `AllocationManage`, `SeedCapital` on
   `CapitalManage` — and the matrix (`domain::authz::grants`) grants those to **`Admin`
   *and* `Owner`** — role-granting is the identity plane's concern, so the money plane
@@ -377,8 +376,7 @@ once, here, and each plane's tests assert against this table:
 
 14. **TOCTOU on the tally.** The count and the transition to `Approved` happen in one
     Postgres transaction with `SELECT … FOR UPDATE` on the request row.
-15. **Double execution.** Idempotent per kind: the retired payout's withdrawal id
-    `uuid_v5(request_id, "consilium:revenue-payout")`, a mark's id
+15. **Double execution.** Idempotent per kind: a mark's id
     `uuid_v5(…, "consilium:valuation-override")`, a grant's key `holder-grant:<consilium>`
     (`issuance::grant_units`), a seed's subscription id `seed_subscription_id(tx_ref)`; a
     payment's `record_approval` and a fee change's `schedule_approved` are idempotent on
@@ -389,8 +387,8 @@ once, here, and each plane's tests assert against this table:
     consilium (source_claim) WHERE state = 'open'`. `source_claim()` per kind
     (`domain/src/consilium.rs`): a payment — the order's source; an override — the
     product's `service:<id>`; a fee change — `FeeShares(svc)`; a grant —
-    `service:<fee|fund>`; a seed — `service:fund`; the retired payout — the retired `fee`
-    claim. What the index does not do is block a request over a different claim. This
+    `service:<fee|fund>`; a seed — `service:fund`. What the index does not do is block a
+    request over a different claim. This
     removes the race rather than trying to win it. Insufficient cover at execution is
     still handled: the existing solvency Read-First rejects it, the request lands in
     `ExecutionFailed` with the reason visible to owners, and nothing retries silently.
@@ -447,7 +445,7 @@ once, here, and each plane's tests assert against this table:
     `BalanceService.RequestRevenuePayout` and `ConsiliumService.OpenRevenuePayout` are
     gone from the contract with #245: there is no direct payout and no payout consilium;
     the fund's earnings are the `fee` allocation, held by people. `CancelRevenuePayout` /
-    `ListRevenuePayouts` remain for the rows queued before the retirement.
+    `ListRevenuePayouts` were removed with it (C-9); production held no payout row.
 29. **A mechanism that silently does nothing.** Every approval token reaches its owner
     through exactly one route — the `consilium_mail` queue drained into concierge. On a
     build where that seam is not compiled in, a consilium would open, mail nobody, and
@@ -566,14 +564,13 @@ for a consilium, every owner) reads.
 
 Both approval mails leave through the same `consilium_mail` queue, written in the same
 transaction as the seat they carry a token for, drained by the singleton worker into
-concierge's relay. Three kinds, three templates: `PAYOUT_APPROVAL` (a rail and an address),
-`PAYMENT_APPROVAL` (two ends in words, for the owners) and `PAYMENT_CONSENT` (the same, for the
-one investor whose money it is) — `PAYOUT_APPROVAL` is history: nothing opens a payout; a
-holder grant and a seed borrow `PAYMENT_APPROVAL` (§ Holder grant and seed capital). A
-payment is never rendered through the payout template — it would name the wrong claim and
-the wrong rail on the one mail whose job is to state what is being approved. The consent
-mail names the subject's identity-plane id in its typed payload, and concierge refuses it unless that id is the addressee, so the money plane cannot fan one
-consent out to a second mailbox. Beside the canonical label the destination carries what a
+concierge's relay. Two kinds, two templates: `PAYMENT_APPROVAL` (two ends in words, for the
+owners) and `PAYMENT_CONSENT` (the same, for the one investor whose money it is); a holder
+grant and a seed borrow `PAYMENT_APPROVAL` (§ Holder grant and seed capital). The retired
+revenue payout's `PAYOUT_APPROVAL` left `GovernanceMail` and the `consilium_mail.kind` CHECK
+with #245 (`0047_ownership_contract.sql`). The consent mail names the subject's
+identity-plane id in its typed payload, and concierge refuses it unless that id is the
+addressee, so the money plane cannot fan one consent out to a second mailbox. Beside the canonical label the destination carries what a
 person recognises it by — the receiving investor's masked mailbox, the product's title — so
 "investor 8f3e…" is not approved for the wrong person; the label alone is what the digest
 binds.
@@ -685,9 +682,7 @@ this section covers only how the kind sits in the consilium.
   policy whose rates are zero.
 - **The source claim** is the product's `FeeShares(service)` — the account the new terms
   will collect into — so `consilium_single_open_per_source_idx` yields one open fee-policy
-  consilium per product, and a payout or a payment over a different claim is not blocked by
-  it. `consilium_payout_spends_the_fee_claim` constrains only `revenue_payout` and leaves
-  this kind alone.
+  consilium per product, and a payment over a different claim is not blocked by it.
 - **Execution** is not a money move. Carrying the quorum moves the change from
   `awaiting_consilium` to `scheduled`, fixes `effective_from` at
   `max(requested, now + 24h)` (or `now` if the product has no holders), and enqueues one

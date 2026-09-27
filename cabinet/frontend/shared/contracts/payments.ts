@@ -185,8 +185,8 @@ export interface PaymentConsentResult {
 // ── The terms as a consilium carries them ──────────────────────────────────────
 
 /**
- * What a payment consilium authorizes — the sibling of `RevenuePayout` on a `Consilium`
- * and on its emailed invitation. Two ends in words rather than a rail and an address; an
+ * What a payment consilium authorizes — a sibling of the other kinds' terms on a
+ * `Consilium` and on its emailed invitation. Two ends in words rather than a rail and an address; an
  * external destination still carries both inside `destination`.
  */
 export interface ConsiliumPaymentTerms {

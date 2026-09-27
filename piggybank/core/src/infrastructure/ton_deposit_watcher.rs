@@ -45,7 +45,6 @@ use std::{
 };
 
 use domain::{
-	balance::Party,
 	money::{Network, TxRef, Usdt},
 	users::UserId,
 };
@@ -300,7 +299,7 @@ impl TonDepositWatcher {
 		// (`ton_custody::PIGGYBANK_RECIPIENT`) — never a uuid, so the two can never collide.
 		let recipient = user.to_string();
 		let tx_ref = TxRef::parse(&format!("{}:{recipient}", transfer.tx_hash)).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, user, network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
 		if newly {

@@ -10,8 +10,9 @@ package banking.v1;
 // half of ALL owners must each confirm it from their mailbox before anything happens.
 //
 // The kinds, as the `Consilium` message tells them apart (exactly one terms sibling is
-// set): `revenue_payout` (HISTORY ONLY — retired by #245, nothing opens one), `payment`,
-// `valuation_override`, `fee_policy`, `holder_grant`, `seed_capital`.
+// set): `payment`, `valuation_override`, `fee_policy`, `holder_grant`, `seed_capital`.
+// (`revenue_payout` was retired by #245 and left the contract with C-9; field 3 of
+// `Consilium` and `ConsiliumInvitation` is reserved for it.)
 //
 // WHY THE MONEY PLANE OWNS THIS. docs/ARCHITECTURE.md rejects letting a
 // concierge-signed artifact authorize money movement, and a consilium verdict is
@@ -98,23 +99,6 @@ enum VoteDecision {
   VOTE_DECISION_PENDING = 1;
   VOTE_DECISION_APPROVE = 2;
   VOTE_DECISION_REJECT = 3;
-}
-
-// The immutable subject of a revenue payout — HISTORY ONLY. Retired by #245: the
-// platform's earnings are the `fee` allocation's, held by people, and cash leaves it by
-// a holder's redemption or a `payment` out of `service:fee`. Consilia opened before the
-// retirement still read (and, if approved, execute) through this. Amounts are decimal
-// USDT STRINGS, as everywhere else on this wire.
-message RevenuePayoutTerms {
-  // Rail the payout ships on (BEP20 / POLYGON / TRC20 / TON).
-  string network = 1;
-  // Destination address, rendered in FULL wherever a human approves it — a truncated
-  // address in an approval mail is an invitation to approve the wrong one.
-  string address = 2;
-  // Gross USDT to pay out, capped by FundRevenue.available at execution.
-  string amount = 3;
-  // Free-text note from the initiator, shown in the mail. Never interpreted.
-  string memo = 4;
 }
 
 // The immutable subject of a PAYMENT consilium — the §3 rule that money pooled in an
@@ -234,11 +218,15 @@ message ConsiliumVoter {
 message Consilium {
   string id = 1;
   ConsiliumState state = 2;
-  // EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,
-  // `fee_policy`, `holder_grant`, `seed_capital`) is set, decided by the kind. Named fields
-  // rather than a oneof because the surfaces read them by name and a oneof buys nothing
-  // here that the "exactly one" rule does not already give.
-  RevenuePayoutTerms revenue_payout = 3;
+  // EXACTLY ONE of the terms fields (`payment`, `valuation_override`, `fee_policy`,
+  // `holder_grant`, `seed_capital`) is set, decided by the kind. Named fields rather than a
+  // oneof because the surfaces read them by name and a oneof buys nothing here that the
+  // "exactly one" rule does not already give.
+  //
+  // Field 3 was the retired payout terms, `revenue_payout` (#245). Reserved so no later
+  // field can inherit its number and be read by an old client as payout terms.
+  reserved 3;
+  reserved "revenue_payout";
   // Hex SHA-256 over the canonical terms. Shown (short prefix) in the mail so an owner
   // can tell that what they approved is what will execute.
   string payload_hash = 4;
@@ -267,7 +255,7 @@ message Consilium {
   ConsiliumPaymentTerms payment = 18;
   // The payment order an executed PAYMENT consilium carried.
   string executed_payment_id = 19;
-  // The third terms sibling — see `revenue_payout`.
+  // A terms sibling — see the "exactly one" note above.
   ValuationOverrideTerms valuation_override = 20;
   // The `fund_valuations` row an executed VALUATION-OVERRIDE consilium recorded.
   string executed_valuation_id = 21;
@@ -322,8 +310,10 @@ message GetInvitationRequest {
 message ConsiliumInvitation {
   string consilium_id = 1;
   ConsiliumState state = 2;
-  // Exactly one of the terms siblings is set — see `Consilium`.
-  RevenuePayoutTerms revenue_payout = 3;
+  // Exactly one of the terms siblings is set — see `Consilium`. Field 3 was the retired
+  // `revenue_payout` (#245).
+  reserved 3;
+  reserved "revenue_payout";
   string payload_hash = 4;
   // Who opened it, masked.
   string initiator_email = 5;

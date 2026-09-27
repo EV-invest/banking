@@ -21,7 +21,6 @@ use std::sync::{
 };
 
 use domain::{
-	balance::Party,
 	money::{Network, TxRef, Usdt},
 	users::UserId,
 };
@@ -148,7 +147,7 @@ async fn assert_gate(pool: &PgPool, addresses: &SignerDepositAddresses, signer: 
 	let tx_ref = TxRef::parse(&format!("0xcustodygate{}", user.raw().simple())).expect("tx ref");
 	assert!(
 		deposits
-			.record(tx_ref, Party::User(user), NETWORK, Usdt::from_base_units(5_000_000_000_000_000_000))
+			.record(tx_ref, user, NETWORK, Usdt::from_base_units(5_000_000_000_000_000_000))
 			.await
 			.expect("record a deposit"),
 		"the deposit must be newly recorded"

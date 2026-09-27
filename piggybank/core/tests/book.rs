@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationBacking, AllocationIcon, AllocationId},
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, ServiceId},
+	balance::{LedgerAccountKey, ServiceId},
 	book::{BookPolicy, CancelReason, CandleResolution, ClientOrderId, Locked, OrderKind, OrderState, Price, PriceTimeEngine, Side, Tif},
 	error::DomainError,
 	issuance::{IdempotencyKey, UnitHolder},
@@ -186,9 +186,7 @@ async fn issue_units(h: &Harness, service: &ServiceId, user: UserId, units: &str
 /// Cash on the user's claim: the buyer's side of every test starts here.
 async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 	let tx_ref = TxRef::parse(&format!("book-{}", Uuid::new_v4())).unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), Network::Bep20, usdt(amount))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, user, Network::Bep20, usdt(amount)).await.unwrap();
 	common::drain_to_quiescence(&h.relay, &h.pool).await;
 }
 

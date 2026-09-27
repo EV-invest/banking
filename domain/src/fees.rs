@@ -451,7 +451,7 @@ pub struct FeePolicySubject {
 }
 
 impl FeePolicySubject {
-	/// FROZEN, for the reason `RevenuePayoutTerms::DOMAIN` is: every stored `payload_hash`
+	/// FROZEN, for the reason [`crate::payments::PaymentTerms::DOMAIN`] is: every stored `payload_hash`
 	/// over a fee-policy change opens with these bytes.
 	pub const DOMAIN: &'static [u8] = b"banking.v1.FeePolicySubject\x00";
 
@@ -915,16 +915,14 @@ pub enum FeeEvent {
 	/// `Dr SharesOutstanding / Cr FeeShares`, then `Dr ServiceClaim / Cr <payee claim>`).
 	///
 	/// `payee` is the claim the cash lands on — the `fee` allocation's, whose holders
-	/// are people (#245). It rides on the event rather than in the relay so a payload
-	/// written before the field existed (defaulting to the retired revenue claim it was
-	/// planned against) still re-plans to the SAME leg under at-least-once delivery.
+	/// are people (#245). It rides on the event rather than in the relay, so the relay's
+	/// plan is a function of the payload alone.
 	SharesSettled {
 		settlement_id: FeeSettlementId,
 		service: ServiceId,
 		units: Shares,
 		nav: Nav,
 		cash: Usdt,
-		#[serde(default = "Party::legacy_fee_payee")]
 		payee: Party,
 	},
 }

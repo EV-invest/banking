@@ -330,10 +330,10 @@ async fn a_decided_consilium(pool: &PgPool, initiator: UserId) -> ConsiliumId {
 	let id = Uuid::new_v4();
 	sqlx::query(
 		"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at, decided_at) \
-		 VALUES ($1, 'revenue_payout', 'approved', $2::jsonb, 'fee', $3, $4, 3, 2, now() + interval '72 hours', now())",
+		 VALUES ($1, 'valuation_override', 'approved', $2::jsonb, 'service:fixture', $3, $4, 3, 2, now() + interval '72 hours', now())",
 	)
 	.bind(id)
-	.bind(r#"{"network":"bep20","address":"0x52908400098527886E0F7030069857D2E4169EE7","amount":"1","memo":"fixture"}"#)
+	.bind(r#"{"service":"fixture","aum":"1"}"#)
 	.bind(vec![9u8; 32])
 	.bind(initiator.raw())
 	.execute(pool)
@@ -1317,7 +1317,7 @@ async fn an_investors_external_payment_creates_one_withdrawal_under_the_derived_
 	assert_eq!(view.order.state(), PaymentState::Executed, "the consent executed the order inline");
 	assert_eq!(view.order.executed_withdrawal_id(), Some(expected));
 	let withdrawal = a.withdrawals.find_by_id(expected).await.unwrap().expect("the withdrawal exists under the derived id");
-	assert_eq!(withdrawal.user(), Some(investor));
+	assert_eq!(withdrawal.user(), investor);
 	assert_eq!(withdrawal.amount(), usdt("50"));
 	assert_eq!(
 		withdrawal.state(),

@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use domain::{
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party},
+	balance::LedgerAccountKey,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
 	withdrawals::{WithdrawalId, WithdrawalState},
@@ -140,9 +140,7 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 	// Fund the user with 100 and apply it to TB, so both Read-Firsts see available=100.
 	let user = active_user(&h).await;
 	let tx_ref = TxRef::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), network, usdt("100"))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, user, network, usdt("100")).await.unwrap();
 	h.relay.drain().await;
 
 	// Double-submit the full balance WITHOUT draining in between — the exploit window.

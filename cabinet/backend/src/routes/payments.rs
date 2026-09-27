@@ -191,8 +191,8 @@ mod tests {
 
 	#[test]
 	fn an_internal_destination_becomes_the_internal_arm() {
-		let req = parsed(r#"{"source":{"kind":"piggybank"},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"10.00","reason":"rent"}"#);
-		assert_eq!(req.source.as_ref().map(|p| (p.kind.as_str(), p.id.as_str())), Some(("piggybank", "")));
+		let req = parsed(r#"{"source":{"kind":"service","id":"fund"},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"10.00","reason":"rent"}"#);
+		assert_eq!(req.source.as_ref().map(|p| (p.kind.as_str(), p.id.as_str())), Some(("service", "fund")));
 		match req.destination.and_then(|d| d.target) {
 			Some(bk::payment_destination::Target::Internal(party)) => assert_eq!((party.kind.as_str(), party.id.as_str()), ("user", "u-1")),
 			other => panic!("expected the internal arm, got {other:?}"),
@@ -213,8 +213,8 @@ mod tests {
 	/// picked one would open an order the operator did not describe.
 	#[test]
 	fn a_destination_must_be_exactly_one_of_the_two() {
-		let both = r#"{"source":{"kind":"piggybank"},"destination":{"internal":{"kind":"user","id":"u-1"},"external":{"network":"BEP20","address":"0xabc"}},"amount":"10","reason":"rent"}"#;
-		let neither = r#"{"source":{"kind":"piggybank"},"destination":{},"amount":"10","reason":"rent"}"#;
+		let both = r#"{"source":{"kind":"service","id":"fund"},"destination":{"internal":{"kind":"user","id":"u-1"},"external":{"network":"BEP20","address":"0xabc"}},"amount":"10","reason":"rent"}"#;
+		let neither = r#"{"source":{"kind":"service","id":"fund"},"destination":{},"amount":"10","reason":"rent"}"#;
 		for body in [both, neither] {
 			assert!(matches!(parse(body), Err(ApiError::BadRequest(_))), "{body}");
 		}
@@ -226,8 +226,8 @@ mod tests {
 			"not json",
 			"{}",
 			r#"{"source":{"kind":""},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"10","reason":"rent"}"#,
-			r#"{"source":{"kind":"piggybank"},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"","reason":"rent"}"#,
-			r#"{"source":{"kind":"piggybank"},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"10","reason":""}"#,
+			r#"{"source":{"kind":"service","id":"fund"},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"","reason":"rent"}"#,
+			r#"{"source":{"kind":"service","id":"fund"},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"10","reason":""}"#,
 		];
 		for body in cases {
 			assert!(matches!(parse(body), Err(ApiError::BadRequest(_))), "{body}");

@@ -41,7 +41,7 @@
 //! person, for a product registered against an asset that already has owners — and
 //! `RetireUnits`, the mint's mirror. The other [`holder`] kind, a reserved allocation
 //! (`fee` holding a product's fee class), is minted to by the fee accrual alone; the
-//! company is no holder at all (#245 — `TransferCompanyStake` went with it). Its
+//! company is no holder at all (#245 — the stake-transfer RPC went with it). Its
 //! vocabularies ([`holder`], [`issuance_source`], [`issuance_state`]) are pinned here
 //! like the others, as is [`backing`]: whether a product's units have the fund's cash
 //! behind them, which is what decides whether `Redeem` may pay them out.
@@ -241,25 +241,18 @@ pub mod backing {
 ///
 /// The hub's `domain::issuance::UnitHolder` stores exactly these
 /// (`unit_holder_strings_are_canonical` guards that side). Only a `user` row's id is a
-/// user: an `allocation` row's is the holding allocation's slug, and a historical
-/// `company` row's is empty — a client must never resolve either as a user.
+/// user: an `allocation` row's is the holding allocation's slug — a client must never
+/// resolve it as a user. (`company`, the retired company stake, left the vocabulary with
+/// #245; nothing on the wire carries it.)
 pub mod holder {
 	/// An investor; the id is their banking user id.
 	pub const USER: &str = "user";
-	/// The fund's own stake; the id is empty. Retired (#245): no new issuance names it
-	/// and no cap table lists it, but the issuance rows that do are still served and must
-	/// still render.
-	pub const COMPANY: &str = "company";
 	/// A reserved allocation (`fee` | `fund`) holding units of this product — the
 	/// product's fee class is held by `fee`; the id is that allocation's slug.
 	pub const ALLOCATION: &str = "allocation";
 
-	/// Every holder kind.
-	pub const ALL: [&str; 3] = [USER, COMPANY, ALLOCATION];
-
-	/// The kinds a LIVE holder can be — what `UnitHolderRef.kind` carries. `company` is
-	/// history only.
-	pub const LIVE: [&str; 2] = [USER, ALLOCATION];
+	/// Every holder kind — what `UnitHolderRef.kind` carries.
+	pub const ALL: [&str; 2] = [USER, ALLOCATION];
 
 	/// Whether `kind` is one this contract defines.
 	pub fn is_known(kind: &str) -> bool {
@@ -271,20 +264,17 @@ pub mod holder {
 ///
 /// The hub's `domain::issuance::IssuanceSource` stores exactly these
 /// (`issuance_source_strings_are_canonical` guards that side). A `mint` grew the
-/// supply by the row's `units`; a `company` row (history only, #245) moved them out of
-/// the company's stake and left the supply alone; a `retire` row burnt them and shrank
-/// the supply. `units` is always the magnitude — a client summing issuances into "units
-/// created" adds the first, ignores the second and subtracts the third.
+/// supply by the row's `units`; a `retire` row burnt them and shrank the supply. `units`
+/// is always the magnitude — a client summing issuances into "units created" adds the
+/// first and subtracts the second.
 pub mod issuance_source {
 	/// Minted in kind (`IssueUnits`, or an executed holder grant).
 	pub const MINT: &str = "mint";
-	/// Handed over out of the company's stake (`TransferCompanyStake`, retired — historical rows only).
-	pub const COMPANY: &str = "company";
 	/// Burnt out of the holder's account (`RetireUnits`).
 	pub const RETIRE: &str = "retire";
 
 	/// Every source.
-	pub const ALL: [&str; 3] = [MINT, COMPANY, RETIRE];
+	pub const ALL: [&str; 2] = [MINT, RETIRE];
 
 	/// Whether `source` is one this contract defines.
 	pub fn is_known(source: &str) -> bool {
@@ -404,12 +394,10 @@ mod tests {
 	fn the_holder_vocabulary_is_closed_and_canonical() {
 		// Byte-identical with `domain::issuance::UnitHolder::kind_str`
 		// (`unit_holder_strings_are_canonical` guards the other side).
-		assert_eq!(holder::ALL, ["user", "company", "allocation"]);
+		assert_eq!(holder::ALL, ["user", "allocation"]);
 		assert!(holder::ALL.iter().all(|h| holder::is_known(h)));
-		// The company is history: a live holder on a cap table is a person or an allocation.
-		assert_eq!(holder::LIVE, ["user", "allocation"]);
-		assert!(holder::LIVE.iter().all(|h| holder::is_known(h)));
-		assert!(!holder::LIVE.contains(&holder::COMPANY));
+		// The company stake is history (#245): not a holder any client may be sent.
+		assert!(!holder::is_known("company"));
 		// A reserved allocation is a holder of kind `allocation`, named by `holder_id` —
 		// its slug is never a kind of its own.
 		assert!(!holder::is_known("fund"));
@@ -422,7 +410,8 @@ mod tests {
 	fn the_issuance_source_vocabulary_is_closed_and_canonical() {
 		// Byte-identical with `domain::issuance::IssuanceSource::as_str`
 		// (`issuance_source_strings_are_canonical` guards the other side).
-		assert_eq!(issuance_source::ALL, ["mint", "company", "retire"]);
+		assert_eq!(issuance_source::ALL, ["mint", "retire"]);
+		assert!(!issuance_source::is_known("company"), "the hand-over out of the company stake is history (#245)");
 		assert!(issuance_source::ALL.iter().all(|s| issuance_source::is_known(s)));
 		assert!(!issuance_source::is_known("transfer"));
 		assert!(!issuance_source::is_known("burn"));

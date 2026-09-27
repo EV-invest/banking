@@ -50,12 +50,12 @@ pub const ACCOUNT_FROZEN: &str = "account is frozen";
 /// The driven ports the withdrawal write-path borrows: the aggregate's repository, the
 /// ledger both Read-First checks read, the custody gateway the rail-liquidity check asks,
 /// and the relay nudged once the control-plane commit lands. Exactly the set
-/// [`open_withdrawal`] — the shared body of both request paths — needs, so each use-case's
+/// [`open_withdrawal`] — the shared body of every request path — needs, so each use-case's
 /// own parameters stay its *request*: which source, which rail, where, how much. The
 /// user-facing entry point's extra gates (the [`OutflowPolicy`] freeze/KYC standing, the
 /// configured-rail list, the verification switch) are deliberately NOT here but in
-/// [`AdmissionGates`]: the revenue path has no user to gate, and a field it could never
-/// use would only invite one. A plain borrow-holder: it owns nothing and does nothing.
+/// [`AdmissionGates`], so a caller that runs its own admission (a payment order, at open)
+/// is not handed them twice. A plain borrow-holder: it owns nothing and does nothing.
 pub struct WithdrawalPorts<'a> {
 	/// The `withdrawals` aggregate's driven port (Postgres control plane).
 	pub withdrawals: &'a dyn WithdrawalRepository,
@@ -93,8 +93,7 @@ pub struct AdmissionGates<'a> {
 /// The calling user withdraws `amount` (gross) of free balance to `address`. The fee
 /// is the per-network policy fee; the net (`amount − fee`) is what leaves on-chain.
 ///
-/// `id` is supplied by the caller for the reason [`request_revenue_payout`]'s is: a payment
-/// order derives it from itself (`uuid_v5(payment_id, "payment:withdrawal")`) so a retried
+/// `id` is supplied by the caller so a payment order can derive it from itself (`uuid_v5(payment_id, "payment:withdrawal")`) so a retried
 /// execution re-creates the same row instead of a second withdrawal. The self-service wallet
 /// passes a fresh [`WithdrawalId::new`].
 pub async fn request_withdrawal(
@@ -163,9 +162,7 @@ pub async fn admit_user_account(gates: &AdmissionGates<'_>, user: UserId) -> Res
 	// Verification gate — an unverified account (tier 0 is a registration and a confirmed
 	// email, nothing more) may not move money off the platform. The tier is the identity
 	// plane's, mirrored onto the local row by the lifecycle bridge; this is the money
-	// plane enforcing it. Deliberately absent from `request_revenue_payout`: that pays the
-	// fund's own earned revenue out and has no user behind it to verify. The same `gate`
-	// must reach `dispatch_withdrawal` too — a lifted gate that admits a withdrawal the
+	// plane enforcing it. The same `gate` must reach `dispatch_withdrawal` too — a lifted gate that admits a withdrawal the
 	// dispatch gate then parks forever is worse than no switch at all.
 	if !gates.kyc.admits(standing.kyc_level) {
 		return Err(DomainError::Forbidden("identity verification required to withdraw".into()));
@@ -183,8 +180,8 @@ async fn policy_standing(gates: &AdmissionGates<'_>, user: UserId) -> Result<Pay
 	})
 }
 
-/// Would this user withdrawal be accepted *right now*, without recording anything? The
-/// user-side twin of [`check_revenue_payout`], run by a payment order at OPEN so an
+/// Would this user withdrawal be accepted *right now*, without recording anything? Run by
+/// a payment order at OPEN so an
 /// impossible L1 payment is refused before its subject spends 72 hours consenting to it.
 pub async fn check_user_withdrawal(ledger: &dyn Ledger, gates: &AdmissionGates<'_>, user: UserId, network: Network, address: WalletAddress, amount: Usdt) -> Result<(), DomainError> {
 	admit_user_withdrawal(gates, user, network).await?;
@@ -205,71 +202,15 @@ fn require_configured(configured: &[Network], network: Network) -> Result<(), Do
 	}
 }
 
-/// Would this revenue payout be accepted *right now*, without recording anything?
-///
-/// The consilium calls this at OPEN so an impossible payout — an unconfigured rail, a
-/// sub-minimum amount, an address for the wrong chain, more than the fund has earned — is
-/// refused before three owners spend 72 hours approving it. It runs the same three gates
-/// [`open_withdrawal`] does, through the same code, so the answer cannot drift from what
-/// execution will actually do. It is a *pre*-check, not a guarantee: revenue can still fall
-/// between here and execution, which is what `ExecutionFailed` exists for.
-// The pre-check of the retired payout — kept beside `request_revenue_payout` for the
-// same replay reason, and reachable from nothing that opens a new consilium.
-#[allow(deprecated)]
-pub async fn check_revenue_payout(ledger: &dyn Ledger, configured: &[Network], network: Network, address: WalletAddress, amount: Usdt) -> Result<(), DomainError> {
-	require_configured(configured, network)?;
-	let source = WithdrawalSource::Revenue;
-	// `Withdrawal::request` IS the shape validator (minimum, fee coverage, on-chain dust,
-	// address network), so the check is the constructor rather than a copy of its rules.
-	Withdrawal::request(WithdrawalId::new(), source, network, address, amount, WithdrawalPolicy::fee_for(source, network))?;
-	require_solvent(ledger, source, amount).await
-}
-
 /// Read-First on the source's claim: the spendable balance (posted minus what other
-/// in-flight withdrawals have already reserved) must cover the gross. For a user that is
-/// their unified claim; for a payout it is the fund's earned revenue, so this is the check
-/// that makes "only what the fund earned" true rather than aspirational. TigerBeetle's
-/// non-negative flag is the hard backstop either way.
+/// in-flight withdrawals have already reserved) must cover the gross. TigerBeetle's
+/// non-negative flag is the hard backstop.
 async fn require_solvent(ledger: &dyn Ledger, source: WithdrawalSource, amount: Usdt) -> Result<(), DomainError> {
 	let claim = ledger.balance(&source.claim_key()).await?;
 	if Usdt::from_base_units(claim.available()) < amount {
-		return Err(DomainError::Validation(if source.is_revenue() {
-			"payout exceeds the fund's available revenue".into()
-		} else {
-			"insufficient available balance to withdraw".to_owned()
-		}));
+		return Err(DomainError::Validation("insufficient available balance to withdraw".into()));
 	}
 	Ok(())
-}
-
-/// The fund pays **its own earned revenue** out to `address` — the RETIRED admin/owner
-/// payout (#245), reachable only from the execution of a revenue-payout consilium that
-/// was already open when the kind was retired. No new one opens: earnings are the `fee`
-/// allocation's, and cash leaves it by a holder's redemption onto their own claim.
-///
-/// Identical to a user withdrawal but for the claim it debits: the retired `fee` claim
-/// (code 40). Client money (`user:*`/`service:*`) and the fund's capital are different
-/// accounts and are unreachable from here — not by a filter that could be forgotten, but
-/// because [`WithdrawalSource::Revenue`] names exactly one account and TigerBeetle's
-/// non-negative flag on it is the backstop.
-///
-/// Deliberately NOT gated on `configured` rails alone doing the work: like a user
-/// withdrawal, an underfunded rail queues rather than refusing (the dispatcher ships it
-/// on the next top-up), so a payout is never lost to a transient treasury dip.
-/// `id` is supplied by the caller so a consilium can derive it deterministically
-/// (`uuid_v5(consilium_id, "consilium:revenue-payout")`) and have a retried execution
-/// re-create the same row instead of a second payout.
-#[allow(deprecated)]
-pub async fn request_revenue_payout(
-	ports: &WithdrawalPorts<'_>,
-	configured: &[Network],
-	id: WithdrawalId,
-	network: Network,
-	address: WalletAddress,
-	amount: Usdt,
-) -> Result<Withdrawal, DomainError> {
-	require_configured(configured, network)?;
-	open_withdrawal(ports, id, WithdrawalSource::Revenue, network, address, amount, true).await
 }
 
 /// The shared body of every request path: validate the shape, Read-First the **source's**
@@ -343,13 +284,9 @@ pub async fn require_outflows_enabled(policy: &dyn OutflowPolicy) -> Result<(), 
 /// that lands after acceptance must still stop the money. Every arm fails **closed**,
 /// because by this point the gross is already reserved and the next step is a broadcast:
 /// a missing owner row, an unreadable flag and a corrupt tier all refuse.
-///
-/// A revenue payout is exempt from the per-owner arms, and not by omission: the fund is
-/// not a user, so there is no row to read and nothing to fail closed on. The kill-switch
-/// still applies — it pauses outflows, not users.
 async fn require_dispatchable(policy: &dyn OutflowPolicy, gate: KycGate, withdrawal: &Withdrawal) -> Result<(), DomainError> {
 	require_outflows_enabled(policy).await?;
-	let Some(owner) = withdrawal.user() else { return Ok(()) };
+	let owner = withdrawal.user();
 	let standing = policy
 		.standing(owner)
 		.await?
@@ -405,35 +342,12 @@ pub async fn cancel_withdrawal(withdrawals: &dyn WithdrawalRepository, relay: &N
 		entity: "withdrawal",
 		id: id.to_string(),
 	})?;
-	if existing.user() != Some(user) {
+	if existing.user() != user {
 		return Err(DomainError::Forbidden("not your withdrawal".into()));
 	}
 	let withdrawal = withdrawals.cancel(id).await?;
 	relay.notify_one();
 	Ok(withdrawal)
-}
-
-/// Cancel a still-queued **revenue payout** (admin): voids the reservation, returning
-/// the gross to the fund's revenue claim. The mirror of [`cancel_withdrawal`] for the
-/// source that has no user to own it — and it checks the source for the same reason
-/// that one checks ownership: this entry point must not become a way for an admin to
-/// cancel an investor's withdrawal out from under them.
-pub async fn cancel_revenue_payout(withdrawals: &dyn WithdrawalRepository, relay: &Notify, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
-	let existing = withdrawals.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
-		entity: "withdrawal",
-		id: id.to_string(),
-	})?;
-	if !existing.source().is_revenue() {
-		return Err(DomainError::Forbidden("not a revenue payout".into()));
-	}
-	let withdrawal = withdrawals.cancel(id).await?;
-	relay.notify_one();
-	Ok(withdrawal)
-}
-
-/// The fund's own revenue payouts, newest first — the admin payout history.
-pub async fn list_revenue_payouts(withdrawals: &dyn WithdrawalRepository) -> Result<Vec<Withdrawal>, DomainError> {
-	withdrawals.list_revenue_payouts().await
 }
 
 /// Settle a confirmed withdrawal (operator/watcher): records the chain `tx_ref` and

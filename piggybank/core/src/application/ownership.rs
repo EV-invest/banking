@@ -15,11 +15,9 @@
 //!   by construction, so a mismatch is a genuine inconsistency: an error.
 //! - **value without a holder** ([`AllocationOwnership::is_unheld`]) — the allocation
 //!   holds cash or product units while nobody holds units of it. Nothing is lost and
-//!   nothing is inconsistent; the money is simply not yet anyone's. It is the expected
-//!   state of the `fee` allocation between the first release and the ownership data
-//!   migration, when fees settle into `service:fee` before its first holders are seated
-//!   — so it is a warning and a number, not an alert — and it should be zero everywhere
-//!   after that migration.
+//!   nothing is inconsistent; the money is simply not yet anyone's. It happens when
+//!   fees settle into `service:fee` before a holder grant seats anyone — so it is a
+//!   warning and a number, not an alert; the owners decide whose it is.
 
 use std::collections::HashMap;
 

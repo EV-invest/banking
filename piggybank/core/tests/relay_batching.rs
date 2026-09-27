@@ -55,13 +55,12 @@ async fn drain_exhausts_a_backlog_wider_than_one_batch() {
 	let Some(h) = harness().await else { return };
 	let relay = Relay::new(h.pool.clone(), ledger_for(&h.pool), Arc::new(StubCustody), h.notify.clone());
 
-	let party = Party::User(UserId::new());
+	let user = UserId::new();
+	let party = Party::User(user);
 	let claim = party.claim_key();
 	let before = h.balance(&claim).await;
 	for _ in 0..129 {
-		balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), party.clone(), Network::Bep20, usdt("1"))
-			.await
-			.unwrap();
+		balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), user, Network::Bep20, usdt("1")).await.unwrap();
 	}
 
 	let throttle = relay.drain().await;

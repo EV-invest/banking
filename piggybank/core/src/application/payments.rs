@@ -159,21 +159,7 @@ pub async fn open(ports: &PaymentPorts<'_>, initiator: UserId, terms: PaymentTer
 }
 
 /// Everything the order's eventual execution will check, checked now.
-// The retired parties are refused by name until C-9 removes them from the type.
-#[allow(deprecated)]
 async fn check_executable(ports: &PaymentPorts<'_>, terms: &PaymentTerms) -> Result<(), DomainError> {
-	// Nothing new is opened against the retired claims (#245): the fund's money is the
-	// `fee` and `fund` allocations, addressed as `service:fee` / `service:fund`.
-	if let Party::Piggybank | Party::Revenue = terms.from() {
-		return Err(DomainError::Validation(
-			"the fund's capital and revenue claims are retired: pay from service:fund or service:fee".into(),
-		));
-	}
-	if let PaymentDestination::Internal(Party::Piggybank | Party::Revenue) = terms.to() {
-		return Err(DomainError::Validation(
-			"the fund's capital and revenue claims are retired: pay into service:fund or service:fee".into(),
-		));
-	}
 	// A product's pooled claim exists in the ledger the moment something is posted to it,
 	// registered or not — so the registry, not the ledger, is what says the slug names a
 	// product. Money paid into a claim no product owns is reachable by nobody.
@@ -183,7 +169,7 @@ async fn check_executable(ports: &PaymentPorts<'_>, terms: &PaymentTerms) -> Res
 		return Err(DomainError::Validation(format!("no product is registered as service {service}")));
 	}
 	match (terms.to(), terms.from()) {
-		(PaymentDestination::External { .. }, Party::Piggybank | Party::Revenue | Party::Service(_)) => {
+		(PaymentDestination::External { .. }, Party::Service(_)) => {
 			// The withdrawal saga pays out of an investor's claim and of nothing else: an
 			// allocation's pooled money — a product's or the platform's own `fee`/`fund` —
 			// has no `WithdrawalSource` (#237). The one way cash leaves a reserved allocation
@@ -402,10 +388,9 @@ async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Re
 			)
 			.await,
 		// Refused at open; stated here too so the match is total and a row that somehow
-		// carries this shape — an order opened against the retired revenue claim before
-		// #245 included — fails visibly rather than paying from a source the saga no longer
-		// opens a withdrawal for.
-		Party::Piggybank | Party::Revenue | Party::Service(_) => return Ok(ExecutionOutcome::Failed("an external payment cannot leave from this source".to_owned())),
+		// carries this shape fails visibly rather than paying from a source the saga does not
+		// open a withdrawal for.
+		Party::Service(_) => return Ok(ExecutionOutcome::Failed("an external payment cannot leave from this source".to_owned())),
 	};
 	Ok(match requested {
 		Ok(created) => ExecutionOutcome::Executed(PaymentEffect::Withdrawal(created.id())),

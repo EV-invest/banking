@@ -356,14 +356,20 @@ impl Ledger for TbLedger {
 		// Share ledger — one row per (product, holder) — which is small for a fund with a
 		// handful of products; narrowing it by key prefix in SQL is a later optimisation
 		// that changes nothing above this line.
-		let rows = sqlx::query_as::<_, (String, Vec<u8>)>("SELECT logical_key, tb_account_id FROM tb_accounts WHERE ledger = $1")
+		let rows = sqlx::query_as::<_, (String, Vec<u8>, i32)>("SELECT logical_key, tb_account_id, code FROM tb_accounts WHERE ledger = $1")
 			.bind(SHARE_LEDGER_ID)
 			.fetch_all(&self.pool)
 			.await
 			.map_err(|e| LedgerError::Unavailable(format!("share-plane account scan: {e}")))?;
 		let mut wanted = std::collections::HashMap::with_capacity(rows.len());
 		let mut ids = Vec::with_capacity(rows.len());
-		for (logical_key, bytes) in &rows {
+		for (logical_key, bytes, code) in &rows {
+			// A retired kind (the company stake, `shares_company:<svc>`, #245) is a row that
+			// exists for good and names no live account: skipped by its code, like the cash
+			// scan classifies by code, rather than parsed into a key nothing derives.
+			if u16::try_from(*code).ok().and_then(AccountCode::from_code).is_some_and(AccountCode::is_retired) {
+				continue;
+			}
 			let key = LedgerAccountKey::parse_logical_key(logical_key).map_err(|e| LedgerError::Conflict(format!("unreadable tb_accounts row {logical_key}: {e}")))?;
 			if !scope.admits(&key) {
 				continue;
@@ -470,11 +476,9 @@ impl Ledger for TbLedger {
 /// per-rail treasury), the network-agnostic withdrawal-clearing account and the mocked
 /// bank custody. Per-user/-service claim accounts are created lazily on first transfer.
 ///
-/// The retired `Fund` and `FeeRevenue` claims (#245) are no longer seeded: nothing new
-/// posts to them, and what still does — a replayed outbox row, an in-flight payment's
-/// completion, the data migration's debit — goes through [`Ledger::post`], which
-/// resolves-or-creates both sides of a transfer, so a ledger that has never seen them
-/// gets them at that moment and one that has keeps them. Production has both.
+/// The retired `fund` and `fee` claims (#245) are not seeded and are never resolved: no
+/// live key names them. Production still has both (and `shares_company:service_arb`) in
+/// `tb_accounts`, at zero; the scans classify those rows by code.
 pub async fn seed_singletons(ledger: &dyn Ledger) -> Result<(), LedgerError> {
 	use domain::money::Network;
 	for network in Network::ALL {

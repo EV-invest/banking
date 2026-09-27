@@ -75,11 +75,10 @@ async fn run_finishes_its_drain_then_stops_on_cancellation() {
 	let relay = Relay::new(h.pool.clone(), ledger_for(&h.pool), Arc::new(StubCustody), h.notify.clone());
 	drain_the_shared_backlog(&relay).await;
 
-	let party = Party::User(UserId::new());
+	let user = UserId::new();
+	let party = Party::User(user);
 	let before = h.claim_balance(&party).await;
-	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), party.clone(), Network::Bep20, usdt("125"))
-		.await
-		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), user, Network::Bep20, usdt("125")).await.unwrap();
 	let expected = before.saturating_add(usdt("125").base_units());
 
 	let shutdown = CancellationToken::new();

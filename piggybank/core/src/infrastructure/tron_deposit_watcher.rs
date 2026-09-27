@@ -18,7 +18,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use domain::{
-	balance::Party,
 	money::{Network, TxRef, Usdt},
 	users::UserId,
 };
@@ -195,7 +194,7 @@ impl TronDepositWatcher {
 		// The `/v1` trc20 feed exposes no per-event index to append; a normal wallet deposit is one
 		// Transfer per tx, so this is an accepted edge, not a real deposit path.
 		let tx_ref = TxRef::parse(&format!("{}:{}", transfer.transaction_id, transfer.to)).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, user, network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
 		if newly {

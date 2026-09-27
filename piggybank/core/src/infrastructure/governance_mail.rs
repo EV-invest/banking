@@ -29,7 +29,6 @@ use crate::ports::governance_mail::GovernanceMail;
 /// two planes' understanding of "what kind of mail is this" stays in one place.
 pub fn mail_kind_str(mail: &GovernanceMail) -> &'static str {
 	match mail {
-		GovernanceMail::PayoutApproval(_) => "PAYOUT_APPROVAL",
 		GovernanceMail::PayoutOutcome(_) => "PAYOUT_OUTCOME",
 		GovernanceMail::TokenBurned(_) => "APPROVAL_TOKEN_BURNED",
 		GovernanceMail::PaymentConsent(_) => "PAYMENT_CONSENT",
@@ -55,7 +54,7 @@ pub const fn is_wired() -> bool {
 pub mod wired {
 	use async_trait::async_trait;
 	use evconcierge_contracts::concierge::v1::{
-		FeePolicyApprovalMail, FeePolicyNoticeMail, FeeTerms, GovernanceMailKind, PaymentApprovalMail, PaymentConsentMail, PayoutApprovalMail, PayoutOutcomeMail, SendGovernanceMailRequest,
+		FeePolicyApprovalMail, FeePolicyNoticeMail, FeeTerms, GovernanceMailKind, PaymentApprovalMail, PaymentConsentMail, PayoutOutcomeMail, SendGovernanceMailRequest,
 		mail_relay_service_client::MailRelayServiceClient,
 	};
 	use tonic::{Code, Request, metadata::MetadataValue, transport::Channel};
@@ -104,23 +103,6 @@ pub mod wired {
 				fee_policy_notice: None,
 			};
 			match mail {
-				GovernanceMail::PayoutApproval(approval) => {
-					payload.kind = GovernanceMailKind::PayoutApproval as i32;
-					payload.payout_approval = Some(PayoutApprovalMail {
-						consilium_id: approval.consilium_id.clone(),
-						initiator_email: approval.initiator_email.clone(),
-						network: approval.network.clone(),
-						address: approval.address.clone(),
-						amount: approval.amount.clone(),
-						memo: approval.memo.clone(),
-						payload_hash: approval.payload_hash.clone(),
-						threshold: approval.threshold,
-						owner_count: approval.owner_count,
-						expires_at: approval.expires_at,
-						approval_url: approval.approval_url.clone(),
-						code: approval.code.clone(),
-					});
-				}
 				// The burn notice shares `payout_outcome`: the contract declares a distinct
 				// KIND for it but no payload message of its own, so the outcome shape (with
 				// `outcome = TOKEN_BURNED`) is the only carrier available.
