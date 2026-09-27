@@ -596,7 +596,11 @@ the one that found the consent still valid can insert it after the other has alr
 closed the order. That late withdrawal's record is refused, and the refusal cancels it
 in the same transaction while it is still `Queued` — over any closed order (failed,
 rejected, expired, withdrawn), not only a voided one; dispatched before that, it is logged
-at error for an operator to reconcile. **The notice never holds up the transition it reports.** It
+at error for an operator to reconcile. That cancel runs only if the late caller's record
+does: if its process dies (or its transaction fails) between creating the withdrawal and
+recording it, nothing revisits a closed order and the withdrawal stays `Queued` — the
+dispatcher refusing a payment's withdrawal whose order is no longer `approved` is the
+remaining guard, tracked in #443. **The notice never holds up the transition it reports.** It
 is written inside a savepoint: if queuing it fails for any reason, only the savepoint is
 rolled back, the failure is logged at error with the payment id, and the burn, the
 rejection, the void of the withdrawal and the order's failure commit regardless — a broken
