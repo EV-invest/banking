@@ -39,10 +39,10 @@ use crate::{
 		outbox, withdrawals,
 	},
 	ports::{
-		governance_mail::{GovernanceMail, PaymentConsent},
+		governance_mail::{GovernanceMail, PaymentConsent, PaymentOutcome},
 		payments::{
-			ApprovalSeat, ConsentAudit, ConsentDecision, ConsentInvitation, ConsentOutcome, ConsentView, DIGEST_BYTES, EndDetail, ExecutionOutcome, MAX_CODE_ATTEMPTS, PaymentFeed,
-			PaymentFilter, PaymentRepository, PaymentView, ReservationStatus, already_open, consent_not_found,
+			ApprovalSeat, ConsentAudit, ConsentDecision, ConsentInvalidation, ConsentInvitation, ConsentOutcome, ConsentView, DIGEST_BYTES, EndDetail, ExecutionOutcome, MAX_CODE_ATTEMPTS,
+			PaymentFeed, PaymentFilter, PaymentRepository, PaymentView, ReservationStatus, already_open, consent_not_found,
 		},
 	},
 };
@@ -237,15 +237,15 @@ impl ConsentRow {
 	/// projection was rewritten under the seat, and that is not a state to execute out of.
 	/// The mailbox is compared by digest rather than by address so the row and the seat
 	/// stay comparable without either carrying the other's plaintext.
-	fn invalidation(&self) -> Option<String> {
+	fn invalidation(&self) -> Option<ConsentInvalidation> {
 		if self.token_version != self.token_version_at_open {
-			return Some(format!(
-				"the investor's sessions were revoked after this consent was issued (token version {} at open, {} now), so the consent is void",
-				self.token_version_at_open, self.token_version
-			));
+			return Some(ConsentInvalidation::SessionsRevoked {
+				at_open: self.token_version_at_open,
+				now: self.token_version,
+			});
 		}
 		if !ct_eq(&digest(self.email.as_bytes()), &self.email_hash_at_open) {
-			return Some("the investor's mailbox changed after this consent was issued, so the consent is void".to_owned());
+			return Some(ConsentInvalidation::EmailChanged);
 		}
 		None
 	}
@@ -307,6 +307,89 @@ pub(crate) fn mail_destination(terms: &PaymentTerms, detail: Option<&EndDetail>)
 		Some(EndDetail::ProductTitle(title)) => format!("{label} ({title})"),
 		None => label,
 	}
+}
+
+/// How a consent died without being answered — the pair concierge's `PaymentOutcomeMail`
+/// takes, and a closed one on both sides: a burn is only ever wrong codes.
+#[derive(Clone, Copy)]
+enum ConsentEnd {
+	Burned,
+	Invalidated(ConsentInvalidation),
+}
+
+impl ConsentEnd {
+	fn words(self) -> (&'static str, &'static str) {
+		match self {
+			Self::Burned => ("TOKEN_BURNED", "WRONG_CODES"),
+			Self::Invalidated(cause) => ("INVALIDATED", cause.mail_reason()),
+		}
+	}
+}
+
+/// The amount as the payment-outcome mail must spell it: money and nothing else — the exact
+/// decimal the consent invitation showed, one space, the currency code.
+///
+/// Concierge caps the number at 32 characters. A canonical 18-decimal amount only reaches
+/// that past thirteen integer digits, and then the digits dropped are the smallest
+/// fractional ones — the mail is notice about an order that moved nothing, not a record of
+/// it, and an amount the relay refuses would be a mail nobody gets.
+pub(crate) fn mail_amount(amount: Usdt) -> String {
+	const MAX_NUMBER: usize = 32;
+	let mut number = amount.to_decimal_string();
+	if number.len() > MAX_NUMBER {
+		number.truncate(MAX_NUMBER);
+		if number.contains('.') {
+			number.truncate(number.trim_end_matches('0').trim_end_matches('.').len());
+		}
+	}
+	format!("{number} USDT")
+}
+
+/// Tell the order's subject — and the staff member who opened it, when that is somebody
+/// else — that the order died because its consent could no longer be given (#238). On the
+/// caller's transaction, so the mail commits with the rejection or not at all; one key per
+/// copy, because concierge refuses a key reused for another recipient, and the same key on
+/// a retried transition is the no-op `enqueue` makes it.
+///
+/// A subject with no mirrored identity-plane id cannot be named, and the payload must name
+/// them on every copy. The order was opened only because they had one, so this is a broken
+/// projection — logged at error and NOT allowed to hold up the rejection, which is the part
+/// that protects their money.
+async fn announce_consent_end(conn: &mut PgConnection, order: &PaymentOrder, end: ConsentEnd) -> Result<(), DomainError> {
+	let PaymentApproval::SubjectConsent(subject) = order.requirement() else {
+		return Ok(());
+	};
+	let subject_concierge_id: Option<Uuid> = sqlx::query_scalar("SELECT concierge_user_id FROM users WHERE id = $1")
+		.bind(subject.raw())
+		.fetch_optional(&mut *conn)
+		.await
+		.map_err(repo_err)?
+		.flatten();
+	let Some(subject_concierge_id) = subject_concierge_id else {
+		tracing::error!(payment_id = %order.id(), %subject, "payments: the consent ended but its subject has no mirrored identity-plane id; nobody is mailed");
+		return Ok(());
+	};
+	let detail = detail_of(conn, order.terms().to()).await?;
+	let (outcome, reason) = end.words();
+	let mail = GovernanceMail::PaymentOutcome(PaymentOutcome {
+		subject_user_id: subject_concierge_id.to_string(),
+		outcome: outcome.to_owned(),
+		reason: reason.to_owned(),
+		tier: order.tier().as_str().to_owned(),
+		source: order.terms().source_label(),
+		destination: mail_destination(order.terms(), detail.as_ref()),
+		amount: mail_amount(order.terms().amount()),
+		payment_id: order.id().to_string(),
+	});
+	let mut recipients = vec![subject];
+	if order.initiator() != subject {
+		recipients.push(order.initiator());
+	}
+	for recipient in recipients {
+		let key = format!("payment:{}:outcome:{recipient}", order.id());
+		enqueue(conn, MailSubject::Payment(order.id().raw()), recipient.raw(), &key, &mail).await?;
+	}
+	Ok(())
 }
 
 async fn consent_of_payment(conn: &mut PgConnection, payment: Uuid) -> Result<Option<ConsentRow>, DomainError> {
@@ -714,12 +797,13 @@ impl PaymentRepository for PgPayments {
 		// to re-issue it to — and the holder is told why rather than shown the opaque door,
 		// because holding a live token already proves the seat exists.
 		if already == ConsentDecision::Pending
-			&& let Some(why) = seat.invalidation()
+			&& let Some(cause) = seat.invalidation()
 		{
 			order.reject(at)?;
 			persist(&mut tx, &mut order).await?;
+			announce_consent_end(&mut tx, &order, ConsentEnd::Invalidated(cause)).await?;
 			tx.commit().await.map_err(repo_err)?;
-			return Err(DomainError::Conflict(why));
+			return Err(DomainError::Conflict(cause.to_string()));
 		}
 
 		let correct = ct_eq(&digest(code.as_bytes()), &seat.code_hash);
@@ -753,6 +837,7 @@ impl PaymentRepository for PgPayments {
 						.map_err(repo_err)?;
 					order.reject(at)?;
 					persist(&mut tx, &mut order).await?;
+					announce_consent_end(&mut tx, &order, ConsentEnd::Burned).await?;
 					tx.commit().await.map_err(repo_err)?;
 					// From here on this token answers exactly like an unknown one.
 					return Err(consent_not_found());
@@ -884,7 +969,7 @@ impl PaymentRepository for PgPayments {
 		{
 			lock_subject(&mut tx, id).await?;
 			if let Some(seat) = consent_of_payment(&mut tx, id.raw()).await?
-				&& let Some(why) = seat.invalidation()
+				&& let Some(cause) = seat.invalidation()
 			{
 				// THE L1 WINDOW. The execution path reads `invalidated` before it creates the
 				// withdrawal, but a revocation can land between that read and this lock; by
@@ -903,7 +988,7 @@ impl PaymentRepository for PgPayments {
 						// withdrawal would be the lie that sticks. Logged at error so an
 						// operator sees the one case the pins could not stop.
 						Err(DomainError::Conflict(state)) => {
-							tracing::error!(payment_id = %id, %withdrawal, %why, "payments: the consent pins moved after the withdrawal was already dispatched ({state}); recording the effect that exists");
+							tracing::error!(payment_id = %id, %withdrawal, why = %cause, "payments: the consent pins moved after the withdrawal was already dispatched ({state}); recording the effect that exists");
 							order.mark_executed(effect, at)?;
 							persist(&mut tx, &mut order).await?;
 							let view = view_of(&mut tx, order).await?;
@@ -913,17 +998,34 @@ impl PaymentRepository for PgPayments {
 						Err(err) => return Err(err),
 					}
 				}
-				order.mark_execution_failed(why.clone(), at)?;
+				order.mark_execution_failed(cause.to_string(), at)?;
 				persist(&mut tx, &mut order).await?;
+				announce_consent_end(&mut tx, &order, ConsentEnd::Invalidated(cause)).await?;
 				tx.commit().await.map_err(repo_err)?;
-				return Err(DomainError::Conflict(why));
+				return Err(DomainError::Conflict(cause.to_string()));
 			}
 		}
-		match outcome {
-			ExecutionOutcome::Executed(effect) => order.mark_executed(effect, at)?,
-			ExecutionOutcome::Failed(reason) => order.mark_execution_failed(reason, at)?,
-		}
+		// Only the call that moves the order out of `approved` announces the void: a retry
+		// finding it already failed must not mail over a failure some other cause recorded.
+		let announce = match outcome {
+			ExecutionOutcome::Executed(effect) => {
+				order.mark_executed(effect, at)?;
+				None
+			}
+			ExecutionOutcome::Failed(reason) => {
+				order.mark_execution_failed(reason, at)?;
+				None
+			}
+			ExecutionOutcome::ConsentVoid(cause) => {
+				let voids = order.state() == PaymentState::Approved;
+				order.mark_execution_failed(cause.to_string(), at)?;
+				voids.then_some(ConsentEnd::Invalidated(cause))
+			}
+		};
 		persist(&mut tx, &mut order).await?;
+		if let Some(end) = announce {
+			announce_consent_end(&mut tx, &order, end).await?;
+		}
 		let view = view_of(&mut tx, order).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(view)
@@ -1083,4 +1185,38 @@ fn invitation_of(order: PaymentOrder, initiator_email: String, seat: &ConsentRow
 pub(crate) fn digest(bytes: &[u8]) -> [u8; DIGEST_BYTES] {
 	use sha2::{Digest, Sha256};
 	Sha256::digest(bytes).into()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// Concierge's rule for the payment-outcome amount (`money_amount`, concierge#95): a
+	/// number of at most 32 characters starting with a digit, one space, an upper-case code.
+	fn is_money(value: &str) -> bool {
+		let Some((number, currency)) = value.rsplit_once(' ') else {
+			return false;
+		};
+		number.starts_with(|c: char| c.is_ascii_digit())
+			&& number.chars().count() <= 32
+			&& number.chars().all(|c| c.is_ascii_digit() || matches!(c, ' ' | '\u{00A0}' | '\u{202F}' | '.' | ',' | '\''))
+			&& (2..=10).contains(&currency.len())
+			&& currency.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+	}
+
+	#[test]
+	fn the_outcome_amount_is_the_consent_decimal_spelled_as_money() {
+		let usdt = |raw: &str| Usdt::parse_decimal(raw).unwrap();
+		assert_eq!(mail_amount(usdt("1200")), "1200 USDT");
+		assert_eq!(mail_amount(usdt("12.50")), "12.5 USDT");
+		assert_eq!(mail_amount(usdt("0.000000000000000001")), "0.000000000000000001 USDT");
+		for raw in ["1200", "12.50", "0.000000000000000001", "1234567890123.123456789012345678"] {
+			assert!(is_money(&mail_amount(usdt(raw))), "{raw} → {}", mail_amount(usdt(raw)));
+		}
+		// The largest amount the ledger can hold still reads as money: the smallest
+		// fractional digits give way, never the integer part or the currency.
+		let max = mail_amount(Usdt::from_base_units(u128::MAX));
+		assert!(is_money(&max), "{max}");
+		assert!(max.starts_with(&(u128::MAX / 10u128.pow(18)).to_string()), "{max}");
+	}
 }

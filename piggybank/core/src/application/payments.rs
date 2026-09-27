@@ -344,8 +344,8 @@ pub async fn execute(ports: &PaymentPorts<'_>, id: PaymentId, now: i64) -> Resul
 		let reason = "the stored terms no longer match the payload hash that was approved".to_owned();
 		return ports.payments.record_execution(id, ExecutionOutcome::Failed(reason), now).await;
 	}
-	if let Some(why) = view.consent.as_ref().and_then(|consent| consent.invalidated.clone()) {
-		return ports.payments.record_execution(id, ExecutionOutcome::Failed(why), now).await;
+	if let Some(cause) = view.consent.as_ref().and_then(|consent| consent.invalidated) {
+		return ports.payments.record_execution(id, ExecutionOutcome::ConsentVoid(cause), now).await;
 	}
 	let outcome = match order.tier() {
 		PaymentTier::Internal | PaymentTier::Service => match settle_on_the_ledger(ports, id).await? {

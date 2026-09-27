@@ -74,10 +74,11 @@ pub async fn enqueue(conn: &mut PgConnection, subject: MailSubject, user_id: Uui
 /// Not for a consilium, and not for a payment. A closing consilium's queue holds its verdict
 /// mail and burn notices beside the invitations, and taking back everything undelivered would
 /// silence the first two; a consilium withdraws its invitations alone, through
-/// [`withdraw_undelivered_invitations`]. The one mail a payment queues is its consent
-/// invitation, which carries a token and a code, and withdrawing it without blanking them
-/// would leave a live credential on a row nobody will ever deliver; a payment withdraws it
-/// through [`withdraw_undelivered_consent`]. Both are refused here rather than done wrong.
+/// [`withdraw_undelivered_invitations`]. A payment's queue holds its consent invitation,
+/// which carries a token and a code — withdrawing it without blanking them would leave a live
+/// credential on a row nobody will ever deliver — and, once the consent has died, the
+/// outcome notice that must still reach its audience; a payment withdraws the invitation
+/// alone, through [`withdraw_undelivered_consent`]. Both are refused here rather than done wrong.
 pub async fn withdraw_undelivered(conn: &mut PgConnection, subject: MailSubject) -> Result<u64, DomainError> {
 	let (sql, id) = match subject {
 		MailSubject::Consilium(_) => {
@@ -135,9 +136,9 @@ pub async fn withdraw_undelivered_invitations(conn: &mut PgConnection, consilium
 /// carrying the subject's token and code (#368). The order is closing without a verdict (its
 /// operator withdrew it, or its window ran out); a consent still queued behind a relay outage
 /// would otherwise reach the investor later, asking them to consent to an order nobody can
-/// act on — with a token that still resolves. Only `payment_consent` goes: it is the one kind
-/// a payment queues today, and naming it keeps a future outcome or burn notice under a payment
-/// out of this withdrawal, as [`withdraw_undelivered_invitations`] keeps a consilium's.
+/// act on — with a token that still resolves. Only `payment_consent` goes: naming it keeps the
+/// payment's `payment_outcome` notice (#238) out of this withdrawal, as
+/// [`withdraw_undelivered_invitations`] keeps a consilium's verdict mail.
 ///
 /// The secrets go with the withdrawal, as they do when a row is given up on
 /// ([`ConsiliumMailer::retire`]): a token and a code that will never be delivered are a

@@ -13308,7 +13308,8 @@
           "GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT",
           "GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL",
           "GOVERNANCE_MAIL_KIND_FEE_POLICY_APPROVAL",
-          "GOVERNANCE_MAIL_KIND_FEE_POLICY_NOTICE"
+          "GOVERNANCE_MAIL_KIND_FEE_POLICY_NOTICE",
+          "GOVERNANCE_MAIL_KIND_PAYMENT_OUTCOME"
         ],
         "description": "The typed governance mails this plane knows how to render."
       },
@@ -14131,6 +14132,54 @@
         "additionalProperties": false,
         "description": "One user's consent to a payment that moves their own money.\n\n WHY subject_user_id EXISTS BESIDE SendGovernanceMailRequest.user_id. Every other kind\n is addressed to a fund owner, and \"is this recipient an owner?\" is a fact this plane\n holds independently of anything the money plane says. This kind has no such fact to\n check against: any user may consent to their own transfer, so \"is this the right\n recipient?\" is unanswerable from the addressing field alone. So the money plane must\n state, in the TYPED payload, whose money is moving — and the relay refuses unless the\n user it is being asked to write to IS that person. A caller that fans one consent out\n to a second mailbox has to contradict itself in the same message to do it.\n\n It is a redundancy on purpose. The address is still resolved HERE from the identity\n record and never taken from either field."
       },
+      "concierge.v1.PaymentOutcomeMail": {
+        "type": "object",
+        "properties": {
+          "subject_user_id": {
+            "type": "string",
+            "title": "subject_user_id",
+            "description": "Concierge canonical id of the user whose money the payment would have moved."
+          },
+          "outcome": {
+            "type": "string",
+            "title": "outcome",
+            "description": "TOKEN_BURNED (five wrong codes on the consent page) or INVALIDATED (the consent was\n voided under the subject — sessions revoked, email changed). A closed set."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why the consent died, as a closed word this plane turns into its own phrase:\n WRONG_CODES (the only reason for TOKEN_BURNED), SESSIONS_REVOKED or EMAIL_CHANGED (the\n two reasons for INVALIDATED). Any other word, or a pair that does not match, is refused."
+          },
+          "tier": {
+            "type": "string",
+            "title": "tier",
+            "description": "internal | service | external — the consent kind's closed set."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "Where the money would have left from, in words a person recognises."
+          },
+          "destination": {
+            "type": "string",
+            "title": "destination",
+            "description": "Where it would have landed, in words a person recognises."
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "The amount, spelled by the money plane (`1 200.00 USDT`): digits with the usual\n separators, one ASCII space, an upper-case currency code. Repeated in the subject line\n and in the subject's inbox, so anything else is refused."
+          },
+          "payment_id": {
+            "type": "string",
+            "title": "payment_id",
+            "description": "The payment's id, a UUID. Shown to staff so they can find the order; not to the subject."
+          }
+        },
+        "title": "PaymentOutcomeMail",
+        "additionalProperties": false,
+        "description": "A payment cancelled because its subject's consent could no longer be given.\n\n WHY NOT PayoutOutcomeMail. That one is the consilium's record and goes to seated owners\n only; the people this one is FOR are the payment's subject — whose consent link was\n attacked, or whose sessions were just revoked — and the staff member who opened the\n order, who is usually an admin. Neither holds a seat.\n\n `subject_user_id` exists for the reason PaymentConsentMail gives, with one widening: the\n relay accepts the request's user_id when it IS that subject, or when it names an admin or\n an owner. Which of the two it was decides the copy (the subject is told what to do about\n their mailbox; staff get the order's details) and whether an inbox trace is written (the\n subject only).\n\n Nothing here is a secret and nothing can be a link: no URL, no code. Why the consent\n died is a closed word the platform phrases itself, and the amount must read as money —\n no money-plane text reaches a sentence of ours."
+      },
       "concierge.v1.PayoutApprovalMail": {
         "type": "object",
         "properties": {
@@ -14421,7 +14470,7 @@
           "dedupe_key": {
             "type": "string",
             "title": "dedupe_key",
-            "description": "Idempotency key. The same key never sends twice."
+            "description": "Idempotency key. The same key never sends twice.\n\n A key names ONE mail: one kind, to one recipient. Reusing a key for the same mail is a\n retry and answers `enqueued: false`; reusing it for a different recipient or kind is\n refused ALREADY_EXISTS, because the key is unique across the whole queue. So a kind\n told to several people — PAYMENT_OUTCOME to the subject and to each staff member —\n needs a key per copy."
           },
           "payout_approval": {
             "title": "payout_approval",
@@ -14447,6 +14496,10 @@
           "fee_policy_notice": {
             "title": "fee_policy_notice",
             "$ref": "#/components/schemas/concierge.v1.FeePolicyNoticeMail"
+          },
+          "payment_outcome": {
+            "title": "payment_outcome",
+            "$ref": "#/components/schemas/concierge.v1.PaymentOutcomeMail"
           }
         },
         "title": "SendGovernanceMailRequest",
@@ -15216,7 +15269,7 @@
     },
     {
       "name": "concierge.v1.MailRelayService",
-      "description": "MailRelayService — the one seam over which the MONEY plane asks this plane to send a\n governance mail, because this plane owns the only mailer (lettre + the delivery queue\n + backoff + the daily budget) and standing up a second one would duplicate all of it.\n\n Authenticated by the shared banking↔concierge service secret, compared in constant\n time, and mounted outside the user-auth layer exactly as the lifecycle bridge is.\n\n The payload is TYPED, never rendered HTML: this plane renders it. A compromised money\n plane must not be able to put arbitrary markup into an owner's mailbox.\n\n WHO MAY RECEIVE ONE is decided per KIND, and the default is the strict one. The\n consilium kinds — the three payout kinds and PAYMENT_APPROVAL — speak to the\n consilium, so they go to a seated owner and to nobody else — that rule is what stops a\n compromised money plane aiming a concierge-branded security mail at any address on\n the platform. PAYMENT_CONSENT cannot use it: consenting to a\n transfer of your own money has nothing to do with holding a seat. It gets its own rule,\n narrower in the dimension that matters — the recipient must BE the payment's subject,\n named in the typed payload — so the surface widens by exactly one person per message\n rather than to everyone. The fee policy pair follows the same split: FEE_POLICY_APPROVAL\n is a consilium kind (a seated owner, verified address), FEE_POLICY_NOTICE is addressed by\n identity to the one investor it is about.\n\n This path deliberately bypasses notification preferences. `NotificationService.Emit`\n is opt-out on both channels, and a security mail that a subscriber can silently\n switch off is not a security mail."
+      "description": "MailRelayService — the one seam over which the MONEY plane asks this plane to send a\n governance mail, because this plane owns the only mailer (lettre + the delivery queue\n + backoff + the daily budget) and standing up a second one would duplicate all of it.\n\n Authenticated by the shared banking↔concierge service secret, compared in constant\n time, and mounted outside the user-auth layer exactly as the lifecycle bridge is.\n\n The payload is TYPED, never rendered HTML: this plane renders it. A compromised money\n plane must not be able to put arbitrary markup into an owner's mailbox.\n\n WHO MAY RECEIVE ONE is decided per KIND, and the default is the strict one. The\n consilium kinds — the three payout kinds and PAYMENT_APPROVAL — speak to the\n consilium, so they go to a seated owner and to nobody else — that rule is what stops a\n compromised money plane aiming a concierge-branded security mail at any address on\n the platform. PAYMENT_CONSENT cannot use it: consenting to a\n transfer of your own money has nothing to do with holding a seat. It gets its own rule,\n narrower in the dimension that matters — the recipient must BE the payment's subject,\n named in the typed payload — so the surface widens by exactly one person per message\n rather than to everyone. The fee policy pair follows the same split: FEE_POLICY_APPROVAL\n is a consilium kind (a seated owner, verified address), FEE_POLICY_NOTICE is addressed by\n identity to the one investor it is about.\n\n PAYMENT_OUTCOME — a payment that died while waiting for its subject's consent (the\n consent link burned on wrong codes, or was invalidated when the subject's sessions were\n revoked or their address changed) — speaks to two audiences at once, so it has the one\n two-armed rule: the recipient must BE the payment's subject, or hold a staff role\n (admin or owner) — the person who opened the order is usually an admin and holds no\n seat. It carries no link and no code: there is nothing left to decide.\n\n This path deliberately bypasses notification preferences. `NotificationService.Emit`\n is opt-out on both channels, and a security mail that a subscriber can silently\n switch off is not a security mail."
     }
   ]
 }

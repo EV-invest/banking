@@ -36,6 +36,9 @@ pub enum GovernanceMail {
 	/// Telling ONE unit holder that the terms of a product they hold will change, and when.
 	/// Addressed by identity, like [`Self::PaymentConsent`]; carries no secret.
 	FeePolicyNotice(FeePolicyNotice),
+	/// Telling a payment's subject, and the staff member who opened it, that the order died
+	/// because its consent could no longer be given — burned or invalidated. Carries no secret.
+	PaymentOutcome(PaymentOutcome),
 }
 
 impl GovernanceMail {
@@ -49,6 +52,7 @@ impl GovernanceMail {
 			Self::PaymentApproval(_) => "payment_approval",
 			Self::FeePolicyApproval(_) => "fee_policy_approval",
 			Self::FeePolicyNotice(_) => "fee_policy_notice",
+			Self::PaymentOutcome(_) => "payment_outcome",
 		}
 	}
 
@@ -58,7 +62,7 @@ impl GovernanceMail {
 	pub fn carries_a_token(&self) -> bool {
 		match self {
 			Self::PayoutApproval(_) | Self::PaymentConsent(_) | Self::PaymentApproval(_) | Self::FeePolicyApproval(_) => true,
-			Self::PayoutOutcome(_) | Self::TokenBurned(_) | Self::FeePolicyNotice(_) => false,
+			Self::PayoutOutcome(_) | Self::TokenBurned(_) | Self::FeePolicyNotice(_) | Self::PaymentOutcome(_) => false,
 		}
 	}
 
@@ -87,7 +91,7 @@ impl GovernanceMail {
 				code: String::new(),
 				..mail.clone()
 			}),
-			Self::PayoutOutcome(_) | Self::TokenBurned(_) | Self::FeePolicyNotice(_) => self.clone(),
+			Self::PayoutOutcome(_) | Self::TokenBurned(_) | Self::FeePolicyNotice(_) | Self::PaymentOutcome(_) => self.clone(),
 		}
 	}
 }
@@ -258,6 +262,32 @@ pub struct PaymentApproval {
 	pub code: String,
 }
 
+/// A payment cancelled because its subject's consent could no longer be given (#238).
+///
+/// Its own kind rather than a [`PayoutOutcome`]: that one is the consilium's record and
+/// concierge addresses it to seated owners only, while the people this one is FOR — the
+/// investor whose money it was, and the admin who opened the order — hold no seat. Nothing
+/// here is a secret and nothing may be a link.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PaymentOutcome {
+	/// The SUBJECT's id in the identity plane, on every copy — the initiator's included.
+	/// Concierge sends a copy only to this person or to an admin/owner, and decides by it
+	/// which of the two audiences a copy is written for.
+	pub subject_user_id: String,
+	/// `TOKEN_BURNED` or `INVALIDATED` — a closed word concierge phrases itself.
+	pub outcome: String,
+	/// `WRONG_CODES` for a burn; `SESSIONS_REVOKED` or `EMAIL_CHANGED` for an invalidation.
+	/// Concierge refuses any other pairing.
+	pub reason: String,
+	pub tier: String,
+	pub source: String,
+	pub destination: String,
+	/// Money and nothing else — a number, one space, a currency code (`1200.5 USDT`): it is
+	/// the one money-plane string in the subject line, and concierge refuses any other shape.
+	pub amount: String,
+	pub payment_id: String,
+}
+
 /// Why a mail was not taken — split by what the worker should do about it.
 ///
 /// The identity plane rate-limits governance mail per recipient and answers
@@ -392,5 +422,30 @@ mod tests {
 			approval_url: url(),
 			code: code(),
 		}));
+	}
+
+	/// The consent-outcome notice is queued under the kind the 0047 CHECK admits, hands its
+	/// recipient nothing to answer with — so delivering it flips no seat's `notified` — and
+	/// holds nothing redaction would have to strip.
+	#[test]
+	fn a_payment_outcome_is_its_own_kind_and_carries_no_secret() {
+		let mail = GovernanceMail::PaymentOutcome(PaymentOutcome {
+			subject_user_id: "u".to_owned(),
+			outcome: "INVALIDATED".to_owned(),
+			reason: "EMAIL_CHANGED".to_owned(),
+			tier: "external".to_owned(),
+			source: "s".to_owned(),
+			destination: "d".to_owned(),
+			amount: "1 USDT".to_owned(),
+			payment_id: "p".to_owned(),
+		});
+		assert_eq!(mail.as_str(), "payment_outcome");
+		assert!(!mail.carries_a_token());
+		let json = serde_json::to_value(&mail).unwrap();
+		assert_eq!(json["kind"], "payment_outcome", "the queue row's tag is the stored kind");
+		assert!(json.get("approval_url").is_none() && json.get("code").is_none());
+		assert_eq!(serde_json::to_value(mail.redacted()).unwrap(), json);
+		let back: GovernanceMail = serde_json::from_value(json).unwrap();
+		assert!(matches!(back, GovernanceMail::PaymentOutcome(ref outcome) if outcome.reason == "EMAIL_CHANGED"));
 	}
 }

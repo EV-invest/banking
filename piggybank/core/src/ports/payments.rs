@@ -87,7 +87,41 @@ pub struct ConsentView {
 	/// has moved — or `None` while it still holds. The execution path for an L1 order must
 	/// read this BEFORE creating the withdrawal: `record_execution` refuses a moved pin too,
 	/// but by then the withdrawal would already exist.
-	pub invalidated: Option<String>,
+	pub invalidated: Option<ConsentInvalidation>,
+}
+
+/// Why a consent seat stopped being trustworthy — which of the two pins frozen at open has
+/// moved. Typed rather than a sentence because the cause travels: it is the reason the order
+/// records AND the closed word the subject and the initiator are mailed (#238), and a word
+/// recovered by parsing the sentence would break the first time the sentence was reworded.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConsentInvalidation {
+	/// The subject's folded revoke floor moved — `RevokeTokens` on either plane.
+	SessionsRevoked { at_open: i64, now: i64 },
+	/// The subject's mirrored mailbox is not the one the invitation was mailed to.
+	EmailChanged,
+}
+
+impl ConsentInvalidation {
+	/// The closed reason word concierge's `PaymentOutcomeMail` takes for this cause.
+	pub fn mail_reason(self) -> &'static str {
+		match self {
+			Self::SessionsRevoked { .. } => "SESSIONS_REVOKED",
+			Self::EmailChanged => "EMAIL_CHANGED",
+		}
+	}
+}
+
+impl core::fmt::Display for ConsentInvalidation {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		match self {
+			Self::SessionsRevoked { at_open, now } => write!(
+				f,
+				"the investor's sessions were revoked after this consent was issued (token version {at_open} at open, {now} now), so the consent is void"
+			),
+			Self::EmailChanged => f.write_str("the investor's mailbox changed after this consent was issued, so the consent is void"),
+		}
+	}
 }
 
 /// What the emailed investor answered. The consilium's `VoteDecision` is the same three
@@ -180,6 +214,10 @@ pub struct ConsentOutcome {
 pub enum ExecutionOutcome {
 	Executed(PaymentEffect),
 	Failed(String),
+	/// The consent behind the order was found void before anything was created. Recorded as
+	/// a failure whose reason is the cause, and — unlike any other failure — told by mail to
+	/// the subject and the initiator, which is why the cause stays typed this far.
+	ConsentVoid(ConsentInvalidation),
 }
 
 /// Where an L2/L3 order's reservation stands in the relay — the Read-First the settlement
