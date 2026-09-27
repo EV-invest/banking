@@ -1037,7 +1037,10 @@ impl PaymentRepository for PgPayments {
 			// `Queued` (never dispatched on creation) precisely so that the void is possible.
 			if let Some(withdrawal) = withdrawal {
 				match withdrawals::cancel_on(&mut tx, withdrawal).await {
-					// Absent: no attempt got as far as creating it, and there is nothing to void.
+					// Absent NOW: nothing to void here. That does not mean no attempt will create
+					// it — the other caller of `execute` may be creating it right now, outside
+					// this lock — and that late withdrawal is voided when its record arrives
+					// over the closed order (below).
 					Ok(_) | Err(DomainError::NotFound { .. }) => {}
 					// Past `Queued` the broadcast may have landed and the cardinal rule forbids
 					// the void. The effect then EXISTS whatever the pins say, and the honest
@@ -1065,6 +1068,32 @@ impl PaymentRepository for PgPayments {
 			let view = view_of(&mut tx, order).await?;
 			tx.commit().await.map_err(repo_err)?;
 			return Ok(view);
+		}
+		// THE LOSING CREATOR. `execute` has two callers (the inline one after a consent, and
+		// the sweeper) and creates the withdrawal outside this lock. One can find the order
+		// approved and go to create it while the other fails the order — on a void found
+		// with nothing created yet, or any other refusal — and commits first. The late
+		// withdrawal then arrives `Queued` under an order that will never record it, and
+		// left alone the dispatcher pays it. Its record is refused as before, but the refusal
+		// first voids it, in this same transaction. Only a CLOSED order is judged here: an
+		// executed one keeps its idempotent answer below, and an approved one records.
+		if let ExecutionOutcome::Executed(PaymentEffect::Withdrawal(withdrawal)) = outcome
+			&& matches!(
+				order.state(),
+				PaymentState::ExecutionFailed | PaymentState::Rejected | PaymentState::Expired | PaymentState::Cancelled
+			) {
+			match withdrawals::cancel_on(&mut tx, withdrawal).await {
+				Ok(_) | Err(DomainError::NotFound { .. }) => {}
+				// Already dispatched: nothing may void it now, and the order's record says it
+				// did not execute. The one case the lock order cannot close — logged at error so
+				// an operator reconciles it by hand.
+				Err(DomainError::Conflict(state)) => {
+					tracing::error!(payment_id = %id, %withdrawal, order_state = order.state().as_str(), "payments: a withdrawal created for an order that had already closed was dispatched before it could be voided ({state})");
+				}
+				Err(err) => return Err(err),
+			}
+			tx.commit().await.map_err(repo_err)?;
+			return Err(DomainError::Conflict(format!("payment is {}, not executable", order.state().as_str())));
 		}
 		match outcome {
 			ExecutionOutcome::Executed(effect) => order.mark_executed(effect, at)?,

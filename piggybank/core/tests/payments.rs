@@ -2048,3 +2048,56 @@ async fn a_broken_mail_queue_does_not_undo_the_void_in_the_execution_window() {
 	a.relay.drain().await;
 	reset_payments(&a.pool).await;
 }
+
+/// THE LOSING CREATOR. `execute` has two callers and creates the withdrawal outside the
+/// order's lock: A reads a valid consent and goes to create it; the sessions are revoked; B
+/// reads the void, finds no withdrawal yet and fails the order; only then does A insert the
+/// withdrawal `Queued` and try to record it. A's record is refused — the order is closed —
+/// but the withdrawal it created must not be left for the dispatcher to pay: the refusal
+/// voids it in the same transaction.
+#[tokio::test]
+async fn a_withdrawal_created_after_the_order_was_voided_is_cancelled_when_its_record_is_refused() {
+	use domain::withdrawals::WithdrawalState;
+
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments late withdrawal after a void").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	let admin = an_investor(&a.pool).await;
+	fund(&a, LedgerAccountKey::UserClaim(investor), "100").await;
+	let id = an_approved_l1_order(&a, investor, admin, "25").await;
+	a.users.revoke_tokens(investor).await.unwrap();
+
+	// B: the void, with nothing created yet.
+	let cause = ConsentInvalidation::SessionsRevoked { at_open: 0, now: 1 };
+	let view = a
+		.payments
+		.record_execution(
+			id,
+			ExecutionOutcome::ConsentVoid {
+				cause,
+				withdrawal: Some(payments_app::withdrawal_id(id)),
+			},
+			now(),
+		)
+		.await
+		.expect("the void is recorded");
+	assert_eq!(view.order.state(), PaymentState::ExecutionFailed);
+
+	// A: the withdrawal lands after the void, and its record comes in.
+	let withdrawal = queue_payment_withdrawal(&a, id, investor, "25").await;
+	let refused = a.payments.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Withdrawal(withdrawal)), now()).await;
+	assert!(matches!(refused, Err(DomainError::Conflict(_))), "{refused:?}");
+
+	assert_eq!(
+		a.withdrawals.find_by_id(withdrawal).await.unwrap().unwrap().state(),
+		WithdrawalState::Cancelled,
+		"the late withdrawal is voided, not paid"
+	);
+	assert!(a.withdrawals.list_actionable().await.unwrap().iter().all(|queued| queued.id != withdrawal));
+	assert_eq!(payments_app::find(&a.payments, id).await.unwrap().order.state(), PaymentState::ExecutionFailed);
+	assert_outcome_told(&a.pool, id, investor, &[investor, admin], "INVALIDATED", "SESSIONS_REVOKED").await;
+
+	a.relay.drain().await;
+	reset_payments(&a.pool).await;
+}

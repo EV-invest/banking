@@ -590,7 +590,13 @@ order on their own money is told nothing by mail. An order still `approved` when
 found — at the L1 window, or by an execution retried after an earlier attempt created the
 withdrawal and died — has that withdrawal cancelled in the same transaction while it is
 still `Queued`; one already dispatched is recorded as executed and logged at error, and
-nobody is told nothing moved. **The notice never holds up the transition it reports.** It
+nobody is told nothing moved. Finding no withdrawal at the void does not mean none will
+exist: `execute` has two callers and creates the withdrawal outside the order's lock, so
+the one that found the consent still valid can insert it after the other has already
+closed the order. That late withdrawal's record is refused, and the refusal cancels it
+in the same transaction while it is still `Queued` — over any closed order (failed,
+rejected, expired, withdrawn), not only a voided one; dispatched before that, it is logged
+at error for an operator to reconcile. **The notice never holds up the transition it reports.** It
 is written inside a savepoint: if queuing it fails for any reason, only the savepoint is
 rolled back, the failure is logged at error with the payment id, and the burn, the
 rejection, the void of the withdrawal and the order's failure commit regardless — a broken
