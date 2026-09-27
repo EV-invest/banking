@@ -39,10 +39,10 @@ use crate::{
 		outbox, withdrawals,
 	},
 	ports::{
-		governance_mail::{GovernanceMail, PaymentConsent},
+		governance_mail::{GovernanceMail, PaymentConsent, PaymentOutcome},
 		payments::{
-			ApprovalSeat, ConsentAudit, ConsentDecision, ConsentInvitation, ConsentOutcome, ConsentView, DIGEST_BYTES, EndDetail, ExecutionOutcome, MAX_CODE_ATTEMPTS, PaymentFeed,
-			PaymentFilter, PaymentRepository, PaymentView, ReservationStatus, already_open, consent_not_found,
+			ApprovalSeat, ConsentAudit, ConsentDecision, ConsentInvalidation, ConsentInvitation, ConsentOutcome, ConsentView, DIGEST_BYTES, EndDetail, ExecutionOutcome, MAX_CODE_ATTEMPTS,
+			PaymentFeed, PaymentFilter, PaymentRepository, PaymentView, ReservationStatus, already_open, consent_not_found,
 		},
 	},
 };
@@ -237,15 +237,15 @@ impl ConsentRow {
 	/// projection was rewritten under the seat, and that is not a state to execute out of.
 	/// The mailbox is compared by digest rather than by address so the row and the seat
 	/// stay comparable without either carrying the other's plaintext.
-	fn invalidation(&self) -> Option<String> {
+	fn invalidation(&self) -> Option<ConsentInvalidation> {
 		if self.token_version != self.token_version_at_open {
-			return Some(format!(
-				"the investor's sessions were revoked after this consent was issued (token version {} at open, {} now), so the consent is void",
-				self.token_version_at_open, self.token_version
-			));
+			return Some(ConsentInvalidation::SessionsRevoked {
+				at_open: self.token_version_at_open,
+				now: self.token_version,
+			});
 		}
 		if !ct_eq(&digest(self.email.as_bytes()), &self.email_hash_at_open) {
-			return Some("the investor's mailbox changed after this consent was issued, so the consent is void".to_owned());
+			return Some(ConsentInvalidation::EmailChanged);
 		}
 		None
 	}
@@ -305,6 +305,133 @@ pub(crate) fn mail_destination(terms: &PaymentTerms, detail: Option<&EndDetail>)
 		Some(EndDetail::ProductTitle(title)) => format!("{label} ({title})"),
 		None => label,
 	}
+}
+
+/// How a consent died without being answered — the pair concierge's `PaymentOutcomeMail`
+/// takes, and a closed one on both sides: a burn is only ever wrong codes.
+#[derive(Clone, Copy)]
+enum ConsentEnd {
+	Burned,
+	Invalidated(ConsentInvalidation),
+}
+
+impl ConsentEnd {
+	fn words(self) -> (&'static str, &'static str) {
+		match self {
+			Self::Burned => ("TOKEN_BURNED", "WRONG_CODES"),
+			Self::Invalidated(cause) => ("INVALIDATED", cause.mail_reason()),
+		}
+	}
+}
+
+/// The amount as the payment-outcome mail must spell it: money and nothing else — the exact
+/// decimal the consent invitation showed, one space, the currency code.
+///
+/// Concierge caps the number at 32 characters. A canonical 18-decimal amount only reaches
+/// that past thirteen integer digits, and then the digits dropped are the smallest
+/// fractional ones — the mail is notice about an order that moved nothing, not a record of
+/// it, and an amount the relay refuses would be a mail nobody gets.
+pub fn mail_amount(amount: Usdt) -> String {
+	const MAX_NUMBER: usize = 32;
+	let mut number = amount.to_decimal_string();
+	if number.len() > MAX_NUMBER {
+		number.truncate(MAX_NUMBER);
+		if number.contains('.') {
+			number.truncate(number.trim_end_matches('0').trim_end_matches('.').len());
+		}
+	}
+	format!("{number} USDT")
+}
+
+/// Tell the people a dead consent concerns that the order died with it (#238), on the
+/// caller's transaction so the notice commits with the rejection — but NEVER as a condition
+/// of it. The transition this reports is the defence (a burn, a void, a cancelled
+/// withdrawal); were a failed enqueue allowed to roll it back, a broken mail queue would
+/// undo a burn and its attempt, and hand a guesser unlimited fifth tries. So the notice is
+/// written inside a SAVEPOINT: on any failure only the savepoint is rolled back, the failure
+/// is logged at error, and the caller commits the transition as if nothing had been mailed.
+///
+/// One key per copy, because concierge refuses a key reused for another recipient; the same
+/// key on a replayed write is the no-op `enqueue` makes it.
+async fn announce_consent_end(conn: &mut PgConnection, order: &PaymentOrder, end: ConsentEnd) {
+	let mut savepoint = match sqlx::Connection::begin(&mut *conn).await {
+		Ok(savepoint) => savepoint,
+		Err(err) => {
+			tracing::error!(payment_id = %order.id(), "payments: could not open the savepoint for the consent-outcome notice; nobody is mailed: {err}");
+			return;
+		}
+	};
+	match queue_consent_end(&mut savepoint, order, end).await {
+		Ok(()) =>
+			if let Err(err) = savepoint.commit().await {
+				tracing::error!(payment_id = %order.id(), "payments: could not release the savepoint of the consent-outcome notice: {err}");
+			},
+		Err(err) => {
+			tracing::error!(payment_id = %order.id(), "payments: the consent-outcome notice could not be queued; the order is closed regardless and nobody is mailed: {err}");
+			// An error left the savepoint aborted, and Postgres refuses every later statement
+			// of the transaction until it is rolled back — the commit of the transition
+			// included. If even the rollback fails, that commit fails loudly instead.
+			if let Err(err) = savepoint.rollback().await {
+				tracing::error!(payment_id = %order.id(), "payments: could not roll back the savepoint of the consent-outcome notice: {err}");
+			}
+		}
+	}
+}
+
+/// Who is told is decided by how the consent died:
+///
+/// - the SUBJECT, unless their mailbox is the thing that changed — then the address a copy
+///   would reach is the one that just replaced theirs, possibly unverified, possibly an
+///   attacker's, and it is not told that a payment out of this account was stopped;
+/// - the INITIATOR, when that is somebody else — staff who opened the order and would
+///   otherwise find it closed without a word.
+///
+/// Every copy names the SUBJECT by their identity-plane id, and concierge sends it only to
+/// that person or to an admin/owner. The id is resolved here; `open` refused to seat a consent
+/// without it and the bridge only ever fills a missing one in, so its absence is a broken
+/// projection — logged, and nothing is queued, because a copy that cannot name its subject
+/// is one concierge refuses.
+async fn queue_consent_end(conn: &mut PgConnection, order: &PaymentOrder, end: ConsentEnd) -> Result<(), DomainError> {
+	let PaymentApproval::SubjectConsent(subject) = order.requirement() else {
+		return Ok(());
+	};
+	let mut recipients = Vec::with_capacity(2);
+	if !matches!(end, ConsentEnd::Invalidated(ConsentInvalidation::EmailChanged)) {
+		recipients.push(subject);
+	}
+	if order.initiator() != subject {
+		recipients.push(order.initiator());
+	}
+	if recipients.is_empty() {
+		return Ok(());
+	}
+	let subject_concierge_id: Option<Uuid> = sqlx::query_scalar("SELECT concierge_user_id FROM users WHERE id = $1")
+		.bind(subject.raw())
+		.fetch_optional(&mut *conn)
+		.await
+		.map_err(repo_err)?
+		.flatten();
+	let Some(subject_concierge_id) = subject_concierge_id else {
+		tracing::error!(payment_id = %order.id(), %subject, "payments: the consent ended but its subject has no mirrored identity-plane id; nobody is mailed");
+		return Ok(());
+	};
+	let detail = detail_of(conn, order.terms().to()).await?;
+	let (outcome, reason) = end.words();
+	let mail = GovernanceMail::PaymentOutcome(PaymentOutcome {
+		subject_user_id: subject_concierge_id.to_string(),
+		outcome: outcome.to_owned(),
+		reason: reason.to_owned(),
+		tier: order.tier().as_str().to_owned(),
+		source: order.terms().source_label(),
+		destination: mail_destination(order.terms(), detail.as_ref()),
+		amount: mail_amount(order.terms().amount()),
+		payment_id: order.id().to_string(),
+	});
+	for recipient in recipients {
+		let key = format!("payment:{}:outcome:{recipient}", order.id());
+		enqueue(conn, MailSubject::Payment(order.id().raw()), recipient.raw(), &key, &mail).await?;
+	}
+	Ok(())
 }
 
 async fn consent_of_payment(conn: &mut PgConnection, payment: Uuid) -> Result<Option<ConsentRow>, DomainError> {
@@ -712,12 +839,13 @@ impl PaymentRepository for PgPayments {
 		// to re-issue it to — and the holder is told why rather than shown the opaque door,
 		// because holding a live token already proves the seat exists.
 		if already == ConsentDecision::Pending
-			&& let Some(why) = seat.invalidation()
+			&& let Some(cause) = seat.invalidation()
 		{
 			order.reject(at)?;
 			persist(&mut tx, &mut order).await?;
+			announce_consent_end(&mut tx, &order, ConsentEnd::Invalidated(cause)).await;
 			tx.commit().await.map_err(repo_err)?;
-			return Err(DomainError::Conflict(why));
+			return Err(DomainError::Conflict(cause.to_string()));
 		}
 
 		let correct = ct_eq(&digest(code.as_bytes()), &seat.code_hash);
@@ -751,6 +879,7 @@ impl PaymentRepository for PgPayments {
 						.map_err(repo_err)?;
 					order.reject(at)?;
 					persist(&mut tx, &mut order).await?;
+					announce_consent_end(&mut tx, &order, ConsentEnd::Burned).await;
 					tx.commit().await.map_err(repo_err)?;
 					// From here on this token answers exactly like an unknown one.
 					return Err(consent_not_found());
@@ -871,55 +1000,103 @@ impl PaymentRepository for PgPayments {
 	async fn record_execution(&self, id: PaymentId, outcome: ExecutionOutcome, at: i64) -> Result<PaymentView, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let mut order = locked(&mut tx, id).await?;
-		// THE PINS AGAIN, AT THE MOMENT THAT SPENDS THE MONEY. Consent and execution can be
-		// 72h apart; a `RevokeTokens` in between must not be overtaken by an execution the
-		// investor authorized before it. Only an order still `approved` is at stake — a
-		// repeat naming an effect that already exists is the idempotent retry and must stay
-		// one. The failure is committed and then reported as an error, so a caller that
-		// only checks for `Ok` cannot mistake it for success.
-		if let ExecutionOutcome::Executed(effect) = outcome
-			&& order.state() == PaymentState::Approved
-		{
-			lock_subject(&mut tx, id).await?;
-			if let Some(seat) = consent_of_payment(&mut tx, id.raw()).await?
-				&& let Some(why) = seat.invalidation()
-			{
-				// THE L1 WINDOW. The execution path reads `invalidated` before it creates the
-				// withdrawal, but a revocation can land between that read and this lock; by
-				// then the withdrawal exists and, left alone, ships. Voiding it HERE, under the
-				// order's lock and in the failure's own transaction, is what closes the window
-				// — the one place two aggregates move together, because the alternative is
-				// money leaving under a consent that no longer stands. A payment's withdrawal
-				// is always created `Queued` (never dispatched on creation) precisely so that
-				// the void is possible here.
-				if let PaymentEffect::Withdrawal(withdrawal) = effect {
-					match withdrawals::cancel_on(&mut tx, withdrawal).await {
-						Ok(_) => {}
-						// Past `Queued` the broadcast may have landed and the cardinal rule
-						// forbids the void. The effect then EXISTS whatever the pins say, and
-						// the honest record is that it does; a failure written over a shipped
-						// withdrawal would be the lie that sticks. Logged at error so an
-						// operator sees the one case the pins could not stop.
-						Err(DomainError::Conflict(state)) => {
-							tracing::error!(payment_id = %id, %withdrawal, %why, "payments: the consent pins moved after the withdrawal was already dispatched ({state}); recording the effect that exists");
-							order.mark_executed(effect, at)?;
-							persist(&mut tx, &mut order).await?;
-							let view = view_of(&mut tx, order).await?;
-							tx.commit().await.map_err(repo_err)?;
-							return Ok(view);
-						}
-						Err(err) => return Err(err),
+		// Only an order still `approved` is at stake — a repeat over a terminal order is the
+		// idempotent retry and must stay one: no second void, no second notice.
+		let void = match &outcome {
+			// THE PINS AGAIN, AT THE MOMENT THAT SPENDS THE MONEY. Consent and execution can
+			// be 72h apart; a `RevokeTokens` in between must not be overtaken by an execution
+			// the investor authorized before it. The failure is committed and then reported
+			// as an error, so a caller that only checks for `Ok` cannot mistake it for success.
+			ExecutionOutcome::Executed(effect) if order.state() == PaymentState::Approved => {
+				lock_subject(&mut tx, id).await?;
+				match consent_of_payment(&mut tx, id.raw()).await?.and_then(|seat| seat.invalidation()) {
+					Some(cause) => {
+						let withdrawal = match effect {
+							PaymentEffect::Withdrawal(withdrawal) => Some(*withdrawal),
+							PaymentEffect::Transfer => None,
+						};
+						Some((cause, withdrawal, true))
 					}
+					None => None,
 				}
-				order.mark_execution_failed(why.clone(), at)?;
-				persist(&mut tx, &mut order).await?;
-				tx.commit().await.map_err(repo_err)?;
-				return Err(DomainError::Conflict(why));
 			}
+			// The caller found the void before recording anything — but an earlier attempt
+			// may have created the withdrawal and died, so it is voided here all the same.
+			ExecutionOutcome::ConsentVoid { cause, withdrawal } if order.state() == PaymentState::Approved => Some((*cause, *withdrawal, false)),
+			_ => None,
+		};
+		if let Some((cause, withdrawal, raise)) = void {
+			// THE L1 WINDOW. The execution path reads `invalidated` before it creates the
+			// withdrawal, but a revocation can land between that read and this lock; by then
+			// the withdrawal exists and, left alone, ships. Voiding it HERE, under the order's
+			// lock and in the failure's own transaction, is what closes the window — the one
+			// place two aggregates move together, because the alternative is money leaving
+			// under a consent that no longer stands. A payment's withdrawal is always created
+			// `Queued` (never dispatched on creation) precisely so that the void is possible.
+			if let Some(withdrawal) = withdrawal {
+				match withdrawals::cancel_on(&mut tx, withdrawal).await {
+					// Absent NOW: nothing to void here. That does not mean no attempt will create
+					// it — the other caller of `execute` may be creating it right now, outside
+					// this lock — and that late withdrawal is voided when its record arrives
+					// over the closed order (below).
+					Ok(_) | Err(DomainError::NotFound { .. }) => {}
+					// Past `Queued` the broadcast may have landed and the cardinal rule forbids
+					// the void. The effect then EXISTS whatever the pins say, and the honest
+					// record is that it does; a failure written over a shipped withdrawal would
+					// be the lie that sticks — and would mail that nothing moved. Logged at
+					// error so an operator sees the one case the pins could not stop.
+					Err(DomainError::Conflict(state)) => {
+						tracing::error!(payment_id = %id, %withdrawal, why = %cause, "payments: the consent pins moved after the withdrawal was already dispatched ({state}); recording the effect that exists");
+						order.mark_executed(PaymentEffect::Withdrawal(withdrawal), at)?;
+						persist(&mut tx, &mut order).await?;
+						let view = view_of(&mut tx, order).await?;
+						tx.commit().await.map_err(repo_err)?;
+						return Ok(view);
+					}
+					Err(err) => return Err(err),
+				}
+			}
+			order.mark_execution_failed(cause.to_string(), at)?;
+			persist(&mut tx, &mut order).await?;
+			announce_consent_end(&mut tx, &order, ConsentEnd::Invalidated(cause)).await;
+			if raise {
+				tx.commit().await.map_err(repo_err)?;
+				return Err(DomainError::Conflict(cause.to_string()));
+			}
+			let view = view_of(&mut tx, order).await?;
+			tx.commit().await.map_err(repo_err)?;
+			return Ok(view);
+		}
+		// THE LOSING CREATOR. `execute` has two callers (the inline one after a consent, and
+		// the sweeper) and creates the withdrawal outside this lock. One can find the order
+		// approved and go to create it while the other fails the order — on a void found
+		// with nothing created yet, or any other refusal — and commits first. The late
+		// withdrawal then arrives `Queued` under an order that will never record it, and
+		// left alone the dispatcher pays it. Its record is refused as before, but the refusal
+		// first voids it, in this same transaction. Only a CLOSED order is judged here: an
+		// executed one keeps its idempotent answer below, and an approved one records.
+		if let ExecutionOutcome::Executed(PaymentEffect::Withdrawal(withdrawal)) = outcome
+			&& matches!(
+				order.state(),
+				PaymentState::ExecutionFailed | PaymentState::Rejected | PaymentState::Expired | PaymentState::Cancelled
+			) {
+			match withdrawals::cancel_on(&mut tx, withdrawal).await {
+				Ok(_) | Err(DomainError::NotFound { .. }) => {}
+				// Already dispatched: nothing may void it now, and the order's record says it
+				// did not execute. The one case the lock order cannot close — logged at error so
+				// an operator reconciles it by hand.
+				Err(DomainError::Conflict(state)) => {
+					tracing::error!(payment_id = %id, %withdrawal, order_state = order.state().as_str(), "payments: a withdrawal created for an order that had already closed was dispatched before it could be voided ({state})");
+				}
+				Err(err) => return Err(err),
+			}
+			tx.commit().await.map_err(repo_err)?;
+			return Err(DomainError::Conflict(format!("payment is {}, not executable", order.state().as_str())));
 		}
 		match outcome {
 			ExecutionOutcome::Executed(effect) => order.mark_executed(effect, at)?,
 			ExecutionOutcome::Failed(reason) => order.mark_execution_failed(reason, at)?,
+			ExecutionOutcome::ConsentVoid { cause, .. } => order.mark_execution_failed(cause.to_string(), at)?,
 		}
 		persist(&mut tx, &mut order).await?;
 		let view = view_of(&mut tx, order).await?;

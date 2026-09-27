@@ -5562,7 +5562,7 @@ export type ConciergeV1GetUserRequest = {
  *
  * The typed governance mails this plane knows how to render.
  */
-export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED' | 'GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT' | 'GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_FEE_POLICY_APPROVAL' | 'GOVERNANCE_MAIL_KIND_FEE_POLICY_NOTICE';
+export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED' | 'GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT' | 'GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_FEE_POLICY_APPROVAL' | 'GOVERNANCE_MAIL_KIND_FEE_POLICY_NOTICE' | 'GOVERNANCE_MAIL_KIND_PAYMENT_OUTCOME';
 
 /**
  * GovernanceTick
@@ -6339,6 +6339,82 @@ export type ConciergeV1PaymentConsentMail = {
 };
 
 /**
+ * PaymentOutcomeMail
+ *
+ * A payment cancelled because its subject's consent could no longer be given.
+ *
+ * WHY NOT PayoutOutcomeMail. That one is the consilium's record and goes to seated owners
+ * only; the people this one is FOR are the payment's subject — whose consent link was
+ * attacked, or whose sessions were just revoked — and the staff member who opened the
+ * order, who is usually an admin. Neither holds a seat.
+ *
+ * `subject_user_id` exists for the reason PaymentConsentMail gives, with one widening: the
+ * relay accepts the request's user_id when it IS that subject, or when it names an admin or
+ * an owner. Which of the two it was decides the copy (the subject is told what to do about
+ * their mailbox; staff get the order's details) and whether an inbox trace is written (the
+ * subject only).
+ *
+ * Nothing here is a secret and nothing can be a link: no URL, no code. Why the consent
+ * died is a closed word the platform phrases itself, and the amount must read as money —
+ * no money-plane text reaches a sentence of ours.
+ */
+export type ConciergeV1PaymentOutcomeMail = {
+    /**
+     * subject_user_id
+     *
+     * Concierge canonical id of the user whose money the payment would have moved.
+     */
+    subject_user_id?: string;
+    /**
+     * outcome
+     *
+     * TOKEN_BURNED (five wrong codes on the consent page) or INVALIDATED (the consent was
+     * voided under the subject — sessions revoked, email changed). A closed set.
+     */
+    outcome?: string;
+    /**
+     * reason
+     *
+     * Why the consent died, as a closed word this plane turns into its own phrase:
+     * WRONG_CODES (the only reason for TOKEN_BURNED), SESSIONS_REVOKED or EMAIL_CHANGED (the
+     * two reasons for INVALIDATED). Any other word, or a pair that does not match, is refused.
+     */
+    reason?: string;
+    /**
+     * tier
+     *
+     * internal | service | external — the consent kind's closed set.
+     */
+    tier?: string;
+    /**
+     * source
+     *
+     * Where the money would have left from, in words a person recognises.
+     */
+    source?: string;
+    /**
+     * destination
+     *
+     * Where it would have landed, in words a person recognises.
+     */
+    destination?: string;
+    /**
+     * amount
+     *
+     * The amount, spelled by the money plane (`1 200.00 USDT`): digits with the usual
+     * separators, one ASCII space, an upper-case currency code. Repeated in the subject line
+     * and in the subject's inbox, so anything else is refused.
+     */
+    amount?: string;
+    /**
+     * payment_id
+     *
+     * The payment's id, a UUID. Shown to staff so they can find the order; not to the subject.
+     */
+    payment_id?: string;
+};
+
+/**
  * PayoutApprovalMail
  */
 export type ConciergeV1PayoutApprovalMail = {
@@ -6650,6 +6726,12 @@ export type ConciergeV1SendGovernanceMailRequest = {
      * dedupe_key
      *
      * Idempotency key. The same key never sends twice.
+     *
+     * A key names ONE mail: one kind, to one recipient. Reusing a key for the same mail is a
+     * retry and answers `enqueued: false`; reusing it for a different recipient or kind is
+     * refused ALREADY_EXISTS, because the key is unique across the whole queue. So a kind
+     * told to several people — PAYMENT_OUTCOME to the subject and to each staff member —
+     * needs a key per copy.
      */
     dedupe_key?: string;
     /**
@@ -6678,6 +6760,10 @@ export type ConciergeV1SendGovernanceMailRequest = {
      * fee_policy_notice
      */
     fee_policy_notice?: ConciergeV1FeePolicyNoticeMail;
+    /**
+     * payment_outcome
+     */
+    payment_outcome?: ConciergeV1PaymentOutcomeMail;
 };
 
 /**

@@ -62,6 +62,11 @@ mod common;
 /// The last migration before the contract step.
 const EXPAND_VERSION: i64 = 46;
 
+/// The contract step itself. The suite migrates to it and no further: its round trip
+/// (rollback, re-apply) is over 0047 alone, and a later migration applied on top would be
+/// read back as a constraint 0047 failed to restore.
+const CONTRACT_VERSION: i64 = 47;
+
 /// The rollback the 0047 header documents, statement for statement. Kept here so the
 /// round trip below exercises exactly what an operator would paste.
 const ROLLBACK_0047: &str = "
@@ -426,7 +431,7 @@ async fn the_contract_migration_applies_over_production_history_and_moves_no_hol
 	let before = picture(&h, &history).await;
 
 	// (1) The migration applies over the history, and the holders are exactly as they were.
-	sqlx::migrate!().run(&pool).await.expect("0047 applies over production's history");
+	sqlx::migrate!().run_to(CONTRACT_VERSION, &pool).await.expect("0047 applies over production's history");
 	let applied: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM _sqlx_migrations WHERE version = 47 AND success)")
 		.fetch_one(&pool)
 		.await

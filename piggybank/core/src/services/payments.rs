@@ -237,7 +237,7 @@ fn payment_to_proto(view: &PaymentView) -> pb::Payment {
 			notified: consent.notified,
 			attempts_remaining: consent.attempts_remaining,
 			invalidated: consent.invalidated.is_some(),
-			invalidation_reason: consent.invalidated.clone().unwrap_or_default(),
+			invalidation_reason: consent.invalidated.map(|cause| cause.to_string()).unwrap_or_default(),
 		}),
 		created_at: order.created_at(),
 		expires_at: order.expires_at(),

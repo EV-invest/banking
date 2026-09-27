@@ -35,6 +35,7 @@ pub fn mail_kind_str(mail: &GovernanceMail) -> &'static str {
 		GovernanceMail::PaymentApproval(_) => "PAYMENT_APPROVAL",
 		GovernanceMail::FeePolicyApproval(_) => "FEE_POLICY_APPROVAL",
 		GovernanceMail::FeePolicyNotice(_) => "FEE_POLICY_NOTICE",
+		GovernanceMail::PaymentOutcome(_) => "PAYMENT_OUTCOME",
 	}
 }
 
@@ -54,7 +55,7 @@ pub const fn is_wired() -> bool {
 pub mod wired {
 	use async_trait::async_trait;
 	use evconcierge_contracts::concierge::v1::{
-		FeePolicyApprovalMail, FeePolicyNoticeMail, FeeTerms, GovernanceMailKind, PaymentApprovalMail, PaymentConsentMail, PayoutOutcomeMail, SendGovernanceMailRequest,
+		FeePolicyApprovalMail, FeePolicyNoticeMail, FeeTerms, GovernanceMailKind, PaymentApprovalMail, PaymentConsentMail, PaymentOutcomeMail, PayoutOutcomeMail, SendGovernanceMailRequest,
 		mail_relay_service_client::MailRelayServiceClient,
 	};
 	use tonic::{Code, Request, metadata::MetadataValue, transport::Channel};
@@ -88,115 +89,135 @@ pub mod wired {
 		}
 	}
 
+	/// The queue row as the relay's request: the kind, and exactly the one payload field that
+	/// kind reads.
+	pub(crate) fn request_of(concierge_user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> SendGovernanceMailRequest {
+		let mut payload = SendGovernanceMailRequest {
+			kind: GovernanceMailKind::Unspecified as i32,
+			user_id: concierge_user_id.to_string(),
+			dedupe_key: dedupe_key.to_owned(),
+			payout_approval: None,
+			payout_outcome: None,
+			payment_consent: None,
+			payment_approval: None,
+			fee_policy_approval: None,
+			fee_policy_notice: None,
+			payment_outcome: None,
+		};
+		match mail {
+			// The burn notice shares `payout_outcome`: the contract declares a distinct
+			// KIND for it but no payload message of its own, so the outcome shape (with
+			// `outcome = TOKEN_BURNED`) is the only carrier available.
+			GovernanceMail::PayoutOutcome(outcome) | GovernanceMail::TokenBurned(outcome) => {
+				payload.kind = if matches!(mail, GovernanceMail::TokenBurned(_)) {
+					GovernanceMailKind::ApprovalTokenBurned as i32
+				} else {
+					GovernanceMailKind::PayoutOutcome as i32
+				};
+				payload.payout_outcome = Some(PayoutOutcomeMail {
+					consilium_id: outcome.consilium_id.clone(),
+					outcome: outcome.outcome.clone(),
+					network: outcome.network.clone(),
+					address: outcome.address.clone(),
+					amount: outcome.amount.clone(),
+					detail: outcome.detail.clone(),
+					tier: outcome.tier.clone(),
+					source: outcome.source.clone(),
+					destination: outcome.destination.clone(),
+					reason: outcome.reason.clone(),
+					fund: outcome.fund.clone(),
+					current: outcome.current.as_ref().map(fee_terms),
+					proposed: outcome.proposed.as_ref().map(fee_terms),
+					mark: outcome.mark.clone(),
+				});
+			}
+			GovernanceMail::PaymentConsent(consent) => {
+				payload.kind = GovernanceMailKind::PaymentConsent as i32;
+				payload.payment_consent = Some(PaymentConsentMail {
+					payment_id: consent.payment_id.clone(),
+					subject_user_id: consent.subject_user_id.clone(),
+					initiator_email: consent.initiator_email.clone(),
+					tier: consent.tier.clone(),
+					source: consent.source.clone(),
+					destination: consent.destination.clone(),
+					amount: consent.amount.clone(),
+					reason: consent.reason.clone(),
+					payload_hash: consent.payload_hash.clone(),
+					expires_at: consent.expires_at,
+					approval_url: consent.approval_url.clone(),
+					code: consent.code.clone(),
+				});
+			}
+			GovernanceMail::PaymentApproval(approval) => {
+				payload.kind = GovernanceMailKind::PaymentApproval as i32;
+				payload.payment_approval = Some(PaymentApprovalMail {
+					consilium_id: approval.consilium_id.clone(),
+					payment_id: approval.payment_id.clone(),
+					initiator_email: approval.initiator_email.clone(),
+					tier: approval.tier.clone(),
+					source: approval.source.clone(),
+					destination: approval.destination.clone(),
+					amount: approval.amount.clone(),
+					reason: approval.reason.clone(),
+					payload_hash: approval.payload_hash.clone(),
+					threshold: approval.threshold,
+					owner_count: approval.owner_count,
+					expires_at: approval.expires_at,
+					approval_url: approval.approval_url.clone(),
+					code: approval.code.clone(),
+				});
+			}
+			GovernanceMail::FeePolicyApproval(approval) => {
+				payload.kind = GovernanceMailKind::FeePolicyApproval as i32;
+				payload.fee_policy_approval = Some(FeePolicyApprovalMail {
+					consilium_id: approval.consilium_id.clone(),
+					initiator_email: approval.initiator_email.clone(),
+					fund: approval.fund.clone(),
+					// Absent when the fund charged nothing: the template says so in words,
+					// which a zero-rate `FeeTerms` would not.
+					current: approval.current.as_ref().map(fee_terms),
+					proposed: Some(fee_terms(&approval.proposed)),
+					reason: approval.reason.clone(),
+					payload_hash: approval.payload_hash.clone(),
+					threshold: approval.threshold,
+					owner_count: approval.owner_count,
+					expires_at: approval.expires_at,
+					approval_url: approval.approval_url.clone(),
+					code: approval.code.clone(),
+				});
+			}
+			GovernanceMail::FeePolicyNotice(notice) => {
+				payload.kind = GovernanceMailKind::FeePolicyNotice as i32;
+				payload.fee_policy_notice = Some(FeePolicyNoticeMail {
+					subject_user_id: notice.subject_user_id.clone(),
+					fund: notice.fund.clone(),
+					current: notice.current.as_ref().map(fee_terms),
+					proposed: Some(fee_terms(&notice.proposed)),
+					effective_at: notice.effective_at,
+					link: notice.link.clone(),
+				});
+			}
+			GovernanceMail::PaymentOutcome(outcome) => {
+				payload.kind = GovernanceMailKind::PaymentOutcome as i32;
+				payload.payment_outcome = Some(PaymentOutcomeMail {
+					subject_user_id: outcome.subject_user_id.clone(),
+					outcome: outcome.outcome.clone(),
+					reason: outcome.reason.clone(),
+					tier: outcome.tier.clone(),
+					source: outcome.source.clone(),
+					destination: outcome.destination.clone(),
+					amount: outcome.amount.clone(),
+					payment_id: outcome.payment_id.clone(),
+				});
+			}
+		}
+		payload
+	}
+
 	#[async_trait]
 	impl GovernanceMailer for ConciergeGovernanceMailer {
 		async fn send(&self, concierge_user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError> {
-			let mut payload = SendGovernanceMailRequest {
-				kind: GovernanceMailKind::Unspecified as i32,
-				user_id: concierge_user_id.to_string(),
-				dedupe_key: dedupe_key.to_owned(),
-				payout_approval: None,
-				payout_outcome: None,
-				payment_consent: None,
-				payment_approval: None,
-				fee_policy_approval: None,
-				fee_policy_notice: None,
-			};
-			match mail {
-				// The burn notice shares `payout_outcome`: the contract declares a distinct
-				// KIND for it but no payload message of its own, so the outcome shape (with
-				// `outcome = TOKEN_BURNED`) is the only carrier available.
-				GovernanceMail::PayoutOutcome(outcome) | GovernanceMail::TokenBurned(outcome) => {
-					payload.kind = if matches!(mail, GovernanceMail::TokenBurned(_)) {
-						GovernanceMailKind::ApprovalTokenBurned as i32
-					} else {
-						GovernanceMailKind::PayoutOutcome as i32
-					};
-					payload.payout_outcome = Some(PayoutOutcomeMail {
-						consilium_id: outcome.consilium_id.clone(),
-						outcome: outcome.outcome.clone(),
-						network: outcome.network.clone(),
-						address: outcome.address.clone(),
-						amount: outcome.amount.clone(),
-						detail: outcome.detail.clone(),
-						tier: outcome.tier.clone(),
-						source: outcome.source.clone(),
-						destination: outcome.destination.clone(),
-						reason: outcome.reason.clone(),
-						fund: outcome.fund.clone(),
-						current: outcome.current.as_ref().map(fee_terms),
-						proposed: outcome.proposed.as_ref().map(fee_terms),
-						mark: outcome.mark.clone(),
-					});
-				}
-				GovernanceMail::PaymentConsent(consent) => {
-					payload.kind = GovernanceMailKind::PaymentConsent as i32;
-					payload.payment_consent = Some(PaymentConsentMail {
-						payment_id: consent.payment_id.clone(),
-						subject_user_id: consent.subject_user_id.clone(),
-						initiator_email: consent.initiator_email.clone(),
-						tier: consent.tier.clone(),
-						source: consent.source.clone(),
-						destination: consent.destination.clone(),
-						amount: consent.amount.clone(),
-						reason: consent.reason.clone(),
-						payload_hash: consent.payload_hash.clone(),
-						expires_at: consent.expires_at,
-						approval_url: consent.approval_url.clone(),
-						code: consent.code.clone(),
-					});
-				}
-				GovernanceMail::PaymentApproval(approval) => {
-					payload.kind = GovernanceMailKind::PaymentApproval as i32;
-					payload.payment_approval = Some(PaymentApprovalMail {
-						consilium_id: approval.consilium_id.clone(),
-						payment_id: approval.payment_id.clone(),
-						initiator_email: approval.initiator_email.clone(),
-						tier: approval.tier.clone(),
-						source: approval.source.clone(),
-						destination: approval.destination.clone(),
-						amount: approval.amount.clone(),
-						reason: approval.reason.clone(),
-						payload_hash: approval.payload_hash.clone(),
-						threshold: approval.threshold,
-						owner_count: approval.owner_count,
-						expires_at: approval.expires_at,
-						approval_url: approval.approval_url.clone(),
-						code: approval.code.clone(),
-					});
-				}
-				GovernanceMail::FeePolicyApproval(approval) => {
-					payload.kind = GovernanceMailKind::FeePolicyApproval as i32;
-					payload.fee_policy_approval = Some(FeePolicyApprovalMail {
-						consilium_id: approval.consilium_id.clone(),
-						initiator_email: approval.initiator_email.clone(),
-						fund: approval.fund.clone(),
-						// Absent when the fund charged nothing: the template says so in words,
-						// which a zero-rate `FeeTerms` would not.
-						current: approval.current.as_ref().map(fee_terms),
-						proposed: Some(fee_terms(&approval.proposed)),
-						reason: approval.reason.clone(),
-						payload_hash: approval.payload_hash.clone(),
-						threshold: approval.threshold,
-						owner_count: approval.owner_count,
-						expires_at: approval.expires_at,
-						approval_url: approval.approval_url.clone(),
-						code: approval.code.clone(),
-					});
-				}
-				GovernanceMail::FeePolicyNotice(notice) => {
-					payload.kind = GovernanceMailKind::FeePolicyNotice as i32;
-					payload.fee_policy_notice = Some(FeePolicyNoticeMail {
-						subject_user_id: notice.subject_user_id.clone(),
-						fund: notice.fund.clone(),
-						current: notice.current.as_ref().map(fee_terms),
-						proposed: Some(fee_terms(&notice.proposed)),
-						effective_at: notice.effective_at,
-						link: notice.link.clone(),
-					});
-				}
-			}
-			let mut request = Request::new(payload);
+			let mut request = Request::new(request_of(concierge_user_id, dedupe_key, mail));
 			let token: MetadataValue<_> = format!("Bearer {}", self.service_token)
 				.parse()
 				.map_err(|_| MailDeliveryError::Failed("malformed governance mail service token".into()))?;
@@ -211,6 +232,49 @@ pub mod wired {
 					Code::ResourceExhausted | Code::Unavailable => MailDeliveryError::Deferred(format!("governance mail relay: {status}")),
 					_ => MailDeliveryError::Failed(format!("governance mail relay: {status}")),
 				})
+		}
+	}
+
+	#[cfg(test)]
+	mod tests {
+		use super::*;
+		use crate::ports::governance_mail::PaymentOutcome;
+
+		/// The consent-outcome kind reaches the relay as `PAYMENT_OUTCOME` (8) with its own
+		/// payload (field 10) and no other: concierge reads the payload the kind names, so a
+		/// mail filed under another field would be refused as missing its payload.
+		#[test]
+		fn a_payment_outcome_is_sent_as_its_own_kind_with_only_its_own_payload() {
+			let recipient = Uuid::new_v4();
+			let mail = GovernanceMail::PaymentOutcome(PaymentOutcome {
+				subject_user_id: recipient.to_string(),
+				outcome: "TOKEN_BURNED".to_owned(),
+				reason: "WRONG_CODES".to_owned(),
+				tier: "internal".to_owned(),
+				source: "investor 8f3e…".to_owned(),
+				destination: "fee".to_owned(),
+				amount: "12.5 USDT".to_owned(),
+				payment_id: Uuid::nil().to_string(),
+			});
+			let request = request_of(recipient, "payment:p:outcome:u", &mail);
+			assert_eq!(request.kind, GovernanceMailKind::PaymentOutcome as i32);
+			assert_eq!(request.kind, 8, "the wire number concierge#95 froze");
+			assert_eq!(request.user_id, recipient.to_string());
+			assert_eq!(request.dedupe_key, "payment:p:outcome:u");
+			let payload = request.payment_outcome.as_ref().expect("the payment_outcome field is set");
+			assert_eq!((payload.outcome.as_str(), payload.reason.as_str()), ("TOKEN_BURNED", "WRONG_CODES"));
+			assert_eq!(payload.subject_user_id, recipient.to_string());
+			assert_eq!(payload.amount, "12.5 USDT");
+			assert_eq!(payload.payment_id, Uuid::nil().to_string());
+			assert!(
+				request.payout_approval.is_none()
+					&& request.payout_outcome.is_none()
+					&& request.payment_consent.is_none()
+					&& request.payment_approval.is_none()
+					&& request.fee_policy_approval.is_none()
+					&& request.fee_policy_notice.is_none(),
+				"exactly one payload rides a request"
+			);
 		}
 	}
 }
