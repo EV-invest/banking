@@ -36,7 +36,7 @@ reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 color-eyre.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
-ev = { workspace = true, features = ["analytics", "error_monitoring", "otel", "settings"] }
+ev = { workspace = true, features = ["analytics", "error_monitoring", "otel", "settings", "settings_drift"] }
 evbanking_auth.workspace = true
 evbanking_contracts.workspace = true
 evconcierge_contracts.workspace = true

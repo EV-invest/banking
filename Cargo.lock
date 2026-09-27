@@ -1782,9 +1782,9 @@ dependencies = [
 
 [[package]]
 name = "ev_lib"
-version = "0.7.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "715778aa8403e6b555e7fa4389bcff28252a5c585b4aa085909d02d922e3fd38"
+checksum = "76afd3b6d5ab1663841d4cb87ccf9d777714974a20ac8f66acad75f769ba1adf"
 dependencies = [
  "async-trait",
  "dioxus",
@@ -1799,6 +1799,7 @@ dependencies = [
  "sentry",
  "serde",
  "serde_json",
+ "tokio",
  "tonic 0.13.1",
  "tracing",
  "tracing-opentelemetry",
@@ -1842,7 +1843,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_auth"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=a9b7171093d3f029b4e7e88faa002e6f42895b02#a9b7171093d3f029b4e7e88faa002e6f42895b02"
+source = "git+https://github.com/EV-invest/concierge.git?rev=7744496ca348c94141ae3b06c00acf2b6e33781b#7744496ca348c94141ae3b06c00acf2b6e33781b"
 dependencies = [
  "color-eyre",
  "ev_lib",
@@ -1864,7 +1865,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_contracts"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=a9b7171093d3f029b4e7e88faa002e6f42895b02#a9b7171093d3f029b4e7e88faa002e6f42895b02"
+source = "git+https://github.com/EV-invest/concierge.git?rev=7744496ca348c94141ae3b06c00acf2b6e33781b#7744496ca348c94141ae3b06c00acf2b6e33781b"
 dependencies = [
  "prost 0.14.4",
  "tonic 0.14.6",

@@ -26,7 +26,6 @@ use piggybank_core::{
 			BridgeConsumer,
 			endpoint::{BridgeTlsFiles, bridge_endpoint},
 		},
-		config_drift,
 		consilium::PgConsilia,
 		consilium_mailer::{self, ConsiliumMailer},
 		consilium_sweeper::ConsiliumSweeper,
@@ -123,10 +122,6 @@ fn main() -> color_eyre::Result<()> {
 }
 
 async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
-	// Watches the mounted settings Secret and warns when it stops matching what
-	// this process booted with. Detection only — applying means a redeploy.
-	config_drift::spawn(config::AppConfig::var_names());
-
 	// The on-chain rails keep their env-based conditional construction — a rail
 	// runs only when its endpoint var is set. Production asserts the rail set below.
 	let rails = Rails::from_env().context("failed to load the on-chain rail configuration")?;
@@ -569,6 +564,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		treasury_resolve_done,
 		consilium_sweeper_done,
 		consilium_mailer_done,
+		settings_drift_done,
 	) = tokio::join!(
 		await_signal(shutdown.clone()),
 		branch(&shutdown, "core gRPC server", services::serve(config.grpc_addr, state, shutdown.clone().cancelled_owned())),
@@ -652,6 +648,16 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 			"consilium mailer",
 			infallible(run_or_idle(shutdown.clone(), consilium_mailer.map(|mailer| mailer.run(shutdown.clone()))))
 		),
+		branch(
+			&shutdown,
+			"settings drift watch",
+			infallible(async {
+				tokio::select! {
+					never = config::AppConfig::watch_drift() => match never {},
+					() = shutdown.cancelled() => {}
+				}
+			})
+		),
 	);
 	let () = signal;
 	// The first error (if any) becomes the process result; a clean shutdown is `Ok`.
@@ -679,6 +685,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		.and(treasury_resolve_done)
 		.and(consilium_sweeper_done)
 		.and(consilium_mailer_done)
+		.and(settings_drift_done)
 }
 
 /// Build the governance-mail adapter over the concierge endpoint, or `None` when the seam

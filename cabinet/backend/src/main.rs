@@ -127,10 +127,11 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	// Now the listener closes, the in-flight requests finish (each already bounded by
 	// the router's outer deadline), and only then does the process exit;
 	// `terminationGracePeriodSeconds` remains the SIGKILL backstop.
-	axum::serve(listener, routes::router(state).into_make_service_with_connect_info::<std::net::SocketAddr>())
-		.with_graceful_shutdown(shutdown_signal())
-		.await
-		.context("cabinet BFF HTTP server error")
+	let serve = axum::serve(listener, routes::router(state).into_make_service_with_connect_info::<std::net::SocketAddr>()).with_graceful_shutdown(shutdown_signal());
+	tokio::select! {
+		never = AppConfig::watch_drift() => match never {},
+		result = serve => result.context("cabinet BFF HTTP server error"),
+	}
 }
 
 /// Resolve on the first of `SIGINT` (ctrl_c) or, on Unix, `SIGTERM` — the same pair

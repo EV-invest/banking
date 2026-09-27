@@ -17,7 +17,7 @@ axum = { workspace = true, features = ["ws"] }
 axum-extra = { workspace = true, features = ["cookie"] }
 color-eyre.workspace = true
 dotenvy.workspace = true
-ev = { workspace = true, features = ["analytics", "error_monitoring", "otel", "settings"] }
+ev = { workspace = true, features = ["analytics", "error_monitoring", "otel", "settings", "settings_drift"] }
 evbanking_contracts.workspace = true
 evconcierge_auth.workspace = true
 evconcierge_contracts.workspace = true

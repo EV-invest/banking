@@ -43,7 +43,6 @@
 pub mod allocations;
 pub mod book;
 pub mod bridge;
-pub mod config_drift;
 pub mod consilium;
 pub mod consilium_mailer;
 pub mod consilium_sweeper;
