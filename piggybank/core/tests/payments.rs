@@ -51,12 +51,30 @@ async fn exclusive_payments() -> tokio::sync::MutexGuard<'static, ()> {
 /// drained. The outbox is shared with the relay suites, so leaving `payment` rows behind
 /// would hand a live relay money facts about claims this suite never funded.
 async fn reset_payments(pool: &PgPool) {
+	refuse_outcome_mail(pool, false).await;
 	for statement in [
 		"DELETE FROM payments",
 		"DELETE FROM outbox WHERE aggregate = 'payment'",
 		"DELETE FROM event_log WHERE aggregate = 'payment'",
 	] {
 		sqlx::query(statement).execute(pool).await.expect("clear the payments plane");
+	}
+}
+
+/// Make every `payment_outcome` INSERT fail — or stop doing so. A `NOT VALID` CHECK refuses
+/// new rows only, which is exactly an enqueue failing inside the transition's transaction the
+/// way a lock timeout or a constraint drift would. Dropped again by [`reset_payments`], so a
+/// test that panics with it on cannot leave the queue refusing.
+async fn refuse_outcome_mail(pool: &PgPool, refuse: bool) {
+	sqlx::query("ALTER TABLE consilium_mail DROP CONSTRAINT IF EXISTS test_refuses_payment_outcome")
+		.execute(pool)
+		.await
+		.expect("drop the fault");
+	if refuse {
+		sqlx::query("ALTER TABLE consilium_mail ADD CONSTRAINT test_refuses_payment_outcome CHECK (kind <> 'payment_outcome') NOT VALID")
+			.execute(pool)
+			.await
+			.expect("inject the fault");
 	}
 }
 
@@ -398,6 +416,24 @@ fn is_money(value: &str) -> bool {
 		&& currency.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
 }
 
+/// The amount a notice carries is the consent's exact decimal spelled as money, in every
+/// case concierge will see — including the largest amount the ledger can hold, where the
+/// smallest fractional digits give way, never the integer part or the currency.
+#[test]
+fn the_outcome_amount_is_the_consent_decimal_spelled_as_money() {
+	use piggybank_core::infrastructure::payments::mail_amount;
+
+	assert_eq!(mail_amount(usdt("1200")), "1200 USDT");
+	assert_eq!(mail_amount(usdt("12.50")), "12.5 USDT");
+	assert_eq!(mail_amount(usdt("0.000000000000000001")), "0.000000000000000001 USDT");
+	for raw in ["1200", "12.50", "0.000000000000000001", "1234567890123.123456789012345678"] {
+		assert!(is_money(&mail_amount(usdt(raw))), "{raw} → {}", mail_amount(usdt(raw)));
+	}
+	let max = mail_amount(Usdt::from_base_units(u128::MAX));
+	assert!(is_money(&max), "{max}");
+	assert!(max.starts_with(&(u128::MAX / 10u128.pow(18)).to_string()), "{max}");
+}
+
 /// Assert the order's outcome notices: one per person in `recipients` (subject first), each
 /// under its own key, all naming the SUBJECT in the identity plane and the given pair.
 async fn assert_outcome_told(pool: &PgPool, order: PaymentId, subject: UserId, recipients: &[UserId], outcome: &str, reason: &str) -> Vec<OutcomeMail> {
@@ -589,6 +625,52 @@ async fn a_burned_consent_tells_the_subject_and_the_initiator_once_each() {
 		));
 	}
 	assert_eq!(outcome_mails(&pool, id).await.len(), 2, "no duplicate notices");
+
+	reset_payments(&pool).await;
+}
+
+/// A burn is the defence, the mail only its report: with the queue refusing the notice, the
+/// fifth wrong code still burns the token and rejects the order. Were the two one unit, a
+/// broken mailer would roll the burn back — and the attempt with it — handing a guesser
+/// unlimited fifth tries.
+#[tokio::test]
+async fn a_broken_mail_queue_does_not_undo_the_burn() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let admin = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let seat = a_consent_seat(&pool, investor).await;
+	let token = token_hash_of(&seat);
+	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Service(ServiceId::fee())), admin, "7.00");
+	let id = order.id();
+	payments.open(&mut order, seat, CONSENT_URL_BASE).await.expect("open the order");
+
+	refuse_outcome_mail(&pool, true).await;
+	for _ in 0..MAX_CODE_ATTEMPTS {
+		payments
+			.submit(&token, "000000", ConsentDecision::Approve, &audit(), now())
+			.await
+			.expect_err("a wrong code is refused");
+	}
+	refuse_outcome_mail(&pool, false).await;
+
+	let (attempts, burned): (i32, bool) = sqlx::query_as("SELECT attempts, burned_at IS NOT NULL FROM payment_consent WHERE payment_id = $1")
+		.bind(id.raw())
+		.fetch_one(&pool)
+		.await
+		.unwrap();
+	assert_eq!((attempts, burned), (MAX_CODE_ATTEMPTS, true), "the burn committed");
+	assert_eq!(payments.find(id).await.unwrap().unwrap().order.state(), PaymentState::Rejected);
+	assert!(outcome_mails(&pool, id).await.is_empty(), "the refused notice left nothing half-written");
+	assert!(
+		matches!(payments.submit(&token, CODE, ConsentDecision::Approve, &audit(), now()).await, Err(DomainError::NotFound { .. })),
+		"the right code after the burn finds nothing"
+	);
 
 	reset_payments(&pool).await;
 }
@@ -1270,6 +1352,12 @@ async fn a_changed_mailbox_voids_a_pending_consent() {
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Service(ServiceId::fee())), investor, "1.50");
 	let id = order.id();
 	payments.open(&mut order, seat, CONSENT_URL_BASE).await.expect("open the order");
+	// The same investor's money, on an order an admin opened.
+	let admin = an_investor(&pool).await;
+	let admins_seat = a_consent_seat(&pool, investor).await;
+	let admins_token = token_hash_of(&admins_seat);
+	let mut admins_order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Service(ServiceId::fee())), admin, "2.50");
+	payments.open(&mut admins_order, admins_seat, CONSENT_URL_BASE).await.expect("open the admin's order");
 
 	// The provider reports a new address behind the same subject — the path the first-login
 	// upsert takes for an existing row.
@@ -1284,7 +1372,12 @@ async fn a_changed_mailbox_voids_a_pending_consent() {
 		"a moved mailbox voids the seat: {refused:?}"
 	);
 	assert_eq!(payments.find(id).await.unwrap().unwrap().order.state(), PaymentState::Rejected);
-	assert_outcome_told(&pool, id, investor, &[investor], "INVALIDATED", "EMAIL_CHANGED").await;
+	// The mailbox the subject's copy would reach is the one that just replaced theirs — maybe
+	// unverified, maybe an attacker's. Nobody but staff is told, and here there is no staff.
+	assert!(outcome_mails(&pool, id).await.is_empty(), "the new mailbox is not told: {:#?}", outcome_mails(&pool, id).await);
+	assert!(payments.submit(&admins_token, CODE, ConsentDecision::Approve, &audit(), now()).await.is_err());
+	assert_eq!(payments.find(admins_order.id()).await.unwrap().unwrap().order.state(), PaymentState::Rejected);
+	assert_outcome_told(&pool, admins_order.id(), investor, &[admin], "INVALIDATED", "EMAIL_CHANGED").await;
 
 	reset_payments(&pool).await;
 }
@@ -1634,7 +1727,10 @@ async fn a_revocation_after_consent_fails_execution_closed_and_releases_the_rese
 	// A second caller carrying the same void — the sweeper racing the inline execute — finds
 	// the order already failed and tells nobody again.
 	let cause = ConsentInvalidation::SessionsRevoked { at_open: 0, now: 1 };
-	a.payments.record_execution(id, ExecutionOutcome::ConsentVoid(cause), now()).await.expect("idempotent");
+	a.payments
+		.record_execution(id, ExecutionOutcome::ConsentVoid { cause, withdrawal: None }, now())
+		.await
+		.expect("idempotent");
 	assert_eq!(outcome_mails(&a.pool, id).await.len(), 1);
 	a.relay.drain().await;
 	let after = a.ledger.balance(&LedgerAccountKey::UserClaim(investor)).await.unwrap();
@@ -1850,5 +1946,105 @@ async fn the_sweep_expires_what_nobody_consented_to() {
 		"an expired order's token answers like an unknown one"
 	);
 
+	reset_payments(&a.pool).await;
+}
+
+/// Queue the order's own L1 withdrawal under its derived id, as `execute` would have before
+/// it failed to record the effect.
+async fn queue_payment_withdrawal(a: &App, id: PaymentId, investor: UserId, amount: &str) -> WithdrawalId {
+	let withdrawal = payments_app::withdrawal_id(id);
+	piggybank_core::application::withdrawals::queue_withdrawal(
+		&piggybank_core::application::withdrawals::WithdrawalPorts {
+			withdrawals: &a.withdrawals,
+			ledger: a.ledger.as_ref(),
+			custody: &StubCustody,
+			relay: &a.notify,
+		},
+		&piggybank_core::application::withdrawals::AdmissionGates {
+			policy: &a.outflow,
+			configured: &[Network::Bep20],
+			kyc: KycGate::LIFTED,
+		},
+		withdrawal,
+		investor,
+		Network::Bep20,
+		WalletAddress::parse(Network::Bep20, BEP20_ADDRESS).unwrap(),
+		usdt(amount),
+	)
+	.await
+	.unwrap();
+	withdrawal
+}
+
+/// An approved L1 order, its consent given through the port so nothing executed inline.
+async fn an_approved_l1_order(a: &App, investor: UserId, initiator: UserId, amount: &str) -> PaymentId {
+	let id = payments_app::open(&ports(a), initiator, terms(Party::User(investor), external(), amount), now())
+		.await
+		.unwrap()
+		.order
+		.id();
+	let (token, code) = consent_credentials(&a.pool, id).await;
+	a.payments.submit(&digest(token.as_bytes()), &code, ConsentDecision::Approve, &audit(), now()).await.unwrap();
+	id
+}
+
+/// THE CRASHED EXECUTION. `execute` created the order's withdrawal `Queued` and died before
+/// recording the effect; the investor's sessions are then revoked; the sweep comes back,
+/// reads the void BEFORE looking for a withdrawal and fails the order. That failure must
+/// void the withdrawal already there, exactly as the L1 window does — a notice saying no
+/// money moved, over a withdrawal the dispatcher then sends, is the worst of both.
+#[tokio::test]
+async fn a_consent_void_found_at_execution_cancels_the_withdrawal_a_crashed_attempt_left_queued() {
+	use domain::withdrawals::WithdrawalState;
+
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments consent void over a queued withdrawal").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	let admin = an_investor(&a.pool).await;
+	fund(&a, LedgerAccountKey::UserClaim(investor), "100").await;
+	let id = an_approved_l1_order(&a, investor, admin, "40").await;
+	let withdrawal = queue_payment_withdrawal(&a, id, investor, "40").await;
+	a.users.revoke_tokens(investor).await.unwrap();
+
+	let view = payments_app::execute(&ports(&a), id, now()).await.expect("the void is recorded on the order, not raised");
+	assert_eq!(view.order.state(), PaymentState::ExecutionFailed);
+	assert_eq!(
+		a.withdrawals.find_by_id(withdrawal).await.unwrap().unwrap().state(),
+		WithdrawalState::Cancelled,
+		"the queued withdrawal is voided with the order"
+	);
+	assert!(a.withdrawals.list_actionable().await.unwrap().iter().all(|queued| queued.id != withdrawal));
+	assert_outcome_told(&a.pool, id, investor, &[investor, admin], "INVALIDATED", "SESSIONS_REVOKED").await;
+
+	a.relay.drain().await;
+	reset_payments(&a.pool).await;
+}
+
+/// The L1 window with the mail queue refusing: the void of the withdrawal and the order's
+/// failure still commit. The notice is the report of the defence, never a condition of it.
+#[tokio::test]
+async fn a_broken_mail_queue_does_not_undo_the_void_in_the_execution_window() {
+	use domain::withdrawals::WithdrawalState;
+
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments L1 window with the mail queue refusing").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	fund(&a, LedgerAccountKey::UserClaim(investor), "100").await;
+	let id = an_approved_l1_order(&a, investor, investor, "30").await;
+	let withdrawal = queue_payment_withdrawal(&a, id, investor, "30").await;
+	a.users.revoke_tokens(investor).await.unwrap();
+
+	refuse_outcome_mail(&a.pool, true).await;
+	let refused = a.payments.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Withdrawal(withdrawal)), now()).await;
+	refuse_outcome_mail(&a.pool, false).await;
+
+	assert!(matches!(refused, Err(DomainError::Conflict(_))), "{refused:?}");
+	assert_eq!(payments_app::find(&a.payments, id).await.unwrap().order.state(), PaymentState::ExecutionFailed);
+	assert_eq!(a.withdrawals.find_by_id(withdrawal).await.unwrap().unwrap().state(), WithdrawalState::Cancelled);
+	assert!(outcome_mails(&a.pool, id).await.is_empty());
+
+	a.relay.drain().await;
 	reset_payments(&a.pool).await;
 }

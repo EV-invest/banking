@@ -24,6 +24,7 @@ use domain::{
 	error::DomainError,
 	payments::{PaymentEffect, PaymentId, PaymentOrder, PaymentState},
 	users::UserId,
+	withdrawals::WithdrawalId,
 };
 
 /// The digest length every stored secret is reduced to, named so the schema's
@@ -214,10 +215,18 @@ pub struct ConsentOutcome {
 pub enum ExecutionOutcome {
 	Executed(PaymentEffect),
 	Failed(String),
-	/// The consent behind the order was found void before anything was created. Recorded as
-	/// a failure whose reason is the cause, and — unlike any other failure — told by mail to
-	/// the subject and the initiator, which is why the cause stays typed this far.
-	ConsentVoid(ConsentInvalidation),
+	/// The consent behind the order was found void before the effect was recorded. Recorded
+	/// as a failure whose reason is the cause, and — unlike any other failure — told by mail
+	/// to the audience that cause allows, which is why the cause stays typed this far.
+	///
+	/// `withdrawal` is the L1 order's derived withdrawal id, `None` for an L2/L3 order. An
+	/// earlier attempt may have created it and died before recording the effect; the void
+	/// cancels it while it is still `Queued`, as the L1 window does, and records the effect
+	/// that exists when it is already past voiding.
+	ConsentVoid {
+		cause: ConsentInvalidation,
+		withdrawal: Option<WithdrawalId>,
+	},
 }
 
 /// Where an L2/L3 order's reservation stands in the relay — the Read-First the settlement
