@@ -14,7 +14,7 @@
 //! which they disagree.
 
 use async_trait::async_trait;
-use domain::{error::DomainError, users::UserId};
+use domain::{error::DomainError, money::Network, users::UserId};
 
 /// The control-plane facts a payout must clear.
 #[async_trait]
@@ -29,6 +29,9 @@ pub trait OutflowPolicy: Send + Sync {
 	/// path a missing row means the gate cannot be evaluated for a withdrawal that has
 	/// already reserved money, and the caller is the one that turns that into a refusal.
 	async fn standing(&self, user: UserId) -> Result<Option<PayoutStanding>, DomainError>;
+
+	/// Rails an operator froze: nothing new is admitted on them and what is queued stays queued.
+	async fn frozen_rails(&self) -> Result<Vec<Network>, DomainError>;
 }
 
 /// One owner's money-out standing, as the cross-plane bridge mirrors it.

@@ -141,6 +141,7 @@ pub async fn queue_withdrawal(
 /// open for exactly the reasons its execution would refuse it 72 hours later.
 async fn admit_user_withdrawal(gates: &AdmissionGates<'_>, user: UserId, network: Network) -> Result<(), DomainError> {
 	require_configured(gates.configured, network)?;
+	require_unfrozen_rail(gates.policy, network).await?;
 	admit_user_account(gates, user).await
 }
 
@@ -200,6 +201,13 @@ fn require_configured(configured: &[Network], network: Network) -> Result<(), Do
 	} else {
 		Err(DomainError::Validation(format!("{network} withdrawals are not available")))
 	}
+}
+
+async fn require_unfrozen_rail(policy: &dyn OutflowPolicy, network: Network) -> Result<(), DomainError> {
+	if policy.frozen_rails().await?.contains(&network) {
+		return Err(DomainError::Precondition(format!("{network} is frozen by an operator — withdrawals on it are paused")));
+	}
+	Ok(())
 }
 
 /// Read-First on the source's claim: the spendable balance (posted minus what other
@@ -286,6 +294,7 @@ pub async fn require_outflows_enabled(policy: &dyn OutflowPolicy) -> Result<(), 
 /// a missing owner row, an unreadable flag and a corrupt tier all refuse.
 async fn require_dispatchable(policy: &dyn OutflowPolicy, gate: KycGate, withdrawal: &Withdrawal) -> Result<(), DomainError> {
 	require_outflows_enabled(policy).await?;
+	require_unfrozen_rail(policy, withdrawal.network()).await?;
 	let owner = withdrawal.user();
 	let standing = policy
 		.standing(owner)

@@ -648,6 +648,13 @@ export interface OperationsMode {
   read_only: boolean;
 }
 
+export interface Rail {
+  network: string;
+  configured: boolean;
+  frozen: boolean;
+  gas_coin: string;
+}
+
 export interface CabinetConfig {
   platform: PlatformConfig;
   read_only: boolean;

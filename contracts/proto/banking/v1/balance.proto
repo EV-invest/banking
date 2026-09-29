@@ -87,6 +87,14 @@ service BalanceService {
   // (withdraw / subscribe / redeem) is rejected — "pause deposits & withdrawals".
   rpc SetOperationsMode(SetOperationsModeRequest) returns (OperationsMode);
 
+  // Operator (TreasuryRead): every rail, whether this deployment runs it, and whether an
+  // operator froze it.
+  rpc ListRails(ListRailsRequest) returns (RailList);
+
+  // Admin (OperationsManage): freeze/unfreeze a rail — no new deposit addresses or
+  // withdrawals on it, queued withdrawals held, and no treasury gas alert.
+  rpc SetRailFrozen(SetRailFrozenRequest) returns (RailList);
+
   // Operator (TreasuryRead): outbox rows the relay parked (needs-intervention).
   rpc ListParkedEvents(ListParkedEventsRequest) returns (ParkedEventList);
 
@@ -197,6 +205,24 @@ message OperationsMode {
 
 message SetOperationsModeRequest {
   bool read_only = 1;
+}
+
+message ListRailsRequest {}
+
+message Rail {
+  string network = 1;
+  bool configured = 2;
+  bool frozen = 3;
+  string gas_coin = 4;
+}
+
+message RailList {
+  repeated Rail rails = 1;
+}
+
+message SetRailFrozenRequest {
+  string network = 1;
+  bool frozen = 2;
 }
 
 message GetTreasuryRequest {}

@@ -158,6 +158,14 @@ The signer archives the dead row (`superseded_at`), mints a fresh keypair (unsea
 before it is served), and the hub cache refreshes — `GetDepositAddress` serves the new
 address immediately. Rotation is **refused for a healthy key**.
 
+## Treasury gas alert — fund the rail, or freeze it
+
+`treasury gas exhausted/low on <net>` names the treasury address and the top-up that clears
+it. If the rail is not meant to be live, switch it off at **admin → Coins** instead: a
+frozen rail hides from users, refuses new withdrawals, holds queued ones (they stay
+cancellable), and drops out of the gas watch. Deposit watchers keep crediting arrivals on
+existing addresses; the USDT drift check keeps running.
+
 ## Spend brake — stop or tighten the signer without a restart
 
 The signer's ceilings (`SIGNER_MAX_*`, `piggybank/signer/src/policy.rs`) are loaded once

@@ -55,7 +55,10 @@ use domain::{
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
-use crate::ports::{Custody, Ledger};
+use crate::ports::{
+	Custody, Ledger, OutflowPolicy,
+	custody::{GasRunway, format_native_units},
+};
 
 /// Ignore differences at or below this — one cent in canonical 18-dp base units. Nothing in
 /// the ledger math rounds, so a real drift is never this small; this only absorbs a rail whose
@@ -90,15 +93,17 @@ enum Drift {
 pub struct TreasuryDrift {
 	ledger: Arc<dyn Ledger>,
 	custody: Arc<dyn Custody>,
+	policy: Arc<dyn OutflowPolicy>,
 	/// Last scan's verdict per rail — a divergence is reported only when repeated.
 	previous: Mutex<HashMap<Network, Drift>>,
 }
 
 impl TreasuryDrift {
-	pub fn new(ledger: Arc<dyn Ledger>, custody: Arc<dyn Custody>) -> Self {
+	pub fn new(ledger: Arc<dyn Ledger>, custody: Arc<dyn Custody>, policy: Arc<dyn OutflowPolicy>) -> Self {
 		Self {
 			ledger,
 			custody,
+			policy,
 			previous: Mutex::new(HashMap::new()),
 		}
 	}
@@ -120,8 +125,18 @@ impl TreasuryDrift {
 	}
 
 	async fn scan_once(&self) {
+		let frozen = match self.policy.frozen_rails().await {
+			Ok(frozen) => frozen,
+			Err(err) => {
+				warn!("treasury drift watch: frozen rails unreadable — skipping this scan: {err}");
+				return;
+			}
+		};
 		for network in Network::ALL {
-			self.check_gas(network).await;
+			// A frozen rail is one an operator chose not to fund; its USDT is still compared below.
+			if !frozen.contains(&network) {
+				self.check_gas(network).await;
+			}
 			// A rail with no chain view (unwired, or the stub) has nothing to compare against;
 			// it is not a drift and must not be reported as one.
 			let (Ok(Some(treasury)), Ok(Some(deposits))) = (self.custody.treasury_liquidity(network).await, self.custody.deposit_address_liquidity(network).await) else {
@@ -152,15 +167,16 @@ impl TreasuryDrift {
 	/// price, and a transient RPC failure is already an `Err` that skips the rail. Waiting for
 	/// a second scan would cost an hour of warning and buy nothing.
 	async fn check_gas(&self, network: Network) {
-		let Ok(Some(runway)) = self.custody.treasury_gas_runway(network).await else {
+		let Ok(Some(gas)) = self.custody.treasury_gas_runway(network).await else {
 			return;
 		};
+		let runway = gas.withdrawals();
 		match classify_gas(runway) {
 			GasState::Ok => {}
 			// Not a warning: at zero the broadcast gate refuses, so withdrawals on this rail
 			// are already parking and each one needs an operator to unstick.
-			GasState::Exhausted => error!(%network, "treasury gas exhausted: the next withdrawal on this rail will park — fund the treasury with native coin"),
-			GasState::Low => warn!(%network, runway, "treasury gas is low: the treasury can pay for {runway} more withdrawal(s) before they start parking"),
+			GasState::Exhausted => error!(%network, "treasury gas exhausted on {network}: the next withdrawal will park. {}", gas_remedy(network, &gas)),
+			GasState::Low => warn!(%network, runway, "treasury gas low on {network}: {runway} withdrawal(s) left before they park. {}", gas_remedy(network, &gas)),
 		}
 	}
 
@@ -206,6 +222,19 @@ enum GasState {
 	Low,
 	/// The next withdrawal parks — the broadcast gate already refuses at this balance.
 	Exhausted,
+}
+
+/// Where to send how much to clear the alert, or how to silence it for a rail nobody means to run.
+fn gas_remedy(network: Network, gas: &GasRunway) -> String {
+	let coin = network.native_coin();
+	let top_up = gas.per_withdrawal.saturating_mul(u128::from(MIN_GAS_RUNWAY)).saturating_sub(gas.balance);
+	format!(
+		"Send ≥{} {coin} to {} (holds {} {coin}, one withdrawal costs {} {coin}) — or, if {network} is not meant to be live, freeze it in admin → Coins",
+		format_native_units(top_up, gas.decimals),
+		gas.treasury,
+		format_native_units(gas.balance, gas.decimals),
+		format_native_units(gas.per_withdrawal, gas.decimals),
+	)
 }
 
 fn classify_gas(runway: u64) -> GasState {

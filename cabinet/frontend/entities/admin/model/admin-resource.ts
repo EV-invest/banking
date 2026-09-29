@@ -17,6 +17,7 @@ import {
   fetchAllocationAccessGrants,
   fetchAllocations as fetchAdminAllocations,
   fetchCabinet,
+  fetchRails,
   fetchFundRevenue,
   fetchMfeRegistry,
   fetchParkedEvents,
@@ -65,6 +66,13 @@ export const cabinetConfigResource = defineResource({
   fetch: fetchCabinet,
   revalidate: 60,
   tags: [TAG.adminCabinet],
+});
+
+export const railsResource = defineResource({
+  name: "admin.rails",
+  fetch: fetchRails,
+  revalidate: 60,
+  tags: [TAG.adminRails],
 });
 
 // Deployment config, not account data — safe to mirror into sessionStorage, and it changes

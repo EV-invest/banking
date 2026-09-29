@@ -38,7 +38,7 @@ use crate::{
 		rails::now_unix_secs,
 		ton_rpc::{RpcError, TonRpc},
 	},
-	ports::custody::{BroadcastRequest, Custody, CustodyError, InboundTransfer, TreasuryFunding, format_native_units},
+	ports::custody::{BroadcastRequest, Custody, CustodyError, GasRunway, InboundTransfer, TreasuryFunding, format_native_units},
 };
 
 /// Seconds a signed external message stays valid (`valid_until = now + this`). Generous so
@@ -492,14 +492,19 @@ impl Custody for TonCustody {
 	/// response destination is the treasury itself) and only the forwarded amount plus fees
 	/// is really spent. Erring toward the pessimistic number is deliberate — the alert should
 	/// fire before the cliff, not after it.
-	async fn treasury_gas_runway(&self, _network: Network) -> Result<Option<u64>, CustodyError> {
+	async fn treasury_gas_runway(&self, _network: Network) -> Result<Option<GasRunway>, CustodyError> {
 		let treasury = self.treasury_address().await?;
 		let balance = self.rpc.balance(&treasury).await.map_err(read_err)?;
 		let per_withdrawal = u128::from(self.msg_value);
 		if per_withdrawal == 0 {
 			return Ok(None);
 		}
-		Ok(Some(u64::try_from(balance / per_withdrawal).unwrap_or(u64::MAX)))
+		Ok(Some(GasRunway {
+			treasury,
+			balance,
+			per_withdrawal,
+			decimals: 9,
+		}))
 	}
 
 	/// Sums each derived deposit address's USDT jetton wallet. Sequential for the same reason

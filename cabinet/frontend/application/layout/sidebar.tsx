@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Gavel, Home, Inbox, Landmark, LifeBuoy, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UserRound, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Coins, Gavel, Home, Inbox, Landmark, LifeBuoy, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UserRound, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
@@ -66,6 +66,7 @@ const ADMIN: NavItem[] = [
   { href: "/admin/users", label: "Users", key: "nav.users", icon: UsersRound, active: (p) => p.startsWith("/admin/users") },
   { href: "/admin/cabinet", label: "Cabinet", key: "nav.cabinet", icon: PanelsTopLeft, active: (p) => p.startsWith("/admin/cabinet") },
   { href: "/admin/treasury", label: "Treasury", key: "nav.treasury", icon: Landmark, active: (p) => p.startsWith("/admin/treasury") },
+  { href: "/admin/coins", label: "Coins", key: "nav.coins", icon: Coins, active: (p) => p.startsWith("/admin/coins") },
   { href: "/admin/withdrawals", label: "Withdrawals", key: "nav.withdrawals", icon: ArrowUpFromLine, active: (p) => p.startsWith("/admin/withdrawals") },
   // Payments is where money is moved between the platform's claims and out to a chain —
   // every tier, authorised by whoever the money belongs to. Beside Withdrawals because

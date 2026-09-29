@@ -159,6 +159,8 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/cabinet", get(admin::cabinet_config))
 		.route("/api/admin/cabinet/maintenance", post(admin::set_maintenance))
 		.route("/api/admin/cabinet/read-only", post(admin::set_read_only))
+		.route("/api/admin/rails", get(admin::rails))
+		.route("/api/admin/rails/frozen", post(admin::set_rail_frozen))
 		.route("/api/admin/cabinet/announcement", post(admin::set_announcement))
 		.route("/api/admin/cabinet/flag", post(admin::set_flag))
 		// Payments — an order between two named ends. Money plane, Admin|Owner; the plane

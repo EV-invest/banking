@@ -80,6 +80,8 @@ export const TAG = {
   adminTreasury: "admin.treasury",
   /** Platform config: maintenance, read-only, announcement, flags. */
   adminCabinet: "admin.cabinet",
+  /** Which rails are run and which an operator froze. */
+  adminRails: "admin.rails",
   /** The withdrawal and redemption queues an operator works through. */
   adminQueue: "admin.queue",
   /** The operator allocation registry — drafts and closed products included. */

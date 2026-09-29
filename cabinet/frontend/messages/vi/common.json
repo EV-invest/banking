@@ -579,6 +579,26 @@
     "en": "Host shell — microfrontend registry, feature flags and content",
     "t": "Vỏ ứng dụng chủ — sổ đăng ký microfrontend, cờ tính năng và nội dung"
   },
+  "admin.coins.frozen": {
+    "en": "Frozen — hidden from users, queued withdrawals held, no gas alerts",
+    "t": "Đã đóng băng — ẩn với người dùng, lệnh rút đang chờ bị giữ lại, không cảnh báo gas"
+  },
+  "admin.coins.gas": {
+    "en": "gas in {coin}",
+    "t": "phí gas bằng {coin}"
+  },
+  "admin.coins.live": {
+    "en": "Live — deposits and withdrawals open",
+    "t": "Đang hoạt động — nạp và rút đang mở"
+  },
+  "admin.coins.subtitle": {
+    "en": "Rails users can deposit and withdraw on",
+    "t": "Các mạng người dùng có thể nạp và rút tiền"
+  },
+  "admin.coins.unconfigured": {
+    "en": "Not run by this deployment",
+    "t": "Không chạy trong bản triển khai này"
+  },
   "admin.col.actions": {
     "en": "Actions",
     "t": "Thao tác"
@@ -4442,6 +4462,10 @@
   "nav.cabinet": {
     "en": "Cabinet",
     "t": "Cabinet"
+  },
+  "nav.coins": {
+    "en": "Coins",
+    "t": "Tiền mã hóa"
   },
   "nav.consilium": {
     "en": "Consilium",
