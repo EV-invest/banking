@@ -30,6 +30,12 @@ impl WalletSvc {
 	}
 }
 
+/// Configured minus operator-frozen: what a user is offered to deposit or withdraw on.
+async fn live_rails(state: &AppState) -> Result<Vec<Network>, Status> {
+	let frozen = state.outflow.frozen_rails().await.map_err(map_err)?;
+	Ok(state.configured_networks.iter().copied().filter(|n| !frozen.contains(n)).collect())
+}
+
 #[tonic::async_trait]
 impl WalletService for WalletSvc {
 	async fn get_wallet(&self, request: Request<pb::GetWalletRequest>) -> Result<Response<pb::Wallet>, Status> {
@@ -42,7 +48,7 @@ impl WalletService for WalletSvc {
 				deposit_addresses: self.state.deposit_addresses.as_ref(),
 				users: self.state.users.as_ref(),
 			},
-			&self.state.configured_networks,
+			&live_rails(&self.state).await?,
 			self.state.kyc_gate,
 			user,
 		)
@@ -73,7 +79,7 @@ impl WalletService for WalletSvc {
 				deposit_addresses: self.state.deposit_addresses.as_ref(),
 				users: self.state.users.as_ref(),
 			},
-			&self.state.configured_networks,
+			&live_rails(&self.state).await?,
 			self.state.kyc_gate,
 			user,
 			network,

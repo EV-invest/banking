@@ -25,7 +25,7 @@ use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
 	config::KycGate,
 	infrastructure::{custody::StubCustody, deposits::PgDeposits, dispatcher::Dispatcher, operations, outflow::PgOutflowPolicy, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
-	ports::{BroadcastRequest, Custody, CustodyError, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{BroadcastRequest, Custody, CustodyError, DepositAddresses, OutflowPolicy, PayoutStanding, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -952,6 +952,82 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
 		.await
 		.unwrap();
+	h.relay.drain().await;
+}
+
+/// The real policy with one rail frozen. Not the `frozen_rails` row: that is shared by every
+/// test binary on this database, and a frozen rail would refuse their withdrawals on it.
+struct FrozenRail(PgOutflowPolicy, Network);
+
+#[async_trait]
+impl OutflowPolicy for FrozenRail {
+	async fn outflows_paused(&self) -> Result<bool, DomainError> {
+		self.0.outflows_paused().await
+	}
+
+	async fn standing(&self, user: UserId) -> Result<Option<PayoutStanding>, DomainError> {
+		self.0.standing(user).await
+	}
+
+	async fn frozen_rails(&self) -> Result<Vec<Network>, DomainError> {
+		Ok(vec![self.1])
+	}
+}
+
+#[tokio::test]
+async fn a_frozen_rail_refuses_new_withdrawals_and_holds_queued_ones() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	deposit(&h, user, network, "100").await;
+	let frozen = FrozenRail(policy(&h), network);
+
+	let short = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
+	let queued = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &short),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(queued.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+
+	let refused = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &short),
+		&withdrawal_app::AdmissionGates {
+			policy: &frozen,
+			configured: &Network::ALL,
+			kyc: KycGate::ENFORCED,
+		},
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("10"),
+	)
+	.await;
+	assert!(matches!(refused, Err(DomainError::Precondition(_))), "a frozen rail admits no new withdrawal, got {refused:?}");
+
+	let liquid = TestCustody::with_view(network, TreasuryView::OnChain(usdt("1000000000")));
+	let held = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &frozen, KycGate::ENFORCED, &h.notify, queued.id()).await;
+	assert!(
+		matches!(held, Err(DomainError::Precondition(_))),
+		"a frozen rail holds its queue rather than parking it, got {held:?}"
+	);
+	let still = h.withdrawals.find_by_id(queued.id()).await.unwrap().unwrap();
+	assert_eq!(still.state(), WithdrawalState::Queued, "held, so still cancellable");
+
+	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, queued.id())
+		.await
+		.unwrap();
+	assert_eq!(dispatched.state(), WithdrawalState::Processing, "unfrozen, the same withdrawal ships");
+	h.relay.drain().await;
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, queued.id(), unique_tx_ref()).await.unwrap();
 	h.relay.drain().await;
 }
 

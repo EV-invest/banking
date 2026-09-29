@@ -32,7 +32,7 @@ use crate::{
 	application::withdrawals as withdrawal_app,
 	config::KycGate,
 	infrastructure::outflow::PgOutflowPolicy,
-	ports::{Custody, WithdrawalRepository, ledger::Ledger},
+	ports::{Custody, OutflowPolicy, WithdrawalRepository, ledger::Ledger},
 };
 
 /// How often the dispatcher re-checks the queued backlog. Well inside the reaper's
@@ -100,6 +100,15 @@ impl Dispatcher {
 			info!("dispatcher: skipping this sweep — {err}");
 			return Ok(0);
 		}
+		// Read once so a frozen rail's backlog waits silently rather than logging a refusal
+		// per row every sweep; `dispatch_withdrawal` re-checks it for the operator path.
+		let frozen = match policy.frozen_rails().await {
+			Ok(frozen) => frozen,
+			Err(err) => {
+				warn!("dispatcher: frozen rails unreadable — skipping this sweep: {err}");
+				return Ok(0);
+			}
+		};
 		let queued: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM withdrawals WHERE state = 'queued' ORDER BY created_at")
 			.fetch_all(&self.pool)
 			.await?;
@@ -120,6 +129,9 @@ impl Dispatcher {
 			};
 			let net = withdrawal.net_amount();
 			let network = withdrawal.network();
+			if frozen.contains(&network) {
+				continue;
+			}
 			let spent = in_flight.get(&network).copied().unwrap_or(Usdt::ZERO);
 			// Gate 1 — the TB rail accounting balance, less this sweep's dispatches, must
 			// cover the net.

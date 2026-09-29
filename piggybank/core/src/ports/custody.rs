@@ -78,7 +78,7 @@ pub trait Custody: Gateway {
 	/// cliff. `0` is not "nearly empty" but "the next withdrawal parks" — it is the same
 	/// comparison `ensure_treasury_funded` makes at broadcast time, so the two can never
 	/// disagree about when a rail stops paying. `None` means the adapter has no chain view.
-	async fn treasury_gas_runway(&self, network: Network) -> Result<Option<u64>, CustodyError> {
+	async fn treasury_gas_runway(&self, network: Network) -> Result<Option<GasRunway>, CustodyError> {
 		let _ = network;
 		Ok(None)
 	}
@@ -92,6 +92,22 @@ pub trait Custody: Gateway {
 		Ok(None)
 	}
 }
+/// A rail treasury's native-coin gas against what one withdrawal costs, both in the chain's
+/// smallest unit — enough for an alert to say where to send how much.
+#[derive(Clone, Debug)]
+pub struct GasRunway {
+	pub treasury: String,
+	pub balance: u128,
+	/// Never zero: an adapter reading a zero price reports no view instead.
+	pub per_withdrawal: u128,
+	pub decimals: u32,
+}
+impl GasRunway {
+	pub fn withdrawals(&self) -> u64 {
+		u64::try_from(self.balance / self.per_withdrawal).unwrap_or(u64::MAX) // saturates: past u64::MAX withdrawals is "plenty"
+	}
+}
+
 /// One confirmed inbound USDT transfer, as the chain reports it — the evidence behind a
 /// hand-recorded arrival. Addresses are in the rail's own canonical form (lowercase `0x…`
 /// on EVM, raw `0:<hex>` on TON), the same form `user_deposit_addresses` stores, so the

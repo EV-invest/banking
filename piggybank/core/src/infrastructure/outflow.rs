@@ -9,7 +9,7 @@
 //! threaded through as a twenty-sixth constructor argument.
 
 use async_trait::async_trait;
-use domain::{error::DomainError, users::UserId};
+use domain::{error::DomainError, money::Network, users::UserId};
 use sqlx::PgPool;
 
 use crate::{
@@ -47,5 +47,9 @@ impl OutflowPolicy for PgOutflowPolicy {
 			// an unparseable role to the one that holds nothing.
 			kyc_level: u32::try_from(kyc_level).unwrap_or(0),
 		}))
+	}
+
+	async fn frozen_rails(&self) -> Result<Vec<Network>, DomainError> {
+		operations::frozen_rails(&self.pool).await.map_err(|err| DomainError::Repository(err.to_string()))
 	}
 }

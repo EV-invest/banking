@@ -38,6 +38,12 @@ pub struct UserIdQuery {
 }
 
 #[derive(Deserialize)]
+struct SetRailFrozen {
+	network: String,
+	frozen: bool,
+}
+
+#[derive(Deserialize)]
 pub struct FeeServiceQuery {
 	service: Option<String>,
 }
@@ -1130,6 +1136,35 @@ pub async fn set_read_only(State(st): State<AppState>, jar: CookieJar, headers: 
 	let token = require_money_token(&st, &jar).await?;
 	let mode = st.grpc.set_operations_mode(&token, bool_field(&parse_body(&body), "read_only")).await?;
 	Ok(Json(mode.into()))
+}
+
+/// `GET /api/admin/rails` — every rail with whether it is run and whether it is frozen.
+pub async fn rails(State(st): State<AppState>, jar: CookieJar) -> Result<Json<Vec<dto::Rail>>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let token = require_money_token(&st, &jar).await?;
+	let rails = st.grpc.rails(&token).await.map_err(|s| ApiError::read(s, "rails unavailable"))?;
+	Ok(Json(rails.rails.into_iter().map(Into::into).collect()))
+}
+
+/// `POST /api/admin/rails/frozen` — freeze or unfreeze one rail; answers the whole list.
+pub async fn set_rail_frozen(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Vec<dto::Rail>>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let req: SetRailFrozen = serde_json::from_slice(&body).map_err(|e| ApiError::BadRequest(format!("expected {{ network, frozen }}: {e}")))?;
+	let token = require_money_token(&st, &jar).await?;
+	let rails = st
+		.grpc
+		.set_rail_frozen(
+			&token,
+			bk::SetRailFrozenRequest {
+				network: req.network,
+				frozen: req.frozen,
+			},
+		)
+		.await?;
+	Ok(Json(rails.rails.into_iter().map(Into::into).collect()))
 }
 
 /// `POST /api/admin/cabinet/announcement` — set/clear the live announcement banner.

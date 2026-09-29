@@ -28,6 +28,7 @@ import type {
   CabinetConfig,
   FundNav,
   OperationsMode,
+  Rail,
   ParkedEventList,
   PlatformConfig,
   Redemption,
@@ -279,6 +280,10 @@ export const fetchMfeRegistry = async (): Promise<MfeEntry[]> => {
 export const setMaintenance = (enabled: boolean): Promise<PlatformConfig> => postJson("/api/admin/cabinet/maintenance", { enabled });
 
 export const setReadOnly = (readOnly: boolean): Promise<OperationsMode> => postJson("/api/admin/cabinet/read-only", { read_only: readOnly });
+
+export const fetchRails = (): Promise<Rail[]> => getJson("/api/admin/rails");
+
+export const setRailFrozen = (network: string, frozen: boolean): Promise<Rail[]> => postJson("/api/admin/rails/frozen", { network, frozen });
 
 export const setAnnouncement = (body: { title: string; body: string; active: boolean }): Promise<PlatformConfig> => postJson("/api/admin/cabinet/announcement", body);
 

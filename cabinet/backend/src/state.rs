@@ -931,6 +931,14 @@ impl Grpc {
 		let req = bk::SetOperationsModeRequest { read_only };
 		Ok(self.balance().set_operations_mode(bearer(token, req)?).await?.into_inner())
 	}
+
+	pub async fn rails(&self, token: &str) -> Result<bk::RailList, Status> {
+		Ok(self.balance().list_rails(bearer(token, bk::ListRailsRequest {})?).await?.into_inner())
+	}
+
+	pub async fn set_rail_frozen(&self, token: &str, req: bk::SetRailFrozenRequest) -> Result<bk::RailList, Status> {
+		Ok(self.balance().set_rail_frozen(bearer(token, req)?).await?.into_inner())
+	}
 }
 
 /// A lazily-connected upstream `Endpoint` with explicit connect + per-RPC deadlines, so a

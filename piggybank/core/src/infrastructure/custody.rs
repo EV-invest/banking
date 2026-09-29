@@ -51,7 +51,7 @@ const CLOCK_SKEW_SECS: u64 = 300;
 use crate::{
 	config::EvmConfig,
 	infrastructure::evm_rpc::{EvmRpc, RpcError, TRANSFER_TOPIC, address_from_topic, hex_to_u64, pad_topic, word_to_u128},
-	ports::custody::{BroadcastRequest, Custody, CustodyError, InboundTransfer, TreasuryFunding, format_native_units},
+	ports::custody::{BroadcastRequest, Custody, CustodyError, GasRunway, InboundTransfer, TreasuryFunding, format_native_units},
 };
 
 /// No-op custody: logs and returns success. An operator supplies the real on-chain tx ref
@@ -115,7 +115,7 @@ impl Custody for MultiChainCustody {
 		}
 	}
 
-	async fn treasury_gas_runway(&self, network: Network) -> Result<Option<u64>, CustodyError> {
+	async fn treasury_gas_runway(&self, network: Network) -> Result<Option<GasRunway>, CustodyError> {
 		match self.by_network.get(&network) {
 			Some(adapter) => adapter.treasury_gas_runway(network).await,
 			None => Ok(None),
@@ -567,16 +567,21 @@ impl Custody for ChainCustody {
 	/// reported `0` is exactly the balance at which the next broadcast parks. Re-reads the
 	/// price each call rather than caching it: on Polygon it moves by multiples within an
 	/// hour, and a stale price would understate the cliff precisely when gas is spiking.
-	async fn treasury_gas_runway(&self, _network: Network) -> Result<Option<u64>, CustodyError> {
+	async fn treasury_gas_runway(&self, _network: Network) -> Result<Option<GasRunway>, CustodyError> {
 		let treasury = self.treasury_address().await?;
-		let native = self.rpc.native_balance(&treasury).await.map_err(read_err)?;
+		let balance = self.rpc.native_balance(&treasury).await.map_err(read_err)?;
 		let per_withdrawal = u128::from(self.gas_limit).saturating_mul(self.rpc.gas_price().await.map_err(read_err)?);
 		// A zero price is not a free chain, it is a node answering nonsense; refuse to divide
 		// by it and report no view rather than an infinite runway.
 		if per_withdrawal == 0 {
 			return Ok(None);
 		}
-		Ok(Some(u64::try_from(native / per_withdrawal).unwrap_or(u64::MAX)))
+		Ok(Some(GasRunway {
+			treasury,
+			balance,
+			per_withdrawal,
+			decimals: 18,
+		}))
 	}
 
 	/// Sums `balanceOf` across every derived deposit address on this rail. Sequential on

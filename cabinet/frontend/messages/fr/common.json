@@ -579,6 +579,26 @@
     "en": "Host shell — microfrontend registry, feature flags and content",
     "t": "Shell hôte — registre des microfrontends, feature flags et contenu"
   },
+  "admin.coins.frozen": {
+    "en": "Frozen — hidden from users, queued withdrawals held, no gas alerts",
+    "t": "Gelé — masqué aux utilisateurs, retraits en file retenus, aucune alerte de gaz"
+  },
+  "admin.coins.gas": {
+    "en": "gas in {coin}",
+    "t": "frais de gaz en {coin}"
+  },
+  "admin.coins.live": {
+    "en": "Live — deposits and withdrawals open",
+    "t": "Actif — dépôts et retraits ouverts"
+  },
+  "admin.coins.subtitle": {
+    "en": "Rails users can deposit and withdraw on",
+    "t": "Réseaux sur lesquels les utilisateurs peuvent déposer et retirer"
+  },
+  "admin.coins.unconfigured": {
+    "en": "Not run by this deployment",
+    "t": "Non exploité par ce déploiement"
+  },
   "admin.col.actions": {
     "en": "Actions",
     "t": "Actions"
@@ -4442,6 +4462,10 @@
   "nav.cabinet": {
     "en": "Cabinet",
     "t": "Mon espace"
+  },
+  "nav.coins": {
+    "en": "Coins",
+    "t": "Cryptomonnaies"
   },
   "nav.consilium": {
     "en": "Consilium",

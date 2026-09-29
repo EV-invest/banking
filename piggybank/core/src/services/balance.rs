@@ -39,6 +39,23 @@ impl BalanceSvc {
 	pub fn new(state: AppState) -> Self {
 		Self { state }
 	}
+
+	async fn rails(&self) -> Result<Response<pb::RailList>, Status> {
+		let frozen = crate::infrastructure::operations::frozen_rails(&self.state.pool)
+			.await
+			.map_err(|_| Status::unavailable("internal error"))?;
+		Ok(Response::new(pb::RailList {
+			rails: Network::ALL
+				.into_iter()
+				.map(|network| pb::Rail {
+					network: network.as_str().to_owned(),
+					configured: self.state.configured_networks.contains(&network),
+					frozen: frozen.contains(&network),
+					gas_coin: network.native_coin().to_owned(),
+				})
+				.collect(),
+		}))
+	}
 }
 
 #[tonic::async_trait]
@@ -299,6 +316,22 @@ impl BalanceService for BalanceSvc {
 			.await
 			.map_err(|_| Status::unavailable("internal error"))?;
 		Ok(Response::new(pb::OperationsMode { read_only }))
+	}
+
+	async fn list_rails(&self, request: Request<pb::ListRailsRequest>) -> Result<Response<pb::RailList>, Status> {
+		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
+		self.rails().await
+	}
+
+	async fn set_rail_frozen(&self, request: Request<pb::SetRailFrozenRequest>) -> Result<Response<pb::RailList>, Status> {
+		require_permission(&self.state, &request, Permission::OperationsManage).await?;
+		let req = request.get_ref();
+		let network = Network::parse(&req.network).map_err(map_err)?;
+		crate::infrastructure::operations::set_rail_frozen(&self.state.pool, network, req.frozen)
+			.await
+			.map_err(|_| Status::unavailable("internal error"))?;
+		tracing::warn!(%network, frozen = req.frozen, "rail freeze changed by an operator");
+		self.rails().await
 	}
 
 	async fn list_parked_events(&self, request: Request<pb::ListParkedEventsRequest>) -> Result<Response<pb::ParkedEventList>, Status> {

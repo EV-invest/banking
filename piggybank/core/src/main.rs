@@ -362,7 +362,10 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// so it stays green when the LEDGER and the CHAIN disagree. This compares `wallet:<net>`
 	// against the wallets it claims to describe, which is the only thing that notices USDT
 	// arriving out of band. Alert-only, and a no-op on rails with no chain view.
-	let treasury_drift = TreasuryDrift::new(ledger.clone(), custody.clone());
+	// One outflow-policy handle for every path money leaves through — the sweeper's chained
+	// payment execution reads the same pause the RPC handlers and the dispatcher do.
+	let outflow: Arc<dyn OutflowPolicy> = Arc::new(PgOutflowPolicy::new(pool.clone()));
+	let treasury_drift = TreasuryDrift::new(ledger.clone(), custody.clone(), outflow.clone());
 
 	// ── cross-plane lifecycle bridge consumer (one-way concierge → banking) ─────
 	// Pull concierge `UserLifecycleEvent`s and mirror them onto the `users` control
@@ -458,9 +461,6 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// The sweeper owns the two things the governance aggregate cannot hear on its own: a
 	// 72h window running out, and an approval whose payout never got created (a crash
 	// between the verdict and the money). Both are idempotent.
-	// One outflow-policy handle for every path money leaves through — the sweeper's chained
-	// payment execution reads the same pause the RPC handlers and the dispatcher do.
-	let outflow: Arc<dyn OutflowPolicy> = Arc::new(PgOutflowPolicy::new(pool.clone()));
 	let consilium_sweeper = ConsiliumSweeper {
 		pool: pool.clone(),
 		consilia: consilia.clone(),

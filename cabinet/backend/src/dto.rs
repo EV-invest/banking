@@ -1444,6 +1444,26 @@ impl From<bk::WithdrawalQueue> for WithdrawalQueue {
 	}
 }
 
+/// A rail on the Coins screen.
+#[derive(Serialize)]
+pub struct Rail {
+	pub network: String,
+	pub configured: bool,
+	pub frozen: bool,
+	pub gas_coin: String,
+}
+
+impl From<bk::Rail> for Rail {
+	fn from(r: bk::Rail) -> Self {
+		Self {
+			network: r.network,
+			configured: r.configured,
+			frozen: r.frozen,
+			gas_coin: r.gas_coin,
+		}
+	}
+}
+
 /// The money-plane read-only kill-switch state (Cabinet screen).
 #[derive(Serialize)]
 pub struct OperationsMode {

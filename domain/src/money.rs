@@ -72,6 +72,16 @@ impl Network {
 		}
 	}
 
+	/// The coin this chain charges gas in — what a rail treasury must hold to send anything.
+	pub const fn native_coin(self) -> &'static str {
+		match self {
+			Self::Bep20 => "BNB",
+			Self::Trc20 => "TRX",
+			Self::Ton => "TON",
+			Self::Polygon => "POL",
+		}
+	}
+
 	pub const fn as_str(self) -> &'static str {
 		match self {
 			Self::Bep20 => "bep20",

@@ -579,6 +579,26 @@
     "en": "Host shell — microfrontend registry, feature flags and content",
     "t": "Хост-оболочка — реестр микрофронтендов, фича-флаги и контент"
   },
+  "admin.coins.frozen": {
+    "en": "Frozen — hidden from users, queued withdrawals held, no gas alerts",
+    "t": "Заморожена — скрыта от пользователей, выводы в очереди удерживаются, без оповещений о газе"
+  },
+  "admin.coins.gas": {
+    "en": "gas in {coin}",
+    "t": "газ в {coin}"
+  },
+  "admin.coins.live": {
+    "en": "Live — deposits and withdrawals open",
+    "t": "Активна — пополнения и выводы открыты"
+  },
+  "admin.coins.subtitle": {
+    "en": "Rails users can deposit and withdraw on",
+    "t": "Сети, в которых пользователи могут пополнять и выводить средства"
+  },
+  "admin.coins.unconfigured": {
+    "en": "Not run by this deployment",
+    "t": "Не запущена в этом развёртывании"
+  },
   "admin.col.actions": {
     "en": "Actions",
     "t": "Действия"
@@ -4442,6 +4462,10 @@
   "nav.cabinet": {
     "en": "Cabinet",
     "t": "Кабинет"
+  },
+  "nav.coins": {
+    "en": "Coins",
+    "t": "Монеты"
   },
   "nav.consilium": {
     "en": "Consilium",
