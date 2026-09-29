@@ -24,7 +24,7 @@ const BATCH: u32 = 8189;
 /// An unreachable cluster never errors, the client retries forever; this is what makes it fail.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct Account {
 	id: String,
 	user_data_128: String,
@@ -49,7 +49,7 @@ impl From<&tb::Account> for Account {
 	}
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct Transfer {
 	id: String,
 	debit_account_id: String,
@@ -84,7 +84,7 @@ impl From<&tb::Transfer> for Transfer {
 	}
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct Gap {
 	since: u64,
 	accounts: Vec<Account>,

@@ -96,7 +96,7 @@ pub trait Custody: Gateway {
 /// hand-recorded arrival. Addresses are in the rail's own canonical form (lowercase `0x…`
 /// on EVM, raw `0:<hex>` on TON), the same form `user_deposit_addresses` stores, so the
 /// caller compares them without decoding anything.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InboundTransfer {
 	/// Who sent it. The only thing separating the fund's own capital injection from the
 	/// sweep consolidating money already on the ledger.

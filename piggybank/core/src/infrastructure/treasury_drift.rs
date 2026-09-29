@@ -77,7 +77,7 @@ const SCAN_INTERVAL: Duration = Duration::from_secs(3600);
 const MIN_GAS_RUNWAY: u64 = 5;
 
 /// What the previous scan saw for a rail, so a divergence must persist to be reported.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 enum Drift {
 	/// Chain and ledger agreed (within dust).
 	None,
@@ -199,7 +199,7 @@ impl TreasuryDrift {
 }
 
 /// How much gas the treasury has left, in the only unit that matters operationally.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum GasState {
 	Ok,
 	/// Still paying, but close enough that the operator has to act now.

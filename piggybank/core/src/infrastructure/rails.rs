@@ -135,7 +135,7 @@ pub(super) fn signer_err(what: impl Display, key: HoldKey, status: &Status) -> S
 /// while a gas top-up is signed by the one gas-station key for every address — held per
 /// address, a station under custodian consensus would still mint one pending activity per
 /// address per hold, N times the noise the backoff exists to remove.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(super) enum HoldKey {
 	Address(String),
 	GasStation,

@@ -109,7 +109,7 @@ const PRUNE_SLACK_BLOCKS: u64 = 256;
 
 /// Whether a scan owns the persistent cursor. The live cycle does; a backfill must not
 /// touch it, or it would drag the live scan backwards or skip it past unread blocks.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CursorPolicy {
 	Advance,
 	Leave,
@@ -709,7 +709,7 @@ fn is_pruned(err: &WatcherError) -> bool {
 }
 
 /// How the caller should react to an RPC error.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Eq, PartialEq)]
 enum RpcAction {
 	/// Transient (rate limit, timeout, transport, 429/5xx) — the same call may succeed later.
 	Backoff,

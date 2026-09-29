@@ -91,7 +91,7 @@ pub struct FeePolicyChange {
 /// the banking ids of exactly the holders whose notice the mailer had given up on by that
 /// moment — the latest acknowledgement's, which took over the whole list. A tightening
 /// then binds over THESE holders and no other.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NoticeWaiver {
 	pub by: String,
 	pub at_unix: i64,

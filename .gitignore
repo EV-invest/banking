@@ -99,6 +99,8 @@ graphify-out/
 node_modules/
 .next/
 .turbo/
+## Brand mark, staged from the ev_assets input
+cabinet/frontend/public/assets/
 ## Env
 .env
 .env.local

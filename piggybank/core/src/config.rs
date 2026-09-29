@@ -101,7 +101,7 @@ ev::settings! {
 /// does not recognise as `false` — the safe default for an opt-in sweep, the wrong one
 /// here. An unparseable value warns rather than refusing the boot on purpose: the reading
 /// that cannot lose money is already available without stopping the hub.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct KycGate {
 	enforced: bool,
 }
@@ -617,7 +617,7 @@ pub struct TonSweepConfig {
 /// movement, and a `ROLE_CHANGED` mirrors an operator role onto the money plane. The
 /// shared `BRIDGE_SERVICE_TOKEN` only proves banking to concierge — it says nothing about
 /// who answered — so the transport is the whole of the reverse proof (EV-invest/banking#199).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BridgeTransport {
 	/// `https://` — the channel authenticates the server against the CA pinned by
 	/// `BRIDGE_TLS_CA_PEM_FILE`, or, outside production, against the public roots.
@@ -678,7 +678,7 @@ pub fn bridge_transport(addr: &str) -> BridgeTransport {
 ///
 /// Every variant below ends the same way if it is let through: a root store holding fewer
 /// anchors than the operator pinned — none at all, in each of these cases.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum PinnedCaProblem {
 	/// Not a PEM: an empty file, raw DER, a block whose `-----END …-----` never arrives, or
 	/// a path left pointing at something that was never a certificate bundle.
@@ -756,7 +756,7 @@ pub fn check_pinned_ca_pem(raw: &str) -> Result<(), PinnedCaProblem> {
 ///
 /// The address is carried so the message names the value an operator has to change, not
 /// only the variable; the variables to change it with are named in the text.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum BridgeRefusal {
 	/// Cleartext to a peer off-host: neither encrypted nor server-authenticated, so anything
 	/// that can answer to that name could mirror a KYC tier or an operator role onto the
@@ -826,8 +826,7 @@ fn bool_env(key: &str, default: bool) -> bool {
 /// Parse an optional env var that, when present and non-empty, must be a valid `T`.
 fn parse_opt<T: std::str::FromStr>(key: &str) -> color_eyre::Result<Option<T>>
 where
-	T::Err: std::fmt::Display,
-{
+	T::Err: std::fmt::Display, {
 	match env::var(key).ok().filter(|s| !s.is_empty()) {
 		Some(raw) => raw.parse::<T>().map(Some).map_err(|e| color_eyre::eyre::eyre!("{key} must be a valid value: {e}")),
 		None => Ok(None),

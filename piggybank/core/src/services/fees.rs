@@ -291,7 +291,7 @@ impl FeesService for FeesSvc {
 /// Who is reading a change. The terms, the state, the moments and the reason are public
 /// information about a product; WHO asked and WHICH consilium decides are governance
 /// detail, shown to operators and blanked for everyone else.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 enum Audience {
 	Operator,
 	Investor,

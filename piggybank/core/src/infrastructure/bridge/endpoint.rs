@@ -20,7 +20,7 @@ use crate::config::{self, BridgeTransport};
 
 /// The PEM files the bridge's TLS reads, held by path so the read happens once, here, and
 /// a path that cannot be read stops the boot with the variable's name in the error.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct BridgeTlsFiles {
 	/// `BRIDGE_TLS_CA_PEM_FILE` — the trust anchor; certificates and nothing else.
 	pub ca: Option<String>,

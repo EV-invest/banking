@@ -74,7 +74,7 @@ const BACKOFF_MAX: Duration = Duration::from_secs(60);
 /// What [`BridgeConsumer::apply`] did with one event. `drain` reads this to decide whether
 /// the single global cursor may move past it — the cursor is the only delivery guarantee
 /// there is, so this is a consumed/not-consumed verdict, not a status log.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Outcome {
 	/// Mirrored onto the local row, or dropped as a redelivery the per-user sequence guard
 	/// already covers. Either way this build is done with it: the cursor may pass.
@@ -89,7 +89,7 @@ enum Outcome {
 }
 
 /// What one pull did, in the three terms its callers need.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Pull {
 	/// The cursor moved past this batch, so it is consumed and will not be re-delivered.
 	/// [`BridgeConsumer::run`] reads this as the cycle having done work even when a LATER
@@ -123,7 +123,7 @@ impl Pull {
 
 /// What one whole cycle of [`BridgeConsumer::run`] got done, accumulated over the pulls
 /// [`BridgeConsumer::drain`] made before it returned.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Cycle {
 	/// Some pull committed its cursor: this cycle mirrored something, whatever happened after.
 	progressed: bool,
@@ -144,7 +144,7 @@ impl Cycle {
 ///
 /// The snapshot is taken when concierge DRAINS the event, not when banking applies it, so
 /// the two are only interchangeable while the gap is small.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Freshness {
 	/// Pulled from the concierge outbox moments ago: the newest snapshot either plane holds.
 	Live,
