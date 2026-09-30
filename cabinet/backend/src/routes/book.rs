@@ -452,6 +452,14 @@ mod book_route_tests {
 			Err(Status::unimplemented("not reached by the book routes"))
 		}
 
+		async fn exchange_code(&self, _: GrpcRequest<cc::ExchangeCodeRequest>) -> Result<GrpcResponse<cc::ClientTokenResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
+		async fn refresh_client_token(&self, _: GrpcRequest<cc::RefreshClientTokenRequest>) -> Result<GrpcResponse<cc::ClientTokenResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
 		async fn refresh(&self, _: GrpcRequest<cc::RefreshRequest>) -> Result<GrpcResponse<cc::TokenResponse>, Status> {
 			Err(Status::unimplemented("not reached by the book routes"))
 		}
@@ -514,6 +522,18 @@ mod book_route_tests {
 		}
 
 		async fn set_role(&self, _: GrpcRequest<cc::SetRoleRequest>) -> Result<GrpcResponse<cc::SetRoleResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
+		async fn grant_scope(&self, _: GrpcRequest<cc::GrantScopeRequest>) -> Result<GrpcResponse<cc::GrantScopeResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
+		async fn revoke_scope(&self, _: GrpcRequest<cc::RevokeScopeRequest>) -> Result<GrpcResponse<cc::RevokeScopeResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
+		async fn list_scoped_grants(&self, _: GrpcRequest<cc::ListScopedGrantsRequest>) -> Result<GrpcResponse<cc::ListScopedGrantsResponse>, Status> {
 			Err(Status::unimplemented("not reached by the book routes"))
 		}
 	}
