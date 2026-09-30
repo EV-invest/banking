@@ -3771,6 +3771,10 @@
     "en": "Recent activity",
     "t": "Hoạt động gần đây"
   },
+  "dash.servicePanel": {
+    "en": "Service-Arb panel",
+    "t": "Bảng điều khiển Service-Arb"
+  },
   "dash.strategyCount": {
     "en": "{n, plural, one {# strategy} other {# strategies}}",
     "t": "{n, plural, other {# chiến lược}}"

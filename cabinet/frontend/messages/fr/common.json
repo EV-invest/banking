@@ -3771,6 +3771,10 @@
     "en": "Recent activity",
     "t": "Activité récente"
   },
+  "dash.servicePanel": {
+    "en": "Service-Arb panel",
+    "t": "Panneau Service-Arb"
+  },
   "dash.strategyCount": {
     "en": "{n, plural, one {# strategy} other {# strategies}}",
     "t": "{n, plural, one {# stratégie} many {# stratégies} other {# stratégies}}"

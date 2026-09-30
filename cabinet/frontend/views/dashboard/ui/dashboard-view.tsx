@@ -22,6 +22,7 @@ import { GetStartedSection } from "@/views/dashboard/ui/get-started-section";
 import { MoveMoneyCard } from "@/views/dashboard/ui/move-money-card";
 import { PerfCard } from "@/views/dashboard/ui/perf-card";
 import { RecentOperationsCard } from "@/views/dashboard/ui/recent-operations-card";
+import { ServicePanelCard } from "@/views/dashboard/ui/service-panel-card";
 import { WhatIOwnCard } from "@/views/dashboard/ui/what-i-own-card";
 
 // The portfolio dashboard (Figma `cabinet/home`). Bound to live wallet + fund-position
@@ -83,6 +84,9 @@ export function DashboardView() {
           an account with a step still to do, the path takes the top slot and the hero — a
           zero over an empty plot — reads second. Once the path is done it is one quiet line. */}
       <GetStartedSection className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
+      {/* Above the grid for the same reason: it is a door out of the cabinet for the few who
+          hold a Service-Arb scope, and the numbered desktop rows are not the place for it. */}
+      <ServicePanelCard className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
       <PageFrame
         title={t("dash.portfolio")}
         description={t("dash.portfolioSub")}

@@ -942,6 +942,7 @@
   "dash.range.all": "All",
   "dash.rangeLabel": "Chart range",
   "dash.recentOperations": "Recent activity",
+  "dash.servicePanel": "Service-Arb panel",
   "dash.strategyCount": "{n, plural, one {# strategy} other {# strategies}}",
   "dash.unitsAmount": "{n, plural, one {{units} unit} other {{units} units}}",
   "dash.unrealizedPnl": "Unrealized P&L",

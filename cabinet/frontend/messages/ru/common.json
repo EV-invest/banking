@@ -3771,6 +3771,10 @@
     "en": "Recent activity",
     "t": "Последняя активность"
   },
+  "dash.servicePanel": {
+    "en": "Service-Arb panel",
+    "t": "Панель Service-Arb"
+  },
   "dash.strategyCount": {
     "en": "{n, plural, one {# strategy} other {# strategies}}",
     "t": "{n, plural, one {# стратегия} few {# стратегии} many {# стратегий} other {# стратегии}}"

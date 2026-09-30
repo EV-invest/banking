@@ -45,6 +45,9 @@ function getSettings() {
       // Unset ⇒ browser error monitoring is a silent no-op: the cabinet's
       // client-side crashes reach nobody. Acceptable locally, not in a deploy.
       NEXT_PUBLIC_SENTRY_DSN: requiredIn(opt(str()), "production"),
+      // The Service-Arb panel Home links to. Unset ⇒ no card: a link to nowhere is worse
+      // than no link. Public; a build-time literal in flake.nix like the PostHog key.
+      NEXT_PUBLIC_SA_PANEL_URL: opt(url()),
     },
     // `requiredIn` matches against this. NODE_ENV is what Next.js already sets
     // and what every other check here reads, so it stays the single name for
@@ -67,6 +70,7 @@ function getSettings() {
       NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
       NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
       NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+      NEXT_PUBLIC_SA_PANEL_URL: process.env.NEXT_PUBLIC_SA_PANEL_URL,
     },
   });
 }
@@ -108,6 +112,7 @@ export const config = ((): Readonly<{
     posthogKey: string | undefined;
     posthogHost: string | undefined;
     sentryDsn: string | undefined;
+    saPanelUrl: string | undefined;
   }>;
 }> => {
   return Object.freeze({
@@ -142,6 +147,9 @@ export const config = ((): Readonly<{
       get sentryDsn(): string | undefined {
         return getSettings().NEXT_PUBLIC_SENTRY_DSN;
       },
+      get saPanelUrl(): string | undefined {
+        return getSettings().NEXT_PUBLIC_SA_PANEL_URL;
+      },
     }),
   });
 })();
@@ -167,6 +175,7 @@ export function assertConfig(): void {
   void config.public.posthogKey;
   void config.public.posthogHost;
   void config.public.sentryDsn;
+  void config.public.saPanelUrl;
 }
 
 // Keep the old helpers for any remaining callers outside this module.
