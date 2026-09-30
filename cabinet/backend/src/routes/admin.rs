@@ -1340,6 +1340,17 @@ mod admin_route_tests {
 		}
 	}
 
+	/// A scope grant as the directory reports one.
+	fn stub_grant(scope: &str, role: &str) -> cc::ScopedGrant {
+		cc::ScopedGrant {
+			user_id: KNOWN_INVESTOR.into(),
+			scope: scope.into(),
+			role: role.into(),
+			granted_by: "user-1".into(),
+			granted_at: 1_750_000_200,
+		}
+	}
+
 	/// The stub's one holder the identity plane cannot reach.
 	const UNTOLD_HOLDER: &str = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
@@ -1350,6 +1361,9 @@ mod admin_route_tests {
 		acknowledge: Option<bk::AcknowledgeUndeliveredNoticesRequest>,
 		settle: Option<bk::SettleFeeSharesRequest>,
 		set_kyc: Option<cc::SetKycLevelRequest>,
+		grant_scope: Option<cc::GrantScopeRequest>,
+		revoke_scope: Option<cc::RevokeScopeRequest>,
+		list_scope: Option<String>,
 		set_access: Option<bk::SetAllocationAccessRequest>,
 		grant: Option<bk::GrantAllocationAccessRequest>,
 		revoke: Option<bk::RevokeAllocationAccessRequest>,
@@ -1395,6 +1409,17 @@ mod admin_route_tests {
 			let presented = request.metadata().get("authorization").and_then(|v| v.to_str().ok()).unwrap_or_default();
 			if presented != format!("Bearer {MONEY_TOKEN}") {
 				return Err(Status::unauthenticated("the fees plane requires the banking money token, not the concierge identity token"));
+			}
+			self.guard()
+		}
+
+		/// The mirror of [`Self::guard_money_plane`]: scopes are identity-plane state, and
+		/// concierge judges the CALLER, so the BFF must forward the caller's own concierge
+		/// token — never the minted money token, which concierge would not accept.
+		fn guard_identity_plane<T>(&self, request: &GrpcRequest<T>) -> Result<(), Status> {
+			let presented = request.metadata().get("authorization").and_then(|v| v.to_str().ok()).unwrap_or_default();
+			if !presented.starts_with("Bearer ey") || presented == format!("Bearer {MONEY_TOKEN}") {
+				return Err(Status::unauthenticated("the directory requires the caller's concierge identity token"));
 			}
 			self.guard()
 		}
@@ -1462,6 +1487,7 @@ mod admin_route_tests {
 			Ok(GrpcResponse::new(cc::UserProfile {
 				user_id: "user-1".into(),
 				role: self.role.clone(),
+				scopes: vec![stub_grant("allocation:service_arb", "operator")],
 				..Default::default()
 			}))
 		}
@@ -1524,16 +1550,42 @@ mod admin_route_tests {
 			Err(Status::unimplemented("not reached by the fees routes"))
 		}
 
-		async fn grant_scope(&self, _: GrpcRequest<cc::GrantScopeRequest>) -> Result<GrpcResponse<cc::GrantScopeResponse>, Status> {
-			Err(Status::unimplemented("not reached by the fees routes"))
+		/// The scope RPCs decide authority themselves, so the stub records what it was asked
+		/// and answers with `fail_with` when set — the concierge verdicts the routes relay.
+		async fn grant_scope(&self, request: GrpcRequest<cc::GrantScopeRequest>) -> Result<GrpcResponse<cc::GrantScopeResponse>, Status> {
+			self.guard_identity_plane(&request)?;
+			let req = request.into_inner();
+			let grant = stub_grant(&req.scope, &req.role);
+			self.seen.lock().unwrap().grant_scope = Some(req);
+			Ok(GrpcResponse::new(cc::GrantScopeResponse { grant: Some(grant) }))
 		}
 
-		async fn revoke_scope(&self, _: GrpcRequest<cc::RevokeScopeRequest>) -> Result<GrpcResponse<cc::RevokeScopeResponse>, Status> {
-			Err(Status::unimplemented("not reached by the fees routes"))
+		async fn revoke_scope(&self, request: GrpcRequest<cc::RevokeScopeRequest>) -> Result<GrpcResponse<cc::RevokeScopeResponse>, Status> {
+			self.guard_identity_plane(&request)?;
+			self.seen.lock().unwrap().revoke_scope = Some(request.into_inner());
+			Ok(GrpcResponse::new(cc::RevokeScopeResponse {}))
 		}
 
-		async fn list_scoped_grants(&self, _: GrpcRequest<cc::ListScopedGrantsRequest>) -> Result<GrpcResponse<cc::ListScopedGrantsResponse>, Status> {
-			Err(Status::unimplemented("not reached by the fees routes"))
+		async fn list_scoped_grants(&self, request: GrpcRequest<cc::ListScopedGrantsRequest>) -> Result<GrpcResponse<cc::ListScopedGrantsResponse>, Status> {
+			self.guard_identity_plane(&request)?;
+			let scope = request.into_inner().scope;
+			self.seen.lock().unwrap().list_scope = Some(scope.clone());
+			Ok(GrpcResponse::new(cc::ListScopedGrantsResponse {
+				holders: vec![
+					cc::ScopeHolder {
+						grant: Some(stub_grant(&scope, "admin")),
+						email: KNOWN_INVESTOR_EMAIL.into(),
+						legal_name: String::new(),
+						preferred_name: "Seven".into(),
+					},
+					// A row without its grant names nobody the tab could act on.
+					cc::ScopeHolder {
+						grant: None,
+						email: "orphan@example.test".into(),
+						..Default::default()
+					},
+				],
+			}))
 		}
 	}
 
@@ -3179,5 +3231,174 @@ mod admin_route_tests {
 		let (status, body) = send(&app, signed("GET", "/api/admin/allocations/grants?service=quy-nhon", None, false)).await;
 		assert_eq!(status, StatusCode::BAD_GATEWAY);
 		assert_eq!(body["error"], "allocation access grants unavailable", "a read must not relay the hub's own message");
+	}
+
+	// ── panel access: `allocation:<service_id>` scopes ────────────────────────
+
+	const SCOPE_ACCESS: &str = "/api/admin/allocations/service_arb/access";
+
+	/// Reads and writes of a scope are behind the session like everything else, and a
+	/// mutation checks the double-submit pair FIRST — a missing header is refused as CSRF
+	/// even without a session, which proves the check sits at the top of the handler.
+	#[tokio::test]
+	async fn scope_access_needs_a_session_and_csrf() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let anonymous = Request::builder().method("GET").uri(SCOPE_ACCESS).body(Body::empty()).unwrap();
+		assert_eq!(send(&app, anonymous).await.0, StatusCode::UNAUTHORIZED);
+
+		let body = r#"{"email":"investor7@example.test","role":"operator"}"#;
+		for method in ["POST", "DELETE"] {
+			let (status, response) = send(&app, signed(method, SCOPE_ACCESS, Some(body), false)).await;
+			assert_eq!(status, StatusCode::FORBIDDEN, "{method} without the CSRF header");
+			assert_eq!(response["error"], "csrf", "{method} must be refused as CSRF, not by the directory");
+
+			let anonymous = Request::builder()
+				.method(method)
+				.uri(SCOPE_ACCESS)
+				.header(header::COOKIE, format!("ev_csrf={CSRF}"))
+				.header("x-ev-csrf", CSRF)
+				.header(header::CONTENT_TYPE, "application/json")
+				.body(Body::from(body))
+				.unwrap();
+			assert_eq!(send(&app, anonymous).await.0, StatusCode::UNAUTHORIZED, "{method} with CSRF but no session");
+		}
+
+		let seen = seen.lock().unwrap();
+		assert!(
+			seen.grant_scope.is_none() && seen.revoke_scope.is_none() && seen.list_scope.is_none(),
+			"a refused request must never reach the directory"
+		);
+	}
+
+	/// A scope's own admin is usually a plain `investor` globally, so the BFF must NOT put
+	/// the console's role gate in front of these routes: the directory judges the caller.
+	/// It is asked with the caller's concierge token, and no money token is ever minted —
+	/// panel access is not a money-plane matter.
+	#[tokio::test]
+	async fn a_scope_admin_without_a_global_role_reaches_the_directory() {
+		let hub = Hub::new("investor");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(&app, signed("GET", SCOPE_ACCESS, None, false)).await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		let holders = body["holders"].as_array().expect("holders is a list");
+		assert_eq!(holders.len(), 1, "a row without its grant is dropped: {body}");
+		assert_eq!(holders[0]["email"], KNOWN_INVESTOR_EMAIL);
+		assert_eq!(holders[0]["legal_name"], "");
+		assert_eq!(holders[0]["preferred_name"], "Seven");
+		assert_eq!(holders[0]["grant"]["scope"], "allocation:service_arb");
+		assert_eq!(holders[0]["grant"]["role"], "admin");
+		assert_eq!(holders[0]["grant"]["granted_at"], "1750000200", "int64 crosses as a string");
+
+		let (status, body) = send(
+			&app,
+			signed(
+				"POST",
+				SCOPE_ACCESS,
+				Some(r#"{"email":"investor7@example.test","role":"operator","reason":"runs the calls"}"#),
+				true,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!(body["scope"], "allocation:service_arb");
+		assert_eq!(body["role"], "operator");
+		assert_eq!(body["user_id"], KNOWN_INVESTOR);
+
+		let (status, body) = send(&app, signed("DELETE", SCOPE_ACCESS, Some(r#"{"user_id":"investor-7"}"#), true)).await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!(body["ok"], true);
+
+		let seen = seen.lock().unwrap();
+		assert_eq!(seen.list_scope.as_deref(), Some("allocation:service_arb"));
+		let grant = seen.grant_scope.as_ref().expect("the grant reached the directory");
+		assert_eq!(grant.target, Some(cc::grant_scope_request::Target::Email("investor7@example.test".into())));
+		assert_eq!(grant.scope, "allocation:service_arb");
+		assert_eq!(grant.role, "operator");
+		assert_eq!(grant.reason, "runs the calls");
+		let revoke = seen.revoke_scope.as_ref().expect("the revocation reached the directory");
+		assert_eq!(revoke.target, Some(cc::revoke_scope_request::Target::UserId("investor-7".into())));
+		assert_eq!(revoke.scope, "allocation:service_arb");
+		assert_eq!(revoke.reason, "", "an untyped reason is forwarded empty, not refused");
+		assert_eq!(seen.money_tokens_issued, 0, "panel access must never mint a money-plane token");
+	}
+
+	/// A malformed request is answered here, before the directory is asked: a service id
+	/// outside `[a-z0-9_]{1,64}`, the retired `viewer` role, and a target named twice or not
+	/// at all.
+	#[tokio::test]
+	async fn a_malformed_scope_request_never_reaches_the_directory() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let long = "x".repeat(65);
+		for service_id in ["quy-nhon", "Service_Arb", "a%3Ab", long.as_str()] {
+			let uri = format!("/api/admin/allocations/{service_id}/access");
+			assert_eq!(send(&app, signed("GET", &uri, None, false)).await.0, StatusCode::BAD_REQUEST, "GET {uri}");
+			let body = r#"{"email":"investor7@example.test","role":"operator"}"#;
+			assert_eq!(send(&app, signed("POST", &uri, Some(body), true)).await.0, StatusCode::BAD_REQUEST, "POST {uri}");
+			assert_eq!(send(&app, signed("DELETE", &uri, Some(body), true)).await.0, StatusCode::BAD_REQUEST, "DELETE {uri}");
+		}
+
+		for body in [
+			r#"{"email":"investor7@example.test","role":"viewer"}"#,
+			r#"{"email":"investor7@example.test","role":"owner"}"#,
+			r#"{"email":"investor7@example.test"}"#,
+			r#"{"email":"investor7@example.test","user_id":"investor-7","role":"operator"}"#,
+			r#"{"role":"operator"}"#,
+		] {
+			let (status, _) = send(&app, signed("POST", SCOPE_ACCESS, Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "POST {body}");
+		}
+		for body in [r#"{}"#, r#"{"email":"investor7@example.test","user_id":"investor-7"}"#] {
+			let (status, _) = send(&app, signed("DELETE", SCOPE_ACCESS, Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "DELETE {body}");
+		}
+
+		let seen = seen.lock().unwrap();
+		assert!(
+			seen.grant_scope.is_none() && seen.revoke_scope.is_none() && seen.list_scope.is_none(),
+			"a malformed request must never reach the directory"
+		);
+	}
+
+	/// The directory's verdict is the answer: its code maps to the BFF's usual status and
+	/// its message — client-safe for these codes — reaches the console so it can say why.
+	#[tokio::test]
+	async fn the_directory_verdict_on_a_scope_surfaces_with_its_code() {
+		let cases = [
+			(Code::PermissionDenied, StatusCode::FORBIDDEN),
+			(Code::NotFound, StatusCode::NOT_FOUND),
+			(Code::FailedPrecondition, StatusCode::PRECONDITION_FAILED),
+			(Code::InvalidArgument, StatusCode::BAD_REQUEST),
+		];
+		for (code, expected) in cases {
+			let app = app(serve(Hub::failing("investor", code)).await);
+			let body = r#"{"email":"investor7@example.test","role":"operator"}"#;
+			for (method, body) in [("GET", None), ("POST", Some(body)), ("DELETE", Some(body))] {
+				let (status, response) = send(&app, signed(method, SCOPE_ACCESS, body, method != "GET")).await;
+				assert_eq!(status, expected, "{method} under {code:?}");
+				assert_eq!(response["error"], "upstream refused", "{method} under {code:?}");
+			}
+		}
+	}
+
+	/// `/api/users` carries the caller's scopes from GetMe, so the cabinet can offer the
+	/// panel link and the "Access" tab without a second round trip.
+	#[tokio::test]
+	async fn the_profile_carries_the_callers_scopes() {
+		let app = app(serve(Hub::new("investor")).await);
+		let (status, body) = send(&app, signed("GET", "/api/users", None, false)).await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		let scopes = body["scopes"].as_array().expect("scopes is a list");
+		assert_eq!(scopes.len(), 1);
+		assert_eq!(scopes[0]["scope"], "allocation:service_arb");
+		assert_eq!(scopes[0]["role"], "operator");
+		assert_eq!(scopes[0]["granted_at"], "1750000200");
 	}
 }
