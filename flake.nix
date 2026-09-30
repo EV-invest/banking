@@ -660,7 +660,6 @@
             [ -d node_modules/next ] || npm install
             ${portEnv}
             export CABINET_BACKEND_URL="''${CABINET_BACKEND_URL:-http://127.0.0.1:$CABINET_BACKEND_PORT}"
-            export NEXT_PUBLIC_SA_PANEL_URL="''${NEXT_PUBLIC_SA_PANEL_URL:-https://sa.evinvest.ltd}"
             exec npm run dev --workspace @evbanking/cabinet -- --port "$CABINET_FRONTEND_PORT"
           '';
         };
