@@ -6956,8 +6956,8 @@ export type ConciergeV1ScopeHolder = {
     /**
      * legal_name
      *
-     * Empty until the user sets them (see UserProfile). `legal_name` is also empty for a
-     * caller who is only the scope's admin.
+     * Empty until the user sets them (see UserProfile). Both are also empty for a caller
+     * who is only the scope's admin.
      */
     legal_name?: string;
     /**

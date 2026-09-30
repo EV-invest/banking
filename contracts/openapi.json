@@ -7673,7 +7673,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "Give a user a role over ONE resource (`allocation:\u003cservice_id\u003e`), replacing the role\n they hold there if any. Non-money access only — a vertical's panel; it never crosses\n the bridge. Echoes the grant now in effect; re-granting the role already held is a\n no-op.",
-        "description": "A disabled account is refused FAILED_PRECONDITION: reinstate it first.\n\n Who may: a global admin/owner — any scope, any role. The scope's own `admin` —\n `operator` inside that scope, and never an `admin` grant in either direction\n (neither minting one nor moving an existing one). Anyone else: PERMISSION_DENIED.\n A malformed scope or role is INVALID_ARGUMENT — including `viewer`, which no longer\n exists: a read-only holder is just an ordinary user and gets no grant. An unknown\n user_id is NOT_FOUND, reported only to a caller who holds some authority over the\n scope.",
+        "description": "Who may: a global admin/owner — any scope, any role. The scope's own `admin` —\n `operator` inside that scope, and never an `admin` grant in either direction\n (neither minting one nor moving an existing one). Anyone else: PERMISSION_DENIED.\n A malformed scope or role is INVALID_ARGUMENT — including `viewer`, which no longer\n exists: a read-only holder is just an ordinary user and gets no grant.\n\n To a global admin/owner: an unknown user or address is NOT_FOUND; an address held by\n several accounts, or a disabled/held account, is FAILED_PRECONDITION with the reason.\n To a scope admin all three are the SAME FAILED_PRECONDITION (\"this address cannot be\n granted access\"), so a grant never tells them whether, or how, an address is known.\n\n A caller without global authority gets a budget of GrantScope + RevokeScope calls\n per hour (refusals included); past it, RESOURCE_EXHAUSTED.",
         "operationId": "concierge.v1.UserDirectory.GrantScope",
         "parameters": [
           {
@@ -7791,7 +7791,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "ListScopedGrants",
-        "description": "The active grants on one scope, with each holder's email and names, for the\n cabinet's \"Access\" tab. Global admin/owner, or the scope's `admin` — who gets\n `legal_name` empty: the team sees each other's email and chosen name, the legal\n name stays with staff.",
+        "description": "The active grants on one scope, with each holder's email and names, for the\n cabinet's \"Access\" tab. Global admin/owner, or the scope's `admin` — who gets\n `legal_name` AND `preferred_name` empty: the team sees each other's email and grant,\n and nothing that says who an address belongs to.",
         "operationId": "concierge.v1.UserDirectory.ListScopedGrants",
         "parameters": [
           {
@@ -7968,7 +7968,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "RevokeScope",
-        "description": "Take a user's grant on a scope away. Same authority rule as GrantScope: a scope\n admin may revoke `operator` grants in their scope, never an `admin` one.\n NOT_FOUND when the user holds no active grant there.",
+        "description": "Take a user's grant on a scope away. Same authority rule as GrantScope: a scope\n admin may revoke `operator` grants in their scope, never an `admin` one.\n NOT_FOUND when the user holds no active grant there — including an address nobody,\n or several accounts, hold. Shares GrantScope's per-hour budget.",
         "operationId": "concierge.v1.UserDirectory.RevokeScope",
         "parameters": [
           {
@@ -15000,7 +15000,7 @@
           "legal_name": {
             "type": "string",
             "title": "legal_name",
-            "description": "Empty until the user sets them (see UserProfile). `legal_name` is also empty for a\n caller who is only the scope's admin."
+            "description": "Empty until the user sets them (see UserProfile). Both are also empty for a caller\n who is only the scope's admin."
           },
           "preferred_name": {
             "type": "string",
