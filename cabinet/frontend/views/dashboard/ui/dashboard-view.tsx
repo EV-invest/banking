@@ -84,9 +84,6 @@ export function DashboardView() {
           an account with a step still to do, the path takes the top slot and the hero — a
           zero over an empty plot — reads second. Once the path is done it is one quiet line. */}
       <GetStartedSection className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
-      {/* Above the grid for the same reason: it is a door out of the cabinet for the few who
-          hold a Service-Arb scope, and the numbered desktop rows are not the place for it. */}
-      <ServicePanelCard className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
       <PageFrame
         title={t("dash.portfolio")}
         description={t("dash.portfolioSub")}
@@ -127,6 +124,11 @@ export function DashboardView() {
         <WhatIOwnCard allocations={toAllocations(pos, titleOf)} loading={posLoading} className="lg:order-3 xl:col-start-2 xl:row-start-3" />
         <MoveMoneyCard className="lg:order-2 xl:col-start-2 xl:row-start-2" />
         <RecentOperationsCard ops={ops} className="lg:order-5 xl:col-span-2 xl:col-start-1 xl:row-start-5" />
+        {/* Last, below everything: it is a door out of the cabinet for the few who hold a
+            Service-Arb scope, and it appears only once the profile has answered — anywhere
+            higher, its arrival would push the portfolio down for them, and most readers
+            never see it at all. */}
+        <ServicePanelCard className="lg:order-6 xl:col-span-2 xl:col-start-1 xl:row-start-6" />
       </PageFrame>
     </>
   );
