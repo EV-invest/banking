@@ -2,12 +2,10 @@
 
 import { type ReactNode } from "react";
 
-import { useLocale, useT } from "@evinvest/i18n/react";
-import { StatusScreen } from "@evinvest/uikit";
-import { localePath } from "@evinvest/i18n";
-
-import { cabinetPath } from "@/shared/config/base-path";
+import { isPanelAccessRoute } from "@/entities/scope/lib/access";
+import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { useSession } from "@/shared/lib/use-session";
+import { ForbiddenScreen } from "@/shared/ui/forbidden-screen";
 
 // Client-side guard for the admin console. This is cosmetic defense in depth — the
 // BFF admin routes are the real boundary (they re-check the role and return 403),
@@ -23,31 +21,15 @@ import { useSession } from "@/shared/lib/use-session";
 //
 // `session === null` is "not resolved yet", not "denied": rendering the 403 while
 // the fetch is in flight would flash it at every operator on every admin load.
+//
+// One page is let through without a console role: an allocation's panel-access page,
+// which a scope's own admin — usually no operator at all — has to reach. It gates itself
+// on the scope, and the identity plane re-checks every call it makes.
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const session = useSession();
-  const t = useT();
-  const locale = useLocale();
-  const denied = session !== null && !session.user?.isAdmin;
+  const pathname = useCabinetPathname();
+  const denied = session !== null && !session.user?.isAdmin && !isPanelAccessRoute(pathname);
 
-  if (denied) {
-    return (
-      <StatusScreen
-        accent="warn"
-        code="403"
-        eyebrow={t("status.forbidden.eyebrow")}
-        headlineLead={t("status.forbidden.headlineLead")}
-        headlineAccent={t("status.forbidden.headlineAccent")}
-        subtext={t("status.forbidden.subtext")}
-        links={[
-          { label: t("status.backHome"), href: cabinetPath(locale, "/"), leadingArrow: true },
-          {
-            label: t("status.requestAccess"),
-            href: localePath(locale, "/contact"),
-            variant: "outline",
-          },
-        ]}
-      />
-    );
-  }
+  if (denied) return <ForbiddenScreen />;
   return <>{children}</>;
 }
