@@ -11,6 +11,8 @@ pub mod payments;
 pub mod platform;
 pub mod scopes;
 pub mod system;
+#[cfg(test)]
+mod test_support;
 pub mod ws;
 
 use std::time::Duration;
