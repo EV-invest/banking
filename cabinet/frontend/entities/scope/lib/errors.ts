@@ -16,13 +16,16 @@ export function scopeErrorKey(status: number, action: ScopeAction): string | nul
       return "panelAccess.err.invalid";
     case 403:
       return action === "list" ? "panelAccess.err.forbiddenList" : "panelAccess.err.forbidden";
-    // Grant: no account holds that address. Revoke: the person holds no active grant (a
-    // stranger's id answers the same, by design — the plane leaks no membership).
+    // Grant: an address no account holds (404) and one the plane will not seat — disabled,
+    // or shared by two accounts (412) — read the same. Telling them apart would make the
+    // form a probe for which addresses have cabinet accounts.
     case 404:
-      return action === "revoke" ? "panelAccess.err.notHolder" : "panelAccess.err.noAccount";
-    // FAILED_PRECONDITION: the account is disabled, or its email names more than one account.
+      return action === "revoke" ? "panelAccess.err.notHolder" : "panelAccess.err.cannotGrant";
     case 412:
-      return "panelAccess.err.unavailable";
+      return action === "revoke" ? null : "panelAccess.err.cannotGrant";
+    // RESOURCE_EXHAUSTED, which the BFF maps to 429: the plane's per-caller limit.
+    case 429:
+      return "panelAccess.err.tooMany";
     default:
       return null;
   }

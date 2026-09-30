@@ -4999,6 +4999,10 @@
     "en": "Grant access by email. The person must have signed in to the cabinet at least once.",
     "t": "Gewähren Sie den Zugang per E-Mail. Die Person muss sich mindestens einmal im Kabinett angemeldet haben."
   },
+  "panelAccess.err.cannotGrant": {
+    "en": "Access can't be granted to this address.",
+    "t": "Dieser Adresse kann kein Zugang gewährt werden."
+  },
   "panelAccess.err.forbidden": {
     "en": "You can't make this change. A panel admin can add and remove operators only.",
     "t": "Diese Änderung ist Ihnen nicht erlaubt. Ein Panel-Admin kann nur Operatoren hinzufügen und entfernen."
@@ -5011,17 +5015,13 @@
     "en": "Check the email address and try again.",
     "t": "Prüfen Sie die E-Mail-Adresse und versuchen Sie es erneut."
   },
-  "panelAccess.err.noAccount": {
-    "en": "No cabinet account uses this email. Ask the person to sign in to the cabinet once, then try again.",
-    "t": "Kein Kabinett-Konto nutzt diese E-Mail. Bitten Sie die Person, sich einmal anzumelden, und versuchen Sie es erneut."
-  },
   "panelAccess.err.notHolder": {
     "en": "This person no longer has access to the panel.",
     "t": "Diese Person hat keinen Panel-Zugang mehr."
   },
-  "panelAccess.err.unavailable": {
-    "en": "This account can't be given access: it is disabled, or its email belongs to more than one account.",
-    "t": "Diesem Konto kann kein Zugang gewährt werden: Es ist deaktiviert, oder seine E-Mail gehört zu mehreren Konten."
+  "panelAccess.err.tooMany": {
+    "en": "Too many attempts. Try again later.",
+    "t": "Zu viele Versuche. Bitte versuchen Sie es später erneut."
   },
   "panelAccess.field.email": {
     "en": "Email",
