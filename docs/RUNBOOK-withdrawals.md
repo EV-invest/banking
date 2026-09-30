@@ -14,8 +14,11 @@ hash required) and **Fail** (double-pay warning; the hub refuses while a broadca
 exists). The same RPCs by hand, when the console is down or you are scripting:
 
 ```sh
-# Mint an admin money token (subject must hold admin/owner in banking):
-grpcurl -plaintext -d '{"user_id":"<banking-user-uuid>"}' localhost:50052 banking.v1.AuthService/IssueUserToken
+# Mint an admin money token (subject must hold admin/owner in banking). IssueUserToken is
+# service-to-service: it takes the CONCIERGE user id (the user must already be mirrored
+# by the bridge and not frozen) and the shared issuance token, never a user token:
+grpcurl -plaintext -H "authorization: Bearer $BANKING_ISSUANCE_TOKEN" \
+  -d '{"concierge_user_id":"<concierge-user-uuid>"}' localhost:50052 banking.v1.AuthService/IssueUserToken
 TOKEN=…
 
 grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{}' localhost:50051 banking.v1.BalanceService/ListWithdrawalQueue
@@ -27,16 +30,19 @@ grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{"withdrawal_id":"<id>"
 (Ports: 50051 = core gRPC, 50052 = auth; adjust to your deployment.)
 
 Since the dispatch gate (`min(TB rail, on-chain treasury)`) and the dispatcher worker
-landed, this park is a rare check-then-act residue (the on-chain balance dropped between
-the dispatch-time read and the broadcast), not the norm — but the recovery below stays
-the same.
+landed, an underfunded treasury normally does **not** park anything: the dispatcher skips
+the withdrawal and it stays `queued` (and cancellable) until the treasury covers the net
+(`piggybank/core/src/infrastructure/dispatcher.rs`, gates 1–2). The park described here is
+a rare check-then-act residue (the on-chain balance dropped between the dispatch-time read
+and the broadcast), not the norm — but the recovery below stays the same.
 
 Every queued or processing row is **a person's** withdrawal. The revenue payout that once
 rode this saga (the fund paying its own earnings out) was retired in #245 and removed in C-9:
 `WithdrawalSource::User` is the only source (`domain/src/withdrawals.rs`), the `withdrawals.source`
 CHECK admits only `user` (`0047_ownership_contract.sql`), and production held no revenue row
 when it was narrowed. The platform's earnings are the `fee` allocation; cash leaves it by a
-holder's redemption or an owners' payment order, and a payment order's L1 withdrawal (opened
+holder's redemption and their own withdrawal, or an owners' payment order from
+`service:fee` to an internal `user:` ([`CONSILIUM.md`](./CONSILIUM.md) §Payments), and a payment order's L1 withdrawal (opened
 out of an investor's own claim) is an ordinary user row here.
 
 ## Step 1 — prove the broadcast never happened
@@ -82,12 +88,23 @@ multi-leg event) — reconciliation owns that.
    (BNB/TRX/TON). The address is in the boot log ("treasury hot wallet — fund it…"), or
    via the signer's `ProvisionAddress` with the nil user id. Verify the balance
    on-chain.
-2. Unpark the `Dispatched` event:
+2. Unpark the `Dispatched` event. Preferred: **Unpark** on the admin console's Outbox
+   screen (`/admin/outbox`), i.e. `BalanceService.UnparkEvent` (`Permission::OutboxManage`)
+   with the row's `seq` from Step 2:
+
+   ```sh
+   grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{"seq":<seq>}' localhost:50051 banking.v1.BalanceService/UnparkEvent
+   ```
+
+   It refuses a dispatched or compensated row. Fallback when the hub is unreachable — the
+   same statement `UnparkEvent` runs (`piggybank/core/src/infrastructure/outbox.rs`
+   `unpark`); `attempts` must reset with it, or a retry-exhausted row re-parks on its first
+   redelivery, and `last_error` is kept for forensics:
 
    ```sql
-   UPDATE outbox SET parked_at = NULL, last_error = NULL
-   WHERE event_id = '<parked-dispatched-event-id>'
-     AND dispatched_at IS NULL AND compensated_at IS NULL;
+   UPDATE outbox SET parked_at = NULL, attempts = 0
+   WHERE seq = <seq>
+     AND parked_at IS NOT NULL AND dispatched_at IS NULL AND compensated_at IS NULL;
    ```
 
    The relay re-plans it within its poll: the reserve-applied guard passes, the
@@ -180,7 +197,9 @@ has **no RPC on purpose**: the hub holds a service token for every signer RPC an
 adversary the brake exists to stop, and since banking#173 its `evinvest` role has no
 `CONNECT` on `banking_signer` at all. The only way in is operator SQL.
 
-**Connect** — on the production host (`evinvest-fallback`), as `postgres` over the unix
+**Connect** — on the production host, i.e. the host that holds the failover lease
+(normally `rpi5`; `evinvest-fallback` only during a failover — the operator's
+`nix run .#fallback -- status` in devops tells which), as `postgres` over the unix
 socket; no TCP, no password, no RPC:
 
 ```sh
@@ -257,7 +276,7 @@ maps everything but `Unavailable`/`DeadlineExceeded` to `Rejected`), and the swe
 the refused address back with exponential backoff (`sweep: signer refused on the merits …`
 at `error!`, `piggybank/core/src/infrastructure/sweep.rs`). A read error / missing row is
 `Internal` and parks too. Signer log lines (container `signer` of
-`deploy/ev-banking-piggybank`, namespace `apps`):
+`deploy/ev-banking-piggybank`, namespace `ev-banking`):
 
 - `refused: the spend brake is halted` (`warn`, with `reason` and `updated_at`) — per
   refused request;

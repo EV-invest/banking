@@ -94,7 +94,7 @@ fail on it). The release is effectively one-way from the moment the new pod migr
    (`ev-banking-piggybank`, `gitops/clusters/rpi5/apps/banking/manifests.yaml`):
 
    ```sh
-   kubectl -n apps exec -i deploy/ev-banking-piggybank -c ev-banking-piggybank -- \
+   kubectl -n ev-banking exec -i deploy/ev-banking-piggybank -c ev-banking-piggybank -- \
      /bin/piggybank migrate-ownership --holders /dev/stdin --dry-run < holders.json
    ```
 
@@ -106,7 +106,7 @@ fail on it). The release is effectively one-way from the moment the new pod migr
    the confirmation is the flag; the owner has read the dry run:
 
    ```sh
-   kubectl -n apps exec -i deploy/ev-banking-piggybank -c ev-banking-piggybank -- \
+   kubectl -n ev-banking exec -i deploy/ev-banking-piggybank -c ev-banking-piggybank -- \
      /bin/piggybank migrate-ownership --holders /dev/stdin --yes [--company retire] < holders.json
    ```
 
