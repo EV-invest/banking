@@ -4983,10 +4983,6 @@
     "en": "Panel access",
     "t": "Quyền vào bảng"
   },
-  "panelAccess.col.granted": {
-    "en": "Granted by",
-    "t": "Người cấp"
-  },
   "panelAccess.col.person": {
     "en": "Person",
     "t": "Người dùng"
@@ -5042,6 +5038,10 @@
   "panelAccess.grantOperator": {
     "en": "Add operator",
     "t": "Thêm người vận hành"
+  },
+  "panelAccess.granted": {
+    "en": "by {who} · {when}",
+    "t": "bởi {who} · {when}"
   },
   "panelAccess.revoke": {
     "en": "Revoke",

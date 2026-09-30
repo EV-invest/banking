@@ -4983,10 +4983,6 @@
     "en": "Panel access",
     "t": "Panel-Zugang"
   },
-  "panelAccess.col.granted": {
-    "en": "Granted by",
-    "t": "Erteilt von"
-  },
   "panelAccess.col.person": {
     "en": "Person",
     "t": "Person"
@@ -5042,6 +5038,10 @@
   "panelAccess.grantOperator": {
     "en": "Add operator",
     "t": "Operator hinzufügen"
+  },
+  "panelAccess.granted": {
+    "en": "by {who} · {when}",
+    "t": "von {who} · {when}"
   },
   "panelAccess.revoke": {
     "en": "Revoke",

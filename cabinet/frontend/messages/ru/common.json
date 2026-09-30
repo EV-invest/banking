@@ -4983,10 +4983,6 @@
     "en": "Panel access",
     "t": "Доступ к панели"
   },
-  "panelAccess.col.granted": {
-    "en": "Granted by",
-    "t": "Кем выдан"
-  },
   "panelAccess.col.person": {
     "en": "Person",
     "t": "Кто"
@@ -5042,6 +5038,10 @@
   "panelAccess.grantOperator": {
     "en": "Add operator",
     "t": "Добавить оператора"
+  },
+  "panelAccess.granted": {
+    "en": "by {who} · {when}",
+    "t": "выдал {who} · {when}"
   },
   "panelAccess.revoke": {
     "en": "Revoke",

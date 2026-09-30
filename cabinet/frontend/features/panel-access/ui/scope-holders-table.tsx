@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, UserMinus } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Badge, Button, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Spinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@evinvest/uikit";
@@ -46,7 +46,6 @@ export function ScopeHoldersTable({
         <TableRow>
           <TableHead className={HEAD}>{t("panelAccess.col.person")}</TableHead>
           <TableHead className={HEAD}>{t("panelAccess.col.role")}</TableHead>
-          <TableHead className={HEAD}>{t("panelAccess.col.granted")}</TableHead>
           <TableHead className="sr-only">{t("panelAccess.revoke")}</TableHead>
         </TableRow>
       </TableHeader>
@@ -56,27 +55,30 @@ export function ScopeHoldersTable({
           const name = holderName(h);
           return (
             <TableRow key={userId}>
-              {/* Capped so a long email truncates instead of pushing the other columns out. */}
+              {/* Three columns, not four: in the 340px side panel a separate "granted" column
+                  pushed the revoke control out of sight. Who granted it and when ride under
+                  the person instead. Capped so a long email truncates rather than widening. */}
               <TableCell className="max-w-40">
                 <div className="truncate text-sm" title={h.email}>
                   {h.email || userId}
                 </div>
                 {name && <div className="truncate text-xs text-ink-soft">{name}</div>}
+                <div className="truncate text-xs text-ink-soft tabular-nums">
+                  {t("panelAccess.granted", {
+                    who: granterLabel(h.grant?.granted_by, holders),
+                    when: formatDay(h.grant?.granted_at === undefined ? null : String(h.grant.granted_at), locale),
+                  })}
+                </div>
               </TableCell>
               <TableCell>
                 <Badge variant={h.grant?.role === "admin" ? "secondary" : "outline"}>{t(`admin.role.${h.grant?.role === "admin" ? "admin" : "operator"}`)}</Badge>
               </TableCell>
-              <TableCell className="max-w-32 text-xs text-ink-soft">
-                <div className="truncate" title={granterLabel(h.grant?.granted_by, holders)}>
-                  {granterLabel(h.grant?.granted_by, holders)}
-                </div>
-                <div className="tabular-nums">{formatDay(h.grant?.granted_at === undefined ? null : String(h.grant.granted_at), locale)}</div>
-              </TableCell>
               <TableCell className="text-right">
                 {canRevoke(h.grant?.role) && (
-                  <Button type="button" variant="outline" size="sm" disabled={busyUserId !== null} onClick={() => onRevoke(h)}>
-                    {/* The spinner stands in for the label, so it keeps the kit's `role="status"` name. */}
-                    {busyUserId === userId ? <Spinner /> : t("panelAccess.revoke")}
+                  // An icon, not the word: the panel is 340px and the word is spelled out in
+                  // the confirmation this opens.
+                  <Button type="button" variant="ghost" size="sm" aria-label={t("panelAccess.revoke")} title={t("panelAccess.revoke")} disabled={busyUserId !== null} onClick={() => onRevoke(h)}>
+                    {busyUserId === userId ? <Spinner /> : <UserMinus className="size-4" aria-hidden />}
                   </Button>
                 )}
               </TableCell>
