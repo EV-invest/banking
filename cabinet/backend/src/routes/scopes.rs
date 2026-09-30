@@ -63,7 +63,7 @@ fn scope_role(v: &Value) -> Result<String, ApiError> {
 	}
 }
 
-/// `GET /api/admin/allocations/{service_id}/access` — the scope's holders, oldest grant
+/// `GET /api/admin/allocations/{service_id}/scopes` — the scope's holders, oldest grant
 /// first. `legal_name` is empty for a caller who is only the scope's admin.
 pub async fn list(State(st): State<AppState>, jar: CookieJar, Path(service_id): Path<String>) -> Result<Json<dto::ScopeHolderList>, ApiError> {
 	let (token, _claims) = require_identity(&st, &jar).await?;
@@ -71,7 +71,7 @@ pub async fn list(State(st): State<AppState>, jar: CookieJar, Path(service_id): 
 	Ok(Json(st.grpc.list_scoped_grants(&token, scope).await?.into()))
 }
 
-/// `POST /api/admin/allocations/{service_id}/access` — `{ email | user_id, role, reason? }`.
+/// `POST /api/admin/allocations/{service_id}/scopes` — `{ email | user_id, role, reason? }`.
 /// Replaces the role the user holds on the scope, if any; echoes the grant now in effect.
 pub async fn grant(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, Path(service_id): Path<String>, body: Bytes) -> Result<Json<dto::ScopedGrant>, ApiError> {
 	if !verify_csrf(&st, &jar, &headers) {
@@ -93,7 +93,7 @@ pub async fn grant(State(st): State<AppState>, jar: CookieJar, headers: HeaderMa
 	Ok(Json(grant.into()))
 }
 
-/// `DELETE /api/admin/allocations/{service_id}/access` — `{ email | user_id, reason? }`.
+/// `DELETE /api/admin/allocations/{service_id}/scopes` — `{ email | user_id, reason? }`.
 /// NOT_FOUND (404) when the user holds no active grant on the scope.
 pub async fn revoke(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, Path(service_id): Path<String>, body: Bytes) -> Result<Json<Value>, ApiError> {
 	if !verify_csrf(&st, &jar, &headers) {

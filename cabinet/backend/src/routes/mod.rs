@@ -140,7 +140,7 @@ fn requests(state: AppState) -> Router {
 		// Panel access — who may open a vertical's panel (`allocation:<service_id>` scopes).
 		// Identity plane only, and gated on the session alone: a scope's own admin usually
 		// holds no global role, so concierge — not a coarse role gate here — decides.
-		.route("/api/admin/allocations/{service_id}/access", get(scopes::list).post(scopes::grant).delete(scopes::revoke))
+		.route("/api/admin/allocations/{service_id}/scopes", get(scopes::list).post(scopes::grant).delete(scopes::revoke))
 		.route("/api/admin/fees/policies", get(admin::list_fee_policies))
 		.route("/api/admin/fees/policy", post(admin::schedule_fee_policy))
 		.route("/api/admin/fees/policy/cancel", post(admin::cancel_fee_policy_change))

@@ -3235,29 +3235,29 @@ mod admin_route_tests {
 
 	// ── panel access: `allocation:<service_id>` scopes ────────────────────────
 
-	const SCOPE_ACCESS: &str = "/api/admin/allocations/service_arb/access";
+	const SCOPES_ROUTE: &str = "/api/admin/allocations/service_arb/scopes";
 
 	/// Reads and writes of a scope are behind the session like everything else, and a
 	/// mutation checks the double-submit pair FIRST — a missing header is refused as CSRF
 	/// even without a session, which proves the check sits at the top of the handler.
 	#[tokio::test]
-	async fn scope_access_needs_a_session_and_csrf() {
+	async fn scopes_need_a_session_and_csrf() {
 		let hub = Hub::new("admin");
 		let seen = hub.seen.clone();
 		let app = app(serve(hub).await);
 
-		let anonymous = Request::builder().method("GET").uri(SCOPE_ACCESS).body(Body::empty()).unwrap();
+		let anonymous = Request::builder().method("GET").uri(SCOPES_ROUTE).body(Body::empty()).unwrap();
 		assert_eq!(send(&app, anonymous).await.0, StatusCode::UNAUTHORIZED);
 
 		let body = r#"{"email":"investor7@example.test","role":"operator"}"#;
 		for method in ["POST", "DELETE"] {
-			let (status, response) = send(&app, signed(method, SCOPE_ACCESS, Some(body), false)).await;
+			let (status, response) = send(&app, signed(method, SCOPES_ROUTE, Some(body), false)).await;
 			assert_eq!(status, StatusCode::FORBIDDEN, "{method} without the CSRF header");
 			assert_eq!(response["error"], "csrf", "{method} must be refused as CSRF, not by the directory");
 
 			let anonymous = Request::builder()
 				.method(method)
-				.uri(SCOPE_ACCESS)
+				.uri(SCOPES_ROUTE)
 				.header(header::COOKIE, format!("ev_csrf={CSRF}"))
 				.header("x-ev-csrf", CSRF)
 				.header(header::CONTENT_TYPE, "application/json")
@@ -3283,7 +3283,7 @@ mod admin_route_tests {
 		let seen = hub.seen.clone();
 		let app = app(serve(hub).await);
 
-		let (status, body) = send(&app, signed("GET", SCOPE_ACCESS, None, false)).await;
+		let (status, body) = send(&app, signed("GET", SCOPES_ROUTE, None, false)).await;
 		assert_eq!(status, StatusCode::OK, "{body}");
 		let holders = body["holders"].as_array().expect("holders is a list");
 		assert_eq!(holders.len(), 1, "a row without its grant is dropped: {body}");
@@ -3298,7 +3298,7 @@ mod admin_route_tests {
 			&app,
 			signed(
 				"POST",
-				SCOPE_ACCESS,
+				SCOPES_ROUTE,
 				Some(r#"{"email":"investor7@example.test","role":"operator","reason":"runs the calls"}"#),
 				true,
 			),
@@ -3309,7 +3309,7 @@ mod admin_route_tests {
 		assert_eq!(body["role"], "operator");
 		assert_eq!(body["user_id"], KNOWN_INVESTOR);
 
-		let (status, body) = send(&app, signed("DELETE", SCOPE_ACCESS, Some(r#"{"user_id":"investor-7"}"#), true)).await;
+		let (status, body) = send(&app, signed("DELETE", SCOPES_ROUTE, Some(r#"{"user_id":"investor-7"}"#), true)).await;
 		assert_eq!(status, StatusCode::OK, "{body}");
 		assert_eq!(body["ok"], true);
 
@@ -3338,7 +3338,7 @@ mod admin_route_tests {
 
 		let long = "x".repeat(65);
 		for service_id in ["quy-nhon", "Service_Arb", "a%3Ab", long.as_str()] {
-			let uri = format!("/api/admin/allocations/{service_id}/access");
+			let uri = format!("/api/admin/allocations/{service_id}/scopes");
 			assert_eq!(send(&app, signed("GET", &uri, None, false)).await.0, StatusCode::BAD_REQUEST, "GET {uri}");
 			let body = r#"{"email":"investor7@example.test","role":"operator"}"#;
 			assert_eq!(send(&app, signed("POST", &uri, Some(body), true)).await.0, StatusCode::BAD_REQUEST, "POST {uri}");
@@ -3352,11 +3352,11 @@ mod admin_route_tests {
 			r#"{"email":"investor7@example.test","user_id":"investor-7","role":"operator"}"#,
 			r#"{"role":"operator"}"#,
 		] {
-			let (status, _) = send(&app, signed("POST", SCOPE_ACCESS, Some(body), true)).await;
+			let (status, _) = send(&app, signed("POST", SCOPES_ROUTE, Some(body), true)).await;
 			assert_eq!(status, StatusCode::BAD_REQUEST, "POST {body}");
 		}
 		for body in [r#"{}"#, r#"{"email":"investor7@example.test","user_id":"investor-7"}"#] {
-			let (status, _) = send(&app, signed("DELETE", SCOPE_ACCESS, Some(body), true)).await;
+			let (status, _) = send(&app, signed("DELETE", SCOPES_ROUTE, Some(body), true)).await;
 			assert_eq!(status, StatusCode::BAD_REQUEST, "DELETE {body}");
 		}
 
@@ -3381,7 +3381,7 @@ mod admin_route_tests {
 			let app = app(serve(Hub::failing("investor", code)).await);
 			let body = r#"{"email":"investor7@example.test","role":"operator"}"#;
 			for (method, body) in [("GET", None), ("POST", Some(body)), ("DELETE", Some(body))] {
-				let (status, response) = send(&app, signed(method, SCOPE_ACCESS, body, method != "GET")).await;
+				let (status, response) = send(&app, signed(method, SCOPES_ROUTE, body, method != "GET")).await;
 				assert_eq!(status, expected, "{method} under {code:?}");
 				assert_eq!(response["error"], "upstream refused", "{method} under {code:?}");
 			}
