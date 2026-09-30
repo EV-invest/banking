@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canManagePanelAccess, canOpenPanel, canRevokeHolder, grantableRoles, isPanelAccessRoute, scopeRoleOf } from "./access.ts";
+import { canManagePanelAccess, canOpenPanel, canRevokeHolder, grantableRoles, isPanelAccessRoute, isServiceId, scopeRoleOf } from "./access.ts";
 
 const SA = "service_arb";
 const saAdmin = [{ scope: "allocation:service_arb", role: "admin" }];
@@ -55,4 +55,10 @@ test("only the per-allocation page is open to a scope admin", () => {
   assert.equal(isPanelAccessRoute("/admin/allocations"), false);
   assert.equal(isPanelAccessRoute("/admin/allocations/service_arb/extra"), false);
   assert.equal(isPanelAccessRoute("/admin/users"), false);
+  assert.equal(isPanelAccessRoute("/admin/allocations/Service-Arb"), false);
+});
+
+test("a service id is the plane's own shape, nothing looser", () => {
+  for (const ok of ["service_arb", "a", "abc123", "x".repeat(64)]) assert.equal(isServiceId(ok), true, ok);
+  for (const bad of ["", "Service_Arb", "quy-nhon", "a b", "a%2Fb", "../x", "é", "x".repeat(65)]) assert.equal(isServiceId(bad), false, bad);
 });

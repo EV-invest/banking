@@ -26,6 +26,12 @@ export function isScopeRole(value: string | undefined): value is ScopeRole {
   return value === "operator" || value === "admin";
 }
 
+/** An allocation id as the identity plane accepts it in a scope — `[a-z0-9_]{1,64}`. Anything
+ *  else is refused there anyway, so a route carrying one is a 404, not a request. */
+export function isServiceId(value: string): boolean {
+  return /^[a-z0-9_]{1,64}$/.test(value);
+}
+
 export function allocationScope(service: string): string {
   return `allocation:${service}`;
 }
@@ -68,5 +74,5 @@ export function canRevokeHolder(globalRole: string | undefined, holderRole: stri
  * `/admin/allocations/<service>`, the allocation's panel-access page. Zone-relative path.
  */
 export function isPanelAccessRoute(pathname: string): boolean {
-  return /^\/admin\/allocations\/[^/]+\/?$/.test(pathname);
+  return /^\/admin\/allocations\/[a-z0-9_]{1,64}\/?$/.test(pathname);
 }

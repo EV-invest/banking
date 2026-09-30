@@ -33,6 +33,7 @@ import { allocationsResource, fundNavResource, positionsResource, redemptionsRes
 import { notificationSettingsResource, notificationsResource } from "@/entities/notification/model/notification-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
 import { paymentsResource } from "@/entities/payment/model/payment-resource";
+import { isServiceId } from "@/entities/scope/lib/access";
 import { scopeHoldersResource } from "@/entities/scope/model/scope-resource";
 import { sessionsResource } from "@/entities/session/model/session-resource";
 import { profileResource } from "@/entities/user/model/profile-resource";
@@ -68,8 +69,8 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
   {
     prefix: "/admin/allocations/",
     warm: (path) => {
-      const service = decodeURIComponent(path.slice("/admin/allocations/".length).split("/")[0] ?? "");
-      if (service) scopeHoldersResource.prefetch(service);
+      const service = path.slice("/admin/allocations/".length).split("/")[0] ?? "";
+      if (isServiceId(service)) scopeHoldersResource.prefetch(service);
     },
   },
   { prefix: "/admin/allocations", warm: () => adminAllocationsResource.prefetch() },
