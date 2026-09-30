@@ -1277,7 +1277,6 @@
   "panelAccess.field.role": "Role",
   "panelAccess.grant": "Grant access",
   "panelAccess.grantOperator": "Add operator",
-  "panelAccess.granted": "by {who} · {when}",
   "panelAccess.revoke": "Revoke",
   "panelAccess.revokeBody": "{who} will no longer be able to open the panel. You can grant access again later.",
   "panelAccess.revokeTitle": "Revoke panel access?",

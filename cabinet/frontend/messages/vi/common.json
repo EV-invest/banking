@@ -5039,10 +5039,6 @@
     "en": "Add operator",
     "t": "Thêm người vận hành"
   },
-  "panelAccess.granted": {
-    "en": "by {who} · {when}",
-    "t": "bởi {who} · {when}"
-  },
   "panelAccess.revoke": {
     "en": "Revoke",
     "t": "Thu hồi"

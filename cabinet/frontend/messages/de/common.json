@@ -5039,10 +5039,6 @@
     "en": "Add operator",
     "t": "Operator hinzufügen"
   },
-  "panelAccess.granted": {
-    "en": "by {who} · {when}",
-    "t": "von {who} · {when}"
-  },
   "panelAccess.revoke": {
     "en": "Revoke",
     "t": "Widerrufen"

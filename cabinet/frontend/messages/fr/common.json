@@ -5039,10 +5039,6 @@
     "en": "Add operator",
     "t": "Ajouter un opérateur"
   },
-  "panelAccess.granted": {
-    "en": "by {who} · {when}",
-    "t": "par {who} · {when}"
-  },
   "panelAccess.revoke": {
     "en": "Revoke",
     "t": "Révoquer"

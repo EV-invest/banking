@@ -5039,10 +5039,6 @@
     "en": "Add operator",
     "t": "Добавить оператора"
   },
-  "panelAccess.granted": {
-    "en": "by {who} · {when}",
-    "t": "выдал {who} · {when}"
-  },
   "panelAccess.revoke": {
     "en": "Revoke",
     "t": "Отозвать"
