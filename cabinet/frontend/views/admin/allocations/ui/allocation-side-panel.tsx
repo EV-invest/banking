@@ -11,12 +11,14 @@
 
 import { Drawer, DrawerContent, DrawerTitle } from "@evinvest/uikit";
 
+import { PanelAccessCard } from "@/features/panel-access";
 import { useIsCompact } from "@/shared/lib/use-is-compact";
 import { Panel, PanelPresence, PanelSwap } from "@/shared/ui/motion";
 import type { OpenAllocationPanel } from "@/views/admin/allocations/lib/panel";
 import { BookPanel } from "@/views/admin/allocations/ui/book-panel";
 import { GrantsPanel } from "@/views/admin/allocations/ui/grants-panel";
 import { IssuancePanel } from "@/views/admin/allocations/ui/issuance-panel";
+import { PanelHeader } from "@/views/admin/allocations/ui/panel-header";
 
 // Inside the sheet the panel is the sheet: full width, and the card's own frame would be
 // a border inside a border.
@@ -30,6 +32,8 @@ function PanelBody({ panel, onClose, className }: { panel: OpenAllocationPanel; 
       return <IssuancePanel key={panel.row.service} allocation={panel.row} onClose={onClose} className={className} />;
     case "book":
       return <BookPanel key={panel.row.service} allocation={panel.row} onClose={onClose} className={className} />;
+    case "panelAccess":
+      return <PanelAccessCard key={panel.row.service} service={panel.row.service} header={<PanelHeader allocation={panel.row} onClose={onClose} />} className={className} />;
   }
 }
 

@@ -1595,6 +1595,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/ListRails": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "ListRails",
+        "description": "Operator (TreasuryRead): every rail, whether this deployment runs it, and whether an\n operator froze it.",
+        "operationId": "banking.v1.BalanceService.ListRails",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListRailsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RailList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/ListRedemptionQueue": {
       "post": {
         "tags": [
@@ -2060,6 +2119,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.OperationsMode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/SetRailFrozen": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "SetRailFrozen",
+        "description": "Admin (OperationsManage): freeze/unfreeze a rail — no new deposit addresses or\n withdrawals on it, queued withdrawals held, and no treasury gas alert.",
+        "operationId": "banking.v1.BalanceService.SetRailFrozen",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SetRailFrozenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RailList"
                 }
               }
             }
@@ -5665,6 +5783,65 @@
         }
       }
     },
+    "/concierge.v1.AuthService/ExchangeCode": {
+      "post": {
+        "tags": [
+          "concierge.v1.AuthService"
+        ],
+        "summary": "Redeem a one-time authorization code for a RELYING PARTY's own token pair — the\n back half of the code flow a first-party client on another origin (the Service-Arb\n panel) runs against `GET /auth/authorize` (publicly `evinvest.ltd/api/auth/authorize`).\n Called server-to-server by the client's backend, authenticated by its client\n secret. The code is single-use, lives 60s, and is bound to the client, the exact\n redirect_uri and the PKCE (S256) challenge sent to authorize; presenting a code\n twice is refused AND revokes every token issued off it.",
+        "description": "The access token is `typ=access` with `aud=\u003cthe client's audience\u003e` (e.g. `sa`) and\n a TTL of at most 15 minutes. It opens exactly one RPC in this plane —\n `UserDirectory.GetMe`, which answers it with a trimmed profile (no identity-document\n fields, no KYC level) — and is refused (UNAUTHENTICATED) everywhere else, here and\n on the money plane. Signing out of evinvest.ltd (Logout, RevokeSession, revoke-all)\n revokes the client sessions that sign-in authorized. The refresh token is opaque and bound to the client.",
+        "operationId": "concierge.v1.AuthService.ExchangeCode",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ExchangeCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.ClientTokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/concierge.v1.AuthService/Jwks": {
       "post": {
         "tags": [
@@ -5894,6 +6071,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.TokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.AuthService/RefreshClientToken": {
+      "post": {
+        "tags": [
+          "concierge.v1.AuthService"
+        ],
+        "summary": "RefreshClientToken",
+        "description": "Rotate a relying party's refresh token. The client's access policy is re-checked\n on EVERY rotation, so a revoked scope ends the session at the next refresh rather\n than at the family's deadline; presenting a rotated-out token revokes the family.",
+        "operationId": "concierge.v1.AuthService.RefreshClientToken",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.RefreshClientTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.ClientTokenResponse"
                 }
               }
             }
@@ -7431,6 +7667,65 @@
         }
       }
     },
+    "/concierge.v1.UserDirectory/GrantScope": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "Give a user a role over ONE resource (`allocation:\u003cservice_id\u003e`), replacing the role\n they hold there if any. Non-money access only — a vertical's panel; it never crosses\n the bridge. Echoes the grant now in effect; re-granting the role already held is a\n no-op.",
+        "description": "Who may: a global admin/owner — any scope, any role. The scope's own `admin` —\n `operator` inside that scope, and never an `admin` grant in either direction\n (neither minting one nor moving an existing one). Anyone else: PERMISSION_DENIED.\n A malformed scope or role is INVALID_ARGUMENT — including `viewer`, which no longer\n exists: a read-only holder is just an ordinary user and gets no grant.\n\n To a global admin/owner: an unknown user or address is NOT_FOUND; an address held by\n several accounts, or a disabled/held account, is FAILED_PRECONDITION with the reason.\n To a scope admin all three are the SAME FAILED_PRECONDITION (\"this address cannot be\n granted access\"), so a grant never tells them whether, or how, an address is known.\n\n A caller without global authority gets a budget of GrantScope + RevokeScope calls\n per hour (refusals included); past it, RESOURCE_EXHAUSTED.",
+        "operationId": "concierge.v1.UserDirectory.GrantScope",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.GrantScopeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.GrantScopeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/concierge.v1.UserDirectory/HoldUser": {
       "post": {
         "tags": [
@@ -7483,6 +7778,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.HoldUserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/ListScopedGrants": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "ListScopedGrants",
+        "description": "The active grants on one scope, with each holder's email and names, for the\n cabinet's \"Access\" tab. Global admin/owner, or the scope's `admin` — who gets\n `legal_name` AND `preferred_name` empty: the team sees each other's email and grant,\n and nothing that says who an address belongs to.",
+        "operationId": "concierge.v1.UserDirectory.ListScopedGrants",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ListScopedGrantsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.ListScopedGrantsResponse"
                 }
               }
             }
@@ -7601,6 +7955,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.ReinstateUserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/RevokeScope": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "RevokeScope",
+        "description": "Take a user's grant on a scope away. Same authority rule as GrantScope: a scope\n admin may revoke `operator` grants in their scope, never an `admin` one.\n NOT_FOUND when the user holds no active grant there — including an address nobody,\n or several accounts, hold. Shares GrantScope's per-hour budget.",
+        "operationId": "concierge.v1.UserDirectory.RevokeScope",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.RevokeScopeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.RevokeScopeResponse"
                 }
               }
             }
@@ -10045,6 +10458,11 @@
         "title": "ListPositionsRequest",
         "additionalProperties": false
       },
+      "banking.v1.ListRailsRequest": {
+        "type": "object",
+        "title": "ListRailsRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListRedemptionQueueRequest": {
         "type": "object",
         "title": "ListRedemptionQueueRequest",
@@ -11064,6 +11482,29 @@
         "title": "PostFundValuationRequest",
         "additionalProperties": false
       },
+      "banking.v1.Rail": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "configured"
+          },
+          "frozen": {
+            "type": "boolean",
+            "title": "frozen"
+          },
+          "gas_coin": {
+            "type": "string",
+            "title": "gas_coin"
+          }
+        },
+        "title": "Rail",
+        "additionalProperties": false
+      },
       "banking.v1.RailLiquidity": {
         "type": "object",
         "properties": {
@@ -11111,6 +11552,20 @@
         "title": "RailLiquidity",
         "additionalProperties": false,
         "description": "Per-rail on-chain liquidity (the treasury / Layer 2). The `treasury_*`/`onchain_*`\n fields are the operator funding view, read best-effort from the chain — empty means\n the rail is unconfigured or the read was unavailable, never an error."
+      },
+      "banking.v1.RailList": {
+        "type": "object",
+        "properties": {
+          "rails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Rail"
+            },
+            "title": "rails"
+          }
+        },
+        "title": "RailList",
+        "additionalProperties": false
       },
       "banking.v1.ReadinessRequest": {
         "type": "object",
@@ -11812,6 +12267,21 @@
           }
         },
         "title": "SetOperationsModeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.SetRailFrozenRequest": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network"
+          },
+          "frozen": {
+            "type": "boolean",
+            "title": "frozen"
+          }
+        },
+        "title": "SetRailFrozenRequest",
         "additionalProperties": false
       },
       "banking.v1.SettleFeeSharesRequest": {
@@ -12872,6 +13342,43 @@
         "title": "CancelUserProposalRequest",
         "additionalProperties": false
       },
+      "concierge.v1.ClientTokenResponse": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "access_token"
+          },
+          "access_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "access_expires_at",
+            "format": "int64"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token"
+          },
+          "refresh_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "refresh_expires_at",
+            "format": "int64"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "The concierge user id — the access token's `sub`."
+          }
+        },
+        "title": "ClientTokenResponse",
+        "additionalProperties": false,
+        "description": "A relying party's token pair. Expiries are unix SECONDS. Deliberately carries no\n profile: the client reads that from `UserDirectory.GetMe` with the access token, and\n GetMe is also what it re-checks `scopes` against on every request."
+      },
       "concierge.v1.DisableUserRequest": {
         "type": "object",
         "properties": {
@@ -12886,6 +13393,36 @@
       "concierge.v1.DisableUserResponse": {
         "type": "object",
         "title": "DisableUserResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.ExchangeCodeRequest": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "title": "client_id"
+          },
+          "client_secret": {
+            "type": "string",
+            "title": "client_secret"
+          },
+          "code": {
+            "type": "string",
+            "title": "code",
+            "description": "The `code` query parameter the browser brought back to the redirect_uri."
+          },
+          "redirect_uri": {
+            "type": "string",
+            "title": "redirect_uri",
+            "description": "The redirect_uri sent to authorize, byte for byte."
+          },
+          "code_verifier": {
+            "type": "string",
+            "title": "code_verifier",
+            "description": "The PKCE verifier whose S256 challenge was sent to authorize."
+          }
+        },
+        "title": "ExchangeCodeRequest",
         "additionalProperties": false
       },
       "concierge.v1.ExchangeRequest": {
@@ -13171,6 +13708,72 @@
         "title": "GovernanceTick",
         "additionalProperties": false
       },
+      "concierge.v1.GrantScopeRequest": {
+        "type": "object",
+        "allOf": [
+          {
+            "properties": {
+              "scope": {
+                "type": "string",
+                "title": "scope"
+              },
+              "role": {
+                "type": "string",
+                "title": "role",
+                "description": "operator/admin."
+              },
+              "reason": {
+                "type": "string",
+                "title": "reason",
+                "description": "Recorded verbatim on the audit row."
+              }
+            }
+          },
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "title": "email"
+                  }
+                },
+                "title": "email",
+                "required": [
+                  "email"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "title": "user_id"
+                  }
+                },
+                "title": "user_id",
+                "required": [
+                  "user_id"
+                ]
+              }
+            ]
+          }
+        ],
+        "title": "GrantScopeRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.GrantScopeResponse": {
+        "type": "object",
+        "properties": {
+          "grant": {
+            "title": "grant",
+            "$ref": "#/components/schemas/concierge.v1.ScopedGrant"
+          }
+        },
+        "title": "GrantScopeResponse",
+        "additionalProperties": false
+      },
       "concierge.v1.HoldUserRequest": {
         "type": "object",
         "properties": {
@@ -13281,6 +13884,32 @@
       "concierge.v1.ListOwnersRequest": {
         "type": "object",
         "title": "ListOwnersRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListScopedGrantsRequest": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "title": "scope"
+          }
+        },
+        "title": "ListScopedGrantsRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListScopedGrantsResponse": {
+        "type": "object",
+        "properties": {
+          "holders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.ScopeHolder"
+            },
+            "title": "holders",
+            "description": "Oldest grant first."
+          }
+        },
+        "title": "ListScopedGrantsResponse",
         "additionalProperties": false
       },
       "concierge.v1.ListSessionsRequest": {
@@ -14149,6 +14778,25 @@
         ],
         "description": "Deliberately NEUTRAL verbs, where the owner consilia use remove/keep and\n admit/reject. Three kinds share this vote, so a kind-specific verb would only mean\n something read against UserProposal.kind — and a vocabulary that is correct only when\n cross-referenced is one that eventually gets rendered wrong. The kind-specific verb\n belongs on the SURFACE, which knows the kind; this is which way the voter pushed."
       },
+      "concierge.v1.RefreshClientTokenRequest": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "title": "client_id"
+          },
+          "client_secret": {
+            "type": "string",
+            "title": "client_secret"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token"
+          }
+        },
+        "title": "RefreshClientTokenRequest",
+        "additionalProperties": false
+      },
       "concierge.v1.RefreshRequest": {
         "type": "object",
         "properties": {
@@ -14230,6 +14878,61 @@
         "title": "ResignOwnershipRequest",
         "additionalProperties": false
       },
+      "concierge.v1.RevokeScopeRequest": {
+        "type": "object",
+        "allOf": [
+          {
+            "properties": {
+              "scope": {
+                "type": "string",
+                "title": "scope"
+              },
+              "reason": {
+                "type": "string",
+                "title": "reason",
+                "description": "Recorded verbatim on the audit row."
+              }
+            }
+          },
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "title": "email"
+                  }
+                },
+                "title": "email",
+                "required": [
+                  "email"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "title": "user_id"
+                  }
+                },
+                "title": "user_id",
+                "required": [
+                  "user_id"
+                ]
+              }
+            ]
+          }
+        ],
+        "title": "RevokeScopeRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.RevokeScopeResponse": {
+        "type": "object",
+        "title": "RevokeScopeResponse",
+        "additionalProperties": false
+      },
       "concierge.v1.RevokeSessionRequest": {
         "type": "object",
         "properties": {
@@ -14282,6 +14985,67 @@
         },
         "title": "RevokeTokensResponse",
         "additionalProperties": false
+      },
+      "concierge.v1.ScopeHolder": {
+        "type": "object",
+        "properties": {
+          "grant": {
+            "title": "grant",
+            "$ref": "#/components/schemas/concierge.v1.ScopedGrant"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "legal_name": {
+            "type": "string",
+            "title": "legal_name",
+            "description": "Empty until the user sets them (see UserProfile). Both are also empty for a caller\n who is only the scope's admin."
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "preferred_name"
+          }
+        },
+        "title": "ScopeHolder",
+        "additionalProperties": false,
+        "description": "One holder of a scope, with enough identity to render the row."
+      },
+      "concierge.v1.ScopedGrant": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "scope": {
+            "type": "string",
+            "title": "scope",
+            "description": "`allocation:\u003cservice_id\u003e`, service_id in [a-z0-9_]{1,64}."
+          },
+          "role": {
+            "type": "string",
+            "title": "role",
+            "description": "operator/admin."
+          },
+          "granted_by": {
+            "type": "string",
+            "title": "granted_by",
+            "description": "Who made this grant (user id)."
+          },
+          "granted_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "granted_at",
+            "format": "int64",
+            "description": "Unix SECONDS."
+          }
+        },
+        "title": "ScopedGrant",
+        "additionalProperties": false,
+        "description": "A user's role over one resource."
       },
       "concierge.v1.SendGovernanceMailRequest": {
         "type": "object",
@@ -14719,6 +15483,14 @@
             "title": "hold_expires_at",
             "format": "int64",
             "description": "Unix SECONDS an \"admin_hold\" lapses. 0 when nothing lapses."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.ScopedGrant"
+            },
+            "title": "scopes",
+            "description": "The caller's ACTIVE scoped grants. Filled by GetMe only — every other RPC returning\n a UserProfile leaves it empty, so an empty list elsewhere means \"not reported\", not\n \"holds none\". A global role is NOT folded in here: a panel that admits global\n admins/owners reads `role` above for that."
           }
         },
         "title": "UserProfile",

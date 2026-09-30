@@ -242,13 +242,12 @@ mod book_route_tests {
 		auth_service_server::{AuthService as BkAuthService, AuthServiceServer as BkAuthServiceServer},
 		book_service_server::{BookService, BookServiceServer},
 	};
-	use evconcierge_auth::{Claims, TokenType, Verifier, VerifierConfig};
+	use evconcierge_auth::{TokenType, Verifier, VerifierConfig};
 	use evconcierge_contracts::concierge::v1::{
 		self as cc,
-		auth_service_server::{AuthService as CcAuthService, AuthServiceServer as CcAuthServiceServer},
+		auth_service_server::AuthServiceServer as CcAuthServiceServer,
 		user_directory_server::{UserDirectory, UserDirectoryServer},
 	};
-	use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, get_current_timestamp};
 	use tokio::{
 		io::{AsyncReadExt, AsyncWriteExt},
 		net::{TcpListener, TcpStream},
@@ -261,19 +260,15 @@ mod book_route_tests {
 	use crate::{
 		config::AppConfig,
 		cookies::CookieNames,
-		routes::router,
+		routes::{
+			router,
+			test_support::{AUDIENCE, ConciergeJwks, ISSUER, access_token},
+		},
 		session::BankingTokens,
 		state::{AppState, Grpc},
 		util::now_secs,
 	};
 
-	/// A throwaway Ed25519 keypair (`openssl genpkey -algorithm ed25519`) — the same one
-	/// the concierge verifier's own tests use. It signs nothing outside this file.
-	const TEST_PEM: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKolOSMXwE+tafZkX+jkKYJbmJ066f4E12wAwTIkKps6\n-----END PRIVATE KEY-----\n";
-	const TEST_JWK_X: &str = "Z6BCmq9-_wo9d7co5CDW84Wn0sAC3BA0XWK2AOstpV4";
-	const TEST_KID: &str = "test-kid";
-	const ISSUER: &str = "https://auth.test";
-	const AUDIENCE: &str = "concierge";
 	const CSRF: &str = "csrf-token-value";
 	const SERVICE: &str = "quy-nhon";
 	const ORDER_ID: &str = "3f1c1a52-4b7e-4d0a-9d6c-0f5e2b7a9c11";
@@ -432,44 +427,6 @@ mod book_route_tests {
 	}
 
 	#[tonic::async_trait]
-	impl CcAuthService for Hub {
-		/// The only concierge auth RPC the BFF reaches: the verifier caches these keys and
-		/// checks the `ev_access` cookie against them locally.
-		async fn jwks(&self, _: GrpcRequest<cc::JwksRequest>) -> Result<GrpcResponse<cc::JwksResponse>, Status> {
-			Ok(GrpcResponse::new(cc::JwksResponse {
-				keys: vec![cc::Jwk {
-					kid: TEST_KID.into(),
-					kty: "OKP".into(),
-					crv: "Ed25519".into(),
-					x: TEST_JWK_X.into(),
-					alg: "EdDSA".into(),
-					r#use: "sig".into(),
-				}],
-			}))
-		}
-
-		async fn exchange(&self, _: GrpcRequest<cc::ExchangeRequest>) -> Result<GrpcResponse<cc::TokenResponse>, Status> {
-			Err(Status::unimplemented("not reached by the book routes"))
-		}
-
-		async fn refresh(&self, _: GrpcRequest<cc::RefreshRequest>) -> Result<GrpcResponse<cc::TokenResponse>, Status> {
-			Err(Status::unimplemented("not reached by the book routes"))
-		}
-
-		async fn logout(&self, _: GrpcRequest<cc::LogoutRequest>) -> Result<GrpcResponse<cc::LogoutResponse>, Status> {
-			Err(Status::unimplemented("not reached by the book routes"))
-		}
-
-		async fn list_sessions(&self, _: GrpcRequest<cc::ListSessionsRequest>) -> Result<GrpcResponse<cc::ListSessionsResponse>, Status> {
-			Err(Status::unimplemented("not reached by the book routes"))
-		}
-
-		async fn revoke_session(&self, _: GrpcRequest<cc::RevokeSessionRequest>) -> Result<GrpcResponse<cc::RevokeSessionResponse>, Status> {
-			Err(Status::unimplemented("not reached by the book routes"))
-		}
-	}
-
-	#[tonic::async_trait]
 	impl UserDirectory for Hub {
 		/// `require_admin` reads the caller's role from here per request — the only thing
 		/// standing between an investor and the policy write.
@@ -514,6 +471,18 @@ mod book_route_tests {
 		}
 
 		async fn set_role(&self, _: GrpcRequest<cc::SetRoleRequest>) -> Result<GrpcResponse<cc::SetRoleResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
+		async fn grant_scope(&self, _: GrpcRequest<cc::GrantScopeRequest>) -> Result<GrpcResponse<cc::GrantScopeResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
+		async fn revoke_scope(&self, _: GrpcRequest<cc::RevokeScopeRequest>) -> Result<GrpcResponse<cc::RevokeScopeResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
+		async fn list_scoped_grants(&self, _: GrpcRequest<cc::ListScopedGrantsRequest>) -> Result<GrpcResponse<cc::ListScopedGrantsResponse>, Status> {
 			Err(Status::unimplemented("not reached by the book routes"))
 		}
 	}
@@ -669,7 +638,7 @@ mod book_route_tests {
 
 		tokio::spawn(async move {
 			Server::builder()
-				.add_service(CcAuthServiceServer::new(hub.clone()))
+				.add_service(CcAuthServiceServer::new(ConciergeJwks))
 				.add_service(UserDirectoryServer::new(hub.clone()))
 				.add_service(BkAuthServiceServer::new(hub.clone()))
 				.add_service(BookServiceServer::new(hub))
@@ -715,23 +684,6 @@ mod book_route_tests {
 			grpc: Grpc::connect_lazy(&endpoint, &endpoint, &endpoint, Some("test-issuance".into())).expect("build the lazy channels"),
 			config: Arc::new(config),
 		})
-	}
-
-	/// A valid `ev_access` cookie value — signed with the key the stub publishes.
-	fn access_token() -> String {
-		let claims = Claims {
-			sub: "user-1".into(),
-			iss: ISSUER.into(),
-			aud: AUDIENCE.into(),
-			exp: get_current_timestamp() + 900,
-			iat: get_current_timestamp(),
-			typ: TokenType::Access,
-			jti: None,
-			token_version: 0,
-		};
-		let mut header = Header::new(Algorithm::EdDSA);
-		header.kid = Some(TEST_KID.into());
-		encode(&header, &claims, &EncodingKey::from_ed_pem(TEST_PEM.as_bytes()).unwrap()).expect("sign the access token")
 	}
 
 	/// A request carrying the signed session cookie (and, for mutations, the matching

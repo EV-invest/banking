@@ -3771,6 +3771,10 @@
     "en": "Recent activity",
     "t": "Последняя активность"
   },
+  "dash.servicePanel": {
+    "en": "Service-Arb panel",
+    "t": "Панель Service-Arb"
+  },
   "dash.strategyCount": {
     "en": "{n, plural, one {# strategy} other {# strategies}}",
     "t": "{n, plural, one {# стратегия} few {# стратегии} many {# стратегий} other {# стратегии}}"
@@ -4974,6 +4978,82 @@
   "ops.truncatedNote": {
     "en": "Showing your most recent activity — older entries aren't listed here yet.",
     "t": "Показана последняя активность — более ранние записи здесь пока не отображаются."
+  },
+  "panelAccess.action": {
+    "en": "Panel access",
+    "t": "Доступ к панели"
+  },
+  "panelAccess.col.person": {
+    "en": "Person",
+    "t": "Кто"
+  },
+  "panelAccess.col.role": {
+    "en": "Role",
+    "t": "Роль"
+  },
+  "panelAccess.empty": {
+    "en": "No one has panel access",
+    "t": "Доступа к панели пока нет ни у кого"
+  },
+  "panelAccess.emptyHint": {
+    "en": "Grant access by email. The person must have signed in to the cabinet at least once.",
+    "t": "Выдайте доступ по email. Человек должен хотя бы раз войти в кабинет."
+  },
+  "panelAccess.err.cannotGrant": {
+    "en": "Access can't be granted to this address.",
+    "t": "Этому адресу нельзя выдать доступ."
+  },
+  "panelAccess.err.forbidden": {
+    "en": "You can't make this change. A panel admin can add and remove operators only.",
+    "t": "Это изменение вам недоступно. Админ панели может добавлять и убирать только операторов."
+  },
+  "panelAccess.err.forbiddenList": {
+    "en": "You don't have permission to manage access to this panel.",
+    "t": "У вас нет прав управлять доступом к этой панели."
+  },
+  "panelAccess.err.invalid": {
+    "en": "Check the email address and try again.",
+    "t": "Проверьте адрес почты и попробуйте снова."
+  },
+  "panelAccess.err.notHolder": {
+    "en": "This person no longer has access to the panel.",
+    "t": "У этого человека уже нет доступа к панели."
+  },
+  "panelAccess.err.tooMany": {
+    "en": "Too many attempts. Try again later.",
+    "t": "Слишком много попыток, попробуйте позже."
+  },
+  "panelAccess.field.email": {
+    "en": "Email",
+    "t": "Эл. почта"
+  },
+  "panelAccess.field.role": {
+    "en": "Role",
+    "t": "Роль"
+  },
+  "panelAccess.grant": {
+    "en": "Grant access",
+    "t": "Выдать доступ"
+  },
+  "panelAccess.grantOperator": {
+    "en": "Add operator",
+    "t": "Добавить оператора"
+  },
+  "panelAccess.revoke": {
+    "en": "Revoke",
+    "t": "Отозвать"
+  },
+  "panelAccess.revokeBody": {
+    "en": "{who} will no longer be able to open the panel. You can grant access again later.",
+    "t": "{who} больше не сможет открыть панель. Доступ можно выдать снова позже."
+  },
+  "panelAccess.revokeTitle": {
+    "en": "Revoke panel access?",
+    "t": "Отозвать доступ к панели?"
+  },
+  "panelAccess.roster": {
+    "en": "Who has access",
+    "t": "У кого есть доступ"
   },
   "payment.consent.approve": {
     "en": "Consented",

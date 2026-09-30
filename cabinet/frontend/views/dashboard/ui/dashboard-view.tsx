@@ -22,6 +22,7 @@ import { GetStartedSection } from "@/views/dashboard/ui/get-started-section";
 import { MoveMoneyCard } from "@/views/dashboard/ui/move-money-card";
 import { PerfCard } from "@/views/dashboard/ui/perf-card";
 import { RecentOperationsCard } from "@/views/dashboard/ui/recent-operations-card";
+import { ServicePanelCard } from "@/views/dashboard/ui/service-panel-card";
 import { WhatIOwnCard } from "@/views/dashboard/ui/what-i-own-card";
 
 // The portfolio dashboard (Figma `cabinet/home`). Bound to live wallet + fund-position
@@ -123,6 +124,11 @@ export function DashboardView() {
         <WhatIOwnCard allocations={toAllocations(pos, titleOf)} loading={posLoading} className="lg:order-3 xl:col-start-2 xl:row-start-3" />
         <MoveMoneyCard className="lg:order-2 xl:col-start-2 xl:row-start-2" />
         <RecentOperationsCard ops={ops} className="lg:order-5 xl:col-span-2 xl:col-start-1 xl:row-start-5" />
+        {/* Last, below everything: it is a door out of the cabinet for the few who hold a
+            Service-Arb scope, and it appears only once the profile has answered — anywhere
+            higher, its arrival would push the portfolio down for them, and most readers
+            never see it at all. */}
+        <ServicePanelCard className="lg:order-6 xl:col-span-2 xl:col-start-1 xl:row-start-6" />
       </PageFrame>
     </>
   );

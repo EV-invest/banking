@@ -277,6 +277,9 @@
             # make posthog-js default to this very host — and the CSP would then block it.
             NEXT_PUBLIC_POSTHOG_KEY = posthogKey;
             NEXT_PUBLIC_POSTHOG_HOST = "https://us.i.posthog.com";
+            # Where Home's "Service-Arb panel" card points. Public, and inlined at build
+            # like the two above; unset, the card is simply not shown.
+            NEXT_PUBLIC_SA_PANEL_URL = "https://sa.evinvest.ltd";
           };
           buildPhase = ''
             runHook preBuild

@@ -84,6 +84,11 @@ pub struct UserProfile {
 	/// Unix seconds an `admin_hold` lapses; `"0"` when nothing lapses. A string like every
 	/// other stamp the BFF emits — see [`AdminUserSummary::created_at`].
 	pub hold_expires_at: String,
+	/// The caller's active panel grants (`allocation:<service_id>` → `operator` | `admin`).
+	/// Only `/api/users` (GetMe) fills it; every other profile the BFF relays carries it
+	/// empty, which means "not reported", not "holds none". A global admin/owner is not
+	/// folded in — read `role` for that.
+	pub scopes: Vec<ScopedGrant>,
 }
 
 impl From<cc::UserProfile> for UserProfile {
@@ -109,6 +114,66 @@ impl From<cc::UserProfile> for UserProfile {
 			role_is_break_glass: p.role_is_break_glass,
 			suspended_by: p.suspended_by,
 			hold_expires_at: p.hold_expires_at.to_string(),
+			scopes: p.scopes.into_iter().map(ScopedGrant::from).collect(),
+		}
+	}
+}
+
+/// A user's role over one resource — `scope` is `allocation:<service_id>`, `role` is
+/// `operator` | `admin`. `granted_at` crosses as a string like every other int64.
+#[derive(Serialize)]
+pub struct ScopedGrant {
+	pub user_id: String,
+	pub scope: String,
+	pub role: String,
+	pub granted_by: String,
+	pub granted_at: String,
+}
+
+impl From<cc::ScopedGrant> for ScopedGrant {
+	fn from(g: cc::ScopedGrant) -> Self {
+		Self {
+			user_id: g.user_id,
+			scope: g.scope,
+			role: g.role,
+			granted_by: g.granted_by,
+			granted_at: g.granted_at.to_string(),
+		}
+	}
+}
+
+/// One holder of a scope for the allocation's "Access" tab. `legal_name` is empty for a
+/// caller who is only the scope's admin — the legal name stays with staff.
+#[derive(Serialize)]
+pub struct ScopeHolder {
+	pub grant: ScopedGrant,
+	pub email: String,
+	pub legal_name: String,
+	pub preferred_name: String,
+}
+
+/// The holders of one scope, oldest grant first. A row concierge sends without its grant
+/// names nobody the tab could act on, so it is dropped rather than rendered half-empty.
+#[derive(Serialize)]
+pub struct ScopeHolderList {
+	pub holders: Vec<ScopeHolder>,
+}
+
+impl From<cc::ListScopedGrantsResponse> for ScopeHolderList {
+	fn from(r: cc::ListScopedGrantsResponse) -> Self {
+		Self {
+			holders: r
+				.holders
+				.into_iter()
+				.filter_map(|h| {
+					Some(ScopeHolder {
+						grant: h.grant?.into(),
+						email: h.email,
+						legal_name: h.legal_name,
+						preferred_name: h.preferred_name,
+					})
+				})
+				.collect(),
 		}
 	}
 }

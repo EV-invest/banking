@@ -41,6 +41,11 @@ fn user_profile_is_wire_identical_across_planes() {
 		// re-encodes SHORT from the banking side and the byte assertion below catches it.
 		suspended_by: "admin_hold".into(),
 		hold_expires_at: 1_700_086_400,
+		// Empty on purpose, and the one field banking's duplicate does NOT mirror: concierge
+		// fills `scopes` (field 21) on GetMe only, and the cabinet reads it from there. The
+		// money plane's copy serves its admin/operator path, where scopes never travel —
+		// they are identity-plane state that does not cross the bridge.
+		scopes: Vec::new(),
 	};
 
 	let bk_profile = bk::UserProfile::decode(cc_profile.encode_to_vec().as_slice()).expect("concierge UserProfile decodes as banking UserProfile");
