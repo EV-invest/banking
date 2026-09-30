@@ -22,8 +22,8 @@ export function ServicePanelCard({ className }: { className?: string }) {
   if (!link) return null;
 
   return (
-    <Card className={cn("flex-row items-center justify-between gap-3 py-4", CARD_PAD, className)}>
-      <a href={link.href} className="group inline-flex items-center gap-2 rounded-md font-semibold text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <Card className={cn("flex-row flex-wrap items-center justify-between gap-3 py-4", CARD_PAD, className)}>
+      <a href={link.href} className="group inline-flex items-center gap-2 whitespace-nowrap rounded-md font-semibold text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {t("dash.servicePanel")}
         <ArrowUpRight className="size-4 text-ink-soft transition-colors group-hover:text-ink" aria-hidden />
       </a>
