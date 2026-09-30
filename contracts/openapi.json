@@ -1595,6 +1595,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/ListRails": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "ListRails",
+        "description": "Operator (TreasuryRead): every rail, whether this deployment runs it, and whether an\n operator froze it.",
+        "operationId": "banking.v1.BalanceService.ListRails",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListRailsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RailList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/ListRedemptionQueue": {
       "post": {
         "tags": [
@@ -2060,6 +2119,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.OperationsMode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/SetRailFrozen": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "SetRailFrozen",
+        "description": "Admin (OperationsManage): freeze/unfreeze a rail — no new deposit addresses or\n withdrawals on it, queued withdrawals held, and no treasury gas alert.",
+        "operationId": "banking.v1.BalanceService.SetRailFrozen",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SetRailFrozenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RailList"
                 }
               }
             }
@@ -10045,6 +10163,11 @@
         "title": "ListPositionsRequest",
         "additionalProperties": false
       },
+      "banking.v1.ListRailsRequest": {
+        "type": "object",
+        "title": "ListRailsRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListRedemptionQueueRequest": {
         "type": "object",
         "title": "ListRedemptionQueueRequest",
@@ -11064,6 +11187,29 @@
         "title": "PostFundValuationRequest",
         "additionalProperties": false
       },
+      "banking.v1.Rail": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "configured"
+          },
+          "frozen": {
+            "type": "boolean",
+            "title": "frozen"
+          },
+          "gas_coin": {
+            "type": "string",
+            "title": "gas_coin"
+          }
+        },
+        "title": "Rail",
+        "additionalProperties": false
+      },
       "banking.v1.RailLiquidity": {
         "type": "object",
         "properties": {
@@ -11111,6 +11257,20 @@
         "title": "RailLiquidity",
         "additionalProperties": false,
         "description": "Per-rail on-chain liquidity (the treasury / Layer 2). The `treasury_*`/`onchain_*`\n fields are the operator funding view, read best-effort from the chain — empty means\n the rail is unconfigured or the read was unavailable, never an error."
+      },
+      "banking.v1.RailList": {
+        "type": "object",
+        "properties": {
+          "rails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Rail"
+            },
+            "title": "rails"
+          }
+        },
+        "title": "RailList",
+        "additionalProperties": false
       },
       "banking.v1.ReadinessRequest": {
         "type": "object",
@@ -11812,6 +11972,21 @@
           }
         },
         "title": "SetOperationsModeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.SetRailFrozenRequest": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network"
+          },
+          "frozen": {
+            "type": "boolean",
+            "title": "frozen"
+          }
+        },
+        "title": "SetRailFrozenRequest",
         "additionalProperties": false
       },
       "banking.v1.SettleFeeSharesRequest": {

@@ -2260,6 +2260,13 @@ export type BankingV1ListPositionsRequest = {
 };
 
 /**
+ * ListRailsRequest
+ */
+export type BankingV1ListRailsRequest = {
+    [key: string]: never;
+};
+
+/**
  * ListRedemptionQueueRequest
  */
 export type BankingV1ListRedemptionQueueRequest = {
@@ -3333,6 +3340,28 @@ export type BankingV1PostFundValuationRequest = {
 };
 
 /**
+ * Rail
+ */
+export type BankingV1Rail = {
+    /**
+     * network
+     */
+    network?: string;
+    /**
+     * configured
+     */
+    configured?: boolean;
+    /**
+     * frozen
+     */
+    frozen?: boolean;
+    /**
+     * gas_coin
+     */
+    gas_coin?: string;
+};
+
+/**
  * RailLiquidity
  *
  * Per-rail on-chain liquidity (the treasury / Layer 2). The `treasury_*`/`onchain_*`
@@ -3392,6 +3421,16 @@ export type BankingV1RailLiquidity = {
      * meaningful per rail; false where the rail's address form is network-agnostic.
      */
     is_testnet?: boolean;
+};
+
+/**
+ * RailList
+ */
+export type BankingV1RailList = {
+    /**
+     * rails
+     */
+    rails?: Array<BankingV1Rail>;
 };
 
 /**
@@ -4143,6 +4182,20 @@ export type BankingV1SetOperationsModeRequest = {
      * read_only
      */
     read_only?: boolean;
+};
+
+/**
+ * SetRailFrozenRequest
+ */
+export type BankingV1SetRailFrozenRequest = {
+    /**
+     * network
+     */
+    network?: string;
+    /**
+     * frozen
+     */
+    frozen?: boolean;
 };
 
 /**
@@ -8192,6 +8245,35 @@ export type BankingV1BalanceServiceListParkedEventsResponses = {
 
 export type BankingV1BalanceServiceListParkedEventsResponse = BankingV1BalanceServiceListParkedEventsResponses[keyof BankingV1BalanceServiceListParkedEventsResponses];
 
+export type BankingV1BalanceServiceListRailsData = {
+    body: BankingV1ListRailsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/ListRails';
+};
+
+export type BankingV1BalanceServiceListRailsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceListRailsError = BankingV1BalanceServiceListRailsErrors[keyof BankingV1BalanceServiceListRailsErrors];
+
+export type BankingV1BalanceServiceListRailsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1RailList;
+};
+
+export type BankingV1BalanceServiceListRailsResponse = BankingV1BalanceServiceListRailsResponses[keyof BankingV1BalanceServiceListRailsResponses];
+
 export type BankingV1BalanceServiceListRedemptionQueueData = {
     body: BankingV1ListRedemptionQueueRequest;
     headers: {
@@ -8423,6 +8505,35 @@ export type BankingV1BalanceServiceSetOperationsModeResponses = {
 };
 
 export type BankingV1BalanceServiceSetOperationsModeResponse = BankingV1BalanceServiceSetOperationsModeResponses[keyof BankingV1BalanceServiceSetOperationsModeResponses];
+
+export type BankingV1BalanceServiceSetRailFrozenData = {
+    body: BankingV1SetRailFrozenRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/SetRailFrozen';
+};
+
+export type BankingV1BalanceServiceSetRailFrozenErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceSetRailFrozenError = BankingV1BalanceServiceSetRailFrozenErrors[keyof BankingV1BalanceServiceSetRailFrozenErrors];
+
+export type BankingV1BalanceServiceSetRailFrozenResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1RailList;
+};
+
+export type BankingV1BalanceServiceSetRailFrozenResponse = BankingV1BalanceServiceSetRailFrozenResponses[keyof BankingV1BalanceServiceSetRailFrozenResponses];
 
 export type BankingV1BalanceServiceSettleRedemptionData = {
     body: BankingV1SettleRedemptionRequest;
