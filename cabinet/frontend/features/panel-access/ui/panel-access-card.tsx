@@ -4,7 +4,7 @@ import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Alert, AlertDescription, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { grantScope, revokeScope } from "@/entities/scope/api/scope-client";
 import { canRevokeHolder, grantableRoles, type ScopeRole } from "@/entities/scope/lib/access";
@@ -36,7 +36,8 @@ export function PanelAccessCard({ service, header, className }: { service: strin
     const key = e instanceof RequestError && e.code === null ? scopeErrorKey(e.status, action) : null;
     return key ? t(key) : errorMessage(e, t);
   };
-  const error = actionError ?? (read.data || !read.error ? null : describe(read.error, "list"));
+  // A failed read belongs to the roster it failed to fill; the banner is for actions.
+  const readError = read.data || !read.error ? null : describe(read.error, "list");
 
   const run = async (key: string, action: ScopeAction, fn: () => Promise<unknown>) => {
     setBusy(key);
@@ -65,10 +66,11 @@ export function PanelAccessCard({ service, header, className }: { service: strin
       <CardContent className="space-y-5 py-5">
         {header}
 
-        {error && (
-          <p role="alert" className="flex items-center gap-2 text-xs text-accent-error">
-            <TriangleAlert className="size-3.5 shrink-0" /> {error}
-          </p>
+        {actionError && (
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" />
+            <AlertDescription>{actionError}</AlertDescription>
+          </Alert>
         )}
 
         <GrantScopeForm roles={grantableRoles(role)} busy={busy === "grant"} onSubmit={grant} />
@@ -76,6 +78,17 @@ export function PanelAccessCard({ service, header, className }: { service: strin
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("panelAccess.roster")}</p>
           <Settled loading={!read.data && !read.error} skeleton={<Skeleton className="h-24 w-full" />}>
+            {readError && (
+              <Alert variant="destructive">
+                <TriangleAlert className="size-4" />
+                <AlertDescription className="flex flex-col items-start gap-2">
+                  {readError}
+                  <Button type="button" variant="outline" size="sm" onClick={() => void read.refresh()}>
+                    {t("status.tryAgain")}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
             {read.data && (
               <ScopeHoldersTable
                 holders={holders}
