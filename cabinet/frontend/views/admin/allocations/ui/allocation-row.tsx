@@ -68,7 +68,7 @@ export function AllocationRow({ row, busy, editing, onEdit, onSave, onToggle, on
             it has to be judged against. */}
         <TableCell className={cn(EDGE_CELL, "tabular-nums text-ink-soft")}>{compactUnits(row.unit_cap, locale)}</TableCell>
         <TableCell className={EDGE_CELL}>
-          <AllocationRowActions state={row.state} busy={busy} editing={editing} onOpenPanel={onOpenPanel} onEdit={onEdit} onToggle={onToggle} />
+          <AllocationRowActions service={row.service} state={row.state} busy={busy} editing={editing} onOpenPanel={onOpenPanel} onEdit={onEdit} onToggle={onToggle} />
         </TableCell>
       </TableRow>
       {editing && (

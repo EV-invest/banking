@@ -4975,6 +4975,86 @@
     "en": "Showing your most recent activity — older entries aren't listed here yet.",
     "t": "Es wird Ihre jüngste Aktivität gezeigt — ältere Einträge sind hier noch nicht aufgeführt."
   },
+  "panelAccess.action": {
+    "en": "Panel access",
+    "t": "Panel-Zugang"
+  },
+  "panelAccess.col.granted": {
+    "en": "Granted by",
+    "t": "Erteilt von"
+  },
+  "panelAccess.col.person": {
+    "en": "Person",
+    "t": "Person"
+  },
+  "panelAccess.col.role": {
+    "en": "Role",
+    "t": "Rolle"
+  },
+  "panelAccess.empty": {
+    "en": "No one has panel access",
+    "t": "Noch niemand hat Panel-Zugang"
+  },
+  "panelAccess.emptyHint": {
+    "en": "Grant access by email. The person must have signed in to the cabinet at least once.",
+    "t": "Gewähren Sie den Zugang per E-Mail. Die Person muss sich mindestens einmal im Kabinett angemeldet haben."
+  },
+  "panelAccess.err.forbidden": {
+    "en": "You can't make this change. A panel admin can add and remove operators only.",
+    "t": "Diese Änderung ist Ihnen nicht erlaubt. Ein Panel-Admin kann nur Operatoren hinzufügen und entfernen."
+  },
+  "panelAccess.err.forbiddenList": {
+    "en": "You don't have permission to manage access to this panel.",
+    "t": "Sie dürfen den Zugang zu diesem Panel nicht verwalten."
+  },
+  "panelAccess.err.invalid": {
+    "en": "Check the email address and try again.",
+    "t": "Prüfen Sie die E-Mail-Adresse und versuchen Sie es erneut."
+  },
+  "panelAccess.err.noAccount": {
+    "en": "No cabinet account uses this email. Ask the person to sign in to the cabinet once, then try again.",
+    "t": "Kein Kabinett-Konto nutzt diese E-Mail. Bitten Sie die Person, sich einmal anzumelden, und versuchen Sie es erneut."
+  },
+  "panelAccess.err.notHolder": {
+    "en": "This person no longer has access to the panel.",
+    "t": "Diese Person hat keinen Panel-Zugang mehr."
+  },
+  "panelAccess.err.unavailable": {
+    "en": "This account can't be given access: it is disabled, or its email belongs to more than one account.",
+    "t": "Diesem Konto kann kein Zugang gewährt werden: Es ist deaktiviert, oder seine E-Mail gehört zu mehreren Konten."
+  },
+  "panelAccess.field.email": {
+    "en": "Email",
+    "t": "E-Mail"
+  },
+  "panelAccess.field.role": {
+    "en": "Role",
+    "t": "Rolle"
+  },
+  "panelAccess.grant": {
+    "en": "Grant access",
+    "t": "Zugang gewähren"
+  },
+  "panelAccess.grantOperator": {
+    "en": "Add operator",
+    "t": "Operator hinzufügen"
+  },
+  "panelAccess.revoke": {
+    "en": "Revoke",
+    "t": "Widerrufen"
+  },
+  "panelAccess.revokeBody": {
+    "en": "{who} will no longer be able to open the panel. You can grant access again later.",
+    "t": "{who} kann das Panel danach nicht mehr öffnen. Sie können den Zugang später erneut gewähren."
+  },
+  "panelAccess.revokeTitle": {
+    "en": "Revoke panel access?",
+    "t": "Panel-Zugang widerrufen?"
+  },
+  "panelAccess.roster": {
+    "en": "Who has access",
+    "t": "Wer Zugang hat"
+  },
   "payment.consent.approve": {
     "en": "Consented",
     "t": "Zugestimmt"

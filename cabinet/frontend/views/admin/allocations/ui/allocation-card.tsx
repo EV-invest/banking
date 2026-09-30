@@ -49,7 +49,7 @@ export function AllocationCard({ row, busy, editing, onEdit, onSave, onToggle, o
           <dd className="tabular-nums text-ink-soft">{compactUnits(row.unit_cap, locale)}</dd>
         </div>
       </dl>
-      <AllocationRowActions state={row.state} busy={busy} editing={editing} onOpenPanel={onOpenPanel} onEdit={onEdit} onToggle={onToggle} className="justify-start" />
+      <AllocationRowActions service={row.service} state={row.state} busy={busy} editing={editing} onOpenPanel={onOpenPanel} onEdit={onEdit} onToggle={onToggle} className="justify-start" />
       {editing && (
         <div className="rounded-lg bg-ink/[0.03] p-3">
           <AllocationEditor row={row} busy={busy} onSave={onSave} />
