@@ -25,7 +25,7 @@ use evbanking_contracts::banking::v1::{
 use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;
 use tower::{Layer, ServiceBuilder};
-use tower_http::trace::TraceLayer;
+use tower_http::trace::{DefaultOnFailure, TraceLayer};
 
 use crate::{
 	AppState,
@@ -92,7 +92,7 @@ pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Outp
 	Server::builder()
 		// grpc-web rides HTTP/1.1; required for the GrpcWebLayer to translate.
 		.accept_http1(true)
-		.layer(ServiceBuilder::new().layer(TraceLayer::new_for_grpc()).layer(GrpcWebLayer::new()).into_inner())
+		.layer(ServiceBuilder::new().layer(TraceLayer::new_for_grpc().on_failure(DefaultOnFailure::new().level(tracing::Level::WARN))).layer(GrpcWebLayer::new()).into_inner())
 		.add_service(std_health)
 		.add_service(HealthServiceServer::new(health))
 		.add_service(auth.layer(UsersServiceServer::new(UsersSvc::new(state.clone()))))

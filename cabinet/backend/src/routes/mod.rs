@@ -31,7 +31,10 @@ use evconcierge_auth::Claims;
 use serde_json::Value;
 use subtle::ConstantTimeEq;
 use tonic::Status;
-use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+use tower_http::{
+	timeout::TimeoutLayer,
+	trace::{DefaultOnFailure, TraceLayer},
+};
 
 use crate::{error::ApiError, session::MoneyToken, state::AppState};
 
@@ -60,7 +63,9 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/book/ws", get(book_ws::upgrade))
 		.with_state(state.clone());
 
-	requests(state).merge(websockets).layer(TraceLayer::new_for_http())
+	requests(state)
+		.merge(websockets)
+		.layer(TraceLayer::new_for_http().on_failure(DefaultOnFailure::new().level(tracing::Level::WARN))) // recurring ones escalate in devops alerting
 }
 
 /// Every request-shaped endpoint: served under the outer deadline.
