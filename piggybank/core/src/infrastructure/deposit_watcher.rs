@@ -62,7 +62,7 @@ use crate::{
 		custody::ChainCustody,
 		deposits::PgDeposits,
 		evm_rpc::{TRANSFER_TOPIC, address_from_topic, hex_to_u64, pad_topic, word_to_u128},
-		rails::repo,
+		rails::{repo, set_scan_cursor},
 		telemetry,
 	},
 };
@@ -287,7 +287,7 @@ impl DepositWatcher {
 			// Nothing fundable yet. The live scan still fast-forwards, or it would re-read the
 			// same empty window every cycle forever; a backfill just reports the window done.
 			if matches!(cursor, CursorPolicy::Advance) {
-				self.set_cursor(network, to).await?;
+				set_scan_cursor(&self.pool, network, to as i64).await?;
 			}
 			summary.scanned_to = to;
 			return Ok(summary);
@@ -325,7 +325,7 @@ impl DepositWatcher {
 					);
 					// Persist the jump before anything else can fail, so the gap is filed exactly
 					// once: a later throttled chunk must not re-run the bisection and re-alert.
-					self.set_cursor(network, skipped_to).await?;
+					set_scan_cursor(&self.pool, network, skipped_to as i64).await?;
 					next = resume;
 					continue;
 				}
@@ -353,7 +353,7 @@ impl DepositWatcher {
 			// was reported once, and re-reading the chunk forever would only repeat the
 			// report while crediting nothing.
 			if matches!(cursor, CursorPolicy::Advance) {
-				self.set_cursor(network, chunk_end).await?;
+				set_scan_cursor(&self.pool, network, chunk_end as i64).await?;
 			}
 			summary.scanned_to = chunk_end;
 			next = chunk_end + 1;
@@ -536,16 +536,6 @@ impl DepositWatcher {
 			.await
 			.map_err(repo)?;
 		Ok(init)
-	}
-
-	async fn set_cursor(&self, network: Network, block: u64) -> Result<(), WatcherError> {
-		sqlx::query("UPDATE deposit_scan_cursor SET last_scanned_block = $2, updated_at = now() WHERE network = $1")
-			.bind(network.as_str())
-			.bind(block as i64)
-			.execute(&self.pool)
-			.await
-			.map_err(repo)?;
-		Ok(())
 	}
 
 	async fn watched_addresses(&self, network: Network) -> Result<HashMap<String, UserId>, WatcherError> {

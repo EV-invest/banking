@@ -31,7 +31,7 @@ use crate::{
 	config::TronConfig,
 	infrastructure::{
 		deposits::PgDeposits,
-		rails::{WatcherError, repo},
+		rails::{WatcherError, repo, set_scan_cursor},
 		tron_rpc::{Trc20Transfer, TronRpc},
 	},
 };
@@ -162,7 +162,7 @@ impl TronDepositWatcher {
 		// Advance only after the window's deposits are recorded. A crash before this re-scans from
 		// the unchanged cursor; `record_deposit` is idempotent by transaction_id.
 		if high_watermark > cursor {
-			self.set_cursor(network, high_watermark).await?;
+			set_scan_cursor(&self.pool, network, high_watermark).await?;
 		}
 		Ok(())
 	}
@@ -235,15 +235,5 @@ impl TronDepositWatcher {
 			.await
 			.map_err(repo)?;
 		Ok(init)
-	}
-
-	async fn set_cursor(&self, network: Network, timestamp: i64) -> Result<(), WatcherError> {
-		sqlx::query("UPDATE deposit_scan_cursor SET last_scanned_block = $2, updated_at = now() WHERE network = $1")
-			.bind(network.as_str())
-			.bind(timestamp)
-			.execute(&self.pool)
-			.await
-			.map_err(repo)?;
-		Ok(())
 	}
 }

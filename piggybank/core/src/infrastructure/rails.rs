@@ -22,6 +22,7 @@ use std::{
 	time::{Duration, Instant},
 };
 
+use domain::money::Network;
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -71,6 +72,19 @@ pub enum WatcherError {
 /// A control-plane query that failed — the watchers' `map_err` for `sqlx`.
 pub(super) fn repo(err: sqlx::Error) -> WatcherError {
 	WatcherError::Db(err.to_string())
+}
+
+/// Advance a deposit watcher's resume point. Committed without waiting for fsync: a lost advance only re-scans, and crediting is idempotent.
+pub(super) async fn set_scan_cursor(pool: &PgPool, network: Network, cursor: i64) -> Result<(), WatcherError> {
+	let mut tx = pool.begin().await.map_err(repo)?;
+	sqlx::query("SET LOCAL synchronous_commit = off").execute(&mut *tx).await.map_err(repo)?;
+	sqlx::query("UPDATE deposit_scan_cursor SET last_scanned_block = $2, updated_at = now() WHERE network = $1")
+		.bind(network.as_str())
+		.bind(cursor)
+		.execute(&mut *tx)
+		.await
+		.map_err(repo)?;
+	tx.commit().await.map_err(repo)
 }
 
 /// The failure taxonomy every rail's treasury sweep shares.

@@ -58,7 +58,7 @@ use crate::{
 	config::TonConfig,
 	infrastructure::{
 		deposits::PgDeposits,
-		rails::{WatcherError, now_unix_secs, repo},
+		rails::{WatcherError, now_unix_secs, repo, set_scan_cursor},
 		telemetry,
 		ton_custody::TonCustody,
 		ton_rpc::{JettonDeposit, TonRpc},
@@ -198,7 +198,7 @@ impl TonDepositWatcher {
 		};
 		if watched.is_empty() && treasury.is_none() {
 			// Nothing fundable yet — fast-forward to now so we don't re-scan an empty window.
-			self.set_cursor(network, now_unix_secs()).await?;
+			set_scan_cursor(&self.pool, network, now_unix_secs() as i64).await?;
 			return Ok(());
 		}
 		// `None` marks the treasury owner — its arrivals are reported, never credited.
@@ -278,7 +278,7 @@ impl TonDepositWatcher {
 		// re-scans `LOOKBACK_SECS` below this; the overlap is deduped by `record_deposit`.
 		let next = next_watermark(cursor, high, all_owners_drained, now_unix_secs());
 		if next > cursor {
-			self.set_cursor(network, next).await?;
+			set_scan_cursor(&self.pool, network, next as i64).await?;
 		}
 		Ok(())
 	}
@@ -347,16 +347,6 @@ impl TonDepositWatcher {
 			.await
 			.map_err(repo)?;
 		Ok(init)
-	}
-
-	async fn set_cursor(&self, network: Network, cursor: u64) -> Result<(), WatcherError> {
-		sqlx::query("UPDATE deposit_scan_cursor SET last_scanned_block = $2, updated_at = now() WHERE network = $1")
-			.bind(network.as_str())
-			.bind(cursor as i64)
-			.execute(&self.pool)
-			.await
-			.map_err(repo)?;
-		Ok(())
 	}
 
 	/// The watched (owner address → user) map: only `derived` (fundable) TON addresses. The

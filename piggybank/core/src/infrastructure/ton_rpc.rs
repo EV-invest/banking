@@ -9,14 +9,19 @@
 //! retry) and [`RpcError::Rpc`] on a well-formed error answer. The pure decode helpers are
 //! split out so they are unit-testable without a live indexer.
 
-use std::time::Duration;
+use std::{sync::LazyLock, time::Duration};
 
 use serde_json::{Value, json};
+use tokio::{sync::Mutex, time::Instant};
+
+/// toncenter rate-limits per key, and every `TonRpc` in the process (watchers, sweep, custody) spends the same one.
+static NEXT_SLOT: LazyLock<Mutex<Instant>> = LazyLock::new(|| Mutex::new(Instant::now()));
 
 pub struct TonRpc {
 	http: reqwest::Client,
 	base_url: String,
 	api_key: Option<String>,
+	min_interval: Duration,
 }
 impl TonRpc {
 	pub fn new(base_url: String, api_key: Option<String>) -> Self {
@@ -24,11 +29,24 @@ impl TonRpc {
 			.timeout(Duration::from_secs(20))
 			.build()
 			.expect("reqwest client builds with default config");
+		// ponytail: free-tier quotas (10 rps keyed, 1 anonymous) with headroom; make it config if the key's plan changes
+		let min_interval = Duration::from_millis(if api_key.is_some() { 120 } else { 1100 });
 		Self {
 			http,
 			base_url: base_url.trim_end_matches('/').to_owned(),
 			api_key,
+			min_interval,
 		}
+	}
+
+	async fn pace(&self) {
+		let slot = {
+			let mut next = NEXT_SLOT.lock().await;
+			let slot = (*next).max(Instant::now());
+			*next = slot + self.min_interval;
+			slot
+		};
+		tokio::time::sleep_until(slot).await;
 	}
 
 	/// The wallet contract's `seqno` (its nonce). A not-yet-deployed wallet has no
@@ -141,6 +159,7 @@ impl TonRpc {
 	}
 
 	async fn get(&self, path: &str, query: &[(&str, &str)]) -> Result<Value, RpcError> {
+		self.pace().await;
 		let url = format!("{}/{path}", self.base_url);
 		let mut request = self.http.get(&url).query(query);
 		if let Some(key) = &self.api_key {
@@ -151,6 +170,7 @@ impl TonRpc {
 	}
 
 	async fn post(&self, path: &str, body: &Value) -> Result<Value, RpcError> {
+		self.pace().await;
 		let url = format!("{}/{path}", self.base_url);
 		let mut request = self.http.post(&url).json(body);
 		if let Some(key) = &self.api_key {
