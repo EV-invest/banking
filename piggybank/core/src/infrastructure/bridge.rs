@@ -348,7 +348,7 @@ impl BridgeConsumer {
 	/// remaining copy, since the concierge cursor has long since moved past it.
 	async fn replay_deferred(&self) -> Result<(), sqlx::Error> {
 		let parked: Vec<DeferredEvent> = sqlx::query_as(
-			"SELECT d.event_id, d.auth_subject, d.kind, d.sequence, d.concierge_user_id, d.email, d.email_verified, d.kyc_level, d.role, d.token_version, d.occurred_at \
+			"SELECT d.event_id, d.auth_subject, d.kind, d.sequence, d.concierge_user_id, d.email, d.email_verified, d.kyc_level, d.role, d.token_version, d.occurred_at, d.permissions \
 			 FROM bridge_deferred_event d JOIN users u ON u.auth_subject = d.auth_subject ORDER BY d.auth_subject, d.sequence",
 		)
 		.fetch_all(&self.pool)
@@ -575,6 +575,14 @@ impl BridgeConsumer {
 					record_roster_change(&mut tx, user_id, &from_role, role.as_str()).await?;
 				}
 			}
+			Kind::PermissionsChanged => {
+				sqlx::query("UPDATE users SET permissions = $2, last_lifecycle_sequence = $3, updated_at = now() WHERE auth_subject = $1")
+					.bind(subject)
+					.bind(&event.permissions)
+					.bind(sequence)
+					.execute(&mut *tx)
+					.await?;
+			}
 			Kind::SessionsRevoked => {
 				// The revoke FLOOR only ratchets up — GREATEST guards against an out-of-order
 				// lower value (the sequence guard already orders, this is belt-and-suspenders).
@@ -646,8 +654,8 @@ async fn refresh_profile_snapshot(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>
 /// which is the only signal an operator has for how long a subject has been stuck.
 async fn defer(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, event: &UserLifecycleEvent, concierge_user_id: Option<uuid::Uuid>) -> Result<(), sqlx::Error> {
 	sqlx::query(
-		"INSERT INTO bridge_deferred_event (event_id, auth_subject, kind, sequence, concierge_user_id, email, email_verified, kyc_level, role, token_version, occurred_at) \
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (event_id) DO NOTHING",
+		"INSERT INTO bridge_deferred_event (event_id, auth_subject, kind, sequence, concierge_user_id, email, email_verified, kyc_level, role, token_version, occurred_at, permissions) \
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (event_id) DO NOTHING",
 	)
 	.bind(&event.event_id)
 	.bind(&event.auth_subject)
@@ -660,6 +668,7 @@ async fn defer(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, event: &UserLifec
 	.bind(&event.role)
 	.bind(event.token_version as i64)
 	.bind(event.occurred_at)
+	.bind(&event.permissions)
 	.execute(&mut **tx)
 	.await?;
 	warn!(
@@ -688,6 +697,7 @@ struct DeferredEvent {
 	role: String,
 	token_version: i64,
 	occurred_at: i64,
+	permissions: Vec<String>,
 }
 
 impl DeferredEvent {
@@ -706,6 +716,7 @@ impl DeferredEvent {
 			email_verified: self.email_verified,
 			token_version: self.token_version as u64,
 			role: self.role,
+			permissions: self.permissions,
 		}
 	}
 }

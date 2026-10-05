@@ -485,6 +485,18 @@ mod book_route_tests {
 		async fn list_scoped_grants(&self, _: GrpcRequest<cc::ListScopedGrantsRequest>) -> Result<GrpcResponse<cc::ListScopedGrantsResponse>, Status> {
 			Err(Status::unimplemented("not reached by the book routes"))
 		}
+
+		async fn grant_permission(&self, _: GrpcRequest<cc::GrantPermissionRequest>) -> Result<GrpcResponse<cc::GrantPermissionResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
+		async fn revoke_permission(&self, _: GrpcRequest<cc::RevokePermissionRequest>) -> Result<GrpcResponse<cc::RevokePermissionResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
+
+		async fn list_grants(&self, _: GrpcRequest<cc::ListGrantsRequest>) -> Result<GrpcResponse<cc::ListGrantsResponse>, Status> {
+			Err(Status::unimplemented("not reached by the book routes"))
+		}
 	}
 
 	#[tonic::async_trait]

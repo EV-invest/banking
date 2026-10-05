@@ -101,6 +101,7 @@ fn event(subject: &str, kind: Kind, sequence: u64) -> UserLifecycleEvent {
 		// Base events carry no role (empty → the consumer mirrors it as Investor); a
 		// ROLE_CHANGED test overrides this field explicitly.
 		role: String::new(),
+		permissions: Vec::new(),
 	}
 }
 
@@ -252,6 +253,50 @@ async fn role_changed_mirrors_role_onto_the_projection() {
 				"role_of reads it back for the operator gate"
 			);
 		}
+	})
+	.await;
+}
+
+async fn permissions_of(pool: &PgPool, subject: &str) -> Option<Vec<String>> {
+	sqlx::query_scalar("SELECT permissions FROM users WHERE auth_subject = $1")
+		.bind(subject)
+		.fetch_one(pool)
+		.await
+		.unwrap()
+}
+
+/// PERMISSIONS_CHANGED is mirrored as sent, and a parked one replays with its set: a
+/// replay that dropped it would read as "holds nothing".
+#[tokio::test]
+async fn permissions_changed_mirrors_the_set_live_and_from_the_parking_lot() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let seated = unique_subject();
+	let mut changed = event(&seated, Kind::PermissionsChanged, 2);
+	changed.permissions = vec!["bank:treasury:read".into(), "bank:user_balance:read".into()];
+	let orphan = unique_subject();
+	let mut parked = event(&orphan, Kind::PermissionsChanged, 2);
+	parked.permissions = vec!["bank:payment:open".into()];
+
+	drive(&pool, vec![event(&seated, Kind::Created, 1), changed, parked], move |pool| async move {
+		assert_eq!(permissions_of(&pool, &seated).await, Some(vec!["bank:treasury:read".into(), "bank:user_balance:read".into()]));
+		assert_eq!(cursor_position(&pool).await, 3, "a kind this build names moves the cursor on");
+
+		PgUsers::new(pool.clone())
+			.provision(
+				domain::auth::AuthSubject::parse(&orphan).unwrap(),
+				domain::users::Email::parse("bridged@example.com").unwrap(),
+				true,
+			)
+			.await
+			.expect("first sign-in provisions the row");
+		let replayed = eventually(|| {
+			let (pool, orphan) = (pool.clone(), orphan.clone());
+			async move { permissions_of(&pool, &orphan).await == Some(vec!["bank:payment:open".into()]) }
+		})
+		.await;
+		assert!(replayed, "the parked set replays onto the row");
 	})
 	.await;
 }

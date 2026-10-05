@@ -1536,6 +1536,18 @@ mod admin_route_tests {
 				],
 			}))
 		}
+
+		async fn grant_permission(&self, _: GrpcRequest<cc::GrantPermissionRequest>) -> Result<GrpcResponse<cc::GrantPermissionResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn revoke_permission(&self, _: GrpcRequest<cc::RevokePermissionRequest>) -> Result<GrpcResponse<cc::RevokePermissionResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn list_grants(&self, _: GrpcRequest<cc::ListGrantsRequest>) -> Result<GrpcResponse<cc::ListGrantsResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
 	}
 
 	#[tonic::async_trait]

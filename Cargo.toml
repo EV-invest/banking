@@ -39,11 +39,12 @@ evbanking_auth = { path = "piggybank/auth" }
 evbanking_contracts = { path = "contracts" }
 # The shared verify-side flow (JWKS-cached local verification of concierge access
 # JWTs) — the BFF's request credential is the shell-set `ev_access` cookie.
-evconcierge_auth = { git = "https://github.com/EV-invest/concierge.git", rev = "7c8fd74c366eb3beb02353858b5fbaea2fc2cbf4" }
+evconcierge_auth = { git = "https://github.com/EV-invest/concierge.git", rev = "42bcc2de8c783f3fa825a17f9b95a66e00361e13" }
 # The concierge identity plane's wire contracts, pulled in by git like any downstream
 # consumer. The cabinet backend (the cross-plane orchestrator) and piggybank-core (the
 # one-way lifecycle bridge consumer + the governance-mail sender) depend on it. Both pins
-# sit at concierge main 7c8fd74 (merge #101): scope-admin grants answer an unknown and an
+# sit at 42bcc2d (concierge#104): `UserLifecycleEvent.permissions` + `PERMISSIONS_CHANGED`,
+# the seat's concrete `bank:*` set the bridge now mirrors. Under it, 7c8fd74 (merge #101): scope-admin grants answer an unknown and an
 # unusable email alike (FAILED_PRECONDITION), a grant past the scope's cap is
 # RESOURCE_EXHAUSTED, and a scope admin's roster leaves `preferred_name` empty too. Under
 # it, da2594d (merge #100) adds `AuthService.ExchangeCode` /
@@ -78,7 +79,7 @@ evconcierge_auth = { git = "https://github.com/EV-invest/concierge.git", rev = "
 # the two fee-policy mails of 824c604 (#70/#71: `FeePolicyApprovalMail` +
 # `FeePolicyNoticeMail`); the verified payout destination of #69; and the payment mails of
 # 1561338 (#62/#63).
-evconcierge_contracts = { git = "https://github.com/EV-invest/concierge.git", rev = "7c8fd74c366eb3beb02353858b5fbaea2fc2cbf4" }
+evconcierge_contracts = { git = "https://github.com/EV-invest/concierge.git", rev = "42bcc2de8c783f3fa825a17f9b95a66e00361e13" }
 form_urlencoded = "1"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 hex = "0.4"

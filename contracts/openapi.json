@@ -6019,6 +6019,65 @@
         }
       }
     },
+    "/concierge.v1.AuthService/PublishCatalog": {
+      "post": {
+        "tags": [
+          "concierge.v1.AuthService"
+        ],
+        "summary": "PublishCatalog",
+        "description": "A relying party publishes its tenant's catalog: the permissions and aliases its\n namespace defines. Authenticated by the client secret, like ExchangeCode. Refused\n (INVALID_ARGUMENT) when anything lies outside the tenant's namespace or an alias names\n a permission the catalog does not define; FAILED_PRECONDITION when `version` is older\n than the stored one, or equal with different content. Grants whose target the new\n catalog drops stay, grant nothing, and are listed as orphaned.",
+        "operationId": "concierge.v1.AuthService.PublishCatalog",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.PublishCatalogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.PublishCatalogResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/concierge.v1.AuthService/Refresh": {
       "post": {
         "tags": [
@@ -7667,6 +7726,65 @@
         }
       }
     },
+    "/concierge.v1.UserDirectory/GrantPermission": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "GrantPermission",
+        "description": "Grant a user a target inside a tenant's namespace: an alias (`sa:operator`), a\n permission (`sa:work:leads:read`) or a `*` pattern (`sa:work:*`). Held by the seats\n with `iam:tenants:grant`; nothing grants that permission, nor anything in the `iam`,\n `concierge`, `bank` or `seat` namespaces (INVALID_ARGUMENT). A target the tenant's\n catalog does not define grants nothing and is INVALID_ARGUMENT. An unknown user or\n address is NOT_FOUND; an address held by several accounts, or a disabled/held\n account, is FAILED_PRECONDITION with the reason. Re-granting what is held is a no-op.",
+        "operationId": "concierge.v1.UserDirectory.GrantPermission",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.GrantPermissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.GrantPermissionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/concierge.v1.UserDirectory/GrantScope": {
       "post": {
         "tags": [
@@ -7778,6 +7896,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.HoldUserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/ListGrants": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "ListGrants",
+        "description": "The active grants inside one tenant namespace, with each holder's identity. Same\n authority as GrantPermission.",
+        "operationId": "concierge.v1.UserDirectory.ListGrants",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ListGrantsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.ListGrantsResponse"
                 }
               }
             }
@@ -7955,6 +8132,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.ReinstateUserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/RevokePermission": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "RevokePermission",
+        "description": "Take a grant away. NOT_FOUND when the user holds no active grant of that target.",
+        "operationId": "concierge.v1.UserDirectory.RevokePermission",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.RevokePermissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.RevokePermissionResponse"
                 }
               }
             }
@@ -13342,6 +13578,25 @@
         "title": "CancelUserProposalRequest",
         "additionalProperties": false
       },
+      "concierge.v1.CatalogAlias": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "`\u003cnamespace\u003e:\u003cname\u003e`."
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "members"
+          }
+        },
+        "title": "CatalogAlias",
+        "additionalProperties": false
+      },
       "concierge.v1.ClientTokenResponse": {
         "type": "object",
         "properties": {
@@ -13708,6 +13963,90 @@
         "title": "GovernanceTick",
         "additionalProperties": false
       },
+      "concierge.v1.GrantHolder": {
+        "type": "object",
+        "properties": {
+          "grant": {
+            "title": "grant",
+            "$ref": "#/components/schemas/concierge.v1.PermissionGrant"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "legal_name": {
+            "type": "string",
+            "title": "legal_name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "preferred_name"
+          }
+        },
+        "title": "GrantHolder",
+        "additionalProperties": false
+      },
+      "concierge.v1.GrantPermissionRequest": {
+        "type": "object",
+        "allOf": [
+          {
+            "properties": {
+              "target": {
+                "type": "string",
+                "title": "target"
+              },
+              "reason": {
+                "type": "string",
+                "title": "reason",
+                "description": "Recorded on the grant and the audit row."
+              }
+            }
+          },
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "title": "email"
+                  }
+                },
+                "title": "email",
+                "required": [
+                  "email"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "title": "user_id"
+                  }
+                },
+                "title": "user_id",
+                "required": [
+                  "user_id"
+                ]
+              }
+            ]
+          }
+        ],
+        "title": "GrantPermissionRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.GrantPermissionResponse": {
+        "type": "object",
+        "properties": {
+          "grant": {
+            "title": "grant",
+            "$ref": "#/components/schemas/concierge.v1.PermissionGrant"
+          }
+        },
+        "title": "GrantPermissionResponse",
+        "additionalProperties": false
+      },
       "concierge.v1.GrantScopeRequest": {
         "type": "object",
         "allOf": [
@@ -13855,6 +14194,33 @@
           }
         },
         "title": "JwksResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListGrantsRequest": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "namespace",
+            "description": "The tenant namespace (`sa`)."
+          }
+        },
+        "title": "ListGrantsRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListGrantsResponse": {
+        "type": "object",
+        "properties": {
+          "holders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.GrantHolder"
+            },
+            "title": "holders",
+            "description": "Oldest grant first."
+          }
+        },
+        "title": "ListGrantsResponse",
         "additionalProperties": false
       },
       "concierge.v1.ListOwnerAdmissionsRequest": {
@@ -14767,6 +15133,52 @@
         "additionalProperties": false,
         "description": "How a consilium ended — over a revenue payout, over a payment, over a fund's fee\n terms, or over a fund's NAV mark — and, under APPROVAL_TOKEN_BURNED, that one of its\n tokens burned.\n\n ONE message for four subjects, additively. The burn notice already rides this shape\n under its own kind, so a payment consilium's outcome and burn ride it too, and so do a\n fee-policy consilium's and a valuation override's, rather than each growing a message\n of their own: `network` + `address` describe a payout, `source` + `destination`\n (+ `tier`, `reason`) describe a payment, `fund` + `proposed` (+ `current`, `reason`)\n describe fee terms, `fund` + `mark` (+ `reason`) describe a NAV mark, and the renderer\n switches on which description is filled. A caller fills exactly one and leaves the\n others empty."
       },
+      "concierge.v1.PermissionGrant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "id",
+            "format": "int64"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "target": {
+            "type": "string",
+            "title": "target"
+          },
+          "granted_by": {
+            "type": "string",
+            "title": "granted_by"
+          },
+          "granted_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "granted_at",
+            "format": "int64",
+            "description": "Unix SECONDS."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "orphaned": {
+            "type": "boolean",
+            "title": "orphaned",
+            "description": "The tenant's current catalog defines nothing this target names: it grants nothing."
+          }
+        },
+        "title": "PermissionGrant",
+        "additionalProperties": false,
+        "description": "One grant of a target inside a tenant's namespace."
+      },
       "concierge.v1.ProposalVote": {
         "type": "string",
         "title": "ProposalVote",
@@ -14777,6 +15189,49 @@
           "PROPOSAL_VOTE_AGAINST"
         ],
         "description": "Deliberately NEUTRAL verbs, where the owner consilia use remove/keep and\n admit/reject. Three kinds share this vote, so a kind-specific verb would only mean\n something read against UserProposal.kind — and a vocabulary that is correct only when\n cross-referenced is one that eventually gets rendered wrong. The kind-specific verb\n belongs on the SURFACE, which knows the kind; this is which way the voter pushed."
+      },
+      "concierge.v1.PublishCatalogRequest": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "title": "client_id"
+          },
+          "client_secret": {
+            "type": "string",
+            "title": "client_secret"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64",
+            "description": "Monotonic per client (a build timestamp); at most 2^63-1."
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "permissions"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.CatalogAlias"
+            },
+            "title": "aliases"
+          }
+        },
+        "title": "PublishCatalogRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.PublishCatalogResponse": {
+        "type": "object",
+        "title": "PublishCatalogResponse",
+        "additionalProperties": false
       },
       "concierge.v1.RefreshClientTokenRequest": {
         "type": "object",
@@ -14876,6 +15331,61 @@
           }
         },
         "title": "ResignOwnershipRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.RevokePermissionRequest": {
+        "type": "object",
+        "allOf": [
+          {
+            "properties": {
+              "target": {
+                "type": "string",
+                "title": "target"
+              },
+              "reason": {
+                "type": "string",
+                "title": "reason",
+                "description": "Recorded on the audit row."
+              }
+            }
+          },
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "title": "email"
+                  }
+                },
+                "title": "email",
+                "required": [
+                  "email"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "title": "user_id"
+                  }
+                },
+                "title": "user_id",
+                "required": [
+                  "user_id"
+                ]
+              }
+            ]
+          }
+        ],
+        "title": "RevokePermissionRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.RevokePermissionResponse": {
+        "type": "object",
+        "title": "RevokePermissionResponse",
         "additionalProperties": false
       },
       "concierge.v1.RevokeScopeRequest": {
@@ -15490,7 +16000,15 @@
               "$ref": "#/components/schemas/concierge.v1.ScopedGrant"
             },
             "title": "scopes",
-            "description": "The caller's ACTIVE scoped grants. Filled by GetMe only — every other RPC returning\n a UserProfile leaves it empty, so an empty list elsewhere means \"not reported\", not\n \"holds none\". A global role is NOT folded in here: a panel that admits global\n admins/owners reads `role` above for that."
+            "description": "The caller's ACTIVE scoped grants, as the `\u003ctenant\u003e:operator`/`:admin` grants of the tenant\n whose legacy scope this is. Filled by GetMe only — every other RPC returning\n a UserProfile leaves it empty, so an empty list elsewhere means \"not reported\", not\n \"holds none\". A global role is NOT folded in here: a panel that admits global\n admins/owners reads `role` above for that."
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "permissions",
+            "description": "What the caller may do, concrete: no alias, no wildcard. Filled by GetMe only. To a\n relying party, its tenant's namespace and nothing else; to a first-party session, the\n seat's permissions plus every tenant's."
           }
         },
         "title": "UserProfile",
