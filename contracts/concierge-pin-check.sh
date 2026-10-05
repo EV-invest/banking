@@ -44,10 +44,16 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 git -C "$work" init -q
 git -C "$work" remote add origin "$remote"
-git -C "$work" fetch -q --depth=200 origin main
+# Full history, not `--depth`: a later shallow fetch (e.g. of tags) resets the shallow
+# boundary and truncates origin/main, so the ancestry check below answers "no" for every
+# pin (issues #371, #440). The repo is small enough to fetch whole.
+git -C "$work" fetch -q --tags origin main
 # Resolve the pin (rev or annotated tag) to a concrete commit, fetching the tag if needed.
-git -C "$work" fetch -q --depth=200 origin "$pin" 2>/dev/null || true
-git -C "$work" fetch -q --tags --depth=1 origin 2>/dev/null || true
+git -C "$work" fetch -q origin "$pin" 2>/dev/null || true
+if [ "$(git -C "$work" rev-parse --is-shallow-repository)" = "true" ]; then
+	echo "::error::the concierge clone is shallow, so ancestry of the pin cannot be decided" >&2
+	exit 1
+fi
 pin_commit="$(git -C "$work" rev-parse -q --verify "${pin}^{commit}" 2>/dev/null || git -C "$work" rev-parse -q --verify "$pin" 2>/dev/null || echo "")"
 if [ -z "$pin_commit" ]; then
 	echo "::error::pinned rev/tag '$pin' is not reachable from the concierge remote (orphaned or unpushed)" >&2
