@@ -68,8 +68,8 @@ export function TradeView({ service }: { service: string }) {
             <EmptyMedia variant="icon">
               <TriangleAlert className="size-5" />
             </EmptyMedia>
-            <EmptyTitle>{t("invest.notRegistered", { service })}</EmptyTitle>
-            <EmptyDescription>{t("invest.notRegisteredHint")}</EmptyDescription>
+            <EmptyTitle>{t("invest.notRegistered", "No fund is registered as “{service}”.", { service })}</EmptyTitle>
+            <EmptyDescription>{t("invest.notRegisteredHint", "Nothing is registered under this name. If you followed a link here, the product may never have been opened.")}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       </div>

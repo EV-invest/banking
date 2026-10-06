@@ -25,15 +25,15 @@ export function ValuationOverrideTerms({ terms }: { terms: ValuationOverride }) 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-ink-soft">{t("consilium.valuation.product")}</span>
+        <span className="text-xs font-medium text-ink-soft">{t("consilium.valuation.product", "Product")}</span>
         <span className="text-sm font-medium text-ink">{product}</span>
       </div>
-      <p className="text-xs text-ink-soft">{t("consilium.valuation.executes")}</p>
+      <p className="text-xs text-ink-soft">{t("consilium.valuation.executes", "If it passes, the fund is marked at this AUM whatever the NAV-move guard would have said, and its queued redemptions settle at the NAV that follows.")}</p>
     </div>
   );
 }
 
 /** The one-line name of a settled NAV mark in the room's history: "NAV mark · trading". */
 export function valuationWords(terms: ValuationOverride, t: Translate): string {
-  return `${t("consilium.valuation.mark")} · ${terms.service}`;
+  return `${t("consilium.valuation.mark", "NAV mark")} · ${terms.service}`;
 }

@@ -35,16 +35,16 @@ export function MobileStack({ pushed, onSelect, personal, sessions, name, sessio
           <DocumentsSection />
         ) : (
           <>
-            <MobileGroup label={t("settings.group.cabinet")}>
+            <MobileGroup label={t("settings.group.cabinet", "Cabinet")}>
               <PreferencesCard loading={personal.loading} form={personal.form} fieldErrors={personal.fieldErrors} onChange={personal.onChange} />
               <MobileNotificationsCard onOpen={() => onSelect("notifications")} />
             </MobileGroup>
-            <MobileGroup label={t("ui.profile")}>
+            <MobileGroup label={t("ui.profile", "Profile")}>
               <ProfileSummaryCard loading={personal.loading} name={name} email={personal.email} verified={personal.verified} />
               <PersonalDetailsCard onOpen={() => onSelect("personal")} />
               <MobileSecurityCard loading={personal.loading} email={personal.email} sessions={sessionList} onOpenSessions={() => onSelect("sessions")} />
             </MobileGroup>
-            <MobileGroup label={t("settings.group.help")}>
+            <MobileGroup label={t("settings.group.help", "Help")}>
               <MobileHelpCard onOpen={() => onSelect("documents")} />
             </MobileGroup>
             {/* Last on the screen, under no eyebrow: leaving is not a setting of any group. */}

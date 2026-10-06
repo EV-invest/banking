@@ -20,16 +20,16 @@ export function FeePolicyTerms({ terms }: { terms: ConsiliumFeePolicyTerms }) {
       <FeeTermsDiff from={terms.from} to={terms.to} />
       <div className="flex flex-col gap-1.5 text-xs text-ink-soft">
         <span className="tabular-nums">
-          {t("consilium.feePolicy.effectiveFrom", {
+          {t("consilium.feePolicy.effectiveFrom", "Takes effect · {at}", {
             // "0" is "as soon as allowed": the 24h notice is counted from the owners'
             // approval, so the moment the terms bind is not known until they carry it.
-            at: hasStamp(terms.effective_from) ? formatMoment(terms.effective_from, locale) : t("consilium.feePolicy.asSoonAsAllowed"),
+            at: hasStamp(terms.effective_from) ? formatMoment(terms.effective_from, locale) : t("consilium.feePolicy.asSoonAsAllowed", "As soon as allowed — 24 hours after the owners carry it, while anyone holds units"),
           })}
         </span>
-        <span className="tabular-nums">{t("consilium.feePolicy.holders", { n: terms.holder_count })}</span>
+        <span className="tabular-nums">{t("consilium.feePolicy.holders", "{n, plural, one {# holder will be notified} other {# holders will be notified}}", { n: terms.holder_count })}</span>
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-ink-soft">{t("consilium.feePolicy.reason")}</span>
+        <span className="text-xs font-medium text-ink-soft">{t("consilium.feePolicy.reason", "Reason given")}</span>
         {/* The requester's words, whole, set apart from the room's own. */}
         <blockquote className="whitespace-pre-line border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
       </div>

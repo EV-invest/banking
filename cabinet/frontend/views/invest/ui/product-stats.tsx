@@ -21,7 +21,7 @@ export function BackLink() {
   return (
     <Link href="/invest" className="inline-flex items-center gap-1.5 rounded-sm text-sm text-ink-soft outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
       <ArrowLeft className="size-4" />
-      {t("invest.allProducts")}
+      {t("invest.allProducts", "All products")}
     </Link>
   );
 }
@@ -34,12 +34,12 @@ export function HoldingStats({ position }: { position: Position }) {
   const trend = valence(position.pnl);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <StatTile variant="box" label={t("invest.units")} value={formatUnits(position.units, locale)} tip="invest.position.units" />
-      <StatTile variant="box" label={t("invest.nav")} value={formatUsdt(position.nav, locale)} tip="invest.position.nav" />
-      <StatTile variant="box" label={t("invest.value")} value={`${formatUsdt(position.value, locale)} USDT`} emphasis tip="invest.position.value" />
+      <StatTile variant="box" label={t("invest.units", "Units")} value={formatUnits(position.units, locale)} tip="invest.position.units" />
+      <StatTile variant="box" label={t("invest.nav", "NAV")} value={formatUsdt(position.nav, locale)} tip="invest.position.nav" />
+      <StatTile variant="box" label={t("invest.value", "Value")} value={`${formatUsdt(position.value, locale)} USDT`} emphasis tip="invest.position.value" />
       <StatTile
         variant="box"
-        label={t("invest.pnl")}
+        label={t("invest.pnl", "P&L")}
         value={`${formatSignedUsdt(position.pnl, locale)} USDT`}
         tip="invest.position.pnl"
         emphasis
@@ -60,12 +60,12 @@ export function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: bo
         <div className="space-y-1">
           {/* The same label the holding tiles wear, so the slot reads the same whether or not the caller holds units. */}
           <p className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
-            {t("invest.navPerUnit")}
+            {t("invest.navPerUnit", "NAV / unit")}
             <TipAnchor anchor="invest.position.nav" />
           </p>
           <p className="text-2xl font-semibold tabular-nums">{nav ? `${formatUsdt(nav.nav, locale)} USDT` : "—"}</p>
         </div>
-        <p className="max-w-sm text-sm text-ink-soft">{t(unmarked ? "invest.notYetValuedHint" : "invest.noUnitsInFund")}</p>
+        <p className="max-w-sm text-sm text-ink-soft">{(unmarked ? t("invest.notYetValuedHint", "Not yet valued — the first subscription prices at 1.0.") : t("invest.noUnitsInFund", "You hold no units in this fund yet."))}</p>
       </CardContent>
     </Card>
   );
@@ -91,8 +91,8 @@ export function ProductMissing({ service, error }: { service: string; error: str
       <Card>
         <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-ink-soft">
           <TriangleAlert className="size-6" />
-          <p className="text-sm">{error ?? t("invest.notRegistered", { service })}</p>
-          <p className="max-w-sm text-xs">{t("invest.notRegisteredHint")}</p>
+          <p className="text-sm">{error ?? t("invest.notRegistered", "No fund is registered as “{service}”.", { service })}</p>
+          <p className="max-w-sm text-xs">{t("invest.notRegisteredHint", "Nothing is registered under this name. If you followed a link here, the product may never have been opened.")}</p>
         </CardContent>
       </Card>
     </PageFrame>

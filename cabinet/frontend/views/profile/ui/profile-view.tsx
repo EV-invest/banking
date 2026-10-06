@@ -91,7 +91,7 @@ export function ProfileView() {
   const edit = (className: string) => (
     // i18n-max: 20 — a `shrink-0` outline Button beside the `min-w-0` heading column.
     <Button asChild variant="outline" className={cn("border-border", className)}>
-      <Link href="/settings?section=personal">{t("profile.editInSettings")}</Link>
+      <Link href="/settings?section=personal">{t("profile.editInSettings", "Edit in Settings")}</Link>
     </Button>
   );
   const personal = <PersonalCard loading={loading} profile={profile ?? null} email={email} />;
@@ -100,7 +100,7 @@ export function ProfileView() {
   const security = <SecurityCard loading={loading} email={email} sessions={sessionList.data} sessionsFailed={!sessionList.data && !!sessionList.error} />;
 
   return (
-    <PageFrame title={t("ui.profile")} description={t("profile.subtitle")} actions={edit("shrink-0")} appBar={<MobileAppBar title={t("ui.profile")} backHref="/settings" />}>
+    <PageFrame title={t("ui.profile", "Profile")} description={t("profile.subtitle", "Who you are on the platform and how your account stands")} actions={edit("shrink-0")} appBar={<MobileAppBar title={t("ui.profile", "Profile")} backHref="/settings" />}>
       {error && (
         <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
           {error}
@@ -112,19 +112,19 @@ export function ProfileView() {
         <InitialsAvatar initials={initialsOfName(name, email)} className="size-16 text-2xl lg:text-xl" />
         <div className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center lg:items-start lg:text-left">
           <div className="flex min-w-0 flex-col items-center gap-1 lg:flex-row lg:items-baseline lg:gap-3">
-            {loading ? <Skeleton className="h-6 w-40" /> : <p className="truncate text-lg font-semibold text-ink lg:text-xl">{name || t("ui.account")}</p>}
-            {loading ? <Skeleton className="h-4 w-48" /> : <p className="truncate text-sm text-ink-soft">{email || t("auth.notSignedIn")}</p>}
+            {loading ? <Skeleton className="h-6 w-40" /> : <p className="truncate text-lg font-semibold text-ink lg:text-xl">{name || t("ui.account", "Account")}</p>}
+            {loading ? <Skeleton className="h-4 w-48" /> : <p className="truncate text-sm text-ink-soft">{email || t("auth.notSignedIn", "Not signed in")}</p>}
           </div>
           {!loading && (
             // i18n-max: 12 per Pill — they sit beside the truncated display name.
             <div className="mt-1 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-              {profile?.email_verified && <Pill tone="success" icon={BadgeCheck}>{t("ui.verified")}</Pill>}
+              {profile?.email_verified && <Pill tone="success" icon={BadgeCheck}>{t("ui.verified", "Verified")}</Pill>}
               {profile?.status && <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill>}
-              {profile?.kyc_level !== undefined && <Pill tone="neutral">{t("profile.kycLevelPill", { n: profile.kyc_level })}</Pill>}
+              {profile?.kyc_level !== undefined && <Pill tone="neutral">{t("profile.kycLevelPill", "KYC level {n}", { n: profile.kyc_level })}</Pill>}
               {profile?.role && <Pill tone="neutral">{enumLabel("admin.role", profile.role, t)}</Pill>}
             </div>
           )}
-          {oldest > 0 && <p className="mt-1 text-xs text-ink-soft">{t("profile.activeSince", { date: formatDay(String(oldest), locale) })}</p>}
+          {oldest > 0 && <p className="mt-1 text-xs text-ink-soft">{t("profile.activeSince", "Active since {date}", { date: formatDay(String(oldest), locale) })}</p>}
         </div>
         {/* Mobile puts the action in the hero; desktop has it in the page heading. */}
         {edit("w-full lg:hidden")}
@@ -133,13 +133,13 @@ export function ProfileView() {
       {/* Stat strip — the same tiles and arrangement as Home, so a figure reads the
           same on both screens: a 2×2 card grid on mobile, one divided strip from `lg`. */}
       <StaggerItem as={Card} className={cn(STAT_STRIP, "rounded-none border-0 bg-transparent py-0 shadow-none lg:rounded-xl lg:border lg:bg-card lg:py-5 lg:shadow-sm")}>
-        <StatTile label={t("dash.portfolioValue")} value={positions.isLoading ? null : value} format={usd} hint={t("profile.hintAtNav")} unavailable={posFailed} />
+        <StatTile label={t("dash.portfolioValue", "Portfolio value")} value={positions.isLoading ? null : value} format={usd} hint={t("profile.hintAtNav", "at current NAV")} unavailable={posFailed} />
         <StatDivider />
-        <StatTile label={t("dash.unrealizedPnl")} value={positions.isLoading ? null : pnl} format={signedUsd} tone={valence(pnl)} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" unavailable={posFailed} />
+        <StatTile label={t("dash.unrealizedPnl", "Unrealized P&L")} value={positions.isLoading ? null : pnl} format={signedUsd} tone={valence(pnl)} hint={t("dash.hintAcrossPositions", "across all positions")} tip="dashboard.stats.unrealized-pnl" unavailable={posFailed} />
         <StatDivider />
-        <StatTile label={t("dash.available")} value={wallet.isLoading ? null : num(wallet.data?.balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" unavailable={walletFailed} />
+        <StatTile label={t("dash.available", "Available")} value={wallet.isLoading ? null : num(wallet.data?.balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod", "auto-deploys at EOD")} tip="dashboard.stats.available" unavailable={walletFailed} />
         <StatDivider />
-        <StatTile label={t("dash.activeStrategies")} value={positions.isLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} unavailable={posFailed} />
+        <StatTile label={t("dash.activeStrategies", "Active strategies")} value={positions.isLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions", "fund positions")} unavailable={posFailed} />
       </StaggerItem>
 
       {/* ── Mobile (Figma cabinet/mobile/profile) ────────────────────────── */}

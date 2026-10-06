@@ -28,13 +28,13 @@ export function FeePendingNote({ pending }: { pending: FeePolicy["pending"] }) {
     basis: basisLabel(pending.basis, t),
     period: crystallizationLabel(pending.crystallization, t),
   };
-  const terms = t((pending.hurdle_bps ?? 0) > 0 ? "admin.fees.summaryHurdle" : "admin.fees.summary", words);
+  const terms = ((pending.hurdle_bps ?? 0) > 0 ? t("admin.fees.summaryHurdle", "{management} p.a. · {performance} of the gain above {hurdle} · {basis} · {period}", words) : t("admin.fees.summary", "{management} p.a. · {performance} of the gain · {basis} · {period}", words));
   return (
     <Note tone="accent">
       {pending.state === "scheduled"
         ? // The generated type admits a number for an int64; the wire carries a string.
-          t("invest.feeChangeScheduled", { at: formatMoment(String(pending.effective_from ?? "0"), locale), terms })
-        : t("invest.feeChangeProposed", { terms })}
+          t("invest.feeChangeScheduled", "Terms change on {at}: {terms}.", { at: formatMoment(String(pending.effective_from ?? "0"), locale), terms })
+        : t("invest.feeChangeProposed", "A change is proposed and awaits the owners: {terms}.", { terms })}
     </Note>
   );
 }

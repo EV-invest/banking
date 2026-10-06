@@ -108,7 +108,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   const label = networkLabel(network);
 
   return (
-    <WalletScreen title={t("ui.withdrawUsdt")} subtitle={t("wallet.withdrawSub")} back="/wallet">
+    <WalletScreen title={t("ui.withdrawUsdt", "Withdraw USDT")} subtitle={t("wallet.withdrawSub", "Send funds to an external address — one balance, any network")} back="/wallet">
       <StaggerItem>
         <Settled
           loading={walletLoading || profileLoading}
@@ -117,16 +117,16 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
         {walletLoading || profileLoading ? null : gated ? (
         // The balance is not hidden — it is on the wallet screen this one links back to.
         // Only the send is closed, and this says so and offers the one way to open it.
-        <VerificationRequired title={t("wallet.withdrawVerifyTitle")} description={t("wallet.withdrawVerifyBody")} className="lg:max-w-140" />
+        <VerificationRequired title={t("wallet.withdrawVerifyTitle", "Verify your identity to withdraw")} description={t("wallet.withdrawVerifyBody", "Withdrawals open once your identity is verified. Your balance is untouched in the meantime.")} className="lg:max-w-140" />
       ) : networks.length === 0 ? (
-        <p className="text-sm text-ink-soft">{error ?? t("wallet.noWithdrawRails")}</p>
+        <p className="text-sm text-ink-soft">{error ?? t("wallet.noWithdrawRails", "No withdrawal networks are available right now — check back soon.")}</p>
       ) : (
         // Form 560 + review 400 side by side is the Figma at 1440; below that the content
         // column can't hold both, so the review wraps under the form rather than overflowing.
         <div className="flex flex-col gap-3.5 lg:flex-row lg:flex-wrap lg:items-start lg:gap-5">
           <div className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:w-140 lg:max-w-full lg:flex-none lg:p-6")}>
             <FieldLabel>
-              {t("wallet.networkCaps")}
+              {t("wallet.networkCaps", "NETWORK")}
               <TipAnchor anchor="wallet.withdraw.network" />
             </FieldLabel>
             <NetworkSegments
@@ -136,12 +136,12 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 setSelected(n);
                 setConfirming(null);
               }}
-              label={t("wallet.withdrawalNetwork")}
+              label={t("wallet.withdrawalNetwork", "Withdrawal network")}
             />
 
             <div className="flex flex-col gap-2">
               <FieldLabel htmlFor={addressId}>
-                {t("wallet.destinationAddressCaps")}
+                {t("wallet.destinationAddressCaps", "DESTINATION ADDRESS")}
                 <TipAnchor anchor="wallet.withdraw.destination" />
               </FieldLabel>
               <input
@@ -151,7 +151,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   setAddress(e.target.value);
                   setConfirming(null);
                 }}
-                placeholder={t("wallet.placeholder.railAddress", { network: label })}
+                placeholder={t("wallet.placeholder.railAddress", "{network} address", { network: label })}
                 spellCheck={false}
                 className={FIELD}
               />
@@ -159,9 +159,9 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
 
             <div className="flex flex-col gap-2">
               <span className="flex items-center justify-between gap-2">
-                <FieldLabel htmlFor={amountId}>{t("wallet.amountCaps")}</FieldLabel>
+                <FieldLabel htmlFor={amountId}>{t("wallet.amountCaps", "AMOUNT")}</FieldLabel>
                 <span className="flex items-center gap-1.5 text-xs text-ink-soft">
-                  {t("wallet.availPrefix", { amount: formatUsdt(opts?.withdrawable, locale) })}
+                  {t("wallet.availPrefix", "Avail: {amount}", { amount: formatUsdt(opts?.withdrawable, locale) })}
                   <TipAnchor anchor="wallet.withdraw.available" />
                 </span>
               </span>
@@ -187,24 +187,24 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   }}
                   className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-primary-ink outline-none transition-colors hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {t("ui.max")}
+                  {t("ui.max", "Max")}
                 </button>
               </span>
             </div>
 
             <div className="flex flex-col gap-2.5 rounded-lg bg-secondary px-3.5 py-3">
-              <Row label={t("wallet.networkFee")} value={`${formatUsdt(opts?.withdrawal_fee, locale)} USDT`} tip="wallet.withdraw.network-fee" />
+              <Row label={t("wallet.networkFee", "Network fee")} value={`${formatUsdt(opts?.withdrawal_fee, locale)} USDT`} tip="wallet.withdraw.network-fee" />
               <div className="h-px w-full bg-border" />
-              <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(youReceive, locale)} USDT`} tone="text-positive" tip="wallet.withdraw.you-receive" />
+              <Row label={t("wallet.youWillReceive", "You will receive")} value={`${formatUsdt(youReceive, locale)} USDT`} tone="text-positive" tip="wallet.withdraw.you-receive" />
             </div>
 
             {/* `wallet.withdraw.queueing` / `.review` are section-type tips (descriptor blocks,
                 not inline ⓘ), so that copy is stated inline here rather than anchored. */}
             {queuedUnits > 0n && amountUnits > 0n && (
-              <p className="text-xs text-accent-warn">{t("wallet.exceedsInstant", { amount: formatUsdt(fromBaseUnits(queuedUnits), locale), network: label })}</p>
+              <p className="text-xs text-accent-warn">{t("wallet.exceedsInstant", "~{amount} USDT exceeds instant {network} liquidity and will be queued until the network is topped up.", { amount: formatUsdt(fromBaseUnits(queuedUnits), locale), network: label })}</p>
             )}
             <p className="text-xs text-ink-soft">
-              {t("wallet.minInstantQueued", { min: formatUsdt(opts?.min_withdrawal, locale), network: label, instant: formatUsdt(opts?.instant, locale) })}
+              {t("wallet.minInstantQueued", "Min {min} USDT · instant {network} {instant} · rest queued", { min: formatUsdt(opts?.min_withdrawal, locale), network: label, instant: formatUsdt(opts?.instant, locale) })}
             </p>
 
             <Button
@@ -214,7 +214,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
               onClick={() => setConfirming({ network, address, amount, fee: opts?.withdrawal_fee, instant: opts?.instant, rails })}
               className="w-full font-semibold"
             >
-              {t("wallet.reviewWithdrawal")}
+              {t("wallet.reviewWithdrawal", "Review withdrawal")}
             </Button>
           </div>
 
@@ -228,11 +228,11 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 <Panel key="receipt" from="bottom" className={cn(WALLET_CARD, "flex gap-3 p-4.5 lg:p-5")}>
                   <Clock className="mt-0.5 size-4 shrink-0 text-accent-warn" />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink">{t(done.state === "queued" ? "wallet.withdrawalQueued" : "wallet.withdrawalSubmitted")}</p>
+                    <p className="text-sm font-semibold text-ink">{(done.state === "queued" ? t("wallet.withdrawalQueued", "Withdrawal queued") : t("wallet.withdrawalSubmitted", "Withdrawal submitted"))}</p>
                     <p className="text-xs text-ink-soft">
                       {done.state === "queued"
-                        ? t("wallet.receiptQueued", { amount: formatUsdt(done.net_amount, locale), address: shortAddress(done.address), network: networkLabel(done.network) })
-                        : t("wallet.receiptSubmitted", { amount: formatUsdt(done.net_amount, locale), address: shortAddress(done.address) })}
+                        ? t("wallet.receiptQueued", "{amount} USDT to {address} is queued — it is sent once {network} liquidity is topped up.", { amount: formatUsdt(done.net_amount, locale), address: shortAddress(done.address), network: networkLabel(done.network) })
+                        : t("wallet.receiptSubmitted", "{amount} USDT is on its way to {address} — pending on-chain confirmation.", { amount: formatUsdt(done.net_amount, locale), address: shortAddress(done.address) })}
                     </p>
                   </div>
                 </Panel>
@@ -242,7 +242,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 <Panel key="error" from="bottom" className={cn(WALLET_CARD, "flex gap-3 border-accent-error/50 p-4.5 lg:p-5")}>
                   <TriangleAlert className="mt-0.5 size-4 shrink-0 text-accent-error" />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink">{t("wallet.withdrawalFailed")}</p>
+                    <p className="text-sm font-semibold text-ink">{t("wallet.withdrawalFailed", "Withdrawal failed")}</p>
                     <p className="text-xs text-ink-soft">{error}</p>
                   </div>
                 </Panel>
@@ -250,10 +250,10 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
 
               {confirming && (
                 <Panel key="review" from="bottom" className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:p-5")}>
-                  <p className="text-sm font-semibold text-ink">{t("wallet.reviewWithdrawal")}</p>
+                  <p className="text-sm font-semibold text-ink">{t("wallet.reviewWithdrawal", "Review withdrawal")}</p>
                   <div className="flex flex-col gap-2.5">
                     <Row
-                      label={t("ui.network")}
+                      label={t("ui.network", "Network")}
                       value={
                         <span className="inline-flex items-center gap-1.5">
                           <NetworkMark network={confirming.network} className="size-3.5 shrink-0" />
@@ -261,16 +261,16 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                         </span>
                       }
                     />
-                    <Row label={t("ui.destination")} value={shortAddress(confirming.address)} />
-                    <Row label={t("ui.amount")} value={`${formatUsdt(confirming.amount, locale)} USDT`} />
-                    <Row label={t("wallet.networkFee")} value={`${formatUsdt(confirming.fee, locale)} USDT`} />
+                    <Row label={t("ui.destination", "Destination")} value={shortAddress(confirming.address)} />
+                    <Row label={t("ui.amount", "Amount")} value={`${formatUsdt(confirming.amount, locale)} USDT`} />
+                    <Row label={t("wallet.networkFee", "Network fee")} value={`${formatUsdt(confirming.fee, locale)} USDT`} />
                     <div className="h-px w-full bg-border" />
-                    <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee), locale)} USDT`} tone="text-positive" />
+                    <Row label={t("wallet.youWillReceive", "You will receive")} value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee), locale)} USDT`} tone="text-positive" />
                   </div>
-                  <p className="break-all font-mono-tech text-xs text-ink-soft">{t("wallet.toAddressLine", { address: confirming.address })}</p>
+                  <p className="break-all font-mono-tech text-xs text-ink-soft">{t("wallet.toAddressLine", "To {address}", { address: confirming.address })}</p>
                   {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
                     <p className="text-xs text-accent-warn">
-                      {t("wallet.exceedsInstant", {
+                      {t("wallet.exceedsInstant", "~{amount} USDT exceeds instant {network} liquidity and will be queued until the network is topped up.", {
                         amount: formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant)), locale),
                         network: networkLabel(confirming.network),
                       })}
@@ -281,13 +281,13 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   <div className="flex gap-2">
                     <Button type="button" size="lg" disabled={submitting} onClick={submit} className="min-w-0 flex-1 font-semibold">
                       {submitting && <Spinner aria-hidden />}
-                      <span className="truncate">{t("wallet.confirmWithdrawal")}</span>
+                      <span className="truncate">{t("wallet.confirmWithdrawal", "Confirm withdrawal")}</span>
                     </Button>
                     <Button type="button" size="lg" variant="outline" disabled={submitting} onClick={() => setConfirming(null)} className="shrink-0">
-                      {t("ui.back")}
+                      {t("ui.back", "Back")}
                     </Button>
                   </div>
-                  <p className="text-xs text-ink-soft">{t("wallet.acceptedInstantly", { network: networkLabel(confirming.network) })}</p>
+                  <p className="text-xs text-ink-soft">{t("wallet.acceptedInstantly", "Accepted; if {network} liquidity is short right now, it queues until topped up — you'll be notified.", { network: networkLabel(confirming.network) })}</p>
                 </Panel>
               )}
             </PanelPresence>

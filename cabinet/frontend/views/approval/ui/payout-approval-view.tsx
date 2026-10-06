@@ -29,6 +29,7 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useState } from "react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Progress, Separator, Spinner } from "@evinvest/uikit";
 
@@ -58,6 +59,61 @@ import { FeePolicyTermsBlock, renderableFeePolicy } from "@/views/approval/ui/fe
 import { HolderGrantTermsBlock, SeedCapitalTermsBlock, renderableHolderGrant, renderableSeedCapital } from "@/views/approval/ui/ownership-terms";
 import { PaymentTermsBlock, renderablePayment } from "@/views/approval/ui/payment-terms";
 import { ValuationTermsBlock, renderableValuation } from "@/views/approval/ui/valuation-terms";
+
+type ApprovalSubject = "valuation" | "payment" | "feePolicy" | "holderGrant" | "seedCapital";
+
+interface ApprovalWords {
+  title: string;
+  lead: (initiator: string) => string;
+  approve: string;
+  approvedTitle: string;
+  rejectedTitle: string;
+  freshBody: string;
+}
+
+// One family of words per kind of thing being approved; the rest of the page is shared.
+const WORDS: Record<ApprovalSubject, (t: Translate) => ApprovalWords> = {
+  valuation: (t) => ({
+    title: t("approval.valuation.title", "Approve a NAV mark"),
+    lead: (initiator) => t("approval.valuation.lead", "{initiator} has asked to mark a fund at a value the NAV-move guard refuses. A mark past the guard is never one person's decision, so it needs the owners to agree.", { initiator }),
+    approve: t("approval.valuation.approve", "Approve this mark"),
+    approvedTitle: t("approval.valuation.decided.approvedTitle", "You approved this mark"),
+    rejectedTitle: t("approval.valuation.decided.rejectedTitle", "You rejected this mark"),
+    freshBody: t("approval.valuation.decided.freshBody", "Your answer has been recorded. There is nothing further to do here — the fund is marked once enough owners have agreed."),
+  }),
+  payment: (t) => ({
+    title: t("approval.payment.title", "Approve a fund payment"),
+    lead: (initiator) => t("approval.payment.lead", "{initiator} has asked to move money the fund owns, as set out below. Moving the fund's own money is never one person's decision, so it needs the owners to agree.", { initiator }),
+    approve: t("approval.payment.approve", "Approve this payment"),
+    approvedTitle: t("approval.payment.decided.approvedTitle", "You approved this payment"),
+    rejectedTitle: t("approval.payment.decided.rejectedTitle", "You rejected this payment"),
+    freshBody: t("approval.payment.decided.freshBody", "Your answer has been recorded. There is nothing further to do here — the payment goes ahead once enough owners have agreed."),
+  }),
+  feePolicy: (t) => ({
+    title: t("approval.feePolicy.title", "Approve a change of fee terms"),
+    lead: (initiator) => t("approval.feePolicy.lead", "{initiator} has asked to change what a product charges its investors, as set out below. Tightening the terms beyond what the prospectus promised is never one person's decision, so it needs the owners to agree.", { initiator }),
+    approve: t("approval.feePolicy.approve", "Approve this change"),
+    approvedTitle: t("approval.feePolicy.decided.approvedTitle", "You approved this change"),
+    rejectedTitle: t("approval.feePolicy.decided.rejectedTitle", "You rejected this change"),
+    freshBody: t("approval.feePolicy.decided.freshBody", "Your answer has been recorded. There is nothing further to do here — the change is scheduled once enough owners have agreed, and binds 24 hours after that while anyone holds units."),
+  }),
+  holderGrant: (t) => ({
+    title: t("approval.holderGrant.title", "Approve a holder grant"),
+    lead: (initiator) => t("approval.holderGrant.lead", "{initiator} has asked to seat a person on one of the platform's own allocations, as set out below. Who holds the platform's money is never one person's decision, so it needs the owners to agree.", { initiator }),
+    approve: t("approval.holderGrant.approve", "Approve this grant"),
+    approvedTitle: t("approval.holderGrant.decided.approvedTitle", "You approved this grant"),
+    rejectedTitle: t("approval.holderGrant.decided.rejectedTitle", "You rejected this grant"),
+    freshBody: t("approval.holderGrant.decided.freshBody", "Your answer has been recorded. There is nothing further to do here — the units are minted once enough owners have agreed."),
+  }),
+  seedCapital: (t) => ({
+    title: t("approval.seedCapital.title", "Approve seed capital"),
+    lead: (initiator) => t("approval.seedCapital.lead", "{initiator} has asked to attribute a transfer to the treasury as a person's seed of the platform's capital, as set out below. Whose capital it is is never one person's decision, so it needs the owners to agree.", { initiator }),
+    approve: t("approval.seedCapital.approve", "Approve this seed"),
+    approvedTitle: t("approval.seedCapital.decided.approvedTitle", "You approved this seed"),
+    rejectedTitle: t("approval.seedCapital.decided.rejectedTitle", "You rejected this seed"),
+    freshBody: t("approval.seedCapital.decided.freshBody", "Your answer has been recorded. There is nothing further to do here — the deposit is booked once enough owners have agreed."),
+  }),
+};
 
 export function PayoutApprovalView({ token }: { token: string }) {
   const t = useT();
@@ -173,7 +229,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
           ? renderableHolderGrant(grant)
           : seed !== null && renderableSeedCapital(seed);
   // Past the `renderable` guard below, the last arm can only be a seed.
-  const words = valuation ? "approval.valuation" : payment ? "approval.payment" : feePolicy ? "approval.feePolicy" : grant ? "approval.holderGrant" : "approval.seedCapital";
+  const words = WORDS[valuation ? "valuation" : payment ? "payment" : feePolicy ? "feePolicy" : grant ? "holderGrant" : "seedCapital"](t);
   const burned = !settled && (invitation.attempts_remaining ?? 0) <= 0;
   const expired = !settled && hasExpired(invitation.expires_at);
   const threshold = invitation.threshold ?? 0;
@@ -194,9 +250,9 @@ export function PayoutApprovalView({ token }: { token: string }) {
     <ApprovalPage>
       <Card>
         <CardHeader>
-          <ApprovalTitle>{t(`${words}.title`)}</ApprovalTitle>
+          <ApprovalTitle>{words.title}</ApprovalTitle>
           <CardDescription className="text-balance">
-            {t(`${words}.lead`, { initiator: invitation.initiator_email })}
+            {words.lead(invitation.initiator_email)}
           </CardDescription>
         </CardHeader>
 
@@ -204,7 +260,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
           {valuation ? (
             <ValuationTermsBlock terms={valuation} payloadHash={invitation.payload_hash} />
           ) : payment ? (
-            <PaymentTermsBlock terms={payment} payloadHash={invitation.payload_hash} reasonLabel={t("approval.payment.reasonLabel")} />
+            <PaymentTermsBlock terms={payment} payloadHash={invitation.payload_hash} reasonLabel={t("approval.payment.reasonLabel", "Reason given")} />
           ) : feePolicy ? (
             <FeePolicyTermsBlock terms={feePolicy} payloadHash={invitation.payload_hash} />
           ) : grant ? (
@@ -214,11 +270,11 @@ export function PayoutApprovalView({ token }: { token: string }) {
           )}
 
           <div className="flex flex-col gap-2.5">
-            <DetailRow label={t("approval.openedBy")} value={invitation.initiator_email} />
-            <DetailRow label={t("approval.openedAt")} value={formatMoment(invitation.created_at, locale)} />
+            <DetailRow label={t("approval.openedBy", "Opened by")} value={invitation.initiator_email} />
+            <DetailRow label={t("approval.openedAt", "Opened")} value={formatMoment(invitation.created_at, locale)} />
             <DetailRow
-              label={t("approval.expires")}
-              value={t("approval.expiresValue", { at: formatMoment(invitation.expires_at, locale), left: expiresIn(invitation.expires_at, t) })}
+              label={t("approval.expires", "Expires")}
+              value={t("approval.expiresValue", "{at} · {left}", { at: formatMoment(invitation.expires_at, locale), left: expiresIn(invitation.expires_at, t) })}
               tone={expired ? "text-accent-error" : undefined}
             />
           </div>
@@ -228,10 +284,10 @@ export function PayoutApprovalView({ token }: { token: string }) {
           <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-sm font-medium text-ink tabular-nums">
-                {t("approval.tally", { approvals, threshold })}
+                {t("approval.tally", "{approvals} of {threshold, plural, one {# approval} other {# approvals}} so far", { approvals, threshold })}
               </span>
               <span className="text-xs text-ink-soft tabular-nums">
-                {t("approval.tallyOwners", { owners: invitation.owner_count ?? 0 })}
+                {t("approval.tallyOwners", "{owners, plural, one {# owner} other {# owners}} in total", { owners: invitation.owner_count ?? 0 })}
               </span>
             </div>
             {/* The sentence above states the tally; a second, unlabelled progressbar in the
@@ -240,7 +296,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
             {/* Kind-aware like the title: a change of terms or a NAV mark moves no money, and a
                 hint that says it does would tell an owner they are approving the wrong thing. */}
             <p className="text-xs text-ink-soft">
-              {t(valuation ? "approval.valuation.tallyHint" : feePolicy ? "approval.feePolicy.tallyHint" : "approval.tallyHint")}
+              {(valuation ? t("approval.valuation.tallyHint", "More than half of the owners must approve before the fund is marked. You are one of them.") : feePolicy ? t("approval.feePolicy.tallyHint", "More than half of the owners must approve before the terms change. You are one of them.") : t("approval.tallyHint", "More than half of the owners must approve before any money moves. You are one of them."))}
             </p>
           </div>
         </CardContent>
@@ -248,7 +304,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
 
       {burned ? (
         <ApprovalBurned
-          description={valuation ? t("approval.valuation.burned.body") : feePolicy ? t("approval.feePolicy.burned.body") : undefined}
+          description={valuation ? t("approval.valuation.burned.body", "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and the fund's NAV mark is unchanged. Ask whoever opened the request to send a new one.") : feePolicy ? t("approval.feePolicy.burned.body", "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and the product's terms are unchanged. Ask whoever opened the request to send a new one.") : undefined}
         />
       ) : expired ? (
         <ApprovalExpired />
@@ -256,17 +312,17 @@ export function PayoutApprovalView({ token }: { token: string }) {
         <ApprovalOutcome
           icon={settled === "approve" ? <CheckCircle2 /> : <XCircle />}
           tone={settled === "approve" ? "text-positive" : "text-ink-soft"}
-          title={t(settled === "approve" ? `${words}.decided.approvedTitle` : `${words}.decided.rejectedTitle`)}
-          description={t(justDecided ? `${words}.decided.freshBody` : "approval.decided.body")}
+          title={settled === "approve" ? words.approvedTitle : words.rejectedTitle}
+          description={justDecided ? words.freshBody : t("approval.decided.body", "You answered this earlier, and that answer stands. An answer cannot be changed once it is given.")}
         />
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t("approval.decisionTitle")}</CardTitle>
-            <CardDescription className="text-balance">{t("approval.decisionLead")}</CardDescription>
+            <CardTitle className="text-base">{t("approval.decisionTitle", "Your decision")}</CardTitle>
+            <CardDescription className="text-balance">{t("approval.decisionLead", "Both answers need the code from your email. Enter it once, then choose.")}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <p className="text-xs text-ink-soft">{t("approval.votingAs", { email: invitation.voter_email })}</p>
+            <p className="text-xs text-ink-soft">{t("approval.votingAs", "You are answering as {email}.", { email: invitation.voter_email })}</p>
 
             <CodeField value={code} onChange={setCode} disabled={pending !== null} attemptsRemaining={rejectedAttempts} />
 
@@ -287,7 +343,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
                 onClick={() => void decide("approve")}
               >
                 {pending === "approve" && <Spinner aria-hidden />}
-                {t(`${words}.approve`)}
+                {words.approve}
               </Button>
               <Button
                 size="lg"
@@ -297,14 +353,14 @@ export function PayoutApprovalView({ token }: { token: string }) {
                 onClick={() => void decide("reject")}
               >
                 {pending === "reject" && <Spinner aria-hidden />}
-                {t("approval.reject")}
+                {t("approval.reject", "Reject")}
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      <p className="text-center text-xs text-ink-soft">{t("approval.footnote")}</p>
+      <p className="text-center text-xs text-ink-soft">{t("approval.footnote", "This link was made for you alone. It works once, expires 72 hours after it was sent, and should not be forwarded.")}</p>
     </ApprovalPage>
   );
 }

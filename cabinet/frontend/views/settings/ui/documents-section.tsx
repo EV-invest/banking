@@ -29,7 +29,7 @@ export function DocumentsSection() {
   return (
     <div className="flex flex-col gap-4 lg:gap-4.5">
       <ListCard className="lg:px-5.5">
-        <ListCardTitle>{t("settings.documents.published")}</ListCardTitle>
+        <ListCardTitle>{t("settings.documents.published", "Published documents")}</ListCardTitle>
         <Hairline />
         {whitepaper !== undefined && (
           <>
@@ -37,7 +37,7 @@ export function DocumentsSection() {
                 the destination is the conductor's, outside the zone — the same origin, so no
                 new tab; the caption says where it leads. */}
             <a href={siteDocumentHref(locale, whitepaper)} className={ROW_INTERACTIVE}>
-              <RowLabel title={t("settings.documents.whitepaper")} sub={t("settings.documents.whitepaperSub")} />
+              <RowLabel title={t("settings.documents.whitepaper", "Whitepaper")} sub={t("settings.documents.whitepaperSub", "The fund's thesis and structure, on the public site")} />
               <ExternalLink className="size-4 shrink-0 text-ink-soft" aria-hidden />
             </a>
             <Hairline />
@@ -46,26 +46,26 @@ export function DocumentsSection() {
         {/* Another origin, so a new tab is acceptable here — and announced, since the icon
             alone says nothing to a screen reader. */}
         <a href={sourceCode} target="_blank" rel="noopener" className={ROW_INTERACTIVE}>
-          <RowLabel title={t("settings.documents.sourceCode")} sub={t("settings.documents.sourceCodeSub")} />
-          <span className="sr-only">{t("settings.documents.newTab")}</span>
+          <RowLabel title={t("settings.documents.sourceCode", "Open source")} sub={t("settings.documents.sourceCodeSub", "The fund's code, on GitHub")} />
+          <span className="sr-only">{t("settings.documents.newTab", "opens in a new tab")}</span>
           <ExternalLink className="size-4 shrink-0 text-ink-soft" aria-hidden />
         </a>
       </ListCard>
 
       <ListCard className="lg:px-5.5">
-        <ListCardTitle sub={t("settings.documents.custodySub")}>{t("settings.documents.custody")}</ListCardTitle>
+        <ListCardTitle sub={t("settings.documents.custodySub", "Deposits are held in the fund's custody wallets at Turnkey on the network you sent them over, and booked to your identity as verified by Didit. Nothing is moved without that identity, and withdrawals go only to an address you request. You sign in with your Google account.")}>{t("settings.documents.custody", "How funds are held")}</ListCardTitle>
         <Hairline />
         <Row>
-          <RowLabel title={t("settings.documents.risk")} sub={t("auth.stat.risk")} />
+          <RowLabel title={t("settings.documents.risk", "Risk")} sub={t("auth.stat.risk", "Capital at risk. A target is not a forecast, and returns are not guaranteed.")} />
         </Row>
       </ListCard>
 
       <ListCard className="lg:px-5.5">
-        <ListCardTitle sub={t("settings.support.sub")}>{t("nav.support")}</ListCardTitle>
+        <ListCardTitle sub={t("settings.support.sub", "A person reads every message")}>{t("nav.support", "Support")}</ListCardTitle>
         <Hairline />
         {/* The same mailbox every KYC dead end offers — one address, one place it is set. */}
         <a href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}`} className={ROW_INTERACTIVE}>
-          <RowLabel title={t("settings.support.email")} sub={SUPPORT_EMAIL} />
+          <RowLabel title={t("settings.support.email", "Email support")} sub={SUPPORT_EMAIL} />
           <Mail className="size-4 shrink-0 text-ink-soft" aria-hidden />
         </a>
       </ListCard>
@@ -80,12 +80,12 @@ export function MobileHelpCard({ onOpen }: { onOpen: () => void }) {
   return (
     <ListCard>
       <button type="button" onClick={onOpen} className={cn(ROW_INTERACTIVE, "w-full")}>
-        <RowLabel title={t("settings.documents.title")} sub={t("settings.documents.rowSub")} />
+        <RowLabel title={t("settings.documents.title", "Documents and disclosures")} sub={t("settings.documents.rowSub", "Whitepaper, open source, how funds are held, risk")} />
         <Chevron />
       </button>
       <Hairline />
       <a href={`mailto:${encodeURIComponent(SUPPORT_EMAIL)}`} className={ROW_INTERACTIVE}>
-        <RowLabel title={t("nav.support")} sub={SUPPORT_EMAIL} />
+        <RowLabel title={t("nav.support", "Support")} sub={SUPPORT_EMAIL} />
         <Mail className="size-4 shrink-0 text-ink-soft" aria-hidden />
       </a>
     </ListCard>

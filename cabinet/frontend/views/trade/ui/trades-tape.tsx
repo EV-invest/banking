@@ -27,14 +27,14 @@ export function TradesTape({ service }: { service: string }) {
       </div>
     );
   }
-  if (trades.length === 0) return <OpenOrdersEmpty>{t("trade.tape.empty")}</OpenOrdersEmpty>;
+  if (trades.length === 0) return <OpenOrdersEmpty>{t("trade.tape.empty", "No trades yet")}</OpenOrdersEmpty>;
 
   return (
     <div className="py-1">
       <div className="grid grid-cols-3 gap-2 px-3 py-1 text-right text-xs text-ink-soft [&>*:first-child]:text-left">
-        <span>{t("trade.book.col.price")}</span>
-        <span>{t("trade.book.col.size")}</span>
-        <span>{t("trade.tape.col.time")}</span>
+        <span>{t("trade.book.col.price", "Price")}</span>
+        <span>{t("trade.book.col.size", "Size")}</span>
+        <span>{t("trade.tape.col.time", "Time")}</span>
       </div>
       {trades.map((trade, i) => (
         // A taker buy lifted an ask and prints in the bid colour — the buyer's side.

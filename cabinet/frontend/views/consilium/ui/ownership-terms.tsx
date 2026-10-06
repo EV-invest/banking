@@ -20,15 +20,15 @@ export function HolderGrantTermsBlock({ terms }: { terms: HolderGrantTerms }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-ink-soft">{t("consilium.holderGrant.allocation")}</span>
+        <span className="text-xs font-medium text-ink-soft">{t("consilium.holderGrant.allocation", "Allocation")}</span>
         <span className="text-sm font-medium text-ink">{reservedAllocationLabel(terms.allocation, t)}</span>
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-ink-soft">{t("consilium.holderGrant.holder")}</span>
+        <span className="text-xs font-medium text-ink-soft">{t("consilium.holderGrant.holder", "Holder")}</span>
         {/* The money-plane id the terms stored — the digest binds it, so it is shown as-is. */}
         <span className="break-all font-mono-tech text-xs text-ink">{terms.user_id}</span>
       </div>
-      <p className="text-xs text-ink-soft">{t("consilium.holderGrant.executes")}</p>
+      <p className="text-xs text-ink-soft">{t("consilium.holderGrant.executes", "If it passes, the units are minted to this person in kind — the allocation's supply grows by them, and they hold that share from then on.")}</p>
     </div>
   );
 }
@@ -39,10 +39,10 @@ export function SeedCapitalTermsBlock({ terms }: { terms: SeedCapitalTerms }) {
     <div className="flex flex-col gap-3">
       <p className="break-all rounded-lg border border-border bg-secondary px-3 py-2.5 font-mono-tech text-xs leading-relaxed text-ink">{terms.tx_ref || "—"}</p>
       <div className="flex flex-col gap-1.5 text-xs text-ink-soft">
-        <span className="tabular-nums">{t("consilium.payout.network", { network: networkLabel(terms.network) })}</span>
-        <span className="break-all font-mono-tech">{t("consilium.seedCapital.depositor", { id: terms.depositor_user_id })}</span>
+        <span className="tabular-nums">{t("consilium.payout.network", "Network · {network}", { network: networkLabel(terms.network) })}</span>
+        <span className="break-all font-mono-tech">{t("consilium.seedCapital.depositor", "Depositor · {id}", { id: terms.depositor_user_id })}</span>
       </div>
-      <p className="text-xs text-ink-soft">{t("consilium.seedCapital.executes")}</p>
+      <p className="text-xs text-ink-soft">{t("consilium.seedCapital.executes", "If it passes, the transfer is verified on chain, booked as this person's deposit and subscribed into the fund allocation — one chain, or nothing.")}</p>
     </div>
   );
 }
@@ -64,7 +64,7 @@ export function OwnershipHeadline({ grant, seed }: { grant: HolderGrantTerms | n
   return (
     <p className="text-2xl font-semibold leading-none tabular-nums text-ink">
       {grant ? formatUnits(grant.units, locale) : formatExactUsdt(seed?.amount, locale)}
-      <span className="ml-2 text-sm font-medium text-ink-soft">{grant ? t("consilium.holderGrant.unitsWord") : "USDT"}</span>
+      <span className="ml-2 text-sm font-medium text-ink-soft">{grant ? t("consilium.holderGrant.unitsWord", "units") : "USDT"}</span>
     </p>
   );
 }

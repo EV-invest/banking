@@ -39,8 +39,8 @@ export function BookLevels({ service, onPick }: { service: string; onPick: (pric
     return (
       <Empty className="m-3 border border-dashed border-border p-4">
         <EmptyHeader>
-          <EmptyTitle className="text-sm">{t("trade.book.empty")}</EmptyTitle>
-          <EmptyDescription className="text-xs">{t("trade.book.emptyHint")}</EmptyDescription>
+          <EmptyTitle className="text-sm">{t("trade.book.empty", "Nothing resting")}</EmptyTitle>
+          <EmptyDescription className="text-xs">{t("trade.book.emptyHint", "No holder has quoted yet. The first limit order opens the book.")}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -64,7 +64,7 @@ export function BookLevels({ service, onPick }: { service: string; onPick: (pric
         depth={row.depth}
         role="button"
         tabIndex={0}
-        title={t("trade.book.levelOrders", { n: row.orders })}
+        title={t("trade.book.levelOrders", "{n, plural, one {# order} other {# orders}}", { n: row.orders })}
         className={ROW_FOCUS}
         onClick={pick}
         onKeyDown={onKeyDown}
@@ -74,13 +74,13 @@ export function BookLevels({ service, onPick }: { service: string; onPick: (pric
 
   return (
     <OrderBook>
-      <OrderBookHead price={t("trade.book.col.price")} size={t("trade.book.col.size")} total={t("trade.book.col.total")} />
+      <OrderBookHead price={t("trade.book.col.price", "Price")} size={t("trade.book.col.size", "Size")} total={t("trade.book.col.total", "Total")} />
       {/* Asks arrive best (lowest) first; drawn top-down they must end at the spread, so
           the order is reversed for display and the best ask sits just above the line. */}
       {[...asks].reverse().map((row) => level("ask", row))}
       <OrderBookSpread>
         <span>{book.mid ? formatUsdt(book.mid, locale) : "—"}</span>
-        <span className="text-xs">{book.spread ? t("trade.book.spread", { spread: formatUsdt(book.spread, locale) }) : t("trade.book.oneSided")}</span>
+        <span className="text-xs">{book.spread ? t("trade.book.spread", "Spread {spread}", { spread: formatUsdt(book.spread, locale) }) : t("trade.book.oneSided", "One-sided")}</span>
       </OrderBookSpread>
       {bids.map((row) => level("bid", row))}
     </OrderBook>

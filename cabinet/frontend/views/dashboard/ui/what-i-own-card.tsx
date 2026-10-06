@@ -21,10 +21,10 @@ export function WhatIOwnCard({ allocations, loading, className }: { allocations:
     <StaggerItem as={Card} className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
         <CardTitle className="flex items-center gap-1.5">
-          {t("dash.investedWhatIOwn")}
+          {t("dash.investedWhatIOwn", "Invested · what I own")}
           <TipAnchor anchor="dashboard.invested.allocation" />
         </CardTitle>
-        <CardAction className="text-xs font-medium tabular-nums text-ink-soft">{t("dash.strategyCount", { n: allocations.length })}</CardAction>
+        <CardAction className="text-xs font-medium tabular-nums text-ink-soft">{t("dash.strategyCount", "{n, plural, one {# strategy} other {# strategies}}", { n: allocations.length })}</CardAction>
       </CardHeader>
       <CardContent className={CARD_PAD}>
         <Settled loading={loading} skeleton={<Skeleton className="h-24 w-full" />}>
@@ -34,12 +34,12 @@ export function WhatIOwnCard({ allocations, loading, className }: { allocations:
                 <EmptyMedia variant="icon">
                   <PieChart />
                 </EmptyMedia>
-                <EmptyTitle>{t("dash.nothingInvested")}</EmptyTitle>
-                <EmptyDescription>{t("dash.nothingInvestedHint")}</EmptyDescription>
+                <EmptyTitle>{t("dash.nothingInvested", "Nothing invested yet")}</EmptyTitle>
+                <EmptyDescription>{t("dash.nothingInvestedHint", "Subscribe to a strategy and the split of what you own shows up here.")}</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 <Button asChild variant="outline">
-                  <Link href="/invest">{t("dash.browseStrategies")}</Link>
+                  <Link href="/invest">{t("dash.browseStrategies", "Browse strategies")}</Link>
                 </Button>
               </EmptyContent>
             </Empty>

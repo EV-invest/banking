@@ -54,14 +54,14 @@ export function PerfChart({ allocation, from, className }: PerfChartProps) {
             <EmptyMedia variant="icon">
               <LineChart />
             </EmptyMedia>
-            <EmptyTitle>{t("dash.noHistory")}</EmptyTitle>
-            <EmptyDescription>{t("dash.noHistoryHint")}</EmptyDescription>
+            <EmptyTitle>{t("dash.noHistory", "No performance history yet")}</EmptyTitle>
+            <EmptyDescription>{t("dash.noHistoryHint", "The fund curve and your participation appear here once there is activity to plot.")}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
         <>
           <PerfPlot series={series} format={format} />
-          {history.data?.truncated && <p className="text-xs text-ink-soft">{t("dash.historyTruncated")}</p>}
+          {history.data?.truncated && <p className="text-xs text-ink-soft">{t("dash.historyTruncated", "Only the most recent marks in this range are shown; the fund curve starts from the oldest one shown, not from the start of the range.")}</p>}
         </>
       )}
     </Settled>

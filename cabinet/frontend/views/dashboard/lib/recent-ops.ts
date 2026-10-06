@@ -37,17 +37,17 @@ export function toOp(operation: Operation, index: number, titleOf: (service: str
     sub: opSub(operation, t),
     // A queued redemption is not yet priced, so it shows the units it reserved — a
     // formatted zero would claim the user was paid nothing.
-    amount: operation.amount ? `${sign}${formatUsd(operation.amount, locale)}` : t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: operation.units ?? "0" }),
+    amount: operation.amount ? `${sign}${formatUsd(operation.amount, locale)}` : t("dash.unitsAmount", "{n, plural, one {{units} unit} other {{units} units}}", { n: Number(operation.units ?? 0), units: operation.units ?? "0" }),
     amountClass: operation.amount ? amountTone(meta.direction) : "text-ink-soft",
   };
 }
 
 function opTitle(operation: Operation, titleOf: (service: string | undefined) => string, t: Translate): string {
-  if (operation.kind === "subscription") return t("dash.op.subscribed", { fund: titleOf(operation.service) });
-  if (operation.kind === "redemption") return t("dash.op.redeemed", { fund: titleOf(operation.service) });
-  if (operation.kind === "fee") return t("ops.op.feeCharged", { fund: titleOf(operation.service) });
-  if (operation.kind === "withdrawal") return t("dash.op.withdrawal", { network: networkLabel(operation.network) });
-  if (operation.kind === "deposit") return t("dash.op.deposit", { network: networkLabel(operation.network) });
+  if (operation.kind === "subscription") return t("dash.op.subscribed", "{fund} — subscribed", { fund: titleOf(operation.service) });
+  if (operation.kind === "redemption") return t("dash.op.redeemed", "{fund} — redeemed", { fund: titleOf(operation.service) });
+  if (operation.kind === "fee") return t("ops.op.feeCharged", "{fund} — fee charged", { fund: titleOf(operation.service) });
+  if (operation.kind === "withdrawal") return t("dash.op.withdrawal", "Withdrawal · {network}", { network: networkLabel(operation.network) });
+  if (operation.kind === "deposit") return t("dash.op.deposit", "Deposit · {network}", { network: networkLabel(operation.network) });
   return kindLabel(operation.kind, t);
 }
 
@@ -55,7 +55,7 @@ function opSub(operation: Operation, t: Translate): string {
   // The lifecycle state reaches the reader through the same vocabulary the operations
   // timeline uses — it used to be the bare wire identifier, English by construction.
   const state = stateLabel(operation.state, t);
-  if (operation.kind === "withdrawal") return t("dash.op.sub", { ref: shortAddress(operation.address, DASH_ADDRESS), state });
-  if (operation.kind === "deposit") return t("dash.op.sub", { ref: shortAddress(operation.tx_ref, DASH_ADDRESS), state });
+  if (operation.kind === "withdrawal") return t("dash.op.sub", "{ref} · {state}", { ref: shortAddress(operation.address, DASH_ADDRESS), state });
+  if (operation.kind === "deposit") return t("dash.op.sub", "{ref} · {state}", { ref: shortAddress(operation.tx_ref, DASH_ADDRESS), state });
   return state;
 }

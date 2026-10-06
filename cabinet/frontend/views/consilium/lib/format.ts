@@ -20,6 +20,7 @@ import type {
 // rules (#318) are exactly the ones a unit test has to be able to reach.
 import { admissionVote, peerVote, proposalVote, settledRemoval } from "../../../shared/lib/decision.ts";
 import { hasUnixStamp } from "../../../shared/lib/unix-stamp.ts";
+import { wordFor } from "../../../shared/lib/wire-words.ts";
 
 /**
  * States in which nothing further can be voted.
@@ -69,27 +70,26 @@ export function isSettled(state: string | undefined, decidedAt?: string | null):
   return hasUnixStamp(decidedAt) || TERMINAL.has(normalise(state));
 }
 
-// States that have a name in the catalogue. Anything else falls back to the bare wire word,
+// States that have a name. Anything else falls back to the bare wire word,
 // which is legible — `admin/lib/format.ts` makes the same call and for the same reason: a
 // reader seeing `reconciling` is better served than one seeing `consilium.state.reconciling`.
-const KNOWN_STATES: ReadonlySet<string> = new Set([
-  "open",
-  "pending",
-  "approved",
-  "rejected",
-  "removed",
-  "kept",
-  "expired",
-  "cancelled",
-  "void",
-  "executed",
-  "executionfailed",
-  "failed",
-]);
+const stateWords = (t: Translate): Readonly<Record<string, string>> => ({
+  open: t("consilium.state.open", "Open"),
+  pending: t("consilium.state.pending", "Pending"),
+  approved: t("consilium.state.approved", "Approved"),
+  rejected: t("consilium.state.rejected", "Rejected"),
+  removed: t("consilium.state.removed", "Removed"),
+  kept: t("consilium.state.kept", "Seat kept"),
+  expired: t("consilium.state.expired", "Expired"),
+  cancelled: t("consilium.state.cancelled", "Cancelled"),
+  void: t("consilium.state.void", "Void"),
+  executed: t("consilium.state.executed", "Paid out"),
+  executionfailed: t("consilium.state.executionfailed", "Payout failed"),
+  failed: t("consilium.state.failed", "Failed"),
+});
 
 export function stateLabel(state: string | undefined, t: Translate): string {
-  const key = normalise(state);
-  return KNOWN_STATES.has(key) ? t(`consilium.state.${key}`) : (state ?? "—");
+  return wordFor(stateWords(t), normalise(state)) ?? (state ?? "—");
 }
 
 // ── the kinds of consilium ────────────────────────────────────────────────────
@@ -112,8 +112,16 @@ export function consiliumKind(consilium: Kinded): ConsiliumKind | null {
   return null;
 }
 
+const kindWords = (t: Translate): Record<ConsiliumKind, string> => ({
+  valuation_override: t("consilium.kind.valuation_override", "NAV mark"),
+  payment: t("consilium.kind.payment", "Payment"),
+  fee_policy: t("consilium.kind.fee_policy", "Fee terms"),
+  holder_grant: t("consilium.kind.holder_grant", "Holder grant"),
+  seed_capital: t("consilium.kind.seed_capital", "Seed capital"),
+});
+
 export function consiliumKindLabel(kind: ConsiliumKind | null, t: Translate): string {
-  return kind ? t(`consilium.kind.${kind}`) : "—";
+  return kind ? kindWords(t)[kind] : "—";
 }
 
 /** A state pill that knows what was decided: `executed` on a fee-policy consilium means
@@ -122,9 +130,9 @@ export function consiliumKindLabel(kind: ConsiliumKind | null, t: Translate): st
 export function consiliumStateLabel(consilium: Kinded & Pick<Consilium, "state">, t: Translate): string {
   if (normalise(consilium.state) === "executed") {
     const kind = consiliumKind(consilium);
-    if (kind === "fee_policy") return t("consilium.feePolicy.carried");
-    if (kind === "holder_grant") return t("consilium.holderGrant.carried");
-    if (kind === "seed_capital") return t("consilium.seedCapital.carried");
+    if (kind === "fee_policy") return t("consilium.feePolicy.carried", "Carried");
+    if (kind === "holder_grant") return t("consilium.holderGrant.carried", "Minted");
+    if (kind === "seed_capital") return t("consilium.seedCapital.carried", "Booked");
   }
   return stateLabel(consilium.state, t);
 }
@@ -141,9 +149,9 @@ export function stateTone(state: string | undefined): string {
 // Both take the RAW wire value and normalise on the way in, so no call site can forget to.
 export function voteLabel(vote: string | null | undefined, t: Translate): string {
   const cast = peerVote(vote);
-  if (cast === "remove") return t("consilium.vote.remove");
-  if (cast === "keep") return t("consilium.vote.keep");
-  return t("consilium.vote.waiting");
+  if (cast === "remove") return t("consilium.vote.remove", "To remove");
+  if (cast === "keep") return t("consilium.vote.keep", "To keep");
+  return t("consilium.vote.waiting", "Not answered");
 }
 
 export function voteTone(vote: string | null | undefined): string {
@@ -232,9 +240,9 @@ export function standingIn(removal: OwnerRemoval, userId: string | null): Standi
 /** An admission vote as a reader sees it. Takes the RAW wire value and normalises on entry. */
 export function admissionVoteLabel(vote: string | null | undefined, t: Translate): string {
   const cast = admissionVote(vote);
-  if (cast === "admit") return t("consilium.admissionVote.admit");
-  if (cast === "reject") return t("consilium.admissionVote.reject");
-  return t("consilium.vote.waiting");
+  if (cast === "admit") return t("consilium.admissionVote.admit", "Admit");
+  if (cast === "reject") return t("consilium.admissionVote.reject", "Refuse");
+  return t("consilium.vote.waiting", "Not answered");
 }
 
 export function admissionVoteTone(vote: string | null | undefined): string {
@@ -313,11 +321,21 @@ export function standingInAdmission(admission: OwnerAdmission, userId: string | 
 
 /** The three kinds, as a reader sees them. An unrecognised kind falls back to its wire
  *  word, the same call `roleLabel` makes: `reconciling` beats `consilium.kind.reconciling`. */
-const KNOWN_KINDS: ReadonlySet<string> = new Set(["suspension", "reinstatement", "admin_admission"]);
+const proposalKindWords = (t: Translate): Readonly<Record<string, string>> => ({
+  suspension: t("consilium.proposalKind.suspension", "Permanent block"),
+  reinstatement: t("consilium.proposalKind.reinstatement", "Letting back in"),
+  admin_admission: t("consilium.proposalKind.admin_admission", "Admin seat"),
+});
 
 export function proposalKindLabel(kind: string, t: Translate): string {
-  return KNOWN_KINDS.has(kind) ? t(`consilium.proposalKind.${kind}`) : kind;
+  return wordFor(proposalKindWords(t), kind) ?? kind;
 }
+
+const proposalVerbs = (t: Translate): Readonly<Record<string, Record<ProposalVote, string>>> => ({
+  suspension: { for: t("consilium.proposalVerb.suspension.for", "Block permanently"), against: t("consilium.proposalVerb.suspension.against", "Do not block") },
+  reinstatement: { for: t("consilium.proposalVerb.reinstatement.for", "Let back in"), against: t("consilium.proposalVerb.reinstatement.against", "Keep blocked") },
+  admin_admission: { for: t("consilium.proposalVerb.admin_admission.for", "Grant admin"), against: t("consilium.proposalVerb.admin_admission.against", "Refuse") },
+});
 
 /**
  * The kind's own verb for a vote, in the direction the voter is pushing.
@@ -329,8 +347,9 @@ export function proposalKindLabel(kind: string, t: Translate): string {
  * ballot is how a vote gets cast by mistake.
  */
 export function proposalVoteLabel(kind: string, direction: ProposalVote, t: Translate): string {
-  if (!KNOWN_KINDS.has(kind)) return t(`consilium.proposalVote.${direction}`);
-  return t(`consilium.proposalVerb.${kind}.${direction}`);
+  const verbs = proposalVerbs(t);
+  if (Object.hasOwn(verbs, kind)) return verbs[kind][direction];
+  return direction === "for" ? t("consilium.proposalVote.for", "For") : t("consilium.proposalVote.against", "Against");
 }
 
 export function proposalVoteTone(vote: string | null | undefined): string {
@@ -344,9 +363,9 @@ export function proposalVoteTone(vote: string | null | undefined): string {
  *  which way each owner pushed, and the kind is stated once on the card above it. */
 export function proposalPeerLabel(vote: string | null | undefined, t: Translate): string {
   const cast = proposalVote(vote);
-  if (cast === "for") return t("consilium.proposalVote.for");
-  if (cast === "against") return t("consilium.proposalVote.against");
-  return t("consilium.vote.waiting");
+  if (cast === "for") return t("consilium.proposalVote.for", "For");
+  if (cast === "against") return t("consilium.proposalVote.against", "Against");
+  return t("consilium.vote.waiting", "Not answered");
 }
 
 /**

@@ -56,7 +56,7 @@ export function DashboardView() {
   const walletLoading = wallet.isLoading;
   const posLoading = positions.isLoading;
 
-  const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : t("dash.fundFallback"));
+  const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : t("dash.fundFallback", "Fund"));
   // The chart is per allocation, never "the fund" (#245): the first one the caller holds,
   // or — for an account that holds nothing yet — the first open product, so a new investor
   // sees what the curve of the thing on offer looks like. `null` until both reads have
@@ -85,8 +85,8 @@ export function DashboardView() {
           zero over an empty plot — reads second. Once the path is done it is one quiet line. */}
       <GetStartedSection className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
       <PageFrame
-        title={t("dash.portfolio")}
-        description={t("dash.portfolioSub")}
+        title={t("dash.portfolio", "Portfolio")}
+        description={t("dash.portfolioSub", "All-time performance and your participation")}
         // Shortcuts to the same two actions the Move money card offers, so they stay
         // outline: one solid accent per screen, and that one belongs to the card that
         // explains what it does. Two filled teal CTAs for the same destination read as
@@ -94,10 +94,10 @@ export function DashboardView() {
         actions={
           <>
             <Button asChild variant="outline">
-              <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
+              <Link href="/wallet/withdraw">{t("ui.withdraw", "Withdraw")}</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
+              <Link href="/wallet/deposit">{t("ui.deposit", "Deposit")}</Link>
             </Button>
           </>
         }
@@ -110,13 +110,13 @@ export function DashboardView() {
 
         {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
         <StaggerItem as={Card} className={cn(STAT_STRIP, CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
-          <StatTile label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnl} format={signedUsd} tone={valence(pnl)} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
+          <StatTile label={t("dash.unrealizedPnl", "Unrealized P&L")} value={walletLoading || posLoading ? null : pnl} format={signedUsd} tone={valence(pnl)} hint={t("dash.hintAcrossPositions", "across all positions")} tip="dashboard.stats.unrealized-pnl" />
           <StatDivider />
-          <StatTile label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
+          <StatTile label={t("dash.available", "Available")} value={walletLoading ? null : num(balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod", "auto-deploys at EOD")} tip="dashboard.stats.available" />
           <StatDivider />
-          <StatTile label={t("dash.activeStrategies")} value={posLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} />
+          <StatTile label={t("dash.activeStrategies", "Active strategies")} value={posLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions", "fund positions")} />
           <StatDivider />
-          <StatTile label={t("dash.netContributed")} value={posLoading ? null : netContributed} format={usd} hint={t("dash.hintAtCostBasis")} tip="dashboard.stats.net-invested" />
+          <StatTile label={t("dash.netContributed", "Net contributed")} value={posLoading ? null : netContributed} format={usd} hint={t("dash.hintAtCostBasis", "at cost basis")} tip="dashboard.stats.net-invested" />
         </StaggerItem>
 
         {/* Below `xl` the DOM order is the mobile order; `lg:order-*` restores the desktop

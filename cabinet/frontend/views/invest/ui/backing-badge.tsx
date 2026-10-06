@@ -17,8 +17,8 @@ export function InKindBadge() {
   const t = useT();
   return (
     // Inside the header's `flex-wrap` row, like `ProductBadges` — safe at any length.
-    <Badge variant="outline" className="gap-1 border-accent-warn/40 text-accent-warn" title={t("invest.backing.inKindNote")}>
-      <Package className="size-3" /> {t("invest.backing.inKind")}
+    <Badge variant="outline" className="gap-1 border-accent-warn/40 text-accent-warn" title={t("invest.backing.inKindNote", "Units of this product represent an asset held off-platform. The fund holds no cash for them, so they are sold on the book rather than redeemed.")}>
+      <Package className="size-3" /> {t("invest.backing.inKind", "In kind")}
     </Badge>
   );
 }
@@ -33,7 +33,7 @@ export function BackingBadge({ inKind }: { inKind: boolean }) {
   if (inKind) return <InKindBadge />;
   return (
     <Badge variant="outline" className="gap-1 border-border text-ink-soft">
-      <Banknote className="size-3" /> {t("invest.backing.cash")}
+      <Banknote className="size-3" /> {t("invest.backing.cash", "Cash-backed")}
     </Badge>
   );
 }
@@ -41,5 +41,5 @@ export function BackingBadge({ inKind }: { inKind: boolean }) {
 /** The sentence behind the chip, stated once above the dealing panels. */
 export function InKindNote() {
   const t = useT();
-  return <Note tone="muted">{t("invest.backing.inKindNote")}</Note>;
+  return <Note tone="muted">{t("invest.backing.inKindNote", "Units of this product represent an asset held off-platform. The fund holds no cash for them, so they are sold on the book rather than redeemed.")}</Note>;
 }

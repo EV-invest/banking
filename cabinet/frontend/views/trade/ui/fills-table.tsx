@@ -21,12 +21,12 @@ export function FillsTable({ trades }: { trades: Trade[] }) {
     <Table className="text-xs">
       <TableHeader>
         <TableRow>
-          <TableHead className={HEAD}>{t("trade.orders.col.time")}</TableHead>
-          <TableHead className={HEAD}>{t("trade.orders.col.side")}</TableHead>
-          <TableHead className={cn(HEAD, "text-right")}>{t("trade.book.col.price")}</TableHead>
-          <TableHead className={cn(HEAD, "text-right")}>{t("trade.book.col.size")}</TableHead>
-          <TableHead className={cn(HEAD, "text-right")}>{t("trade.orders.col.fee")}</TableHead>
-          <TableHead className={HEAD}>{t("trade.orders.col.role")}</TableHead>
+          <TableHead className={HEAD}>{t("trade.orders.col.time", "Time")}</TableHead>
+          <TableHead className={HEAD}>{t("trade.orders.col.side", "Side")}</TableHead>
+          <TableHead className={cn(HEAD, "text-right")}>{t("trade.book.col.price", "Price")}</TableHead>
+          <TableHead className={cn(HEAD, "text-right")}>{t("trade.book.col.size", "Size")}</TableHead>
+          <TableHead className={cn(HEAD, "text-right")}>{t("trade.orders.col.fee", "Fee")}</TableHead>
+          <TableHead className={HEAD}>{t("trade.orders.col.role", "Role")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -37,11 +37,11 @@ export function FillsTable({ trades }: { trades: Trade[] }) {
           return (
             <TableRow key={trade.id ?? i}>
               <TableCell className={cn(CELL, "text-ink-soft")}>{formatWhen(trade.executed_at, locale)}</TableCell>
-              <TableCell className={cn(CELL, "font-semibold", sell ? "text-accent-error" : "text-positive")}>{t(sell ? "trade.form.sell" : "trade.form.buy")}</TableCell>
+              <TableCell className={cn(CELL, "font-semibold", sell ? "text-accent-error" : "text-positive")}>{(sell ? t("trade.form.sell", "Sell") : t("trade.form.buy", "Buy"))}</TableCell>
               <TableCell className={cn(CELL, "text-right")}>{formatUsdt(trade.price, locale)}</TableCell>
               <TableCell className={cn(CELL, "text-right")}>{formatUnits(trade.size, locale)}</TableCell>
               <TableCell className={cn(CELL, "text-right")}>{trade.fee ? formatUsdt(trade.fee, locale) : "—"}</TableCell>
-              <TableCell className={cn(CELL, "text-ink-soft")}>{t(taker ? "trade.orders.taker" : "trade.orders.maker")}</TableCell>
+              <TableCell className={cn(CELL, "text-ink-soft")}>{(taker ? t("trade.orders.taker", "Taker") : t("trade.orders.maker", "Maker"))}</TableCell>
             </TableRow>
           );
         })}

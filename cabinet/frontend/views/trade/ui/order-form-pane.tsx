@@ -106,10 +106,10 @@ export function OrderFormPane({
         <Tabs value={draft.side} onValueChange={(v) => setDraft((d) => ({ ...d, side: v === "sell" ? "sell" : "buy" }))} className="w-full">
           <TabsList className="h-7 w-full">
             <TabsTrigger value="buy" className="text-xs data-[state=active]:text-positive">
-              {t("trade.form.buy")}
+              {t("trade.form.buy", "Buy")}
             </TabsTrigger>
             <TabsTrigger value="sell" className="text-xs data-[state=active]:text-accent-error">
-              {t("trade.form.sell")}
+              {t("trade.form.sell", "Sell")}
             </TabsTrigger>
           </TabsList>
         </Tabs>

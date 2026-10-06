@@ -18,11 +18,11 @@ export function PaymentTerms({ terms }: { terms: ConsiliumPaymentTerms }) {
     <div className="flex flex-col gap-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-ink-soft">{t("consilium.payment.from")}</span>
+          <span className="text-xs font-medium text-ink-soft">{t("consilium.payment.from", "From")}</span>
           <PaymentEndSummary end={terms.source} className="text-sm" />
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-ink-soft">{t("consilium.payment.to")}</span>
+          <span className="text-xs font-medium text-ink-soft">{t("consilium.payment.to", "To")}</span>
           {external ? (
             <span className="text-sm font-medium text-ink">{terms.destination.label || "—"}</span>
           ) : (
@@ -36,11 +36,11 @@ export function PaymentTerms({ terms }: { terms: ConsiliumPaymentTerms }) {
         </p>
       )}
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-ink-soft">{t("consilium.payment.reason")}</span>
+        <span className="text-xs font-medium text-ink-soft">{t("consilium.payment.reason", "Reason given")}</span>
         {/* The initiator's words, whole, set apart from the room's own. */}
         <blockquote className="whitespace-pre-line border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
       </div>
-      <span className="text-xs text-ink-soft">{t("consilium.payment.tier", { tier: tierLabel(terms.tier, t) })}</span>
+      <span className="text-xs text-ink-soft">{t("consilium.payment.tier", "Tier · {tier}", { tier: tierLabel(terms.tier, t) })}</span>
     </div>
   );
 }

@@ -31,7 +31,7 @@ export function ValuationTermsBlock({ terms, payloadHash }: { terms: ValuationOv
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <FieldCaption>{t("approval.valuation.aum")}</FieldCaption>
+        <FieldCaption>{t("approval.valuation.aum", "Proposed AUM")}</FieldCaption>
         <p className="text-4xl font-semibold leading-none tabular-nums text-ink">
           {/* The wire string, digit for digit — `payload_hash` covers the exact decimal. */}
           {formatExactUsdt(terms.aum, locale)}
@@ -40,12 +40,12 @@ export function ValuationTermsBlock({ terms, payloadHash }: { terms: ValuationOv
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <DetailRow label={t("approval.valuation.product")} value={terms.service} mono />
-        <DetailRow label={t("approval.payloadHash")} value={hashPrefix(payloadHash)} mono />
+        <DetailRow label={t("approval.valuation.product", "Product")} value={terms.service} mono />
+        <DetailRow label={t("approval.payloadHash", "Request fingerprint")} value={hashPrefix(payloadHash)} mono />
       </div>
 
-      <p className="text-xs text-ink-soft">{t("approval.valuation.executes")}</p>
-      <p className="text-xs text-ink-soft">{t("approval.valuation.payloadHashHint")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.valuation.executes", "If it passes, the fund is marked at this AUM whatever the NAV-move guard would have said, and its queued redemptions settle at the NAV that follows.")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.valuation.payloadHashHint", "The fingerprint is taken over the product and the AUM above. It is checked again before the mark is recorded, so a request cannot be edited after you have agreed to it.")}</p>
 
       <Separator />
     </>

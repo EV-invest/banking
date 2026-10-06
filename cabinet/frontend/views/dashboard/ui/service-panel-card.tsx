@@ -27,12 +27,12 @@ export function ServicePanelCard({ className }: { className?: string }) {
   return (
     <Card className={cn("flex-row flex-wrap items-center justify-between gap-3 py-4", CARD_PAD, className)}>
       <a href={link.href} className="group inline-flex items-center gap-2 whitespace-nowrap rounded-md font-semibold text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        {t("dash.servicePanel")}
+        {t("dash.servicePanel", "Service-Arb panel")}
         <ArrowUpRight className="size-4 text-ink-soft transition-colors group-hover:text-ink" aria-hidden />
       </a>
       {link.manage && (
         <Button asChild variant="outline" size="sm">
-          <Link href={`/admin/allocations/${SERVICE_ARB}`}>{t("panelAccess.action")}</Link>
+          <Link href={`/admin/allocations/${SERVICE_ARB}`}>{t("panelAccess.action", "Panel access")}</Link>
         </Button>
       )}
     </Card>

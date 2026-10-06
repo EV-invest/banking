@@ -22,10 +22,10 @@ export function BookPane({ service, onPick }: { service: string; onPick: (price:
         <Tabs value={tab} onValueChange={(v) => setTab(v === "trades" ? "trades" : "book")}>
           <TabsList className="h-7">
             <TabsTrigger value="book" className="text-xs">
-              {t("trade.book.title")}
+              {t("trade.book.title", "Book")}
             </TabsTrigger>
             <TabsTrigger value="trades" className="text-xs">
-              {t("trade.book.tape")}
+              {t("trade.book.tape", "Trades")}
             </TabsTrigger>
           </TabsList>
         </Tabs>

@@ -121,12 +121,12 @@ export function ConsiliumView() {
             <EmptyMedia variant="icon">
               <ShieldAlert />
             </EmptyMedia>
-            <EmptyTitle>{t("consilium.forbidden.title")}</EmptyTitle>
-            <EmptyDescription>{t("consilium.forbidden.body")}</EmptyDescription>
+            <EmptyTitle>{t("consilium.forbidden.title", "This room is for the fund's owners")}</EmptyTitle>
+            <EmptyDescription>{t("consilium.forbidden.body", "Only owners can see and take part in what is decided here. If that should include you, ask an existing owner.")}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button asChild variant="outline">
-              <Link href="/">{t("status.backHome")}</Link>
+              <Link href="/">{t("status.backHome", "Back to home")}</Link>
             </Button>
           </EmptyContent>
         </Empty>
@@ -170,8 +170,8 @@ export function ConsiliumView() {
     >
       <StaggerItem className="flex flex-wrap items-start justify-between gap-3 xl:col-span-2">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-2xl font-semibold leading-tight text-ink">{t("consilium.title")}</h1>
-          <p className="text-sm text-ink-soft">{t("consilium.sub")}</p>
+          <h1 className="text-2xl font-semibold leading-tight text-ink">{t("consilium.title", "Consilium")}</h1>
+          <p className="text-sm text-ink-soft">{t("consilium.sub", "The owners' room — who the owners are, and what is being decided.")}</p>
         </div>
         <StreamChip status={stream.status} />
       </StaggerItem>
@@ -186,8 +186,8 @@ export function ConsiliumView() {
         <StaggerItem className="flex items-start gap-3 rounded-xl border border-accent-warn/40 bg-accent-warn/10 px-4 py-3.5 xl:col-span-2">
           <ShieldAlert className="mt-0.5 size-4 shrink-0 text-accent-warn" />
           <div className="flex min-w-0 flex-col gap-1">
-            <p className="text-sm font-semibold text-ink">{t("consilium.floor.title")}</p>
-            <p className="text-sm leading-relaxed text-ink">{t("consilium.floor.body", { n: roster.items?.length ?? 0 })}</p>
+            <p className="text-sm font-semibold text-ink">{t("consilium.floor.title", "The fund cannot authorise a payout")}</p>
+            <p className="text-sm leading-relaxed text-ink">{t("consilium.floor.body", "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can no longer be cleared. Adding owners restores it.", { n: roster.items?.length ?? 0 })}</p>
           </div>
         </StaggerItem>
       )}
@@ -199,8 +199,8 @@ export function ConsiliumView() {
         <div className="xl:col-span-2">
           <ReadFailure
             className="mx-auto max-w-160 rounded-xl p-6 md:p-8"
-            title={t("consilium.unavailable.title")}
-            body={t("consilium.unavailable.body")}
+            title={t("consilium.unavailable.title", "The owners' room could not be loaded")}
+            body={t("consilium.unavailable.body", "Every one of the reads this room is built from failed, so the page cannot show who owns the fund, what is being decided, or where any vote stands. Nothing here should be trusted until it loads. Try again — and if it keeps failing, this data is unreachable rather than empty, which is worth raising.")}
             onRetry={refreshGovernance}
             retrying={refreshingAll}
           />
@@ -263,7 +263,7 @@ function StreamChip({ status }: { status: StreamStatus }) {
           live ? "bg-positive" : status === "paused" ? "bg-ink-soft" : "animate-pulse bg-accent-warn",
         )}
       />
-      {t(live ? "consilium.stream.live" : status === "paused" ? "consilium.stream.paused" : "consilium.stream.reconnecting")}
+      {(live ? t("consilium.stream.live", "Live") : status === "paused" ? t("consilium.stream.paused", "Paused") : t("consilium.stream.reconnecting", "Reconnecting"))}
     </Badge>
   );
 }
@@ -286,13 +286,13 @@ function Roster({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">{t("consilium.roster.title")}</CardTitle>
+        <CardTitle className="text-base">{t("consilium.roster.title", "Owners")}</CardTitle>
         {/* How many owners there are is a fact about the fund, so it is printed only when
             the roster arrived. Printed unconditionally, it reported a 404 as "0 owners" —
             in the same header as a card that was showing the reader nothing at all. */}
         {count !== null && (
           <CardAction className="text-xs font-medium tabular-nums text-ink-soft">
-            {t("consilium.roster.count", { n: count })}
+            {t("consilium.roster.count", "{n, plural, one {# owner} other {# owners}}", { n: count })}
           </CardAction>
         )}
       </CardHeader>
@@ -300,8 +300,8 @@ function Roster({
         <Settled loading={read.status === "loading"} skeleton={<RosterSkeleton />}>
           {read.status === "loading" ? null : read.status === "failed" ? (
             <ReadFailure
-              title={t("consilium.roster.failedTitle")}
-              body={t("consilium.roster.failedBody")}
+              title={t("consilium.roster.failedTitle", "The owner list did not load")}
+              body={t("consilium.roster.failedBody", "Until it loads, the page cannot say who owns this fund or how many owners it has, so it says nothing rather than guessing at it. The rest of the page is unaffected.")}
               onRetry={onRetry}
               retrying={retrying}
             />
@@ -334,11 +334,11 @@ function Roster({
                 <EmptyMedia variant="icon">
                   <Users />
                 </EmptyMedia>
-                <EmptyTitle>{t("consilium.roster.emptyTitle")}</EmptyTitle>
-                <EmptyDescription>{t("consilium.roster.emptyBody")}</EmptyDescription>
+                <EmptyTitle>{t("consilium.roster.emptyTitle", "No owner holds a seat yet")}</EmptyTitle>
+                <EmptyDescription>{t("consilium.roster.emptyBody", "Genesis has not run yet. At start-up the service seats everyone on the OWNER_SUBJECTS list who already has an account — but only if at least two of them resolve. A sole owner could never admit the second, so seating one is refused outright rather than left as a dead end.")}</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <p className="text-sm leading-relaxed text-ink-soft">{t("consilium.roster.emptyNext")}</p>
+                <p className="text-sm leading-relaxed text-ink-soft">{t("consilium.roster.emptyNext", "Add the missing people to OWNER_SUBJECTS, have each of them sign in once so the account exists, and restart the service. Until the first seat is written, the operators on that list are working under emergency access — temporary by construction: the first successful seeding closes it permanently, and from then on a seat is only ever granted by a consilium of the existing owners.")}</p>
               </EmptyContent>
             </Empty>
           ) : (
@@ -356,11 +356,11 @@ function Roster({
                       <ItemTitle className="block w-auto truncate font-medium">
                         {owner.display_name || owner.email}
                         {owner.user_id === userId && (
-                          <span className="ml-1.5 text-xs font-normal text-ink-soft">{t("consilium.roster.you")}</span>
+                          <span className="ml-1.5 text-xs font-normal text-ink-soft">{t("consilium.roster.you", "(you)")}</span>
                         )}
                       </ItemTitle>
                       <ItemDescription className="truncate text-xs tabular-nums">
-                        {t("consilium.roster.since", { at: formatDay(owner.owner_since, locale) })}
+                        {t("consilium.roster.since", "Owner since {at}", { at: formatDay(owner.owner_since, locale) })}
                       </ItemDescription>
                     </ItemContent>
                   </Item>
@@ -391,8 +391,8 @@ function PayoutSection({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">{t("consilium.payout.title")}</CardTitle>
-        <CardDescription>{t("consilium.payout.sub")}</CardDescription>
+        <CardTitle className="text-base">{t("consilium.payout.title", "Fund payouts and payments")}</CardTitle>
+        <CardDescription>{t("consilium.payout.sub", "Moving money the fund owns by a payment order, marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <Settled loading={read.status === "loading"} skeleton={<PayoutSkeleton />}>
@@ -400,8 +400,8 @@ function PayoutSection({
             // In place of the empty state, never beside it. "No payout is open" is a claim
             // about the fund, and a read that failed is not entitled to make it.
             <ReadFailure
-              title={t("consilium.payout.failedTitle")}
-              body={t("consilium.payout.failedBody")}
+              title={t("consilium.payout.failedTitle", "Fund payouts did not load")}
+              body={t("consilium.payout.failedBody", "Until it loads, the page cannot tell you whether a payout is open and waiting on the other owners — so do not read this as there being none. The rest of the page is unaffected.")}
               onRetry={onRetry}
               retrying={retrying}
             />
@@ -411,12 +411,12 @@ function PayoutSection({
                 <EmptyMedia variant="icon">
                   <Banknote />
                 </EmptyMedia>
-                <EmptyTitle>{t("consilium.payout.emptyTitle")}</EmptyTitle>
-                <EmptyDescription>{t("consilium.payout.emptyBody")}</EmptyDescription>
+                <EmptyTitle>{t("consilium.payout.emptyTitle", "No request is open")}</EmptyTitle>
+                <EmptyDescription>{t("consilium.payout.emptyBody", "When someone opens a payment of the fund's money, it appears here with its running tally, and every owner is emailed a link to answer from.")}</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 <Button asChild variant="outline">
-                  <Link href="/admin/payments">{t("consilium.payout.emptyAction")}</Link>
+                  <Link href="/admin/payments">{t("consilium.payout.emptyAction", "Go to payments")}</Link>
                 </Button>
               </EmptyContent>
             </Empty>
@@ -436,7 +436,7 @@ function PayoutSection({
               {/* Nothing is deleted: a rejected, expired or failed request stays readable,
                   because the ledger and the governance record have to reconcile after the
                   fact (docs/CONSILIUM.md § Audit). */}
-              <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("consilium.payout.past")}</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("consilium.payout.past", "Earlier requests")}</p>
               <ItemGroup>
                 {past.map((consilium, i) => (
                   <Fragment key={consilium.id}>
@@ -547,22 +547,22 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
       )}
 
       <div className="flex flex-col gap-1.5 text-xs text-ink-soft">
-        <span className="font-mono-tech">{t("consilium.payout.fingerprint", { hash: hashPrefix(consilium.payload_hash) })}</span>
-        <span>{t("consilium.payout.openedBy", { initiator: consilium.initiator_email })}</span>
+        <span className="font-mono-tech">{t("consilium.payout.fingerprint", "Fingerprint · {hash}", { hash: hashPrefix(consilium.payload_hash) })}</span>
+        <span>{t("consilium.payout.openedBy", "Opened by {initiator}", { initiator: consilium.initiator_email })}</span>
         <span className="tabular-nums">
-          {t("consilium.payout.expires", { at: formatMoment(consilium.expires_at, locale), left: expiresIn(consilium.expires_at, t) })}
+          {t("consilium.payout.expires", "Expires {at} · {left}", { at: formatMoment(consilium.expires_at, locale), left: expiresIn(consilium.expires_at, t) })}
         </span>
       </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-sm font-medium tabular-nums text-ink">
-            {t("consilium.payout.tally", { approvals, threshold })}
+            {t("consilium.payout.tally", "{approvals} of {threshold, plural, one {# approval} other {# approvals}}", { approvals, threshold })}
           </span>
-          <span className="text-xs tabular-nums text-ink-soft">{t("consilium.payout.owners", { n: consilium.owner_count ?? 0 })}</span>
+          <span className="text-xs tabular-nums text-ink-soft">{t("consilium.payout.owners", "{n, plural, one {# owner} other {# owners}}", { n: consilium.owner_count ?? 0 })}</span>
         </div>
         <Progress value={progress} className="h-1.5" aria-hidden />
-        <p className="text-xs text-ink-soft">{t("consilium.payout.voteByEmail")}</p>
+        <p className="text-xs text-ink-soft">{t("consilium.payout.voteByEmail", "Owners answer from the link emailed to them, not from this page — the code in that message is what makes an answer deliberate.")}</p>
       </div>
 
       {error !== null && <ResourceError message={errorMessage(error, t)} />}
@@ -572,21 +572,21 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
         // when a request is reopened (policy 12), so this is not the reversible click its
         // single ghost button made it look like.
         <div className="flex flex-col gap-3 rounded-lg border border-accent-error/40 bg-accent-error/10 p-3.5">
-          <p className="text-sm leading-relaxed text-ink">{t("consilium.payout.cancelWarning", { approvals })}</p>
+          <p className="text-sm leading-relaxed text-ink">{t("consilium.payout.cancelWarning", "Cancelling voids every approval collected so far. Votes are not carried over if the request is reopened, so the owners who have already answered would each have to answer again.", { approvals })}</p>
           <div className="flex flex-col gap-2.5 sm:flex-row">
             <Button variant="destructive" size="sm" disabled={busy} onClick={() => void cancel()}>
               {busy && <Spinner aria-hidden />}
-              {t("consilium.payout.cancelConfirm")}
+              {t("consilium.payout.cancelConfirm", "Cancel and void the votes")}
             </Button>
             {/* Not "Cancel": beside "Cancel and void the votes" that word answers both ways. */}
             <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
-              {t("ui.keep")}
+              {t("ui.keep", "Keep it")}
             </Button>
           </div>
         </div>
       ) : (
         <Button variant="ghost" size="sm" className="self-start" onClick={() => setConfirming(true)}>
-          {t("consilium.payout.cancel")}
+          {t("consilium.payout.cancel", "Cancel this request")}
         </Button>
       )}
     </div>
@@ -630,26 +630,26 @@ function ResignCard({ email, loadingProfile }: { email: string; loadingProfile: 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">{t("consilium.resign.title")}</CardTitle>
-        <CardDescription className="text-balance">{t("consilium.resign.sub")}</CardDescription>
+        <CardTitle className="text-base">{t("consilium.resign.title", "Stand down as an owner")}</CardTitle>
+        <CardDescription className="text-balance">{t("consilium.resign.sub", "Give up your own seat. Nobody has to agree to let you leave.")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3.5">
         {done ? (
           <p className="text-sm text-positive" role="status">
-            {t("consilium.resign.done")}
+            {t("consilium.resign.done", "You are no longer an owner.")}
           </p>
         ) : loadingProfile ? (
           <Skeleton className="h-9 w-40" />
         ) : email.length === 0 ? (
           // Without an email there is nothing to type and nothing to compare, so the button
           // would sit permanently disabled with no way to find out why.
-          <p className="text-sm text-ink-soft">{t("consilium.resign.unavailable")}</p>
+          <p className="text-sm text-ink-soft">{t("consilium.resign.unavailable", "We couldn't load your account, so this can't be confirmed right now. Reload the page and try again.")}</p>
         ) : open ? (
           <>
-            <p className="text-sm leading-relaxed text-ink-soft">{t("consilium.resign.warning")}</p>
-            <p className="text-xs text-ink-soft">{t("consilium.resign.floorWarning")}</p>
+            <p className="text-sm leading-relaxed text-ink-soft">{t("consilium.resign.warning", "Your ownership ends as soon as this is recorded. You would need the remaining owners to make you an owner again. Nothing else about your account changes.")}</p>
+            <p className="text-xs text-ink-soft">{t("consilium.resign.floorWarning", "A fund needs at least three owners to authorise a payout. If standing down would leave fewer than three, it is refused.")}</p>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="resign-confirm">{t("consilium.resign.confirmLabel", { email })}</Label>
+              <Label htmlFor="resign-confirm">{t("consilium.resign.confirmLabel", "Type {email} to confirm", { email })}</Label>
               <Input
                 id="resign-confirm"
                 value={typed}
@@ -665,7 +665,7 @@ function ResignCard({ email, loadingProfile }: { email: string; loadingProfile: 
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <Button variant="destructive" className="sm:flex-1" disabled={!matches || busy} onClick={() => void submit()}>
                 {busy && <Spinner aria-hidden />}
-                {t("consilium.resign.confirm")}
+                {t("consilium.resign.confirm", "Stand down as an owner")}
               </Button>
               <Button
                 variant="ghost"
@@ -676,13 +676,13 @@ function ResignCard({ email, loadingProfile }: { email: string; loadingProfile: 
                   setError(null);
                 }}
               >
-                {t("ui.cancel")}
+                {t("ui.cancel", "Cancel")}
               </Button>
             </div>
           </>
         ) : (
           <Button variant="outline" className="self-start" onClick={() => setOpen(true)}>
-            {t("consilium.resign.start")}
+            {t("consilium.resign.start", "Stand down")}
           </Button>
         )}
       </CardContent>

@@ -61,14 +61,14 @@ export function UserProposalList({
   return (
     <ProposalList
       read={read}
-      title={t("consilium.proposals.title")}
-      description={t("consilium.proposals.sub")}
+      title={t("consilium.proposals.title", "People")}
+      description={t("consilium.proposals.sub", "What the owners are deciding about one person's standing — a permanent block, letting someone back in, or the admin seat.")}
       skeleton={<RemovalsSkeleton />}
-      failedTitle={t("consilium.proposals.failedTitle")}
-      failedBody={t("consilium.proposals.failedBody")}
+      failedTitle={t("consilium.proposals.failedTitle", "The people proposals did not load")}
+      failedBody={t("consilium.proposals.failedBody", "Until they do, this page cannot say whether anyone's standing is being decided — including a 24-hour hold that lapses if nobody ratifies it.")}
       emptyIcon={<UserCog />}
-      emptyTitle={t("consilium.proposals.emptyTitle")}
-      emptyBody={t("consilium.proposals.emptyBody")}
+      emptyTitle={t("consilium.proposals.emptyTitle", "Nobody's standing is in question")}
+      emptyBody={t("consilium.proposals.emptyBody", "A hold an operator wants made permanent, a block to undo, or an admin seat to grant would appear here for you to vote on. Operators open these from the user console.")}
       onRetry={onRetry}
       retrying={retrying}
       itemKey={(proposal) => proposal.id}
@@ -111,9 +111,9 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
           {/* The kind leads, because it is what the reader is being asked to agree to and
               the vote words below deliberately do not say it. */}
           <p className="text-base font-semibold text-ink">{proposalKindLabel(kind, t)}</p>
-          <p className="truncate text-sm text-ink">{t("consilium.proposals.subject")}: {proposal.subject_email || proposal.subject_user_id}</p>
+          <p className="truncate text-sm text-ink">{t("consilium.proposals.subject", "Subject")}: {proposal.subject_email || proposal.subject_user_id}</p>
           <p className="text-sm text-ink-soft">
-            {t("consilium.proposals.openedBy", { initiator: proposal.initiator_email, at: formatMoment(proposal.created_at, locale) })}
+            {t("consilium.proposals.openedBy", "Opened by {initiator} on {at}", { initiator: proposal.initiator_email, at: formatMoment(proposal.created_at, locale) })}
           </p>
         </div>
         <Badge variant="outline" className={cn("shrink-0", stateTone(proposal.state))}>
@@ -123,19 +123,19 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
 
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">{t("consilium.removal.reason")}</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">{t("consilium.removal.reason", "Reason given")}</span>
           <p className="whitespace-pre-line rounded-lg bg-secondary px-3.5 py-3 text-sm leading-relaxed text-ink">
-            {proposal.reason?.trim() || t("consilium.removal.noReason")}
+            {proposal.reason?.trim() || t("consilium.removal.noReason", "No reason was given.")}
           </p>
         </div>
 
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <span className="text-sm font-medium tabular-nums text-ink">
-              {t("consilium.proposals.tally", { n: tally.forVotes, threshold: tally.threshold })}
+              {t("consilium.proposals.tally", "{n} of {threshold} needed", { n: tally.forVotes, threshold: tally.threshold })}
             </span>
             <span className="text-xs tabular-nums text-ink-soft">
-              {t("consilium.proposals.tallyDetail", { against: tally.againstVotes, waiting: tally.waiting })}
+              {t("consilium.proposals.tallyDetail", "{against} against · {waiting} yet to answer", { against: tally.againstVotes, waiting: tally.waiting })}
             </span>
           </div>
 
@@ -146,8 +146,8 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
               than the head count. */}
           <Progress value={tally.threshold === 0 ? 0 : Math.min(100, (tally.forVotes / tally.threshold) * 100)} />
 
-          {!tally.stillReachable && <p className="text-xs text-accent-error">{t("consilium.proposals.unreachable")}</p>}
-          <p className="text-xs leading-relaxed text-ink-soft">{t("consilium.proposals.majorityNote")}</p>
+          {!tally.stillReachable && <p className="text-xs text-accent-error">{t("consilium.proposals.unreachable", "Enough owners have voted against that the threshold can no longer be reached.")}</p>}
+          <p className="text-xs leading-relaxed text-ink-soft">{t("consilium.proposals.majorityNote", "A simple majority of the owners who were seated when this opened carries it. The bar was frozen then and does not move with the roster.")}</p>
 
           <ItemGroup>
             {peers.map((peer, i) => (
@@ -166,7 +166,7 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
 
         {!settled && (
           <p className="text-xs tabular-nums text-ink-soft">
-            {t("consilium.proposals.expires", { at: formatMoment(proposal.expires_at, locale), left: expiresIn(proposal.expires_at, t) })}
+            {t("consilium.proposals.expires", "Closes {at} · {left}", { at: formatMoment(proposal.expires_at, locale), left: expiresIn(proposal.expires_at, t) })}
           </p>
         )}
 
@@ -205,7 +205,7 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
             {standing.role === "initiator" && (
               <Button variant="ghost" size="sm" className="self-start" disabled={busy !== null} onClick={() => void act("cancel")}>
                 {busy === "cancel" && <Spinner aria-hidden />}
-                {t("consilium.proposals.withdraw")}
+                {t("consilium.proposals.withdraw", "Withdraw")}
               </Button>
             )}
           </>
@@ -219,10 +219,10 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
  *  control should be. Each case is a different fact and none of them is a refusal. */
 function WhyNoVote({ standing, kind }: { standing: ProposalStanding; kind: string }) {
   const t = useT();
-  if (standing.role === "initiator") return <>{t("consilium.proposals.youInitiated")}</>;
-  if (standing.role === "subject") return <>{t("consilium.proposals.youAreSubject")}</>;
+  if (standing.role === "initiator") return <>{t("consilium.proposals.youInitiated", "You opened this. The initiator does not vote — proposing is not agreeing.")}</>;
+  if (standing.role === "subject") return <>{t("consilium.proposals.youAreSubject", "This is about you. You are not among its voters.")}</>;
   if (standing.role === "peer" && standing.vote !== null) {
-    return <>{t("consilium.proposals.youVoted", { vote: proposalVoteLabel(kind, standing.vote, t) })}</>;
+    return <>{t("consilium.proposals.youVoted", "You voted {vote}.", { vote: proposalVoteLabel(kind, standing.vote, t) })}</>;
   }
-  return <>{t("consilium.proposals.bystander")}</>;
+  return <>{t("consilium.proposals.bystander", "You were not seated when this opened, so you are not among its voters.")}</>;
 }

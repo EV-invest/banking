@@ -32,17 +32,17 @@ export function PersonalSection({ loading, form, email, verified, onChange, fiel
   const ready = !loading && !!form;
   return (
     <section className={cn(CARD, "px-6 py-5.5")}>
-      <SectionHeader title={t("settings.nav.personal")} sub={t("settings.personalSub")} />
+      <SectionHeader title={t("settings.nav.personal", "Personal details")} sub={t("settings.personalSub", "Your identity as the fund records it")} />
       {/* A section-type tip — a descriptor block, not an inline ⓘ — so it sits under the
           header rather than in it. */}
       <TipAnchor anchor="profile.personal.compliance" className="mb-4" />
       <div className="flex flex-wrap gap-x-4.5 gap-y-4">
         {PERSONAL.map((field) => (
-          <Field key={field.key} label={t(field.labelKey)} hint={field.hintKey ? t(field.hintKey) : undefined} tip={field.tip}>
+          <Field key={field.key} label={field.label(t)} hint={field.hint?.(t)} tip={field.tip}>
             {ready ? <Control field={field.key} form={form} error={fieldErrors[field.key]} onChange={onChange} /> : <FieldSkeleton />}
           </Field>
         ))}
-        <Field label={t("ui.emailAddress")} hint={t("settings.hint.email")} trailing={verified ? <VerifiedTag /> : undefined}>
+        <Field label={t("ui.emailAddress", "Email address")} hint={t("settings.hint.email", "Comes from your Google account and can't be changed here.")} trailing={verified ? <VerifiedTag /> : undefined}>
           {loading ? <FieldSkeleton /> : <Input value={formatEmail(email)} readOnly className="border-border bg-secondary text-ink-soft" />}
         </Field>
       </div>
@@ -64,13 +64,13 @@ export function PersonalStack({ loading, form, email, verified, onChange, fieldE
             <StackRow
               label={
                 <span className="flex items-center gap-1.5">
-                  {t(field.labelKey)}
+                  {field.label(t)}
                   {field.tip && <TipAnchor anchor={field.tip} />}
                 </span>
               }
             >
               {ready ? <Control field={field.key} form={form} error={fieldErrors[field.key]} onChange={onChange} /> : <Skeleton className="h-9 w-full rounded-md" />}
-              {field.hintKey && <FieldHint>{t(field.hintKey)}</FieldHint>}
+              {field.hint && <FieldHint>{field.hint(t)}</FieldHint>}
             </StackRow>
           </div>
         ))}
@@ -78,13 +78,13 @@ export function PersonalStack({ loading, form, email, verified, onChange, fieldE
         <StackRow
           label={
             <span className="flex items-center justify-between gap-2">
-              {t("ui.emailAddress")}
+              {t("ui.emailAddress", "Email address")}
               {verified && <VerifiedTag />}
             </span>
           }
         >
           {loading ? <Skeleton className="h-5 w-48" /> : <span className="break-words text-sm font-medium text-ink-soft">{formatEmail(email) || "—"}</span>}
-          <FieldHint>{t("settings.hint.email")}</FieldHint>
+          <FieldHint>{t("settings.hint.email", "Comes from your Google account and can't be changed here.")}</FieldHint>
         </StackRow>
       </ListCard>
     </div>

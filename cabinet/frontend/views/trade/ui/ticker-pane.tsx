@@ -8,6 +8,7 @@
 
 import { ArrowLeft } from "lucide-react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Badge, TerminalTicker, TickerStat } from "@evinvest/uikit";
 
@@ -44,12 +45,12 @@ export function TickerPane({ product, status }: { product: Product; status: Book
           <span className="block font-mono-tech text-xs text-ink-soft">{product.service}</span>
         </span>
       </Link>
-      <TickerStat label={t("trade.ticker.last")} value={price(book?.last_price)} className={book?.last_side === "sell" ? "text-accent-error" : book?.last_side === "buy" ? "text-positive" : undefined} />
-      <TickerStat label={t("trade.ticker.change")} value={formatChange(book?.change_24h)} className={book?.change_24h ? (fall ? "text-accent-error" : "text-positive") : undefined} />
-      <TickerStat label={t("trade.ticker.volume")} value={book?.volume_24h ? formatUnits(book.volume_24h, locale) : "—"} />
-      <TickerStat label={t("trade.ticker.mid")} value={price(book?.mid)} />
-      <TickerStat label={t("trade.ticker.spread")} value={price(book?.spread)} />
-      <TickerStat label={t("trade.ticker.nav")} value={price(book?.nav)} title={t("trade.ticker.navHint")} />
+      <TickerStat label={t("trade.ticker.last", "Last")} value={price(book?.last_price)} className={book?.last_side === "sell" ? "text-accent-error" : book?.last_side === "buy" ? "text-positive" : undefined} />
+      <TickerStat label={t("trade.ticker.change", "24h change")} value={formatChange(book?.change_24h)} className={book?.change_24h ? (fall ? "text-accent-error" : "text-positive") : undefined} />
+      <TickerStat label={t("trade.ticker.volume", "24h volume")} value={book?.volume_24h ? formatUnits(book.volume_24h, locale) : "—"} />
+      <TickerStat label={t("trade.ticker.mid", "Mid")} value={price(book?.mid)} />
+      <TickerStat label={t("trade.ticker.spread", "Spread")} value={price(book?.spread)} />
+      <TickerStat label={t("trade.ticker.nav", "NAV")} value={price(book?.nav)} title={t("trade.ticker.navHint", "The book price is what holders trade at; NAV is the fund's own mark.")} />
       <StreamChip status={status} />
     </TerminalTicker>
   );
@@ -57,6 +58,13 @@ export function TickerPane({ product, status }: { product: Product; status: Book
 
 /** How the book is being kept current — quiet, and honest about the difference. The page
  *  stays correct either way (the poll runs under a down socket); only latency is lost. */
+const streamWords = (t: Translate): Record<Exclude<BookStreamStatus, "idle">, string> => ({
+  live: t("trade.stream.live", "Live"),
+  reconnecting: t("trade.stream.reconnecting", "Reconnecting"),
+  polling: t("trade.stream.polling", "Polling"),
+  paused: t("trade.stream.paused", "Paused"),
+});
+
 function StreamChip({ status }: { status: BookStreamStatus }) {
   const t = useT();
   if (status === "idle") return null;
@@ -64,7 +72,7 @@ function StreamChip({ status }: { status: BookStreamStatus }) {
   return (
     <Badge variant="outline" className="ml-auto shrink-0 gap-1.5 rounded-full font-medium text-ink-soft">
       <span className={cn("size-1.5 rounded-full", live ? "bg-positive" : status === "paused" ? "bg-ink-soft" : "animate-pulse bg-accent-warn")} />
-      {t(`trade.stream.${status}`)}
+      {streamWords(t)[status]}
     </Badge>
   );
 }

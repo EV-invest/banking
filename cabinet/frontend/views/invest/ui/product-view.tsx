@@ -13,6 +13,7 @@
 // the open catalog, because a `hidden` product this caller was granted is not listed
 // (`selectProduct`).
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
@@ -28,7 +29,7 @@ import { PageFrame } from "@/shared/ui/page-frame";
 import { SupportLink } from "@/shared/ui/support-link";
 import { liquidity } from "@/views/invest/lib/catalog-card";
 import { isZero } from "@/views/invest/lib/format";
-import { blockedReasonKey, isClosed, isInKind, selectProduct } from "@/views/invest/lib/product";
+import { type BlockedReason, blockedReasonKey, isClosed, isInKind, selectProduct } from "@/views/invest/lib/product";
 import { AboutProduct, RiskNote } from "@/views/invest/ui/about-product";
 import { Note } from "@/views/invest/ui/atoms";
 import { InKindNote } from "@/views/invest/ui/backing-badge";
@@ -38,6 +39,13 @@ import { FeeCard, SupplyCard } from "@/views/invest/ui/product-cards";
 import { type Panel, ProductHeader } from "@/views/invest/ui/product-header";
 import { BackLink, HoldingStats, PriceOnly, ProductLoading, ProductMissing } from "@/views/invest/ui/product-stats";
 import { SubscribePanel } from "@/views/invest/ui/subscribe-panel";
+
+const blockedWords = (t: Translate): Record<BlockedReason, string> => ({
+  "invest.blocked.closed": t("invest.blocked.closed", "This fund is closed to new subscriptions. Your units are unaffected — you can still redeem them in full."),
+  "invest.blocked.locked": t("invest.blocked.locked", "This fund isn't open to you yet. You can see it, but subscribing stays locked until your access is raised. If you think you should have it:"),
+  "invest.blocked.staleNav": t("invest.blocked.staleNav", "The fund's valuation is out of date, so dealing is paused until a fresh one is posted."),
+  "invest.blocked.capReached": t("invest.blocked.capReached", "This fund has issued its full authorised supply, so it is not minting new units. Redemptions are unaffected."),
+});
 
 export function ProductView({ service }: { service: string }) {
   const t = useT();
@@ -103,7 +111,7 @@ export function ProductView({ service }: { service: string }) {
         <StaggerItem>
           <Alert variant="destructive">
             <TriangleAlert className="size-4" />
-            <AlertTitle>{t("err.fundRefresh")}</AlertTitle>
+            <AlertTitle>{t("err.fundRefresh", "Couldn't refresh this fund")}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         </StaggerItem>
@@ -120,7 +128,7 @@ export function ProductView({ service }: { service: string }) {
           {/* The gates, stated before the action rather than after a failed submit. */}
           {blocked && (
             <Note tone="amber">
-              {t(blocked)}
+              {blockedWords(t)[blocked]}
               {/* The lock is the one gate the reader cannot lift alone, so it carries the address. */}
               {blocked === "invest.blocked.locked" && (
                 <>
@@ -130,7 +138,7 @@ export function ProductView({ service }: { service: string }) {
               )}
             </Note>
           )}
-          {unmarked && !closed && <Note tone="muted">{t("invest.unmarkedNote")}</Note>}
+          {unmarked && !closed && <Note tone="muted">{t("invest.unmarkedNote", "No valuation posted yet — units price at the bootstrap NAV of 1.0 until the first mark.")}</Note>}
           {inKind && <InKindNote />}
 
           {panel === "subscribe" && !blocked && (

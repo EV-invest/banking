@@ -30,8 +30,8 @@ export function SignInPanel({
     <div className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="flex w-full max-w-100 flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold text-ink">{signup ? t("auth.signup.title") : t("auth.welcomeBack")}</h1>
-          <p className="text-sm text-ink-soft">{signup ? t("auth.signup.sub") : t("auth.signInSub")}</p>
+          <h1 className="text-3xl font-semibold text-ink">{signup ? t("auth.signup.title", "Open your investor account") : t("auth.welcomeBack", "Welcome back")}</h1>
+          <p className="text-sm text-ink-soft">{signup ? t("auth.signup.sub", "One Google sign-in sets up your cabinet — no forms, no password.") : t("auth.signInSub", "Sign in to manage your investments.")}</p>
         </div>
 
         {message && <p className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">{message}</p>}
@@ -42,16 +42,16 @@ export function SignInPanel({
           href={href}
           className="flex h-10 w-full items-center justify-center gap-3 rounded-md bg-brand px-6 text-sm font-medium text-ink outline-none ring-1 ring-inset ring-white/10 transition-colors hover:bg-brand/80 focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <GoogleMark /> {t("auth.continueWithGoogle")}
+          <GoogleMark /> {t("auth.continueWithGoogle", "Continue with Google")}
         </a>
 
         <p className="text-center text-sm text-ink-soft">
-          {signup ? t("auth.switch.haveAccount") : t("auth.switch.newHere")}{" "}
+          {signup ? t("auth.switch.haveAccount", "Already have an account?") : t("auth.switch.newHere", "New to EV Invest?")}{" "}
           <Link
             href={switchHref}
             className="rounded-sm font-medium text-primary-ink underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {signup ? t("auth.switch.signIn") : t("auth.switch.openAccount")}
+            {signup ? t("auth.switch.signIn", "Sign in") : t("auth.switch.openAccount", "Open an account")}
           </Link>
         </p>
       </div>

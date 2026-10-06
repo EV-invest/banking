@@ -28,27 +28,27 @@ export function FeePolicyTermsBlock({ terms, payloadHash }: { terms: ConsiliumFe
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <FieldCaption>{t("consilium.feePolicy.fund")}</FieldCaption>
+        <FieldCaption>{t("consilium.feePolicy.fund", "Product")}</FieldCaption>
         <p className="text-2xl font-semibold leading-tight text-ink">{terms.allocation_name || terms.service}</p>
       </div>
 
       <FeeTermsDiff from={terms.from} to={terms.to} />
 
       <div className="flex flex-col gap-1.5">
-        <FieldCaption>{t("consilium.feePolicy.reason")}</FieldCaption>
+        <FieldCaption>{t("consilium.feePolicy.reason", "Reason given")}</FieldCaption>
         <blockquote className="whitespace-pre-line border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
       </div>
 
       <div className="flex flex-col gap-2.5">
         <DetailRow
-          label={t("consilium.feePolicy.effectiveFromLabel")}
-          value={hasStamp(terms.effective_from) ? formatMoment(terms.effective_from, locale) : t("consilium.feePolicy.asSoonAsAllowed")}
+          label={t("consilium.feePolicy.effectiveFromLabel", "Takes effect")}
+          value={hasStamp(terms.effective_from) ? formatMoment(terms.effective_from, locale) : t("consilium.feePolicy.asSoonAsAllowed", "As soon as allowed — 24 hours after the owners carry it, while anyone holds units")}
         />
-        <DetailRow label={t("consilium.feePolicy.holdersLabel")} value={terms.holder_count} />
-        <DetailRow label={t("approval.payloadHash")} value={hashPrefix(payloadHash)} mono />
+        <DetailRow label={t("consilium.feePolicy.holdersLabel", "Holders to notify")} value={terms.holder_count} />
+        <DetailRow label={t("approval.payloadHash", "Request fingerprint")} value={hashPrefix(payloadHash)} mono />
       </div>
 
-      <p className="text-xs text-ink-soft">{t("approval.feePolicy.payloadHashHint")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.feePolicy.payloadHashHint", "The fingerprint is taken over the product, the terms now and proposed, the reason and the requested moment above. It is checked again before the change is scheduled, so a request cannot be edited after you have agreed to it.")}</p>
 
       <Separator />
     </>
