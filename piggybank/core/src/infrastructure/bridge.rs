@@ -56,7 +56,7 @@ use domain::{
 	authz::Role,
 	users::{Email, UserId},
 };
-use evconcierge_contracts::concierge::v1::{PullUserLifecycleRequest, UserLifecycleEvent, user_events_client::UserEventsClient, user_lifecycle_event::Kind};
+use evconcierge_contracts::concierge::v1::{PullUserLifecycleRequest, SeatPermissions, UserLifecycleEvent, user_events_client::UserEventsClient, user_lifecycle_event::Kind};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tonic::{Request, metadata::MetadataValue, transport::Channel};
@@ -455,7 +455,7 @@ impl BridgeConsumer {
 			.bind(event.email_verified)
 			.bind(event.kyc_level as i32)
 			.bind(role.as_str())
-			.bind(&event.permissions)
+			.bind(event.seat_permissions.as_ref().map(|s| &s.bank))
 			.bind(sequence)
 			.fetch_optional(&mut *tx)
 			.await?;
@@ -500,12 +500,15 @@ impl BridgeConsumer {
 		if freshness == Freshness::Live {
 			refresh_profile_snapshot(&mut tx, subject, event).await?;
 		}
-		// Unlike the profile, a parked row carries it, so a replay applies it too.
-		sqlx::query("UPDATE users SET permissions = $2 WHERE auth_subject = $1")
-			.bind(subject)
-			.bind(&event.permissions)
-			.execute(&mut *tx)
-			.await?;
+		// Unlike the profile, a parked row carries it, so a replay applies it too. Absent is
+		// "not stated" and keeps what is mirrored; an empty set is a demotion and is applied.
+		if let Some(seat) = &event.seat_permissions {
+			sqlx::query("UPDATE users SET permissions = $2 WHERE auth_subject = $1")
+				.bind(subject)
+				.bind(&seat.bank)
+				.execute(&mut *tx)
+				.await?;
+		}
 
 		match event.kind() {
 			// CREATED already upserted above; stamp the sequence, refresh KYC, and backfill
@@ -675,7 +678,7 @@ async fn defer(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, event: &UserLifec
 	.bind(&event.role)
 	.bind(event.token_version as i64)
 	.bind(event.occurred_at)
-	.bind(&event.permissions)
+	.bind(event.seat_permissions.as_ref().map(|s| &s.bank))
 	.execute(&mut **tx)
 	.await?;
 	warn!(
@@ -704,7 +707,7 @@ struct DeferredEvent {
 	role: String,
 	token_version: i64,
 	occurred_at: i64,
-	permissions: Vec<String>,
+	permissions: Option<Vec<String>>,
 }
 
 impl DeferredEvent {
@@ -723,7 +726,8 @@ impl DeferredEvent {
 			email_verified: self.email_verified,
 			token_version: self.token_version as u64,
 			role: self.role,
-			permissions: self.permissions,
+			permissions: Vec::new(),
+			seat_permissions: self.permissions.map(|bank| SeatPermissions { bank }),
 		}
 	}
 }
