@@ -28,15 +28,15 @@ export function HoldersTable({ holders, outstanding, queued = "0" }: { holders: 
           <EmptyMedia variant="icon">
             <PieChart />
           </EmptyMedia>
-          <EmptyTitle>{t("admin.alloc.holders.empty")}</EmptyTitle>
-          <EmptyDescription>{t("admin.alloc.holders.emptyHint")}</EmptyDescription>
+          <EmptyTitle>{t("admin.alloc.holders.empty", "No units issued yet")}</EmptyTitle>
+          <EmptyDescription>{t("admin.alloc.holders.emptyHint", "The split by holder appears once a subscription or an in-kind issuance mints the first unit.")}</EmptyDescription>
         </EmptyHeader>
         {!isZero(queued) && (
           // The one fact the zero state can report: a mint is recorded and waiting on the
           // relay — the same figure that keeps "Pin cap" disabled next door.
           <EmptyContent>
             <p className="text-sm tabular-nums">
-              {t("admin.alloc.holders.queued")} · {formatUnits(queued, locale)}
+              {t("admin.alloc.holders.queued", "Queued (not yet on the ledger)")} · {formatUnits(queued, locale)}
             </p>
           </EmptyContent>
         )}
@@ -47,7 +47,7 @@ export function HoldersTable({ holders, outstanding, queued = "0" }: { holders: 
   return (
     <dl className="space-y-3 text-sm">
       <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2">
-        <dt className="text-ink-soft">{t("admin.alloc.holders.outstanding")}</dt>
+        <dt className="text-ink-soft">{t("admin.alloc.holders.outstanding", "Outstanding")}</dt>
         <dd className="font-semibold tabular-nums">{formatUnits(outstanding, locale)}</dd>
       </div>
       {holders.map((line) => (
@@ -57,7 +57,7 @@ export function HoldersTable({ holders, outstanding, queued = "0" }: { holders: 
         // No share bar: a queued mint is not part of the outstanding figure it would be
         // measured against, so a percentage here would be a lie either way.
         <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2">
-          <dt className="text-ink-soft">{t("admin.alloc.holders.queued")}</dt>
+          <dt className="text-ink-soft">{t("admin.alloc.holders.queued", "Queued (not yet on the ledger)")}</dt>
           <dd className="tabular-nums text-ink-soft">{formatUnits(queued, locale)}</dd>
         </div>
       )}
@@ -94,5 +94,5 @@ function HolderLine({ line, outstanding }: { line: UnitHolding; outstanding: str
  *  treasury's holders cell so a person and an allocation look the same on both. */
 export function HolderMark({ person }: { person: boolean }) {
   const t = useT();
-  return person ? <User className="size-3.5 shrink-0" role="img" aria-label={t("admin.holder.person")} /> : <Layers className="size-3.5 shrink-0" role="img" aria-label={t("admin.holder.allocation")} />;
+  return person ? <User className="size-3.5 shrink-0" role="img" aria-label={t("admin.holder.person", "Person")} /> : <Layers className="size-3.5 shrink-0" role="img" aria-label={t("admin.holder.allocation", "Allocation")} />;
 }

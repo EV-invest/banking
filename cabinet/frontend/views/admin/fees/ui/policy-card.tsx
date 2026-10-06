@@ -22,7 +22,7 @@ import { classifyConsiliumRefusal, coolingOffLiftsAt, type ConsiliumRefusal } fr
 import { formatMoment } from "@/shared/lib/datetime";
 import { revalidateTag } from "@/shared/lib/resource";
 import { isPendingChange } from "@/views/admin/fees/lib/format";
-import { FIELD_LABEL_KEY, draftBps, draftProblem, draftRequirement, toRequest, type TermsDraft } from "@/views/admin/fees/lib/schedule";
+import { draftBps, draftProblem, draftRequirement, fieldLabel, toRequest, type TermsDraft } from "@/views/admin/fees/lib/schedule";
 import { useTermsDraft } from "@/views/admin/fees/model/use-terms-draft";
 import { ScheduleFields } from "@/views/admin/fees/ui/schedule-fields";
 import { TermsFields } from "@/views/admin/fees/ui/terms-fields";
@@ -95,13 +95,13 @@ export function PolicyCard({
   const found = useMemo(() => draftProblem(current, draft, now), [current, draft, now]);
   const reasonMissing = found?.key === "admin.fees.err.reasonRequired";
   // Too long is said at once, unlike "required": it is about text they have typed.
-  const reasonTooLong = found?.key === "admin.fees.err.reasonTooLong" ? t(found.key, { max: found.max, used: found.used }) : null;
-  const tooFarAhead = found?.key === "admin.fees.err.tooFarAhead" ? t(found.key, { days: found.days }) : null;
+  const reasonTooLong = found?.key === "admin.fees.err.reasonTooLong" ? t("admin.fees.err.reasonTooLong", "The reason is too long: {used, plural, one {# byte} other {# bytes}} of at most {max}. Letters outside plain Latin count as more than one.", { max: found.max, used: found.used }) : null;
+  const tooFarAhead = found?.key === "admin.fees.err.tooFarAhead" ? t("admin.fees.err.tooFarAhead", "The moment can be at most {days} days ahead.", { days: found.days }) : null;
   // The rate problems, in words. The field name is interpolated rather than concatenated
   // onto the front: which end of the sentence it belongs at is a per-language decision.
   const rateProblem = useMemo(() => {
-    if (found?.key === "admin.fees.err.overCeiling") return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]), ceiling: found.ceiling });
-    if (found?.key === "admin.fees.err.notPercent") return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]) });
+    if (found?.key === "admin.fees.err.overCeiling") return t("admin.fees.err.overCeiling", "{field} cannot be more than {ceiling}.", { field: fieldLabel(found.field, t), ceiling: found.ceiling });
+    if (found?.key === "admin.fees.err.notPercent") return t("admin.fees.err.notPercent", "{field} must be a percentage — 2, or 2.5 / 2,5 for a half.", { field: fieldLabel(found.field, t) });
     return null;
   }, [found, t]);
   const invalid = found !== null;
@@ -128,7 +128,7 @@ export function PolicyCard({
       // about it in the reader's language; anything unrecognised is shown as it came.
       const detail = classifyConsiliumRefusal(e);
       if (detail) setRefusal({ detail, liftsAt: detail.kind === "cooling-off" ? coolingOffLiftsAt(detail) : null });
-      else setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feePolicySave"));
+      else setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feePolicySave", "Could not save these terms."));
       // "Already pending" means a colleague got there first, and this screen still shows
       // the fund without their change. The re-read brings their pending card in and
       // blocks this form for the right reason, instead of leaving a red sentence about a
@@ -146,10 +146,10 @@ export function PolicyCard({
         {/* A heading, not a bare title: focus lands here after a cancel, and a screen
             reader should say what it landed on. `CardTitle` renders a div. */}
         <CardTitle ref={titleRef} tabIndex={-1} role="heading" aria-level={2} className="rounded-sm text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          {t("admin.fees.terms")}
+          {t("admin.fees.terms", "Terms")}
         </CardTitle>
         <CardDescription className="text-xs text-ink-soft">
-          {current ? t("admin.fees.inForce", { version: current.version, since: formatMoment(current.effective_from, locale) }) : t("admin.fees.notConfigured")}
+          {current ? t("admin.fees.inForce", "Version {version}, in force since {since}. Investors see these on the product page.", { version: current.version, since: formatMoment(current.effective_from, locale) }) : t("admin.fees.notConfigured", "This fund charges nothing today. Scheduling terms starts the clock on every holding in it from the moment they take effect.")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -159,20 +159,20 @@ export function PolicyCard({
           now={now}
           requirement={requirement}
           effectiveFromError={tooFarAhead}
-          reasonError={reasonMissing && reasonTouched ? t("admin.fees.err.reasonRequired") : reasonTooLong}
+          reasonError={reasonMissing && reasonTouched ? t("admin.fees.err.reasonRequired", "A reason is required when the owners must approve.") : reasonTooLong}
           onChange={edit}
           onReasonTouched={() => setReasonTouched(true)}
           disabled={blocked}
         />
 
-        {blocked && <p className="text-xs text-ink-soft">{t("admin.fees.pendingBlocks")}</p>}
+        {blocked && <p className="text-xs text-ink-soft">{t("admin.fees.pendingBlocks", "One change at a time: cancel the pending one to schedule another.")}</p>}
         {rateProblem && !blocked && <p className="text-xs text-accent-error">{rateProblem}</p>}
         {refusal && <RefusalNotice subject="feePolicy" refusal={refusal.detail} liftsAt={refusal.liftsAt} />}
         {problem && <p className="text-xs text-accent-error">{problem}</p>}
 
         <Button type="button" onClick={schedule} disabled={busy || blocked || invalid}>
           {busy && <Spinner aria-hidden />}
-          {requirement === "owner_consilium" ? t("admin.fees.askOwners") : current ? t("admin.fees.scheduleChange") : t("admin.fees.startCharging")}
+          {requirement === "owner_consilium" ? t("admin.fees.askOwners", "Ask the owners") : current ? t("admin.fees.scheduleChange", "Schedule the change") : t("admin.fees.startCharging", "Start charging")}
         </Button>
       </CardContent>
     </Card>

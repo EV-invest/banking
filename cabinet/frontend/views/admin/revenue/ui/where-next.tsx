@@ -20,8 +20,8 @@ export function WhereNext() {
   const t = useT();
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <LinkCard href="/admin/payments" icon={<ArrowLeftRight className="size-5" />} title={t("nav.payments")} body={t("admin.revenue.toPayments")} />
-      <LinkCard href="/admin/treasury" icon={<Landmark className="size-5" />} title={t("nav.treasury")} body={t("admin.revenue.toTreasury")} />
+      <LinkCard href="/admin/payments" icon={<ArrowLeftRight className="size-5" />} title={t("nav.payments", "Payments")} body={t("admin.revenue.toPayments", "Moving the platform's earnings — into a product, or to an investor — is a payment order the owners authorise. Open one there. Cash reaches the chain only through a holder's redemption and their own withdrawal.")} />
+      <LinkCard href="/admin/treasury" icon={<Landmark className="size-5" />} title={t("nav.treasury", "Treasury")} body={t("admin.revenue.toTreasury", "The fee allocation beside the platform's other balances: custody per rail, user claims, every allocation and its holders.")} />
     </div>
   );
 }

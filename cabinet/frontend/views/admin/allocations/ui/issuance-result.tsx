@@ -8,6 +8,7 @@
 
 import { CheckCircle2, Clock } from "lucide-react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 
 import type { UnitIssuance, UnitIssuanceSource } from "@/shared/contracts/admin";
@@ -19,15 +20,23 @@ export interface IssuanceOutcome {
   holderLabel: string;
 }
 
+type Args = { units: string; holder: string };
+
 const COPY = {
-  issue: { applied: "admin.alloc.issue.resultApplied", queued: "admin.alloc.issue.resultQueued" },
-  retire: { applied: "admin.alloc.retire.resultApplied", queued: "admin.alloc.retire.resultQueued" },
+  issue: {
+    applied: (t: Translate, args: Args) => t("admin.alloc.issue.resultApplied", "{units} units issued to {holder}.", args),
+    queued: (t: Translate, args: Args) => t("admin.alloc.issue.resultQueued", "{units} units to {holder} queued — the relay posts the mint shortly, and the split below follows.", args),
+  },
+  retire: {
+    applied: (t: Translate, args: Args) => t("admin.alloc.retire.resultApplied", "{units} units retired from {holder}.", args),
+    queued: (t: Translate, args: Args) => t("admin.alloc.retire.resultQueued", "{units} units from {holder} queued for retirement — the relay posts the burn shortly, and the split below follows.", args),
+  },
 } as const;
 
-const SOURCE: Record<UnitIssuanceSource, string> = {
-  mint: "admin.alloc.issuance.source.mint",
-  retire: "admin.alloc.issuance.source.retire",
-};
+const sources = (t: Translate): Record<UnitIssuanceSource, string> => ({
+  mint: t("admin.alloc.issuance.source.mint", "minted"),
+  retire: t("admin.alloc.issuance.source.retire", "retired"),
+});
 
 export function IssuanceResult({ outcome, kind }: { outcome: IssuanceOutcome; kind: keyof typeof COPY }) {
   const t = useT();
@@ -38,10 +47,10 @@ export function IssuanceResult({ outcome, kind }: { outcome: IssuanceOutcome; ki
     <p className="flex items-start gap-2 text-xs text-positive">
       {applied ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" /> : <Clock className="mt-0.5 size-3.5 shrink-0" />}
       <span>
-        {t(COPY[kind][applied ? "applied" : "queued"], args)}
+        {COPY[kind][applied ? "applied" : "queued"](t, args)}
         {/* The source the hub recorded, so a mint and a burn of the same figure on the
             same holder are told apart on screen and not only in the audit log. */}
-        <span className="text-ink-soft"> · {t(SOURCE[outcome.issuance.source])}</span>
+        <span className="text-ink-soft"> · {sources(t)[outcome.issuance.source]}</span>
       </span>
     </p>
   );

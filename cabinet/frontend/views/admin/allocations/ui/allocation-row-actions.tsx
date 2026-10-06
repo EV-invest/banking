@@ -49,29 +49,29 @@ export function AllocationRowActions({
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onOpenPanel("grants")}>
           <KeyRound className="size-3.5" />
-          {t("admin.alloc.grants.action")}
+          {t("admin.alloc.grants.action", "Grants")}
         </Button>
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onOpenPanel("issue")}>
           <Coins className="size-3.5" />
-          {t("admin.alloc.issue.action")}
+          {t("admin.alloc.issue.action", "Issue")}
         </Button>
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onOpenPanel("book")}>
           <ChartCandlestick className="size-3.5" />
-          {t("admin.alloc.book.action")}
+          {t("admin.alloc.book.action", "Book")}
         </Button>
         {panelAccess && (
           <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onOpenPanel("panelAccess")}>
             <ShieldCheck className="size-3.5" />
-            {t("panelAccess.action")}
+            {t("panelAccess.action", "Panel access")}
           </Button>
         )}
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onEdit}>
-          {editing ? t("ui.cancel") : t("ui.edit")}
+          {editing ? t("ui.cancel", "Cancel") : t("ui.edit", "Edit")}
         </Button>
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onToggle}>
-          {busy ? <Spinner aria-hidden /> : state === "open" ? t("admin.alloc.close") : t("admin.alloc.open")}
+          {busy ? <Spinner aria-hidden /> : state === "open" ? t("admin.alloc.close", "Close") : t("admin.alloc.open", "Open")}
         </Button>
       </div>
     </div>

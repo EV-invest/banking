@@ -24,7 +24,7 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
   const problem = issueDraftProblem(draft);
   // Under the button, only what no field already says: an unpicked holder and untouched
   // units have no message of their own, while a malformed figure is flagged at its field.
-  const reason = problem === "holder" ? "admin.alloc.issue.reason.holder" : problem === "units" && draft.units.trim() === "" ? "admin.alloc.issue.reason.units" : null;
+  const reason = problem === "holder" ? t("admin.alloc.issue.reason.holder", "Pick a holder") : problem === "units" && draft.units.trim() === "" ? t("admin.alloc.issue.reason.units", "Enter units") : null;
   const pickedUser: PickedUser | null = draft.holder ? { userId: draft.holder.userId, email: draft.holder.label } : null;
   const unitsProblem = problem === "units" && draft.units.trim() !== "";
   const basisProblem = problem === "costBasis";
@@ -47,27 +47,27 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
       <div className="grid gap-2.5">
         <Field>
           {/* No `htmlFor`: the picker's trigger sits behind a popover, so it is named by reference. */}
-          <FieldLabel id={`${id}-holder`}>{t("admin.alloc.issue.field.holder")}</FieldLabel>
+          <FieldLabel id={`${id}-holder`}>{t("admin.alloc.issue.field.holder", "Holder")}</FieldLabel>
           <UserPicker value={pickedUser} onPick={(u) => setDraft((d) => ({ ...d, holder: { userId: u.userId, label: u.email || u.userId } }))} labelledBy={`${id}-holder`} />
         </Field>
         <Field data-invalid={unitsProblem || undefined}>
-          <FieldLabel htmlFor={`${id}-units`}>{t("admin.alloc.issue.field.units")}</FieldLabel>
+          <FieldLabel htmlFor={`${id}-units`}>{t("admin.alloc.issue.field.units", "Units")}</FieldLabel>
           <Input id={`${id}-units`} inputMode="decimal" value={draft.units} onChange={(e) => setDraft((d) => ({ ...d, units: e.target.value }))} aria-invalid={unitsProblem || undefined} aria-describedby={unitsProblem ? `${id}-units-error` : undefined} className="tabular-nums" />
-          {unitsProblem && <FieldError id={`${id}-units-error`}>{t("admin.alloc.issue.problem.units")}</FieldError>}
+          {unitsProblem && <FieldError id={`${id}-units-error`}>{t("admin.alloc.issue.problem.units", "Units must be a decimal number above zero")}</FieldError>}
         </Field>
         <Field data-invalid={basisProblem || undefined}>
-          <FieldLabel htmlFor={`${id}-basis`}>{t("admin.alloc.issue.field.costBasis")}</FieldLabel>
+          <FieldLabel htmlFor={`${id}-basis`}>{t("admin.alloc.issue.field.costBasis", "Cost basis (USDT)")}</FieldLabel>
           <Input id={`${id}-basis`} inputMode="decimal" value={draft.costBasis} onChange={(e) => setDraft((d) => ({ ...d, costBasis: e.target.value }))} aria-invalid={basisProblem || undefined} aria-describedby={`${id}-basis-hint`} className="tabular-nums" />
-          {basisProblem ? <FieldError id={`${id}-basis-hint`}>{t("admin.alloc.issue.problem.costBasis")}</FieldError> : <FieldDescription id={`${id}-basis-hint`}>{t("admin.alloc.issue.costBasisHint")}</FieldDescription>}
+          {basisProblem ? <FieldError id={`${id}-basis-hint`}>{t("admin.alloc.issue.problem.costBasis", "Cost basis must be a decimal USDT amount")}</FieldError> : <FieldDescription id={`${id}-basis-hint`}>{t("admin.alloc.issue.costBasisHint", "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the holder already owned cost them no cash.")}</FieldDescription>}
         </Field>
       </div>
       <Button type="button" className="w-full" disabled={busy || problem !== null} onClick={submit}>
         {busy ? <Spinner aria-hidden /> : null}
-        {t("admin.alloc.issue.submit")}
+        {t("admin.alloc.issue.submit", "Issue units")}
       </Button>
       {/* The kit dims a disabled button to half opacity, which on a teal fill over navy
           reads as "slightly quieter" rather than "off" — so the button also says why. */}
-      {reason && <p className="text-center text-xs text-ink-soft">{t(reason)}</p>}
+      {reason && <p className="text-center text-xs text-ink-soft">{reason}</p>}
     </div>
   );
 }

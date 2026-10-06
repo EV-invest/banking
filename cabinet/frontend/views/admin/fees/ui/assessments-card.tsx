@@ -25,7 +25,7 @@ export function AssessmentsCard({ service }: { service: string }) {
   return (
     <Card>
       <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">{t("admin.fees.charges")}</p>
+        <p className="text-sm font-semibold">{t("admin.fees.charges", "Charges")}</p>
         {list.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : !list.data && list.error ? (
@@ -38,8 +38,8 @@ export function AssessmentsCard({ service }: { service: string }) {
               <EmptyMedia variant="icon">
                 <Percent />
               </EmptyMedia>
-              <EmptyTitle>{t("admin.fees.noCharges")}</EmptyTitle>
-              <EmptyDescription>{t("admin.fees.noChargesHint")}</EmptyDescription>
+              <EmptyTitle>{t("admin.fees.noCharges", "No charges yet")}</EmptyTitle>
+              <EmptyDescription>{t("admin.fees.noChargesHint", "The sweeper charges a holding once its accrual is old enough. Nothing here means nobody has been billed.")}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -48,12 +48,12 @@ export function AssessmentsCard({ service }: { service: string }) {
               {/* i18n-max: 14 per header — the wrapper scrolls, so a long header costs a
                   sideways drag rather than a clipped column. */}
               <TableRow>
-                <TableHead className={TABLE_HEAD}>{t("admin.col.when")}</TableHead>
-                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.trigger")}</TableHead>
-                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.managementUsdt")}</TableHead>
-                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.performanceUsdt")}</TableHead>
-                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.unitsTaken")}</TableHead>
-                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.deferredUsdt")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.col.when", "When")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.trigger", "Trigger")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.managementUsdt", "Management, USDT")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.performanceUsdt", "Performance, USDT")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.unitsTaken", "Units taken")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.fees.col.deferredUsdt", "Deferred, USDT")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

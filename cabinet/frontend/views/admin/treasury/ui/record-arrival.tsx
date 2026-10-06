@@ -51,18 +51,18 @@ export function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | 
 
   return (
     <StaggerItem as="section" className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.recordArrival")}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.recordArrival", "Record an out-of-band arrival")}</p>
       <Card>
         <CardContent className="space-y-5 py-6">
-          <p className="max-w-3xl text-sm text-ink-soft">{t("admin.treasury.recordArrivalIntro")}</p>
+          <p className="max-w-3xl text-sm text-ink-soft">{t("admin.treasury.recordArrivalIntro", "USDT sent straight to a treasury hot wallet is real money the ledger never saw. Give its on-chain reference and the hub reads the transfer back off the chain — the amount and the party credited come from there, so this records an arrival rather than asserting one.")}</p>
           <div className="grid gap-4 md:grid-cols-3">
             <RailSelect value={network} options={watchedRails(rails)} onChange={setNetwork} />
             <Field>
-              <FieldLabel htmlFor={`${id}-amount`}>{t("admin.treasury.expectedAmount")}</FieldLabel>
-              <Input id={`${id}-amount`} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder={t("admin.treasury.placeholder.any")} className="tabular-nums" />
+              <FieldLabel htmlFor={`${id}-amount`}>{t("admin.treasury.expectedAmount", "Expected amount (USDT) · optional")}</FieldLabel>
+              <Input id={`${id}-amount`} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder={t("admin.treasury.placeholder.any", "any")} className="tabular-nums" />
             </Field>
             <Field>
-              <FieldLabel htmlFor={`${id}-ref`}>{t("admin.treasury.onchainRef")}</FieldLabel>
+              <FieldLabel htmlFor={`${id}-ref`}>{t("admin.treasury.onchainRef", "On-chain reference")}</FieldLabel>
               {/* A format literal, not prose — it reads the same in every locale. */}
               <Input id={`${id}-ref`} value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="0xhash:logIndex" spellCheck={false} className="font-mono-tech" />
             </Field>
@@ -73,7 +73,7 @@ export function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | 
               splitting around the two spans would hand them three fragments instead. */}
           <p className="text-xs text-ink-soft">
             <RichMessage
-              id="admin.treasury.refNote"
+              format={(t, values) => t("admin.treasury.refNote", "The reference is both what gets verified and the idempotency key — {evmRef} on an EVM rail, {tonRef} on TON. A reference that names no confirmed transfer to one of our addresses is refused, and a re-submission of one already recorded is a no-op. Fill the amount only to assert what you expect; a mismatch is then an error instead of a surprise.", values)}
               values={{
                 evmRef: <code className="font-mono-tech">txhash:logIndex</code>,
                 tonRef: <code className="font-mono-tech">txhash:piggybank</code>,
@@ -90,20 +90,20 @@ export function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | 
           {state.result?.recorded && (
             <Alert role="status" variant="success">
               <CheckCircle2 className="size-4" />
-              <AlertTitle>{t("admin.treasury.recordedTitle")}</AlertTitle>
-              <AlertDescription>{t("admin.treasury.recorded", { amount: `${formatUsdt(state.result.amount, locale)} USDT`, party: partyLabel(state.result, t) })}</AlertDescription>
+              <AlertTitle>{t("admin.treasury.recordedTitle", "Recorded")}</AlertTitle>
+              <AlertDescription>{t("admin.treasury.recorded", "Recorded — the chain reported {amount}, credited to {party}.", { amount: `${formatUsdt(state.result.amount, locale)} USDT`, party: partyLabel(state.result, t) })}</AlertDescription>
             </Alert>
           )}
           {state.result && !state.result.recorded && (
             // A successful no-op, not a failure — so neither the success nor the error tone.
             <Alert role="status">
-              <AlertDescription>{t("admin.treasury.alreadyRecorded")}</AlertDescription>
+              <AlertDescription>{t("admin.treasury.alreadyRecorded", "Already recorded — that reference was credited before, nothing changed.")}</AlertDescription>
             </Alert>
           )}
 
           <Button type="button" className="ml-auto flex" disabled={state.busy || !network || !txRef.trim()} onClick={submit}>
             {state.busy ? <Spinner aria-hidden /> : null}
-            {t("admin.treasury.recordArrivalSubmit")}
+            {t("admin.treasury.recordArrivalSubmit", "Record arrival")}
           </Button>
         </CardContent>
       </Card>
@@ -115,5 +115,5 @@ export function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | 
  *  a transfer that is nobody's and points at the seed proposal instead. Shown rather than
  *  assumed so the operator sees whose deposit was actually credited. */
 function partyLabel({ party_kind, party_id }: RecordedArrival, t: Translate): string {
-  return party_id ? t("admin.treasury.party.generic", { kind: party_kind, id: party_id }) : party_kind;
+  return party_id ? t("admin.treasury.party.generic", "{kind} {id}", { kind: party_kind, id: party_id }) : party_kind;
 }

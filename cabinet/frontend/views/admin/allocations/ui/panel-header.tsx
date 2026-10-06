@@ -21,7 +21,7 @@ export function PanelHeader({ allocation, onClose }: { allocation: Allocation; o
       <button
         type="button"
         onClick={onClose}
-        aria-label={t("ui.close")}
+        aria-label={t("ui.close", "Close")}
         className="rounded-md text-ink-soft outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="size-4" />

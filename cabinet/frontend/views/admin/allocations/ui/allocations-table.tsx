@@ -68,8 +68,8 @@ export function AllocationsTable({
                   <EmptyMedia variant="icon">
                     <Boxes />
                   </EmptyMedia>
-                  <EmptyTitle>{t("admin.alloc.empty")}</EmptyTitle>
-                  <EmptyDescription>{t("admin.alloc.emptyHint")}</EmptyDescription>
+                  <EmptyTitle>{t("admin.alloc.empty", "No allocations registered yet")}</EmptyTitle>
+                  <EmptyDescription>{t("admin.alloc.emptyHint", "Until one is, every subscription is refused.")}</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             </div>
@@ -88,12 +88,12 @@ export function AllocationsTable({
                 {/* i18n-max: 14 per header — auto-layout table; a long header widens its
                     column and squeezes the Product cell. */}
                 <TableRow>
-                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.product")}</TableHead>
-                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.serviceId")}</TableHead>
-                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.state")}</TableHead>
-                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.access")}</TableHead>
-                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.unitCap")}</TableHead>
-                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.product", "Product")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.serviceId", "Service id")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.state", "State")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.access", "Access")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.alloc.col.unitCap", "Unit cap")}</TableHead>
+                  <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions", "Actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

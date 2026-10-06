@@ -36,16 +36,16 @@ export function UserPicker({ value, onPick, labelledBy }: { value: PickedUser | 
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button type="button" variant="outline" role="combobox" aria-expanded={open} aria-labelledby={labelledBy} className="w-full justify-between font-normal">
-          <span className="min-w-0 truncate">{value ? value.email || value.userId : t("admin.alloc.grants.pickUser")}</span>
+          <span className="min-w-0 truncate">{value ? value.email || value.userId : t("admin.alloc.grants.pickUser", "Search investors…")}</span>
           <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">
         <Command search={query} onSearchChange={setQuery}>
-          <CommandInput placeholder={t("admin.users.searchPlaceholder")} />
+          <CommandInput placeholder={t("admin.users.searchPlaceholder", "Search email or user id…")} />
           <CommandList>
             {list.isLoading ? null : users.length === 0 ? (
-              <CommandEmpty>{t("admin.alloc.grants.noUserMatch")}</CommandEmpty>
+              <CommandEmpty>{t("admin.alloc.grants.noUserMatch", "No investors match")}</CommandEmpty>
             ) : (
               <CommandGroup>
                 {users.map((u) => (

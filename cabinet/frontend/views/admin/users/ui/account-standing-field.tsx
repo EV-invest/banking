@@ -60,7 +60,7 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
   return (
     <div className="space-y-2 border-t border-border pt-4">
       <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-ink-soft">
-        {t("admin.users.standing")}
+        {t("admin.users.standing", "Account standing")}
         <TipAnchor anchor="admin.users.status.suspend" />
       </p>
 
@@ -68,10 +68,10 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
           cases differ in what happens if nobody acts: a hold releases itself, a verdict
           does not, and a pre-split suspension does not either but can be lifted here. */}
       <p className="text-xs leading-relaxed text-ink-soft">
-        {standing.kind === "active" && t("admin.users.standingActive")}
-        {standing.kind === "hold" && `${t("admin.users.standingHold")} ${t("admin.users.standingHoldLapses", { when: formatMoment(standing.expiresAt, locale) })}`}
-        {standing.kind === "governance" && t("admin.users.standingGovernance")}
-        {standing.kind === "legacy" && t("admin.users.standingLegacy")}
+        {standing.kind === "active" && t("admin.users.standingActive", "Active. This account can sign in and move money.")}
+        {standing.kind === "hold" && `${t("admin.users.standingHold", "Held by one operator. It lapses on its own unless the owners vote to make it permanent.")} ${t("admin.users.standingHoldLapses", "Lapses {when}", { when: formatMoment(standing.expiresAt, locale) })}`}
+        {standing.kind === "governance" && t("admin.users.standingGovernance", "Suspended by the owners' vote. It does not lapse, and one admin cannot lift it.")}
+        {standing.kind === "legacy" && t("admin.users.standingLegacy", "Suspended before holds and owners' verdicts were told apart. It does not lapse, and one admin can lift it.")}
       </p>
 
       {/* The one-act lift. Offered for a hold and for a pre-split suspension — both of
@@ -81,7 +81,7 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
       {(standing.kind === "hold" || standing.kind === "legacy") && (
         <Button type="button" variant="outline" size="sm" className="w-full" disabled={working} onClick={() => void submit(() => reinstateUser(userId))}>
           {working && pending === null ? <Spinner className="size-3.5" aria-hidden /> : <ShieldCheck className="size-3.5" />}
-          {standing.kind === "hold" ? t("admin.users.liftHold") : t("admin.users.liftSuspension")}
+          {standing.kind === "hold" ? t("admin.users.liftHold", "Lift hold") : t("admin.users.liftSuspension", "Lift suspension")}
         </Button>
       )}
 
@@ -92,8 +92,8 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
           open={pending === "hold"}
           onOpen={() => setPending("hold")}
           onCancel={() => setPending(null)}
-          label={t("admin.users.hold")}
-          hint={t("admin.users.holdHint")}
+          label={t("admin.users.hold", "Hold for 24h")}
+          hint={t("admin.users.holdHint", "Freezes the account now. It lapses by itself after 24 hours unless the owners vote to make it permanent.")}
           icon={<ShieldBan className="size-3.5" />}
           destructive
           busy={working}
@@ -113,8 +113,8 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
           open={pending === "suspension"}
           onOpen={() => setPending("suspension")}
           onCancel={() => setPending(null)}
-          label={t("admin.users.proposeSuspension")}
-          hint={t("admin.users.proposeSuspensionHint")}
+          label={t("admin.users.proposeSuspension", "Propose permanent")}
+          hint={t("admin.users.proposeSuspensionHint", "Asks the owners to make this block permanent. A simple majority of them carries it.")}
           icon={<ShieldBan className="size-3.5" />}
           busy={working}
           reason={reason}
@@ -129,8 +129,8 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
           open={pending === "reinstatement"}
           onOpen={() => setPending("reinstatement")}
           onCancel={() => setPending(null)}
-          label={t("admin.users.proposeReinstatement")}
-          hint={t("admin.users.proposeReinstatementHint")}
+          label={t("admin.users.proposeReinstatement", "Propose reinstatement")}
+          hint={t("admin.users.proposeReinstatementHint", "Only the owners can undo their own verdict. A simple majority of them carries it.")}
           icon={<ShieldQuestion className="size-3.5" />}
           busy={working}
           reason={reason}
@@ -142,9 +142,9 @@ export function AccountStandingField({ userId, standing, busy, run }: AccountSta
 
       {standing.kind !== "active" && (
         <p className="text-xs leading-relaxed text-ink-soft">
-          {t("admin.users.standingOpened")}{" "}
+          {t("admin.users.standingOpened", "Proposal opened. The owners vote in")}{" "}
           <Link href="/consilium" className="rounded-xs underline underline-offset-2 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
-            {t("nav.consilium")}
+            {t("nav.consilium", "Consilium")}
           </Link>
           .
         </p>

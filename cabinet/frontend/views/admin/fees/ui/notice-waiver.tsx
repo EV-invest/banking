@@ -18,6 +18,7 @@
 import { MailWarning } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Alert, AlertDescription, AlertTitle, Button, Spinner } from "@evinvest/uikit";
 
@@ -42,13 +43,13 @@ export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
     case "none":
       return null;
     case "queued":
-      return <p className="text-xs text-ink-soft">{t("admin.fees.notices.queued", { n: summary.queued })}</p>;
+      return <p className="text-xs text-ink-soft">{t("admin.fees.notices.queued", "{n, plural, one {# notice is} other {# notices are}} still being delivered. A change that tightens the terms waits for every holder to be told; there is nothing to do unless the mailer gives up on one.", { n: summary.queued })}</p>;
     case "waived": {
       const at = formatMoment(summary.at, locale);
       const by = waiverName(summary);
       return (
         <p className="text-xs text-ink-soft" title={idTooltip(summary)}>
-          {by ? t("admin.fees.waiver.acknowledged", { by, at, n: summary.holders }) : t("admin.fees.waiver.acknowledgedAnon", { at, n: summary.holders })}
+          {by ? t("admin.fees.waiver.acknowledged", "Notices waived by {by} on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.", { by, at, n: summary.holders }) : t("admin.fees.waiver.acknowledgedAnon", "Notices waived on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.", { at, n: summary.holders })}
         </p>
       );
     }
@@ -102,17 +103,17 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
     // `currentColor` with a selector that outranks a colour class on the `svg` itself.
     <Alert role="status" className="border-accent-warn/40 bg-accent-warn/10 text-accent-warn">
       <MailWarning className="size-4" />
-      <AlertTitle className="text-ink">{t("admin.fees.notices.givenUpTitle", { n: givenUp })}</AlertTitle>
+      <AlertTitle className="text-ink">{t("admin.fees.notices.givenUpTitle", "{n, plural, one {# holder} other {# holders}} could not be told", { n: givenUp })}</AlertTitle>
       <AlertDescription className="gap-3 text-ink">
         <p className="text-sm leading-relaxed">
-          {t("admin.fees.notices.givenUpBody", { n: givenUp })}
-          {queued > 0 && <> {t("admin.fees.notices.moreQueued", { n: queued })}</>}
+          {t("admin.fees.notices.givenUpBody", "The mailer has given up on {n, plural, one {this holder's notice} other {these # notices}}. A change that tightens the terms does not bind over a holder who was never told, so it is held up until somebody takes responsibility for them.", { n: givenUp })}
+          {queued > 0 && <> {t("admin.fees.notices.moreQueued", "{n, plural, one {# more notice is still being delivered and is not covered by this act.} other {# more notices are still being delivered and are not covered by this act.}}", { n: queued })}</>}
         </p>
         {waiver && (
           <p className="text-sm leading-relaxed" title={idTooltip(waiver)}>
             {waiverBy
-              ? t("admin.fees.notices.alreadyWaived", { by: waiverBy, at: formatMoment(waiver.at, locale), n: waiver.holders })
-              : t("admin.fees.notices.alreadyWaivedAnon", { at: formatMoment(waiver.at, locale), n: waiver.holders })}
+              ? t("admin.fees.notices.alreadyWaived", "{by} already took responsibility on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.", { by: waiverBy, at: formatMoment(waiver.at, locale), n: waiver.holders })
+              : t("admin.fees.notices.alreadyWaivedAnon", "Responsibility was already taken on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.", { at: formatMoment(waiver.at, locale), n: waiver.holders })}
           </p>
         )}
         {problem && <p className="text-xs text-accent-error">{problem}</p>}
@@ -120,23 +121,23 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
           <>
             <p className="text-sm leading-relaxed">
               {waiver
-                ? t("admin.fees.notices.acknowledgeWarningExtend", { n: givenUp, total: waiver.holders + givenUp })
-                : t("admin.fees.notices.acknowledgeWarning", { n: givenUp })}
+                ? t("admin.fees.notices.acknowledgeWarningExtend", "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name and the moment replace the earlier acknowledgement's on the change, which will then cover {total, plural, one {# holder} other {all # holders}}, and stay in its history.", { n: givenUp, total: waiver.holders + givenUp })
+                : t("admin.fees.notices.acknowledgeWarning", "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.", { n: givenUp })}
             </p>
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <Button variant="destructive" size="sm" disabled={busy} onClick={() => void acknowledge()}>
                 {busy && <Spinner aria-hidden />}
-                {t("admin.fees.notices.acknowledgeConfirm")}
+                {t("admin.fees.notices.acknowledgeConfirm", "Take responsibility")}
               </Button>
               <Button ref={keepRef} variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
-                {t("admin.fees.notices.acknowledgeBack")}
+                {t("admin.fees.notices.acknowledgeBack", "Keep waiting")}
               </Button>
             </div>
           </>
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button ref={openRef} variant="outline" size="sm" onClick={() => setConfirming(true)}>
-              {t("admin.fees.notices.acknowledge")}
+              {t("admin.fees.notices.acknowledge", "Take responsibility and bind anyway")}
             </Button>
           </div>
         )}
@@ -148,8 +149,8 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
 // The hub's refusals in its own words: a 409 names which figure moved (`errorMessage`
 // relays hub prose verbatim, see `api-client.ts`), and only a bare 403 — not the stale
 // page's `csrf`, which carries a key of its own — is the "not yours to acknowledge" one.
-function waiverProblem(e: unknown, t: (key: string) => string): string {
-  if (e instanceof RequestError && e.status === 403 && !e.code) return t("admin.fees.notices.err.forbidden");
+function waiverProblem(e: unknown, t: Translate): string {
+  if (e instanceof RequestError && e.status === 403 && !e.code) return t("admin.fees.notices.err.forbidden", "Only the requester of this change or an owner can take responsibility for it.");
   return stripTransportPrefix(errorMessage(e, t));
 }
 
@@ -162,7 +163,7 @@ export function WaiverNote({ change }: { change: FeePolicyChange }) {
   const by = waiverName(waiver);
   return (
     <p className="mt-1 text-xs text-ink-soft" title={idTooltip(waiver)}>
-      {by ? t("admin.fees.waiver.row", { by, n: waiver.holders }) : t("admin.fees.waiver.rowAnon", { n: waiver.holders })}
+      {by ? t("admin.fees.waiver.row", "Notices waived by {by} · {n, plural, one {# holder} other {# holders}}", { by, n: waiver.holders }) : t("admin.fees.waiver.rowAnon", "Notices waived · {n, plural, one {# holder} other {# holders}}", { n: waiver.holders })}
     </p>
   );
 }

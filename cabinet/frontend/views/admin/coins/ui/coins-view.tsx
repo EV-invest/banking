@@ -31,7 +31,7 @@ export function CoinsView() {
 
   return (
     <AdminScreen className="space-y-8">
-      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.coins")} subtitle={t("admin.coins.subtitle")} />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer", "Administer")} title={t("nav.coins", "Coins")} subtitle={t("admin.coins.subtitle", "Rails users can deposit and withdraw on")} />
 
       {error && (
         <StaggerItem as="p" className="flex items-center gap-2 text-sm text-accent-error">
@@ -49,9 +49,9 @@ export function CoinsView() {
                 <div key={r.network} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium">
-                      {networkLabel(r.network)} <span className="text-xs text-ink-soft">· {t("admin.coins.gas", { coin: r.gas_coin })}</span>
+                      {networkLabel(r.network)} <span className="text-xs text-ink-soft">· {t("admin.coins.gas", "gas in {coin}", { coin: r.gas_coin })}</span>
                     </p>
-                    <p className="text-xs text-ink-soft">{!r.configured ? t("admin.coins.unconfigured") : r.frozen ? t("admin.coins.frozen") : t("admin.coins.live")}</p>
+                    <p className="text-xs text-ink-soft">{!r.configured ? t("admin.coins.unconfigured", "Not run by this deployment") : r.frozen ? t("admin.coins.frozen", "Frozen — hidden from users, queued withdrawals held, no gas alerts") : t("admin.coins.live", "Live — deposits and withdrawals open")}</p>
                   </div>
                   <Toggle on={r.configured && !r.frozen} disabled={!r.configured} onChange={(live) => setLive(r.network, live)} label={networkLabel(r.network)} />
                 </div>

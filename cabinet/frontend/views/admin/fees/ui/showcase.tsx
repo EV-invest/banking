@@ -11,7 +11,7 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { pct } from "@/shared/lib/rate";
 import { formatUsdt } from "@/views/admin/lib/format";
-import { FIELD_LABEL_KEY, RATE_FIELDS, type RateField } from "@/views/admin/fees/lib/schedule";
+import { fieldLabel, RATE_FIELDS, type RateField } from "@/views/admin/fees/lib/schedule";
 
 /** The reference position the worked example prices. A round hundred thousand: big enough
  *  that the management line lands on a figure worth arguing about, round enough that a
@@ -27,29 +27,36 @@ export function Showcase({ bps }: { bps: Record<RateField, number | null> }) {
   const example =
     bps.management === null || bps.performance === null || bps.hurdle === null
       ? null
-      : t(bps.hurdle > 0 ? "admin.fees.showcase.exampleHurdle" : "admin.fees.showcase.example", {
+      : (bps.hurdle > 0 ? t("admin.fees.showcase.exampleHurdle", "On a {amount} position: {management} a year, plus {performance} of any gain above a mark rising {hurdle} a year.", {
           amount: `${formatUsdt(String(REFERENCE_POSITION), locale)} USDT`,
           // Exact: bps are integers and the reference is a multiple of 10 000, so the
           // quotient is a whole number of USDT — no float residue to round away.
           management: `${formatUsdt(String((REFERENCE_POSITION * bps.management) / 10_000), locale)} USDT`,
           performance: pct(bps.performance),
           hurdle: pct(bps.hurdle),
-        });
+        }) : t("admin.fees.showcase.example", "On a {amount} position: {management} a year, plus {performance} of any gain.", {
+          amount: `${formatUsdt(String(REFERENCE_POSITION), locale)} USDT`,
+          // Exact: bps are integers and the reference is a multiple of 10 000, so the
+          // quotient is a whole number of USDT — no float residue to round away.
+          management: `${formatUsdt(String((REFERENCE_POSITION * bps.management) / 10_000), locale)} USDT`,
+          performance: pct(bps.performance),
+          hurdle: pct(bps.hurdle),
+        }));
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
-      <p className="text-xs font-medium text-ink-soft">{t("admin.fees.showcase.title")}</p>
+      <p className="text-xs font-medium text-ink-soft">{t("admin.fees.showcase.title", "What gets saved")}</p>
       <dl className="grid gap-3 sm:grid-cols-3">
         {RATE_FIELDS.map((field) => (
           <div key={field} className="space-y-0.5">
-            <dt className="text-xs text-ink-soft">{t(FIELD_LABEL_KEY[field])}</dt>
+            <dt className="text-xs text-ink-soft">{fieldLabel(field, t)}</dt>
             <dd className="text-sm tabular-nums">
               {bps[field] === null ? (
                 <span className="text-ink-soft">—</span>
               ) : (
                 <>
                   <span className="font-medium">{pct(bps[field])}</span>{" "}
-                  <span className="text-xs text-ink-soft">{t("admin.fees.showcase.bps", { n: bps[field] })}</span>
+                  <span className="text-xs text-ink-soft">{t("admin.fees.showcase.bps", "{n} bps", { n: bps[field] })}</span>
                 </>
               )}
             </dd>

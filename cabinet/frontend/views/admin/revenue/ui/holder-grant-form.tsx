@@ -49,17 +49,17 @@ export function HolderGrantForm({ allocation }: { allocation: "fee" | "fund" }) 
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
-      <p className="text-xs text-ink-soft">{t("admin.revenue.grant.intro")}</p>
+      <p className="text-xs text-ink-soft">{t("admin.revenue.grant.intro", "Seat a person on the fee allocation. The owners are asked; the units are minted only when more than half of them agree.")}</p>
       <div className="grid gap-2.5">
         <Field>
           {/* No `htmlFor`: the picker's trigger sits behind a popover, so it is named by reference. */}
-          <FieldLabel id={`${id}-holder`}>{t("admin.alloc.issue.field.holder")}</FieldLabel>
+          <FieldLabel id={`${id}-holder`}>{t("admin.alloc.issue.field.holder", "Holder")}</FieldLabel>
           <UserPicker value={holder} onPick={setHolder} labelledBy={`${id}-holder`} />
         </Field>
         <Field data-invalid={unitsProblem || undefined}>
-          <FieldLabel htmlFor={`${id}-units`}>{t("admin.alloc.issue.field.units")}</FieldLabel>
+          <FieldLabel htmlFor={`${id}-units`}>{t("admin.alloc.issue.field.units", "Units")}</FieldLabel>
           <Input id={`${id}-units`} inputMode="decimal" value={units} onChange={(e) => setUnits(e.target.value)} aria-invalid={unitsProblem || undefined} aria-describedby={unitsProblem ? `${id}-units-error` : undefined} className="tabular-nums" />
-          {unitsProblem && <FieldError id={`${id}-units-error`}>{t("admin.alloc.issue.problem.units")}</FieldError>}
+          {unitsProblem && <FieldError id={`${id}-units-error`}>{t("admin.alloc.issue.problem.units", "Units must be a decimal number above zero")}</FieldError>}
         </Field>
       </div>
       {error && (
@@ -68,12 +68,12 @@ export function HolderGrantForm({ allocation }: { allocation: "fee" | "fund" }) 
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {opened && <ConsiliumOpened consiliumId={opened.id} body={t("admin.revenue.grant.opened")} onDismiss={() => setOpened(null)} />}
+      {opened && <ConsiliumOpened consiliumId={opened.id} body={t("admin.revenue.grant.opened", "The owners have each been emailed a link. No units are minted until more than half of them confirm from their own mailboxes; the cap table above follows once the relay posts the grant.")} onDismiss={() => setOpened(null)} />}
       <Button type="button" className="w-full" disabled={busy || !sendable} onClick={() => void submit()}>
         {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-        {t("admin.revenue.grant.submit")}
+        {t("admin.revenue.grant.submit", "Propose holder grant")}
       </Button>
-      {!holder && <p className="text-center text-xs text-ink-soft">{t("admin.alloc.issue.reason.holder")}</p>}
+      {!holder && <p className="text-center text-xs text-ink-soft">{t("admin.alloc.issue.reason.holder", "Pick a holder")}</p>}
     </div>
   );
 }

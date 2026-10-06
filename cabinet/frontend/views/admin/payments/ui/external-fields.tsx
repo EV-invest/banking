@@ -43,19 +43,19 @@ export function ExternalFields({
       ) : rails.length === 0 ? (
         <Empty className="border p-4">
           <EmptyHeader>
-            <EmptyTitle className="text-sm">{t("admin.payments.noRail")}</EmptyTitle>
-            <EmptyDescription className="text-xs">{t("admin.payments.noRailHint")}</EmptyDescription>
+            <EmptyTitle className="text-sm">{t("admin.payments.noRail", "No rail is configured")}</EmptyTitle>
+            <EmptyDescription className="text-xs">{t("admin.payments.noRailHint", "Rails are configured on the treasury; a payment ships only on a chain with a running watcher.")}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button asChild size="sm" variant="outline">
-              <Link href="/admin/treasury">{t("nav.treasury")}</Link>
+              <Link href="/admin/treasury">{t("nav.treasury", "Treasury")}</Link>
             </Button>
           </EmptyContent>
         </Empty>
       ) : (
         // The uikit group rather than a hand-rolled `role="radiogroup"`: it brings roving
         // focus, so the rails are one tab stop and the arrow keys move between them.
-        <RadioGroup value={network} onValueChange={(next) => onChange({ network: next })} aria-label={t("admin.rail")} className="flex flex-wrap gap-2">
+        <RadioGroup value={network} onValueChange={(next) => onChange({ network: next })} aria-label={t("admin.rail", "Rail")} className="flex flex-wrap gap-2">
           {rails.map((rail) => {
             const selected = rail.network === network;
             const id = `${railId}-${rail.network}`;
@@ -79,8 +79,8 @@ export function ExternalFields({
       <Input
         value={address}
         onChange={(e) => onChange({ address: e.target.value })}
-        placeholder={t("admin.payments.placeholder.address")}
-        aria-label={t("admin.payments.address")}
+        placeholder={t("admin.payments.placeholder.address", "The wallet that receives the payment")}
+        aria-label={t("admin.payments.address", "Destination address")}
         spellCheck={false}
         className="font-mono-tech text-xs"
       />

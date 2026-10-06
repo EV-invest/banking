@@ -47,7 +47,7 @@ export function RoleField({ userId, role, busy, run }: RoleFieldProps) {
     <div className="flex flex-col gap-1.5 py-1">
       <div className="flex items-center justify-between gap-2 text-sm">
         <span className="flex items-center gap-1.5 text-ink-soft">
-          {t("admin.users.role")}
+          {t("admin.users.role", "Role")}
           <TipAnchor anchor="admin.users.access.role" />
         </span>
         {/* Disabled on the trigger, which is the button: the uikit's `Select` root takes no
@@ -73,11 +73,11 @@ export function RoleField({ userId, role, busy, run }: RoleFieldProps) {
       </div>
 
       <p className="text-xs leading-relaxed text-ink-soft">
-        {seated ? t("admin.users.ownerSeatHeld") : t("admin.users.adminViaProposal")}{" "}
+        {seated ? t("admin.users.ownerSeatHeld", "This account holds an owner's seat, so its role cannot be changed here. A seat is given up by resigning, or taken by a removal the other owners vote through, in") : t("admin.users.adminViaProposal", "Admin is not on this list — granting it is a proposal the owners vote through. Taking it away is still one step here. Open one in")}{" "}
         {/* The destination is the link text, so the sentence stops outside it — a trailing
             full stop inside the anchor would be underlined and clickable. */}
         <Link href="/consilium" className="rounded-xs underline underline-offset-2 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
-          {t("nav.consilium")}
+          {t("nav.consilium", "Consilium")}
         </Link>
         .
       </p>
@@ -89,8 +89,8 @@ export function RoleField({ userId, role, busy, run }: RoleFieldProps) {
           open={proposing}
           onOpen={() => setProposing(true)}
           onCancel={() => setProposing(false)}
-          label={t("admin.users.proposeAdmin")}
-          hint={t("admin.users.proposeAdminHint")}
+          label={t("admin.users.proposeAdmin", "Propose admin")}
+          hint={t("admin.users.proposeAdminHint", "Granting admin is the owners' decision. Taking it away is still one step, right here.")}
           icon={<ShieldPlus className="size-3.5" />}
           busy={working}
           reason={reason}

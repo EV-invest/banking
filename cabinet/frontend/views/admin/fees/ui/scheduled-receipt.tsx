@@ -14,6 +14,7 @@
 import { CalendarClock, Users, Zap } from "lucide-react";
 import { useState } from "react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Alert, AlertDescription, AlertTitle, Button } from "@evinvest/uikit";
 
@@ -22,8 +23,19 @@ import { formatMoment } from "@/shared/lib/datetime";
 import { Link } from "@/shared/ui/cabinet-link";
 import { receiptKind } from "@/views/admin/fees/lib/receipt";
 
-const TITLE_KEY = { awaiting: "admin.fees.awaitingTitle", scheduled: "admin.fees.scheduledTitle", immediate: "admin.fees.immediateTitle" } as const;
-const BODY_KEY = { awaiting: "admin.fees.awaitingBody", scheduled: "admin.fees.scheduledBody", immediate: "admin.fees.immediateBody" } as const;
+type ReceiptKind = "awaiting" | "scheduled" | "immediate";
+type ReceiptArgs = { version: number; at: string };
+
+const titles = (t: Translate): Record<ReceiptKind, string> => ({
+  awaiting: t("admin.fees.awaitingTitle", "Sent to the owners — nothing has changed yet"),
+  scheduled: t("admin.fees.scheduledTitle", "Scheduled — nothing has changed yet"),
+  immediate: t("admin.fees.immediateTitle", "In force within a minute — nobody to notify"),
+});
+const bodies = (t: Translate, args: ReceiptArgs): Record<ReceiptKind, string> => ({
+  awaiting: t("admin.fees.awaitingBody", "The owners have each been emailed a link. Version {version} is scheduled only once more than half of them approve, and binds 24 hours after that while anyone holds units. The live tally is in the consilium.", args),
+  scheduled: t("admin.fees.scheduledBody", "Version {version} takes effect on {at}. Every holder is being emailed the notice; until then the fund charges its current terms.", args),
+  immediate: t("admin.fees.immediateBody", "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. Until it is, it can still be cancelled below. The first investor to subscribe reads these terms.", args),
+});
 const ICON = { awaiting: Users, scheduled: CalendarClock, immediate: Zap } as const;
 
 export function ScheduledReceipt({ change, onDismiss }: { change: FeePolicyChange; onDismiss: () => void }) {
@@ -37,17 +49,17 @@ export function ScheduledReceipt({ change, onDismiss }: { change: FeePolicyChang
   return (
     <Alert role="status" variant="success">
       <Icon className="size-4" />
-      <AlertTitle>{t(TITLE_KEY[kind])}</AlertTitle>
+      <AlertTitle>{titles(t)[kind]}</AlertTitle>
       <AlertDescription className="gap-3">
-        <p className="leading-relaxed">{t(BODY_KEY[kind], { version: change.version, at: formatMoment(change.effective_from, locale) })}</p>
+        <p className="leading-relaxed">{bodies(t, { version: change.version, at: formatMoment(change.effective_from, locale) })[kind]}</p>
         <div className="flex flex-wrap gap-2 text-ink">
           {awaiting && (
             <Button asChild size="sm" variant="outline">
-              <Link href="/consilium">{t("admin.payments.openConsilium")}</Link>
+              <Link href="/consilium">{t("admin.payments.openConsilium", "Open the consilium")}</Link>
             </Button>
           )}
           <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
-            {t("ui.close")}
+            {t("ui.close", "Close")}
           </Button>
         </div>
       </AlertDescription>

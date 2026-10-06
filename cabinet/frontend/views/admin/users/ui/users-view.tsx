@@ -48,7 +48,7 @@ export function UsersView() {
   // lists that happen to differ.
   return (
     <AdminScreen className="space-y-6">
-      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.users")} subtitle={t("admin.users.subtitle")} />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer", "Administer")} title={t("nav.users", "Users")} subtitle={t("admin.users.subtitle", "Investors and operators — identities, KYC, roles and sessions")} />
 
       {/* Above the table, because it changes how every role in it should be read — and
           mounted unconditionally: the component owns the condition (`shared/ui/
@@ -59,20 +59,20 @@ export function UsersView() {
 
       <StaggerItem className="flex flex-wrap items-center gap-3">
         <Input
-          placeholder={t("admin.users.searchPlaceholder")}
+          placeholder={t("admin.users.searchPlaceholder", "Search email or user id…")}
           className="max-w-xs"
           defaultValue={filters.query ?? ""}
           onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value || undefined }))}
         />
         <FilterSelect
-          label={t("admin.users.role")}
+          label={t("admin.users.role", "Role")}
           value={filters.role}
           onChange={(role) => setFilters((f) => ({ ...f, role }))}
           options={ROLES}
           optionLabel={(role) => roleLabel(role, t)}
         />
         <FilterSelect
-          label={t("admin.col.status")}
+          label={t("admin.col.status", "Status")}
           value={filters.status}
           onChange={(status) => setFilters((f) => ({ ...f, status }))}
           options={["active", "disabled"]}
@@ -81,7 +81,7 @@ export function UsersView() {
         {/* The count is an ICU plural, not `${n} users`: the noun has to agree with the
             number in most locales, and `#` groups the digits in the reader's own
             convention — which is also what retires the hard-coded `en-US` here. */}
-        <span className="ml-auto text-sm text-ink-soft">{t("admin.users.count", { n: Number(total) })}</span>
+        <span className="ml-auto text-sm text-ink-soft">{t("admin.users.count", "{n, plural, one {# user} other {# users}}", { n: Number(total) })}</span>
       </StaggerItem>
 
       {/* Table and drawer are one section: the drawer's open/close already owns the
@@ -105,8 +105,8 @@ export function UsersView() {
                       <EmptyMedia variant="icon">
                         <SearchX />
                       </EmptyMedia>
-                      <EmptyTitle>{t("admin.users.noMatch")}</EmptyTitle>
-                      <EmptyDescription>{t("admin.users.noMatchHint")}</EmptyDescription>
+                      <EmptyTitle>{t("admin.users.noMatch", "No users match these filters")}</EmptyTitle>
+                      <EmptyDescription>{t("admin.users.noMatchHint", "Loosen the search, role or status filter to see more accounts.")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 </div>
@@ -137,10 +137,10 @@ export function UsersView() {
                         on every head and cell is what lets them wrap at all: the kit's are
                         nowrap, and under a fixed layout nowrap text overprints its neighbour. */}
                     <TableRow>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "w-1/2 whitespace-normal")}>{t("admin.col.user")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "whitespace-normal")}>{t("admin.users.role")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "whitespace-normal")}>{t("admin.users.kyc")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "whitespace-normal")}>{t("admin.col.status")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "w-1/2 whitespace-normal")}>{t("admin.col.user", "User")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "whitespace-normal")}>{t("admin.users.role", "Role")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "whitespace-normal")}>{t("admin.users.kyc", "KYC")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "whitespace-normal")}>{t("admin.col.status", "Status")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -170,7 +170,7 @@ export function UsersView() {
                             {u.role_is_break_glass && <BreakGlassMark />}
                           </div>
                         </TableCell>
-                        <TableCell className={cn(EDGE_CELL, "whitespace-normal text-ink-soft")}>{t("admin.users.kycLevelShort", { n: u.kyc_level })}</TableCell>
+                        <TableCell className={cn(EDGE_CELL, "whitespace-normal text-ink-soft")}>{t("admin.users.kycLevelShort", "L{n}", { n: u.kyc_level })}</TableCell>
                         <TableCell className={cn(EDGE_CELL, "whitespace-normal")}>
                           <StatusDot status={u.status} label={statusLabel(u.status, t)} />
                         </TableCell>
@@ -244,10 +244,10 @@ function FilterSelect({
       <span className="text-ink-soft">{label}:</span>
       <Select value={value ?? ""} onValueChange={(v) => onChange(v || undefined)}>
         <SelectTrigger size="sm" className="border-border bg-secondary">
-          <span className="truncate">{value === undefined ? t("ui.all") : optionLabel(value)}</span>
+          <span className="truncate">{value === undefined ? t("ui.all", "All") : optionLabel(value)}</span>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">{t("ui.all")}</SelectItem>
+          <SelectItem value="">{t("ui.all", "All")}</SelectItem>
           {options.map((o) => (
             <SelectItem key={o} value={o}>
               {optionLabel(o)}
@@ -336,7 +336,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           <button
             type="button"
             onClick={onClose}
-            aria-label={t("ui.close")}
+            aria-label={t("ui.close", "Close")}
             className="rounded-md text-ink-soft outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="size-4" />
@@ -346,7 +346,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
         {/* i18n-max: 12 per badge — three chips wrap inside a 340px drawer. */}
         <div className="flex flex-wrap gap-1.5 text-xs">
           <Chip>{roleLabel(role, t)}</Chip>
-          <Chip>{t("admin.users.kycBadge", { n: profile?.kyc_level ?? summary.kyc_level })}</Chip>
+          <Chip>{t("admin.users.kycBadge", "KYC L{n}", { n: profile?.kyc_level ?? summary.kyc_level })}</Chip>
           <span className={cn("rounded-full px-2 py-0.5 font-medium", statusTone(status))}>{statusLabel(status, t)}</span>
           {breakGlass && <BreakGlassMark />}
         </div>
@@ -355,7 +355,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
             for the mark. The page-level notice above the table says the same thing about
             the READER; this says it about the account they are looking at, which is a
             different fact and can be true when the other is not. */}
-        {breakGlass && <p className="text-xs leading-relaxed text-ink-soft">{t("admin.users.breakGlassExplainer")}</p>}
+        {breakGlass && <p className="text-xs leading-relaxed text-ink-soft">{t("admin.users.breakGlassExplainer", "This role came from the OWNER_SUBJECTS allowlist, not from the register. It is real access and it seats nobody — the consilium does not count it, and it lapses as soon as the fund has its first owner.")}</p>}
 
         {error && (
           <p className="flex items-center gap-2 text-xs text-accent-error">
@@ -363,17 +363,17 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           </p>
         )}
 
-        <Section title={t("admin.users.identity")}>
-          <Row label={t("admin.users.joined")} value={ago(summary.created_at, t)} />
+        <Section title={t("admin.users.identity", "Identity")}>
+          <Row label={t("admin.users.joined", "Joined")} value={ago(summary.created_at, t)} />
           <Row
-            label={t("admin.users.tokenVersion")}
-            value={t("admin.users.tokenVersionValue", { n: profile?.token_version ?? summary.token_version })}
+            label={t("admin.users.tokenVersion", "Token version")}
+            value={t("admin.users.tokenVersionValue", "v{n}", { n: profile?.token_version ?? summary.token_version })}
             tip="admin.users.identity.token-version"
           />
-          <Row label={t("admin.users.balance")} value={balance ? `${formatUsdt(balance.amount, locale)} USDT` : "—"} />
+          <Row label={t("admin.users.balance", "Balance")} value={balance ? `${formatUsdt(balance.amount, locale)} USDT` : "—"} />
         </Section>
 
-        <Section title={t("admin.users.accessSecurity")}>
+        <Section title={t("admin.users.accessSecurity", "Access & security")}>
           <RoleField userId={summary.user_id} role={role} busy={busy} run={run} />
           <KycField
             level={profile?.kyc_level ?? summary.kyc_level}
@@ -383,10 +383,10 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           />
           <Button type="button" variant="outline" size="sm" className="mt-2 w-full border-accent-error/40 text-accent-error hover:bg-accent-error/10" disabled={busy === "revoke"} onClick={() => run("revoke", () => revokeSessions(summary.user_id))}>
             {busy === "revoke" ? <Spinner aria-hidden /> : null}
-            {t("admin.users.revokeAllSessions")}
+            {t("admin.users.revokeAllSessions", "Revoke all sessions")}
           </Button>
           <p className="flex items-center gap-1.5 pt-1 text-xs text-ink-soft">
-            {t("admin.users.revokeNote")}
+            {t("admin.users.revokeNote", "Bumps token_version — invalidates every JWT issued to this user.")}
             <TipAnchor anchor="admin.users.access.revoke-sessions" />
           </p>
         </Section>
@@ -465,7 +465,7 @@ function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolea
           is a button, which a label has nothing to bind to. */}
       <div className="flex items-center justify-between gap-2 text-sm">
         <span className="flex items-center gap-1.5 text-ink-soft">
-          {t("ui.kycLevel")}
+          {t("ui.kycLevel", "KYC level")}
           <TipAnchor anchor="admin.users.access.kyc-level" />
         </span>
         <Select
@@ -519,7 +519,7 @@ function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolea
         }}
       >
         {busy ? <Spinner aria-hidden /> : null}
-        {t("ui.save")}
+        {t("ui.save", "Save")}
       </Button>
       {/* Below the control rather than instead of it, the way the owner seat's sentence sits
           under the role select: a greyed-out select with no sentence reads as a fault. The `id`
@@ -527,7 +527,7 @@ function KycField({ level, busy, isSelf, onSave }: { level: number; busy: boolea
           a sighted reader knows to pair with them. */}
       {isSelf && (
         <FieldDescription id={hintId} className="text-xs leading-relaxed">
-          {t("admin.users.kycSelf")}
+          {t("admin.users.kycSelf", "Your own verification tier is not set from here. Another holder of KycManage has to change it.")}
         </FieldDescription>
       )}
     </div>
@@ -579,7 +579,7 @@ function BreakGlassMark() {
     <Badge variant="outline" className="gap-1 whitespace-nowrap border-accent-warn/40 text-accent-warn">
       <KeyRound className="size-3" aria-hidden />
       {/* i18n-max: 14 — this sits in a table column sized from an 8-character header. */}
-      {t("admin.users.breakGlassRole")}
+      {t("admin.users.breakGlassRole", "Emergency access")}
     </Badge>
   );
 }

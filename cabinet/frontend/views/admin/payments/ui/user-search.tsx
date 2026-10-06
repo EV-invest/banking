@@ -41,7 +41,7 @@ export function UserSearch({ value, onChange }: { value: string; onChange: (id: 
           <span className="truncate">{pickedEmail || value}</span>
         </span>
         <Button type="button" size="sm" variant="ghost" onClick={() => onChange("", "")}>
-          {t("ui.edit")}
+          {t("ui.edit", "Edit")}
         </Button>
       </div>
     );
@@ -49,12 +49,12 @@ export function UserSearch({ value, onChange }: { value: string; onChange: (id: 
 
   return (
     <Field>
-      <FieldLabel htmlFor={inputId}>{t("admin.payments.investor")}</FieldLabel>
+      <FieldLabel htmlFor={inputId}>{t("admin.payments.investor", "Investor")}</FieldLabel>
       <Input
         id={inputId}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={t("admin.payments.placeholder.userSearch")}
+        placeholder={t("admin.payments.placeholder.userSearch", "Search investors by email")}
         spellCheck={false}
         autoComplete="off"
         aria-controls={listId}
@@ -66,15 +66,15 @@ export function UserSearch({ value, onChange }: { value: string; onChange: (id: 
       ) : users.length === 0 ? (
         <Empty className="border p-4">
           <EmptyHeader>
-            <EmptyTitle className="text-sm">{t("admin.payments.noUsers")}</EmptyTitle>
-            <EmptyDescription className="text-xs">{t("admin.payments.noUsersHint")}</EmptyDescription>
+            <EmptyTitle className="text-sm">{t("admin.payments.noUsers", "No investor matches.")}</EmptyTitle>
+            <EmptyDescription className="text-xs">{t("admin.payments.noUsersHint", "Try another part of the email address.")}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
         // Not the uikit `Command`: it filters its items client-side by their `value`, and
         // these rows are already the server's answer to the query — a match on anything
         // but the email would vanish from the list. The listbox semantics are kept by hand.
-        <ul id={listId} role="listbox" aria-label={t("admin.payments.investor")} className="divide-y divide-border rounded-lg border border-border">
+        <ul id={listId} role="listbox" aria-label={t("admin.payments.investor", "Investor")} className="divide-y divide-border rounded-lg border border-border">
           {users.map((u) => (
             <li key={u.user_id} role="presentation">
               <button

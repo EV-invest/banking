@@ -74,24 +74,24 @@ export function ReasonAction({
 
   return (
     <Field>
-      <FieldLabel htmlFor={inputId}>{t("admin.users.reasonLabel")}</FieldLabel>
+      <FieldLabel htmlFor={inputId}>{t("admin.users.reasonLabel", "Reason")}</FieldLabel>
       <Textarea
         id={inputId}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         rows={3}
         maxLength={1000}
-        placeholder={t("admin.users.reasonPlaceholder")}
+        placeholder={t("admin.users.reasonPlaceholder", "Why this account, in one line")}
       />
       <FieldDescription>{hint}</FieldDescription>
-      <FieldDescription>{t("admin.users.reasonHint")}</FieldDescription>
+      <FieldDescription>{t("admin.users.reasonHint", "Recorded on the audit row, and read by every owner who votes.")}</FieldDescription>
       <div className="flex gap-2">
         <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy || reason.trim().length === 0} onClick={onSubmit}>
           {busy ? <Spinner className="size-3.5" aria-hidden /> : icon}
           {label}
         </Button>
         <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onCancel}>
-          {t("ui.cancel")}
+          {t("ui.cancel", "Cancel")}
         </Button>
       </div>
     </Field>

@@ -44,35 +44,35 @@ export function BookForm({ allocation, policy, busy, saved, onSubmit }: { alloca
       {/* Not a `<label>`: the switch is a button, and the caption would be a second target. */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium">{t("admin.alloc.book.field.open")}</p>
-          <p className="text-xs text-ink-soft">{t(draft.open ? "admin.alloc.book.openHint" : "admin.alloc.book.closedHint")}</p>
+          <p className="text-sm font-medium">{t("admin.alloc.book.field.open", "Book open")}</p>
+          <p className="text-xs text-ink-soft">{(draft.open ? t("admin.alloc.book.openHint", "Holders can place and fill orders") : t("admin.alloc.book.closedHint", "Orders are refused; the book stays readable"))}</p>
         </div>
-        <Switch checked={draft.open} onCheckedChange={(open) => edit({ open })} disabled={busy} aria-label={t("admin.alloc.book.field.open")} />
+        <Switch checked={draft.open} onCheckedChange={(open) => edit({ open })} disabled={busy} aria-label={t("admin.alloc.book.field.open", "Book open")} />
       </div>
 
-      <Field label={t("admin.alloc.book.field.takerFee")} value={draft.takerFeePct} onChange={(takerFeePct) => edit({ takerFeePct })} problem={problem === "fee" ? t("admin.alloc.book.problem.fee") : null} hint={t("admin.alloc.book.takerFeeHint")} />
+      <Field label={t("admin.alloc.book.field.takerFee", "Taker fee (%)")} value={draft.takerFeePct} onChange={(takerFeePct) => edit({ takerFeePct })} problem={problem === "fee" ? t("admin.alloc.book.problem.fee", "Enter a percent between 0 and 100 with up to two decimals") : null} hint={t("admin.alloc.book.takerFeeHint", "Charged to the side that crosses the spread, in USDT on the order value.")} />
 
       <BookUnbackedAck checked={draft.allowUnbackedTrading} onChange={(allowUnbackedTrading) => edit({ allowUnbackedTrading })} backing={backingOf(allocation)} required={unacknowledged} disabled={busy} />
 
       <Collapsible open={advanced} onOpenChange={setAdvanced}>
         <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md py-1 text-xs font-medium text-ink-soft outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
-          {t("admin.alloc.book.advanced")}
+          {t("admin.alloc.book.advanced", "Advanced")}
           <ChevronDown className={cn("size-3.5 transition-transform", advanced && "rotate-180")} />
         </CollapsibleTrigger>
         <CollapsibleContent className="grid gap-2.5 pt-2">
-          <Field label={t("admin.alloc.book.field.tick")} value={draft.tick} onChange={(tick) => edit({ tick })} problem={problem === "tick" ? t("admin.alloc.book.problem.decimal") : null} hint={t("admin.alloc.book.keepHint")} />
-          <Field label={t("admin.alloc.book.field.lot")} value={draft.lot} onChange={(lot) => edit({ lot })} problem={problem === "lot" ? t("admin.alloc.book.problem.decimal") : null} hint={t("admin.alloc.book.keepHint")} />
-          <Field label={t("admin.alloc.book.field.slippage")} value={draft.slippagePct} onChange={(slippagePct) => edit({ slippagePct })} problem={problem === "slippage" ? t("admin.alloc.book.problem.fee") : null} hint={t("admin.alloc.book.slippageHint")} />
+          <Field label={t("admin.alloc.book.field.tick", "Price tick (USDT)")} value={draft.tick} onChange={(tick) => edit({ tick })} problem={problem === "tick" ? t("admin.alloc.book.problem.decimal", "Enter a decimal number") : null} hint={t("admin.alloc.book.keepHint", "Leave empty to keep the current value.")} />
+          <Field label={t("admin.alloc.book.field.lot", "Lot size (units)")} value={draft.lot} onChange={(lot) => edit({ lot })} problem={problem === "lot" ? t("admin.alloc.book.problem.decimal", "Enter a decimal number") : null} hint={t("admin.alloc.book.keepHint", "Leave empty to keep the current value.")} />
+          <Field label={t("admin.alloc.book.field.slippage", "Market slippage (%)")} value={draft.slippagePct} onChange={(slippagePct) => edit({ slippagePct })} problem={problem === "slippage" ? t("admin.alloc.book.problem.fee", "Enter a percent between 0 and 100 with up to two decimals") : null} hint={t("admin.alloc.book.slippageHint", "How far past the best level a market order may sweep.")} />
         </CollapsibleContent>
       </Collapsible>
 
       <Button type="button" className={cn("w-full", TEAL_CTA)} disabled={busy || problem !== null || unacknowledged} onClick={submit}>
         {busy ? <Spinner aria-hidden /> : null}
-        {t("admin.alloc.book.submit")}
+        {t("admin.alloc.book.submit", "Save book terms")}
       </Button>
       {saved && (
         <p className="flex items-center gap-2 text-xs text-positive">
-          <CheckCircle2 className="size-3.5" /> {t("admin.alloc.book.saved")}
+          <CheckCircle2 className="size-3.5" /> {t("admin.alloc.book.saved", "Book terms saved.")}
         </p>
       )}
     </div>

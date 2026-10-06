@@ -21,8 +21,8 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
           <EmptyMedia variant="icon">
             <Users />
           </EmptyMedia>
-          <EmptyTitle>{t("admin.alloc.grants.empty")}</EmptyTitle>
-          <EmptyDescription>{t("admin.alloc.grants.emptyHint")}</EmptyDescription>
+          <EmptyTitle>{t("admin.alloc.grants.empty", "No grants yet")}</EmptyTitle>
+          <EmptyDescription>{t("admin.alloc.grants.emptyHint", "Every investor holds this product's default access until you raise one above it.")}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -33,10 +33,10 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
       <TableHeader>
         {/* i18n-max: 10 per header — the grants table sits in a 340px panel. */}
         <TableRow>
-          <TableHead className={TABLE_HEAD}>{t("admin.col.user")}</TableHead>
-          <TableHead className={TABLE_HEAD}>{t("admin.alloc.grants.col.level")}</TableHead>
-          <TableHead className={TABLE_HEAD}>{t("admin.alloc.grants.col.grantedBy")}</TableHead>
-          <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.col.when")}</TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.col.user", "User")}</TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.alloc.grants.col.level", "Level")}</TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.alloc.grants.col.grantedBy", "Granted by")}</TableHead>
+          <TableHead className={cn(TABLE_HEAD, "text-right")}>{t("admin.col.when", "When")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -65,7 +65,7 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
                 <span className="text-xs text-ink-soft">{ago(g.granted_at, t)}</span>
                 <Button type="button" variant="outline" size="sm" disabled={busyUserId === g.user_id} onClick={() => onRevoke(g.user_id)}>
                   {/* The spinner stands in for the label, so it keeps the kit's `role="status"` name. */}
-                  {busyUserId === g.user_id ? <Spinner /> : t("admin.alloc.grants.revoke")}
+                  {busyUserId === g.user_id ? <Spinner /> : t("admin.alloc.grants.revoke", "Revoke")}
                 </Button>
               </div>
             </TableCell>

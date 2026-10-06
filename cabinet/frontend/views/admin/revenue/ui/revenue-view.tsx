@@ -33,18 +33,18 @@ export function RevenueView() {
 
   return (
     <AdminScreen className="space-y-8">
-      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.revenue")} subtitle={t("admin.revenue.subtitle")} />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer", "Administer")} title={t("nav.revenue", "Revenue stats")} subtitle={t("admin.revenue.subtitle", "What the platform earned — the fee allocation: its cash, its units and who holds them")} />
 
       {failed && <ResourceError error={revenue.error} onRetry={() => void revenue.refresh()} retrying={revenue.isValidating} />}
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.revenue.earned")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.revenue.earned", "The fee allocation")}</p>
         <FeeAllocationCards fee={fee} loading={!fee && !failed} unavailable={failed} />
-        <p className="max-w-3xl text-xs text-ink-soft">{t("admin.revenue.ownMoneyNote")}</p>
+        <p className="max-w-3xl text-xs text-ink-soft">{t("admin.revenue.ownMoneyNote", "This is the platform's own money. Client balances and the fund allocation are separate ledger claims and are not included here — and cannot be reached from this screen.")}</p>
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.alloc.holders.title")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.alloc.holders.title", "Holders")}</p>
         <div className="grid gap-4 lg:grid-cols-2">
           {failed ? (
             // A read that failed is not an empty cap table: the column says so, with the retry.
@@ -59,7 +59,7 @@ export function RevenueView() {
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.revenue.whereNext")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.revenue.whereNext", "Move or inspect it")}</p>
         <WhereNext />
       </StaggerItem>
     </AdminScreen>

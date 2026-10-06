@@ -42,12 +42,12 @@ export function TreasuryView() {
   return (
     <AdminScreen className="space-y-8">
       <AdminHeader
-        eyebrow={t("admin.eyebrow.administer")}
-        title={t("nav.treasury")}
-        subtitle={t("admin.treasury.subtitle")}
+        eyebrow={t("admin.eyebrow.administer", "Administer")}
+        title={t("nav.treasury", "Treasury")}
+        subtitle={t("admin.treasury.subtitle", "Two layers — ledger claims (USDT) by holder vs on-chain liquidity by rail")}
         action={
           <Button type="button" variant="outline" size="sm" disabled={loading} onClick={retry}>
-            <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} /> {t("ui.refresh")}
+            <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} /> {t("ui.refresh", "Refresh")}
           </Button>
         }
       />
@@ -55,16 +55,16 @@ export function TreasuryView() {
       {error && <ResourceError message={error} onRetry={retry} retrying={loading} />}
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.layer1")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.layer1", "Layer 1 · Ledger — claims by holder (USDT)")}</p>
         <div className="grid gap-4 sm:grid-cols-3">
-          <MoneyCard label={t("admin.treasury.claimsTotal")} value={treasury?.total_custody} hint={t("admin.treasury.claimsTotalHint")} tip="admin.treasury.layer1.claims-total" {...cardState} />
-          <MoneyCard label={t("admin.treasury.heldByUsers")} value={treasury?.held_by_users} hint={t("admin.treasury.heldByUsersHint")} tip="admin.treasury.layer1.held-by-users" {...cardState} />
-          <MoneyCard label={t("admin.treasury.reservedWithdrawals")} value={treasury?.reserved_for_withdrawals} hint={t("admin.treasury.reservedWithdrawalsHint")} tip="admin.treasury.layer1.reserved-withdrawals" {...cardState} />
+          <MoneyCard label={t("admin.treasury.claimsTotal", "Claims · total (USDT)")} value={treasury?.total_custody} hint={t("admin.treasury.claimsTotalHint", "= on-chain custody · backed")} tip="admin.treasury.layer1.claims-total" {...cardState} />
+          <MoneyCard label={t("admin.treasury.heldByUsers", "Held by users")} value={treasury?.held_by_users} hint={t("admin.treasury.heldByUsersHint", "user claims · held directly")} tip="admin.treasury.layer1.held-by-users" {...cardState} />
+          <MoneyCard label={t("admin.treasury.reservedWithdrawals", "Reserved · withdrawals")} value={treasury?.reserved_for_withdrawals} hint={t("admin.treasury.reservedWithdrawalsHint", "queued + in-flight (clearing)")} tip="admin.treasury.layer1.reserved-withdrawals" {...cardState} />
         </div>
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.allocations.title")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.allocations.title", "Held through allocations")}</p>
         {/* A section-type tip — a descriptor block, not an inline ⓘ — so it sits under the
             heading rather than in it, the way the settings sections place theirs. */}
         <TipAnchor anchor="admin.treasury.layer1.allocations" />
@@ -72,14 +72,14 @@ export function TreasuryView() {
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.layer2")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.layer2", "Layer 2 · Treasury — liquidity by rail")}</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {treasury ? (
             <>
               {treasury.rails.map((rail) => (
                 <MoneyCard key={rail.network} network={rail.network} label={railLabel(rail.network, t)} value={rail.custody} loading={false} footer={<RailFunding rail={rail} />} />
               ))}
-              <MoneyCard label={t("admin.treasury.bank")} value={treasury.bank} unit="USD" hint={t("admin.treasury.bankHint")} loading={false} tip="admin.treasury.bank" />
+              <MoneyCard label={t("admin.treasury.bank", "Bank · USD")} value={treasury.bank} unit="USD" hint={t("admin.treasury.bankHint", "off-ramp · FX")} loading={false} tip="admin.treasury.bank" />
             </>
           ) : (
             Array.from({ length: 4 }).map((_, i) => <MoneyCard key={i} label="" value={undefined} loading={loading} unavailable={!loading} />)
@@ -96,7 +96,7 @@ export function TreasuryView() {
           as `<code>` rather than as prose: an invariant set in the body face reads as
           something someone wrote, not as something the system enforces. */}
       <StaggerItem as="p" className="max-w-3xl text-xs text-ink-soft">
-        <RichMessage id="admin.treasury.invariantNote" values={{ invariant: <code className="font-mono-tech">sum(custody) == sum(claims)</code> }} />
+        <RichMessage format={(t, values) => t("admin.treasury.invariantNote", "Per-rail backing is the treasury's job, not the ledger's: a shortfall on one rail is accept-and-queue, then rebalanced via CEX / alt-rail / top-up. The global invariant is {invariant}.", values)} values={{ invariant: <code className="font-mono-tech">sum(custody) == sum(claims)</code> }} />
       </StaggerItem>
     </AdminScreen>
   );

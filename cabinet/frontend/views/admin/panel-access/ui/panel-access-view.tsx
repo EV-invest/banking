@@ -14,7 +14,7 @@ export function PanelAccessView({ service, namespace }: { service: string; names
   const t = useT();
   return (
     <AdminScreen className="space-y-8">
-      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("panelAccess.action")} subtitle={service} />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer", "Administer")} title={t("panelAccess.action", "Panel access")} subtitle={service} />
       <StaggerItem as="section" className="max-w-xl">
         <PanelAccessCard namespace={namespace} className="w-full" />
       </StaggerItem>

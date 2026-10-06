@@ -41,11 +41,11 @@ export function FundPicker({
           >
             <span className="block font-medium">{fund.title}</span>
             <span className="block text-xs tabular-nums text-ink-soft">
-              {policy?.configured ? `${pct(policy.management_bps)} / ${pct(policy.performance_bps)}` : t("admin.fees.noFee")}
+              {policy?.configured ? `${pct(policy.management_bps)} / ${pct(policy.performance_bps)}` : t("admin.fees.noFee", "No fee")}
             </span>
             {/* Said on the chip, not only on the card: a change on the way is what an
                 operator scanning the row most needs to know before they pick a fund. */}
-            {pending && <span className="block text-xs text-accent-debug">{t("admin.fees.pendingChip")}</span>}
+            {pending && <span className="block text-xs text-accent-debug">{t("admin.fees.pendingChip", "Change pending")}</span>}
           </Toggle>
         );
       })}

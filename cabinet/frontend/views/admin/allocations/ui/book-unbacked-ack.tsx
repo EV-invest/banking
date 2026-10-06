@@ -24,13 +24,13 @@ export function BookUnbackedAck({ checked, onChange, backing, required, disabled
       <div className="flex items-start gap-2">
         <Checkbox id={id} checked={checked} onCheckedChange={onChange} disabled={disabled} className="mt-0.5" />
         <label htmlFor={id} className="text-xs">
-          {t("admin.alloc.book.unbacked.ack")}
+          {t("admin.alloc.book.unbacked.ack", "Allow trading of units not backed by fund cash")}
         </label>
       </div>
       <p className={cn("flex items-start gap-2 text-xs", inKind ? "text-accent-warn" : "text-ink-soft")}>
-        <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.book.unbacked.warning")}
+        <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.book.unbacked.warning", "Buyers pay cash for a claim on an asset held in kind and cannot redeem it — the book is their only exit")}
       </p>
-      {required && <p className="text-xs text-accent-error">{t("admin.alloc.book.unbacked.required")}</p>}
+      {required && <p className="text-xs text-accent-error">{t("admin.alloc.book.unbacked.required", "This product is held in kind: tick the acknowledgement before opening its book.")}</p>}
     </div>
   );
 }
@@ -42,8 +42,8 @@ export function UnbackedAckBadge({ acknowledged }: { acknowledged: boolean }) {
   if (!acknowledged) return null;
   return (
     // i18n-max: 32 — a chip above the form.
-    <Badge variant="outline" className="whitespace-nowrap border-accent-warn/40 text-accent-warn" title={t("admin.alloc.book.unbacked.warning")}>
-      {t("admin.alloc.book.unbacked.acknowledged")}
+    <Badge variant="outline" className="whitespace-nowrap border-accent-warn/40 text-accent-warn" title={t("admin.alloc.book.unbacked.warning", "Buyers pay cash for a claim on an asset held in kind and cannot redeem it — the book is their only exit")}>
+      {t("admin.alloc.book.unbacked.acknowledged", "Unbacked trading acknowledged")}
     </Badge>
   );
 }

@@ -65,27 +65,27 @@ export function SeedCapitalForm({ rails }: { rails: RailLiquidity[] | undefined 
 
   return (
     <StaggerItem as="section" className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.seed.title")}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.treasury.seed.title", "Propose seed capital")}</p>
       <Card>
         <CardContent className="space-y-5 py-6">
-          <p className="max-w-3xl text-sm text-ink-soft">{t("admin.treasury.seed.intro")}</p>
+          <p className="max-w-3xl text-sm text-ink-soft">{t("admin.treasury.seed.intro", "USDT sent to a treasury address as the platform's own capital is nobody's until the owners say whose. Name the transfer, the amount the chain must report and the person it is attributed to; when the owners carry it, the hub books their deposit and their subscription into the fund allocation in one step.")}</p>
           <div className="grid gap-4 md:grid-cols-2">
             <RailSelect value={network} options={watchedRails(rails)} onChange={setNetwork} />
             <Field>
-              <FieldLabel htmlFor={`${id}-ref`}>{t("admin.treasury.onchainRef")}</FieldLabel>
+              <FieldLabel htmlFor={`${id}-ref`}>{t("admin.treasury.onchainRef", "On-chain reference")}</FieldLabel>
               {/* A format literal, not prose — it reads the same in every locale. */}
               <Input id={`${id}-ref`} value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="0xhash:logIndex" spellCheck={false} className="font-mono-tech" />
             </Field>
             <Field data-invalid={amountProblem || undefined}>
-              <FieldLabel htmlFor={`${id}-amount`}>{t("admin.treasury.seed.amount")}</FieldLabel>
+              <FieldLabel htmlFor={`${id}-amount`}>{t("admin.treasury.seed.amount", "Amount (USDT)")}</FieldLabel>
               <Input id={`${id}-amount`} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" aria-invalid={amountProblem || undefined} aria-describedby={amountProblem ? `${id}-amount-error` : undefined} className="tabular-nums" />
-              {amountProblem && <FieldError id={`${id}-amount-error`}>{t("admin.treasury.seed.amountProblem")}</FieldError>}
+              {amountProblem && <FieldError id={`${id}-amount-error`}>{t("admin.treasury.seed.amountProblem", "A positive decimal, e.g. 10000 or 2500.50")}</FieldError>}
             </Field>
             <Field>
               {/* No `htmlFor`: the picker's trigger sits behind a popover, so it is named by reference. */}
-              <FieldLabel id={`${id}-depositor`}>{t("admin.treasury.seed.depositor")}</FieldLabel>
+              <FieldLabel id={`${id}-depositor`}>{t("admin.treasury.seed.depositor", "Depositor · optional")}</FieldLabel>
               <UserPicker value={depositor} onPick={setDepositor} labelledBy={`${id}-depositor`} />
-              <FieldDescription>{t("admin.treasury.seed.depositorHint")}</FieldDescription>
+              <FieldDescription>{t("admin.treasury.seed.depositorHint", "Leave empty to attribute the seed to yourself.")}</FieldDescription>
             </Field>
           </div>
 
@@ -95,11 +95,11 @@ export function SeedCapitalForm({ rails }: { rails: RailLiquidity[] | undefined 
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          {opened && <ConsiliumOpened consiliumId={opened.consilium_id} body={t("admin.treasury.seed.opened")} onDismiss={() => setOpened(null)} />}
+          {opened && <ConsiliumOpened consiliumId={opened.consilium_id} body={t("admin.treasury.seed.opened", "The owners have each been emailed a link. Nothing is booked until more than half of them confirm from their own mailboxes; the treasury follows once the chain-proven deposit and the fund subscription post.")} onDismiss={() => setOpened(null)} />}
 
           <Button type="button" className="ml-auto flex" disabled={busy || !sendable} onClick={() => void submit()}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-            {t("admin.treasury.seed.submit")}
+            {t("admin.treasury.seed.submit", "Propose seed")}
           </Button>
         </CardContent>
       </Card>

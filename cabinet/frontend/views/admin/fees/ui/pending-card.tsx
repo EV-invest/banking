@@ -70,7 +70,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
     <Card className="h-fit border-primary-ink/40">
       <CardContent className="space-y-3 py-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-sm font-semibold">{t("admin.fees.pendingTitle")}</p>
+          <p className="text-sm font-semibold">{t("admin.fees.pendingTitle", "Change on its way")}</p>
           <Badge variant="outline" className={cn("shrink-0", changeStateTone(change.state))}>
             {changeStateLabel(change.state, t)}
           </Badge>
@@ -78,15 +78,15 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
         <p className="text-sm tabular-nums">{termsSummary(change, t)}</p>
         <p className="text-xs text-ink-soft">
           {awaiting
-            ? t("admin.fees.pending.awaiting", { version: change.version })
+            ? t("admin.fees.pending.awaiting", "Version {version} awaits the owners' approval. It binds 24 hours after they carry it, while anyone holds units.", { version: change.version })
             : kind === "immediate"
-              ? t("admin.fees.pending.immediate", { version: change.version })
-              : t("admin.fees.pending.scheduled", { version: change.version, at: formatMoment(change.effective_from, locale) })}
+              ? t("admin.fees.pending.immediate", "Version {version} takes effect now and is applied within a minute. Nobody holds units, so no notice was sent.", { version: change.version })
+              : t("admin.fees.pending.scheduled", "Version {version} takes effect on {at}. Holders have been notified.", { version: change.version, at: formatMoment(change.effective_from, locale) })}
         </p>
         {change.reason.trim() && (
           <blockquote className="border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed">{change.reason.trim()}</blockquote>
         )}
-        <p className="text-xs text-ink-soft">{t("admin.fees.pending.requested", { when: ago(change.requested_at, t) })}</p>
+        <p className="text-xs text-ink-soft">{t("admin.fees.pending.requested", "Requested {when}", { when: ago(change.requested_at, t) })}</p>
         <NoticeWaiver change={change} />
 
         {problem && <p className="text-xs text-accent-error">{problem}</p>}
@@ -94,15 +94,15 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
         {confirming ? (
           <Alert variant="destructive" role="status">
             <AlertDescription className="gap-3">
-              <p className="text-sm leading-relaxed">{t(awaiting ? "admin.fees.cancelWarningAwaiting" : "admin.fees.cancelWarning")}</p>
+              <p className="text-sm leading-relaxed">{(awaiting ? t("admin.fees.cancelWarningAwaiting", "Cancelling withdraws the change and takes its consilium down with it, voiding every approval collected so far. The owners who have already answered would each have to answer again.") : t("admin.fees.cancelWarning", "Cancelling withdraws the change. The fund keeps its current terms, and the holders who were notified will not see the new ones."))}</p>
               <div className="flex flex-col gap-2.5 sm:flex-row">
                 <Button variant="destructive" size="sm" disabled={busy} onClick={() => void cancel()}>
                   {busy && <Spinner aria-hidden />}
-                  {t("admin.fees.cancelConfirm")}
+                  {t("admin.fees.cancelConfirm", "Cancel the change")}
                 </Button>
                 {/* Not "Cancel": beside "Cancel the change" that word answers both ways. */}
                 <Button ref={keepRef} variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
-                  {t("ui.keep")}
+                  {t("ui.keep", "Keep it")}
                 </Button>
               </div>
             </AlertDescription>
@@ -111,11 +111,11 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
           <div className="flex flex-wrap gap-2">
             {awaiting && (
               <Button asChild size="sm" variant="outline">
-                <Link href="/consilium">{t("admin.payments.openConsilium")}</Link>
+                <Link href="/consilium">{t("admin.payments.openConsilium", "Open the consilium")}</Link>
               </Button>
             )}
             <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
-              {t("admin.fees.cancelChange")}
+              {t("admin.fees.cancelChange", "Cancel this change")}
             </Button>
           </div>
         )}

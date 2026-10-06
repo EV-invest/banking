@@ -91,7 +91,16 @@ function sameParty(a: EndDraft, b: EndDraft): boolean {
  * `fund` — is refused there too (`WithdrawalSource` has no such rail), and this only
  * says so a click earlier.
  */
-export function draftProblem(source: EndDraft, destination: EndDraft, amount: string, reason: string): string | null {
+export type DraftProblem =
+  | "admin.payments.err.pickSource"
+  | "admin.payments.err.pickDestination"
+  | "admin.payments.err.sameEnds"
+  | "admin.payments.err.noRailFromPooled"
+  | "admin.payments.err.enterAmount"
+  | "admin.payments.err.enterReason"
+  | "admin.payments.err.reasonTooLong";
+
+export function draftProblem(source: EndDraft, destination: EndDraft, amount: string, reason: string): DraftProblem | null {
   if (!complete(source)) return "admin.payments.err.pickSource";
   if (!complete(destination)) return "admin.payments.err.pickDestination";
   if (sameParty(source, destination)) return "admin.payments.err.sameEnds";

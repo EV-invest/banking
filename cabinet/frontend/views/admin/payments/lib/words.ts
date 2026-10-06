@@ -5,8 +5,14 @@ import type { Translate } from "@evinvest/i18n";
 import { networkLabel } from "@/shared/lib/rail";
 import { type EndDraft, type EndKind, needsId } from "@/views/admin/payments/lib/terms";
 
+const endKindWords = (t: Translate): Record<EndKind, string> => ({
+  service: t("admin.payments.kind.service", "A product"),
+  user: t("admin.payments.kind.user", "An investor"),
+  external: t("admin.payments.kind.external", "An external address"),
+});
+
 export function endKindLabel(kind: EndKind, t: Translate): string {
-  return t(`admin.payments.kind.${kind}`);
+  return endKindWords(t)[kind];
 }
 
 /**

@@ -81,17 +81,17 @@ export function ValuationActions({
         // the room with the live tally is one link away (same receipt as a payment).
         <Alert role="status" className="border-positive/40 bg-positive/10">
           <CheckCircle2 className="size-4 text-positive" />
-          <AlertTitle>{t("admin.valuation.proposedTitle")}</AlertTitle>
+          <AlertTitle>{t("admin.valuation.proposedTitle", "Proposed to the owners")}</AlertTitle>
           <AlertDescription className="gap-3 text-ink">
             <p className="leading-relaxed tabular-nums">
-              {t("admin.valuation.proposedBody", { service: proposed.service, aum: formatExactUsdt(proposed.aum, locale) })}
+              {t("admin.valuation.proposedBody", "Nothing is marked yet. Every owner has been emailed a link; once more than half of them agree, {service} is marked at {aum} USDT. The live tally is in the consilium.", { service: proposed.service, aum: formatExactUsdt(proposed.aum, locale) })}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button asChild size="sm" variant="outline">
-                <Link href="/consilium">{t("admin.valuation.openConsilium")}</Link>
+                <Link href="/consilium">{t("admin.valuation.openConsilium", "Open the consilium")}</Link>
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setProposed(null)}>
-                {t("ui.close")}
+                {t("ui.close", "Close")}
               </Button>
             </div>
           </AlertDescription>
@@ -99,18 +99,18 @@ export function ValuationActions({
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <p className="min-w-48 flex-1 text-xs text-ink-soft">{t("admin.valuation.proposeHint")}</p>
+        <p className="min-w-48 flex-1 text-xs text-ink-soft">{t("admin.valuation.proposeHint", "A move past the guard is put to the owners' vote instead of being posted.")}</p>
         {/* i18n-max: 24 per verb — both Buttons are `shrink-0` in a wrapping row. */}
         <span className="inline-flex shrink-0 items-center gap-1.5">
           <Button type="button" variant="outline" disabled={disabled || busy !== null} onClick={() => void run("propose")}>
             {busy === "propose" ? <Spinner aria-hidden /> : null}
-            {t("admin.valuation.propose")}
+            {t("admin.valuation.propose", "Propose to the owners")}
           </Button>
           <TipAnchor anchor="admin.valuation.post.propose" />
         </span>
         <Button type="button" className={TEAL_CTA} disabled={disabled || busy !== null} onClick={() => void run("post")}>
           {busy === "post" ? <Spinner aria-hidden /> : null}
-          {t("admin.valuation.postValuation")}
+          {t("admin.valuation.postValuation", "Post valuation")}
         </Button>
       </div>
     </div>

@@ -20,19 +20,19 @@ export function ConsiliumOpened({ consiliumId, body, onDismiss }: { consiliumId:
   return (
     <Alert role="status" variant="success">
       <CheckCircle2 className="size-4" />
-      <AlertTitle>{t("admin.consilium.openedTitle")}</AlertTitle>
+      <AlertTitle>{t("admin.consilium.openedTitle", "Opened — nothing has moved")}</AlertTitle>
       <AlertDescription className="gap-3">
         <p className="leading-relaxed">{body}</p>
         {/* The id is what the audit trail and the emails carry, so it is shown verbatim. */}
         <p className="font-mono-tech text-xs text-ink-soft" title={consiliumId}>
-          {t("admin.consilium.openedId", { id: consiliumId })}
+          {t("admin.consilium.openedId", "Consilium {id}", { id: consiliumId })}
         </p>
         <div className="flex flex-wrap gap-2 text-ink">
           <Button asChild size="sm" variant="outline">
-            <Link href="/consilium">{t("admin.consilium.open")}</Link>
+            <Link href="/consilium">{t("admin.consilium.open", "Open the consilium")}</Link>
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
-            {t("ui.close")}
+            {t("ui.close", "Close")}
           </Button>
         </div>
       </AlertDescription>

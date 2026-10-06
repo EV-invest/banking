@@ -16,16 +16,16 @@ export function RetireGate({ force, onForce }: { force: boolean; onForce: (force
   const id = useId();
   return (
     <div className="space-y-2">
-      <p className="text-xs text-ink-soft">{t("admin.alloc.retire.closeFirst")}</p>
+      <p className="text-xs text-ink-soft">{t("admin.alloc.retire.closeFirst", "Close the product first — units are retired out of a wound-down product.")}</p>
       <div className="flex items-start gap-2">
         <Checkbox id={id} checked={force} onCheckedChange={onForce} className="mt-0.5" />
         <label htmlFor={id} className="text-xs">
-          {t("admin.alloc.retire.force")}
+          {t("admin.alloc.retire.force", "Retire anyway (force)")}
         </label>
       </div>
       {force && (
         <p className="flex items-start gap-2 text-xs text-accent-warn">
-          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.retire.forceWarning")}
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.retire.forceWarning", "The product is still live — units will be burned out of it while it accepts money. The hub records the override.")}
         </p>
       )}
     </div>

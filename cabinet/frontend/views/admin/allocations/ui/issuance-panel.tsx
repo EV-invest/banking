@@ -73,17 +73,17 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
         )}
 
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.issue.title")}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.issue.title", "Issue units")}</p>
           <IssueForm service={allocation.service} busy={busy} onSubmit={issue} />
           {last && <IssuanceResult outcome={last} kind="issue" />}
-          <p className="text-xs text-ink-soft">{t("admin.alloc.issue.note")}</p>
+          <p className="text-xs text-ink-soft">{t("admin.alloc.issue.note", "In kind: no cash moves. The units count against the cap like a subscription would, and the cost basis is what the holder is deemed to have paid.")}</p>
         </div>
 
         {/* Under the mint, because the mint is what flips a product to `in_kind`. */}
         <BackingAction allocation={allocation} />
 
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.holders.title")}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.holders.title", "Holders")}</p>
           <Settled loading={!read.data} skeleton={<Skeleton className="h-24 w-full" />}>
             {read.data && (
               <>

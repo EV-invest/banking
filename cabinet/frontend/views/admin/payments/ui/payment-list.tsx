@@ -48,15 +48,15 @@ export function PaymentList() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.payments.list")}</span>
+        <span className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.payments.list", "Payments")}</span>
         <div className="ml-auto inline-flex items-center gap-2 text-sm">
-          <span className="text-ink-soft">{t("admin.col.state")}:</span>
+          <span className="text-ink-soft">{t("admin.col.state", "State")}:</span>
           <Select value={state} onValueChange={setState}>
             <SelectTrigger size="sm" className="border-border bg-secondary">
-              <span className="truncate">{state ? paymentStateLabel(state, t) : t("ui.all")}</span>
+              <span className="truncate">{state ? paymentStateLabel(state, t) : t("ui.all", "All")}</span>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">{t("ui.all")}</SelectItem>
+              <SelectItem value="">{t("ui.all", "All")}</SelectItem>
               {STATES.map((s) => (
                 <SelectItem key={s} value={s}>
                   {paymentStateLabel(s, t)}
@@ -86,8 +86,8 @@ export function PaymentList() {
                       <EmptyMedia variant="icon">
                         <ArrowLeftRight />
                       </EmptyMedia>
-                      <EmptyTitle>{state ? t("admin.payments.noneInState") : t("admin.payments.none")}</EmptyTitle>
-                      <EmptyDescription>{t("admin.payments.noneHint")}</EmptyDescription>
+                      <EmptyTitle>{state ? t("admin.payments.noneInState", "No payments in this state") : t("admin.payments.none", "No payments yet")}</EmptyTitle>
+                      <EmptyDescription>{t("admin.payments.noneHint", "Every order opened here appears with who has to agree and where that stands. An order executes once they have, and shows what it became.")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 </div>
@@ -96,13 +96,13 @@ export function PaymentList() {
                 <Table className="min-w-200">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.opened")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.ends")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.amountUsdt")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.tier")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.approval")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.state")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.opened", "Opened")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.ends", "From → to")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.amountUsdt", "Amount, USDT")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.tier", "Tier")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.payments.col.approval", "Approval")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.state", "State")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions", "Actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
