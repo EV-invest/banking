@@ -9,6 +9,7 @@ import { useT } from "@evinvest/i18n/react";
 
 import type { AllocationState } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
+import { wordFor } from "@/shared/lib/wire-words";
 import { stateLabel } from "@/views/admin/lib/format";
 
 // `closed` is amber rather than destructive: it stops new subscriptions but investors
@@ -33,7 +34,7 @@ export function AllocationStateCell({ state }: { state: AllocationState }) {
     // i18n-max: 12 — a chip in a table cell. Display case, not lowercased-and-
     // `capitalize`d: that rule title-cases every word, invisible on a one-word English
     // enum and wrong once translated ("en cours" → "En Cours").
-    <span className={cn("inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", STATE_TONE[state])} title={stateHints(t)[state]}>
+    <span className={cn("inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", STATE_TONE[state])} title={wordFor(stateHints(t), state)}>
       {stateLabel(state, t)}
     </span>
   );

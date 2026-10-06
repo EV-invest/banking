@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@evinvest/uiki
 
 import type { AllocationAccessLevel, AllocationIcon } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
+import { wordFor } from "@/shared/lib/wire-words";
 import { ALLOCATION_ICONS, ProductIcon } from "@/shared/ui/icons/products";
 import { ACCESS_LEVELS, accessLabel } from "@/views/admin/lib/access";
 
@@ -44,14 +45,14 @@ export function IconSelect({ value, onChange, className }: { value: AllocationIc
       <SelectTrigger className={cn("w-full border-border bg-secondary", className)}>
         <span className="flex min-w-0 items-center gap-1.5">
           <ProductIcon icon={value} className="size-3.5 shrink-0" />
-          <span className="truncate">{words[value]}</span>
+          <span className="truncate">{wordFor(words, value) ?? value}</span>
         </span>
       </SelectTrigger>
       <SelectContent>
         {ALLOCATION_ICONS.map((icon) => (
           <SelectItem key={icon} value={icon}>
             <ProductIcon icon={icon} className="size-3.5 shrink-0" />
-            {words[icon]}
+            {wordFor(words, icon) ?? icon}
           </SelectItem>
         ))}
       </SelectContent>

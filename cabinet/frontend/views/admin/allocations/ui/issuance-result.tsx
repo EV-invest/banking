@@ -13,6 +13,7 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 
 import type { UnitIssuance, UnitIssuanceSource } from "@/shared/contracts/admin";
 import { formatUnits } from "@/shared/lib/money";
+import { wordFor } from "@/shared/lib/wire-words";
 
 export interface IssuanceOutcome {
   issuance: UnitIssuance;
@@ -50,7 +51,7 @@ export function IssuanceResult({ outcome, kind }: { outcome: IssuanceOutcome; ki
         {COPY[kind][applied ? "applied" : "queued"](t, args)}
         {/* The source the hub recorded, so a mint and a burn of the same figure on the
             same holder are told apart on screen and not only in the audit log. */}
-        <span className="text-ink-soft"> · {sources(t)[outcome.issuance.source]}</span>
+        <span className="text-ink-soft"> · {wordFor(sources(t), outcome.issuance.source) ?? outcome.issuance.source}</span>
       </span>
     </p>
   );
