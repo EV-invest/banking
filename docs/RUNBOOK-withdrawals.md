@@ -87,7 +87,11 @@ multi-leg event) — reconciliation owns that.
 1. Fund the rail's treasury hot wallet with ≥ the **net** in USDT plus native gas
    (BNB/TRX/TON). The address is in the boot log ("treasury hot wallet — fund it…"), or
    via the signer's `ProvisionAddress` with the nil user id. Verify the balance
-   on-chain.
+   on-chain. Prefer sweeping existing deposits onto the treasury over sending new USDT:
+   USDT sent straight to the treasury is **unbooked** — no claim holds it, the drift
+   watch reports a surplus, and it cannot be withdrawn back through the app until it is
+   attributed (see [Treasury surplus](#treasury-surplus--an-unbooked-arrival)). Native
+   gas is not booked and needs nothing further.
 2. Unpark the `Dispatched` event. Preferred: **Unpark** on the admin console's Outbox
    screen (`/admin/outbox`), i.e. `BalanceService.UnparkEvent` (`Permission::OutboxManage`)
    with the row's `seq` from Step 2:
@@ -182,6 +186,34 @@ it. If the rail is not meant to be live, switch it off at **admin → Coins** in
 frozen rail hides from users, refuses new withdrawals, holds queued ones (they stay
 cancellable), and drops out of the gas watch. Deposit watchers keep crediting arrivals on
 existing addresses; the USDT drift check keeps running.
+
+## Treasury surplus — an unbooked arrival
+
+`treasury drift: the chain holds MORE USDT than the ledger records` (twice in a row, per
+rail) means USDT arrived that no claim holds. It is safe-side but unspendable: the
+dispatch gate takes the smaller of ledger and chain, so the surplus funds no withdrawal.
+Find the transfer (rail, hash, sender, amount) in the deposit watcher's `error!` for that
+rail or on a block explorer, then:
+
+- **It landed on a user's deposit address** — that user's deposit the watcher missed
+  (e.g. a pruned-history gap). `BalanceService.RecordDeposit` with the tx hash (admin →
+  Treasury); the amount and the user are read back from the chain.
+- **It landed on the treasury** — `RecordDeposit` refuses it: the chain cannot say whose
+  it is. An owner opens `BalanceService.SeedCapital` (`tx_ref`, `network`,
+  `expected_amount`, `depositor_user_id` = the sender's account). That opens a
+  `seed_capital` consilium; nothing is booked until it carries:
+  - it needs **≥ 3 owners** on the roster, and **⌊N/2⌋+1** of them to approve — the
+    initiator counts in N but does not vote, so with 3 owners both others must approve;
+  - it **expires after 72 h** without a verdict (a deadline, not a wait — it executes as
+    soon as the threshold is reached);
+  - on execution the amount is booked as the depositor's deposit **and** at once
+    subscribed into the hidden `fund` allocation at its dealing NAV (`fund` must be open
+    and its NAV fresh). The depositor holds `fund` units, not cash.
+  - Getting it back out: the depositor `Redeem`s those units, an operator settles it
+    (`SettleRedemption`, admin → Valuation), then they withdraw as usual (fee 1 USDT).
+
+So during a test pass or an incident, never "top up" the treasury with USDT unless the
+seed above is intended: fund liquidity by sweeping deposits, and send only native gas.
 
 ## Spend brake — stop or tighten the signer without a restart
 
