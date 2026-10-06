@@ -23,7 +23,7 @@ import { NetworkSegments } from "@/views/wallet/ui/network-segments";
 import { FieldLabel, WALLET_CARD, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
 const FIELD =
-  "w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-soft focus-visible:ring-2 focus-visible:ring-ring";
+  "w-full rounded-lg border border-border bg-ink/20 px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-soft focus-visible:ring-2 focus-visible:ring-ring";
 
 // What the user reviewed, frozen at the "Review" click — Confirm submits exactly this
 // even if a wallet refetch changes the live selection underneath the open confirm.
@@ -167,7 +167,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
               </span>
               {/* The bordered box is the field, not the bare input inside it — so the focus ring
                   belongs on the wrapper, reached from the input via focus-within. */}
-              <span className="flex w-full items-center gap-2 rounded-lg border border-border bg-input py-2 pl-3 pr-2 focus-within:ring-2 focus-within:ring-ring/50">
+              <span className="flex w-full items-center gap-2 rounded-lg border border-border bg-ink/20 py-2 pl-3 pr-2 focus-within:ring-2 focus-within:ring-ring/50">
                 <input
                   id={amountId}
                   value={amount}

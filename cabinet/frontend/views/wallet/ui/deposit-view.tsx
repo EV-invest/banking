@@ -151,7 +151,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                 ) : address && shown ? (
                   <>
                     <DepositQr value={shown} />
-                    <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-input px-3 py-2.5 lg:py-2.5 lg:pl-3.5 lg:pr-2">
+                    <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-ink/20 px-3 py-2.5 lg:py-2.5 lg:pl-3.5 lg:pr-2">
                       <code className="min-w-0 flex-1 break-all font-sans text-xs text-ink lg:text-sm">{shown}</code>
                       {/* i18n-max: 11 — a `shrink-0` button beside the address it squeezes. */}
                       <Button type="button" size="sm" onClick={copy} className="hidden shrink-0 lg:inline-flex">
