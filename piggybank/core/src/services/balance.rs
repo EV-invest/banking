@@ -7,8 +7,8 @@
 //! type we don't control, so the large-err lint does not apply in this module.
 #![allow(clippy::result_large_err)]
 
+use concierge_domain::authz::bank;
 use domain::{
-	authz::Permission,
 	balance::{Party, ServiceId},
 	consilium::SeedCapitalTerms,
 	money::{Network, TxRef, Usdt},
@@ -69,7 +69,7 @@ impl BalanceService for BalanceSvc {
 	/// are zero, and until then a non-zero balance on them is a fact for the operator's
 	/// log, not a figure on a screen that would have to explain a fourth kind of owner.
 	async fn get_treasury(&self, request: Request<pb::GetTreasuryRequest>) -> Result<Response<pb::Treasury>, Status> {
-		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
+		require_permission(&self.state, &request, bank::Treasury::Read).await?;
 		let t = balance_app::treasury(&balance_app::TreasuryPorts {
 			ledger: self.state.ledger.as_ref(),
 			custody: self.state.custody.as_ref(),
@@ -119,7 +119,7 @@ impl BalanceService for BalanceSvc {
 	/// `recorded = false` — nothing is booked until the quorum executes — the amount the
 	/// terms carry, and the consilium the proposal lives in.
 	async fn seed_capital(&self, request: Request<pb::SeedCapitalRequest>) -> Result<Response<pb::SeedCapitalResponse>, Status> {
-		require_permission(&self.state, &request, Permission::CapitalManage).await?;
+		require_permission(&self.state, &request, bank::Capital::Manage).await?;
 		let initiator = caller_id(&request)?;
 		let req = request.into_inner();
 		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
@@ -150,7 +150,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn record_deposit(&self, request: Request<pb::RecordDepositRequest>) -> Result<Response<pb::RecordDepositResponse>, Status> {
-		require_permission(&self.state, &request, Permission::CapitalManage).await?;
+		require_permission(&self.state, &request, bank::Capital::Manage).await?;
 		let req = request.into_inner();
 		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
 		let network = Network::parse(&req.network).map_err(map_err)?;
@@ -188,7 +188,7 @@ impl BalanceService for BalanceSvc {
 	/// who reopened outflows and when, rather than a flag on an individual payout that
 	/// looks identical to an ordinary dispatch in the log.
 	async fn dispatch_withdrawal(&self, request: Request<pb::DispatchWithdrawalRequest>) -> Result<Response<pb::DispatchWithdrawalResponse>, Status> {
-		require_permission(&self.state, &request, Permission::WithdrawalDispatch).await?;
+		require_permission(&self.state, &request, bank::Withdrawal::Dispatch).await?;
 		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
 		withdrawal_app::dispatch_withdrawal(
 			self.state.withdrawals.as_ref(),
@@ -204,7 +204,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn settle_withdrawal(&self, request: Request<pb::SettleWithdrawalRequest>) -> Result<Response<pb::SettleWithdrawalResponse>, Status> {
-		require_permission(&self.state, &request, Permission::WithdrawalSettle).await?;
+		require_permission(&self.state, &request, bank::Withdrawal::Settle).await?;
 		let req = request.into_inner();
 		let id = parse_withdrawal_id(&req.withdrawal_id)?;
 		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
@@ -215,7 +215,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn fail_withdrawal(&self, request: Request<pb::FailWithdrawalRequest>) -> Result<Response<pb::FailWithdrawalResponse>, Status> {
-		require_permission(&self.state, &request, Permission::WithdrawalFail).await?;
+		require_permission(&self.state, &request, bank::Withdrawal::Fail).await?;
 		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
 		withdrawal_app::fail_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
 			.await
@@ -224,7 +224,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn post_fund_valuation(&self, request: Request<pb::PostFundValuationRequest>) -> Result<Response<pb::FundNav>, Status> {
-		require_permission(&self.state, &request, Permission::ValuationPost).await?;
+		require_permission(&self.state, &request, bank::Valuation::Post).await?;
 		let caller = caller_id(&request)?;
 		let claims = claims_of(&request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
 		let posted_by = claims.sub.clone();
@@ -262,7 +262,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn settle_redemption(&self, request: Request<pb::SettleRedemptionRequest>) -> Result<Response<pb::Redemption>, Status> {
-		require_permission(&self.state, &request, Permission::RedemptionSettle).await?;
+		require_permission(&self.state, &request, bank::Redemption::Settle).await?;
 		let id = parse_redemption_id(&request.get_ref().redemption_id)?;
 		let redemption = funds_app::settle_redemption(
 			self.state.redemptions.as_ref(),
@@ -278,14 +278,14 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn fail_redemption(&self, request: Request<pb::FailRedemptionRequest>) -> Result<Response<pb::Redemption>, Status> {
-		require_permission(&self.state, &request, Permission::RedemptionFail).await?;
+		require_permission(&self.state, &request, bank::Redemption::Fail).await?;
 		let id = parse_redemption_id(&request.get_ref().redemption_id)?;
 		let redemption = funds_app::fail_redemption(self.state.redemptions.as_ref(), &self.state.relay_notify, id).await.map_err(map_err)?;
 		Ok(Response::new(redemption_to_proto(&redemption)))
 	}
 
 	async fn list_redemption_queue(&self, request: Request<pb::ListRedemptionQueueRequest>) -> Result<Response<pb::RedemptionQueue>, Status> {
-		require_permission(&self.state, &request, Permission::RedemptionSettle).await?;
+		require_permission(&self.state, &request, bank::Redemption::Settle).await?;
 		let queued = self.state.redemptions.list_queued().await.map_err(map_err)?;
 		Ok(Response::new(pb::RedemptionQueue {
 			items: queued
@@ -303,7 +303,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn get_operations_mode(&self, request: Request<pb::GetOperationsModeRequest>) -> Result<Response<pb::OperationsMode>, Status> {
-		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
+		require_permission(&self.state, &request, bank::Treasury::Read).await?;
 		let read_only = crate::infrastructure::operations::is_read_only(&self.state.pool)
 			.await
 			.map_err(|_| Status::unavailable("internal error"))?;
@@ -311,7 +311,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn set_operations_mode(&self, request: Request<pb::SetOperationsModeRequest>) -> Result<Response<pb::OperationsMode>, Status> {
-		require_permission(&self.state, &request, Permission::OperationsManage).await?;
+		require_permission(&self.state, &request, bank::Operations::Manage).await?;
 		let read_only = crate::infrastructure::operations::set_read_only(&self.state.pool, request.get_ref().read_only)
 			.await
 			.map_err(|_| Status::unavailable("internal error"))?;
@@ -319,12 +319,12 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn list_rails(&self, request: Request<pb::ListRailsRequest>) -> Result<Response<pb::RailList>, Status> {
-		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
+		require_permission(&self.state, &request, bank::Treasury::Read).await?;
 		self.rails().await
 	}
 
 	async fn set_rail_frozen(&self, request: Request<pb::SetRailFrozenRequest>) -> Result<Response<pb::RailList>, Status> {
-		require_permission(&self.state, &request, Permission::OperationsManage).await?;
+		require_permission(&self.state, &request, bank::Operations::Manage).await?;
 		let req = request.get_ref();
 		let network = Network::parse(&req.network).map_err(map_err)?;
 		crate::infrastructure::operations::set_rail_frozen(&self.state.pool, network, req.frozen)
@@ -335,7 +335,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn list_parked_events(&self, request: Request<pb::ListParkedEventsRequest>) -> Result<Response<pb::ParkedEventList>, Status> {
-		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
+		require_permission(&self.state, &request, bank::Treasury::Read).await?;
 		let rows = crate::infrastructure::outbox::parked_rows(&self.state.pool)
 			.await
 			.map_err(|_| Status::unavailable("internal error"))?;
@@ -357,7 +357,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn unpark_event(&self, request: Request<pb::UnparkEventRequest>) -> Result<Response<pb::UnparkEventResponse>, Status> {
-		require_permission(&self.state, &request, Permission::OutboxManage).await?;
+		require_permission(&self.state, &request, bank::Outbox::Manage).await?;
 		let seq = request.get_ref().seq;
 		let unparked = crate::infrastructure::outbox::unpark(&self.state.pool, seq)
 			.await
@@ -381,7 +381,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn list_withdrawal_queue(&self, request: Request<pb::ListWithdrawalQueueRequest>) -> Result<Response<pb::WithdrawalQueue>, Status> {
-		require_permission(&self.state, &request, Permission::WithdrawalSettle).await?;
+		require_permission(&self.state, &request, bank::Withdrawal::Settle).await?;
 		let queued = self.state.withdrawals.list_actionable().await.map_err(map_err)?;
 		Ok(Response::new(pb::WithdrawalQueue {
 			items: queued
@@ -406,7 +406,7 @@ impl BalanceService for BalanceSvc {
 	/// lists it as — cash, supply, price and holders. Nothing here pays it out: a holder
 	/// is paid by redeeming, and a payment out of its claim is the owners' consilium.
 	async fn get_fund_revenue(&self, request: Request<pb::GetFundRevenueRequest>) -> Result<Response<pb::AllocationTreasury>, Status> {
-		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
+		require_permission(&self.state, &request, bank::Consilium::Manage).await?;
 		let fee = balance_app::fee_allocation(self.state.allocations.as_ref(), self.state.ledger.as_ref(), self.state.nav.as_ref())
 			.await
 			.map_err(map_err)?;
@@ -414,7 +414,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn rotate_deposit_address(&self, request: Request<pb::RotateDepositAddressRequest>) -> Result<Response<pb::RotateDepositAddressResponse>, Status> {
-		require_permission(&self.state, &request, Permission::DepositAddressRotate).await?;
+		require_permission(&self.state, &request, bank::DepositAddress::Rotate).await?;
 		let req = request.get_ref();
 		let user = parse_user_id(&req.user_id)?;
 		let network = Network::parse(&req.network).map_err(map_err)?;
@@ -436,7 +436,7 @@ impl BalanceService for BalanceSvc {
 		&self,
 		request: Request<pb::MigrateDepositAddressToCustodianRequest>,
 	) -> Result<Response<pb::MigrateDepositAddressToCustodianResponse>, Status> {
-		require_permission(&self.state, &request, Permission::DepositAddressMigrate).await?;
+		require_permission(&self.state, &request, bank::DepositAddress::Migrate).await?;
 		let req = request.get_ref();
 		let user = parse_user_id(&req.user_id)?;
 		let network = Network::parse(&req.network).map_err(map_err)?;

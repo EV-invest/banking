@@ -43,8 +43,7 @@ impl OutflowPolicy for PgOutflowPolicy {
 			blocked,
 			// The column is a signed `int4` the bridge mirrors from the identity plane. A
 			// negative (or otherwise impossible) tier is corrupt data, not a verification —
-			// degrade it to 0 so the caller's floor refuses, the same way `role_of` degrades
-			// an unparseable role to the one that holds nothing.
+			// degrade it to 0 so the caller's floor refuses.
 			kyc_level: u32::try_from(kyc_level).unwrap_or(0),
 		}))
 	}

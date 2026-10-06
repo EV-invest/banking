@@ -51,6 +51,7 @@ pub mod endpoint;
 
 use std::time::Duration;
 
+use concierge_iam::PermissionSet;
 use domain::{
 	authz::Role,
 	users::{Email, UserId},
@@ -753,10 +754,9 @@ async fn record_roster_change(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, us
 	Ok(())
 }
 
-/// The mirrored access role for a banking user id (the money-op RBAC gate reads this).
-/// `None` local row ⇒ `Investor` (holds nothing) so the gate fails closed. A corrupt
-/// stored value likewise degrades to `Investor` rather than erroring the gate open.
-pub async fn role_of(pool: &PgPool, user_id: UserId) -> Result<Role, sqlx::Error> {
-	let role: Option<String> = sqlx::query_scalar("SELECT role FROM users WHERE id = $1").bind(user_id.raw()).fetch_optional(pool).await?;
-	Ok(role.as_deref().map(Role::parse_or_default).unwrap_or_default())
+/// The `bank:*` set concierge last resolved for a banking user id; what the money-op gate
+/// reads. No row, or no PERMISSIONS_CHANGED yet (NULL), holds nothing.
+pub async fn permissions_of(pool: &PgPool, user_id: UserId) -> Result<PermissionSet, sqlx::Error> {
+	let held: Option<Option<Vec<String>>> = sqlx::query_scalar("SELECT permissions FROM users WHERE id = $1").bind(user_id.raw()).fetch_optional(pool).await?;
+	Ok(held.flatten().into_iter().flatten().collect())
 }

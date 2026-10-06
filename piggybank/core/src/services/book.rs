@@ -5,7 +5,7 @@
 //! is behind `caller_id` only, like cancelling a redemption — a frozen user may still
 //! unwind. Every read resolves the allocation as the caller sees it, so the book of a
 //! product hidden from them is `NOT_FOUND` exactly as the product is. The policy is an
-//! operator's (`Permission::AllocationManage`), the same seam that opens a product.
+//! operator's (`bank:allocation:manage`), the same seam that opens a product.
 //!
 //! `WatchBook` is the one server stream on the hub. It is a `watch` receiver turned
 //! into a stream by hand ([`BookWatch`]): every frame is built by re-reading the book,
@@ -21,8 +21,8 @@ use std::{
 	task::{Context, Poll},
 };
 
+use concierge_domain::authz::bank;
 use domain::{
-	authz::Permission,
 	balance::ServiceId,
 	book::{BookPolicy, CancelReason, CandleResolution, ClientOrderId, OrderId, OrderKind, Price, Side, Tif},
 	money::Shares,
@@ -75,7 +75,7 @@ impl BookSvc {
 	/// widened for an `AllocationManage` holder.
 	async fn visible<T>(&self, request: &Request<T>, service: &ServiceId) -> Result<UserId, Status> {
 		let caller = caller_id(request)?;
-		let unrestricted = holds_permission(&self.state, request, Permission::AllocationManage).await?;
+		let unrestricted = holds_permission(&self.state, request, bank::Allocation::Manage).await?;
 		book_app::require_visible(self.state.allocations.as_ref(), service, caller, unrestricted).await.map_err(map_err)?;
 		Ok(caller)
 	}
@@ -217,7 +217,7 @@ impl BookService for BookSvc {
 	}
 
 	async fn set_book_policy(&self, request: Request<pb::SetBookPolicyRequest>) -> Result<Response<pb::BookPolicy>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let price_tick = optional(&req.price_tick)

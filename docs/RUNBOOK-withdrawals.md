@@ -73,7 +73,7 @@ multi-leg event) — reconciliation owns that.
 
 ### Path R — fail-refund (default: smallest blast radius, unblocks the user now)
 
-1. Call `BalanceService.FailWithdrawal` (`Permission::WithdrawalFail`) — legal from
+1. Call `BalanceService.FailWithdrawal` (`bank:withdrawal:fail`) — legal from
    `processing`. The relay voids the clearing pending (`CLEARING_VOID_FAIL`), refunding
    the **gross** in full.
 2. Leave the parked `Dispatched` event parked **forever**, as forensics. **Never unpark
@@ -93,7 +93,7 @@ multi-leg event) — reconciliation owns that.
    attributed (see [Treasury surplus](#treasury-surplus--an-unbooked-arrival)). Native
    gas is not booked and needs nothing further.
 2. Unpark the `Dispatched` event. Preferred: **Unpark** on the admin console's Outbox
-   screen (`/admin/outbox`), i.e. `BalanceService.UnparkEvent` (`Permission::OutboxManage`)
+   screen (`/admin/outbox`), i.e. `BalanceService.UnparkEvent` (`bank:outbox:manage`)
    with the row's `seq` from Step 2:
 
    ```sh

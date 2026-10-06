@@ -13,8 +13,8 @@
 //! don't control, so the large-err lint does not apply in this module.
 #![allow(clippy::result_large_err)]
 
+use concierge_domain::authz::bank;
 use domain::{
-	authz::Permission,
 	balance::ServiceId,
 	consilium::{ConsiliumState, ConsiliumTerms, HolderGrantTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
@@ -312,7 +312,7 @@ impl ConsiliumService for ConsiliumSvc {
 	/// way every admin RPC resolves a target, so the units land on the money-plane row
 	/// they redeem from.
 	async fn open_holder_grant(&self, request: Request<pb::OpenHolderGrantRequest>) -> Result<Response<pb::Consilium>, Status> {
-		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
+		require_permission(&self.state, &request, bank::Consilium::Manage).await?;
 		let initiator = caller_id(&request)?;
 		let terms = request.into_inner().terms.ok_or_else(|| Status::invalid_argument("terms are required"))?;
 		let allocation = ServiceId::parse(&terms.allocation).map_err(map_err)?;
@@ -342,7 +342,7 @@ impl ConsiliumService for ConsiliumSvc {
 		// permission. The second actor here is the vote: the poster proposes, the owners
 		// decide, and the domain refuses an initiator who holds no seat. Granting the
 		// override to a different permission would only recreate the flag one role over.
-		require_permission(&self.state, &request, Permission::ValuationPost).await?;
+		require_permission(&self.state, &request, bank::Valuation::Post).await?;
 		let initiator = caller_id(&request)?;
 		let terms = parse_valuation_override_terms(request.into_inner().terms)?;
 		let view = consilium_app::open_valuation_override(&self.state.consilium_ports(), initiator, terms.clone(), unix_now())
@@ -363,7 +363,7 @@ impl ConsiliumService for ConsiliumSvc {
 	}
 
 	async fn cancel_consilium(&self, request: Request<pb::CancelConsiliumRequest>) -> Result<Response<pb::Consilium>, Status> {
-		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
+		require_permission(&self.state, &request, bank::Consilium::Manage).await?;
 		let caller = caller_id(&request)?;
 		let id = parse_consilium_id(&request.get_ref().consilium_id)?;
 		let view = consilium_app::cancel(self.state.consilia.as_ref(), id, caller, unix_now()).await.map_err(map_err)?;
@@ -371,14 +371,14 @@ impl ConsiliumService for ConsiliumSvc {
 	}
 
 	async fn get_consilium(&self, request: Request<pb::GetConsiliumRequest>) -> Result<Response<pb::Consilium>, Status> {
-		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
+		require_permission(&self.state, &request, bank::Consilium::Manage).await?;
 		let id = parse_consilium_id(&request.get_ref().consilium_id)?;
 		let view = consilium_app::find(self.state.consilia.as_ref(), id).await.map_err(map_err)?;
 		Ok(Response::new(consilium_to_proto(&view)))
 	}
 
 	async fn list_consilia(&self, request: Request<pb::ListConsiliaRequest>) -> Result<Response<pb::ConsiliumList>, Status> {
-		require_permission(&self.state, &request, Permission::ConsiliumManage).await?;
+		require_permission(&self.state, &request, bank::Consilium::Manage).await?;
 		let requested = request.get_ref().limit;
 		let limit = if requested == 0 { DEFAULT_LIST_LIMIT } else { requested.min(MAX_LIST_LIMIT) };
 		let views = consilium_app::list(self.state.consilia.as_ref(), i64::from(limit)).await.map_err(map_err)?;

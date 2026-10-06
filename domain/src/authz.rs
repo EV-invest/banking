@@ -1,5 +1,4 @@
-//! Cross-cutting authorization — the shared role vocabulary and the money plane's
-//! permission matrix.
+//! The shared role vocabulary.
 //!
 //! [`Role`] is OWNED by the identity plane (concierge); banking receives it over the
 //! one-way user-lifecycle bridge (only the string crosses) and mirrors it onto the
@@ -7,10 +6,8 @@
 //! — keep them byte-identical with concierge's `domain::authz::Role`
 //! ([`role_strings_are_canonical`] guards this side).
 //!
-//! [`Permission`] is **local** to the money plane: banking enforces money/treasury
-//! permissions; identity/platform permissions live in concierge's own `Permission`.
-//! [`grants`] is the pure policy (the RBAC "matrix") — the single place the matrix is
-//! defined, carrying the separation-of-duties intent (view ≠ move money).
+//! What a seat may do is not decided here: concierge resolves it to `bank:*` permissions
+//! (`concierge_domain::authz::bank`), the bridge mirrors them, and the gates read those.
 
 use serde::{Deserialize, Serialize};
 
@@ -61,81 +58,6 @@ impl Role {
 	}
 }
 
-/// A capability in the MONEY plane. Identity/platform capabilities live in concierge's
-/// own `Permission` — the sets are deliberately disjoint.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Permission {
-	/// Read the treasury / chart-of-accounts aggregate.
-	TreasuryRead,
-	/// Read any user's balance/wallet (the operator user-detail drawer).
-	UserBalanceRead,
-	/// Post a fund NAV valuation.
-	ValuationPost,
-	/// Register an investable product and drive its lifecycle (open/close). Gates the
-	/// ONLY path by which a fund comes into existence, so it sits with `ValuationPost`
-	/// on the Admin/Owner side of the matrix rather than with the operator reads.
-	AllocationManage,
-	/// Settle a queued redemption.
-	RedemptionSettle,
-	/// Fail (void + refund) a queued redemption.
-	RedemptionFail,
-	/// Mark a queued withdrawal dispatched (broadcast).
-	WithdrawalDispatch,
-	/// Mark a dispatched withdrawal settled.
-	WithdrawalSettle,
-	/// Fail a withdrawal.
-	WithdrawalFail,
-	/// Seed fund capital / record an off-rail deposit.
-	CapitalManage,
-	/// Take part in the owners' governance of the platform's own money: open a holder
-	/// grant, read, list and cancel consilia, and read the `fee` allocation as its owners
-	/// do. (Named after the revenue payout it first gated, until #245 retired that.) It sits
-	/// with the Admin/Owner capabilities — an Operator may see the treasury but never
-	/// propose what happens to it.
-	ConsiliumManage,
-	/// Open a payment order between two named ends of the platform, and read the payment
-	/// history. Opening is a proposal, never a move: fund-owned money still needs the owner
-	/// consilium and an investor's claim still needs that investor's consent — so this sits
-	/// with the Admin/Owner capabilities for the same reason `ConsiliumManage` does, and an
-	/// Operator may see the treasury but never propose spending it.
-	PaymentOpen,
-	/// Toggle the money-plane operations mode (read-only kill-switch).
-	OperationsManage,
-	/// Unpark a parked outbox event so the relay re-drives it.
-	OutboxManage,
-	/// Revoke a user's money-plane tokens (banking's own defense-in-depth revoke;
-	/// identity-plane session revocation is concierge's, mirrored via the bridge).
-	UserRevoke,
-	/// Disable a user's money-plane account directly (independent of the bridge freeze).
-	UserSuspend,
-	/// Supersede a user's PROVABLY DEAD deposit-address key (a KEK-epoch casualty —
-	/// the signer can no longer unseal it) with a freshly minted keypair. Recovery
-	/// only: the signer refuses to rotate a healthy key.
-	DepositAddressRotate,
-	/// Retire a user's HEALTHY, KEK-sealed deposit-address key in favour of one minted
-	/// inside the key custodian's enclave. Separate from [`DepositAddressRotate`]
-	/// because it is a separate act: rotation is emergency recovery for a key that is
-	/// already dead, this is a planned custody move that only runs once the address has
-	/// been drained. Holding one must not grant the other.
-	DepositAddressMigrate,
-}
-
-/// The role→permission policy (pure). The money-plane RBAC matrix, read as separation
-/// of duties:
-/// - `Investor` holds nothing (no console).
-/// - `Operator` may READ (treasury, any user balance) but move no money.
-/// - `Admin` and `Owner` hold every money capability (role-granting is the identity
-///   plane's concern, so the two are equivalent here).
-pub fn grants(role: Role, permission: Permission) -> bool {
-	use Permission::*;
-	use Role::*;
-	match role {
-		Investor => false,
-		Operator => matches!(permission, TreasuryRead | UserBalanceRead),
-		Admin | Owner => true,
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -159,43 +81,5 @@ mod tests {
 		// Bridge tolerance: an empty/unknown role degrades to Investor.
 		assert_eq!(Role::parse_or_default(""), Role::Investor);
 		assert_eq!(Role::parse_or_default("root"), Role::Investor);
-	}
-
-	#[test]
-	fn matrix_enforces_view_versus_move() {
-		// Operator reads, never moves money.
-		assert!(grants(Role::Operator, Permission::TreasuryRead));
-		assert!(grants(Role::Operator, Permission::UserBalanceRead));
-		assert!(!grants(Role::Operator, Permission::ValuationPost));
-		assert!(!grants(Role::Operator, Permission::RedemptionSettle));
-		assert!(!grants(Role::Operator, Permission::OutboxManage));
-		// Creating an investable product is not a read, so an operator may not.
-		assert!(!grants(Role::Operator, Permission::AllocationManage));
-		assert!(!grants(Role::Investor, Permission::AllocationManage));
-		// Admin/Owner move money.
-		assert!(grants(Role::Admin, Permission::ValuationPost));
-		assert!(grants(Role::Admin, Permission::AllocationManage));
-		assert!(grants(Role::Owner, Permission::AllocationManage));
-		assert!(grants(Role::Owner, Permission::WithdrawalSettle));
-		assert!(grants(Role::Admin, Permission::OutboxManage));
-		// Governing the platform's own money is the sharpest "move", so the read/move split
-		// must hold hardest here: an Operator sees the treasury but cannot propose from it.
-		assert!(!grants(Role::Operator, Permission::ConsiliumManage));
-		assert!(grants(Role::Admin, Permission::ConsiliumManage));
-		assert!(grants(Role::Owner, Permission::ConsiliumManage));
-		// Proposing a payment is the same kind of act, whatever approval it then needs.
-		assert!(!grants(Role::Investor, Permission::PaymentOpen));
-		assert!(!grants(Role::Operator, Permission::PaymentOpen));
-		assert!(grants(Role::Admin, Permission::PaymentOpen));
-		assert!(grants(Role::Owner, Permission::PaymentOpen));
-		// Retiring a live deposit key is a money-plane act, not a read: an Operator may not,
-		// however much of the treasury they can see.
-		assert!(!grants(Role::Operator, Permission::DepositAddressMigrate));
-		assert!(!grants(Role::Investor, Permission::DepositAddressMigrate));
-		assert!(grants(Role::Admin, Permission::DepositAddressMigrate));
-		assert!(grants(Role::Owner, Permission::DepositAddressMigrate));
-		// Investor holds nothing.
-		assert!(!grants(Role::Investor, Permission::TreasuryRead));
-		assert!(!grants(Role::Investor, Permission::ConsiliumManage));
 	}
 }

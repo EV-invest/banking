@@ -7,8 +7,8 @@
 //! type we don't control, so the large-err lint does not apply in this module.
 #![allow(clippy::result_large_err)]
 
+use concierge_domain::authz::bank;
 use domain::{
-	authz::Permission,
 	balance::ServiceId,
 	money::{Shares, Usdt},
 	redemptions::Redemption,
@@ -124,7 +124,7 @@ impl FundsService for FundsSvc {
 		// unless they hold AllocationManage: a question, not a gate, since the handler
 		// serves everyone and merely widens for a manager.
 		let caller = caller_id(&request)?;
-		let unrestricted = holds_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let unrestricted = holds_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		let view = funds_app::fund_nav_view(
 			self.state.allocations.as_ref(),
@@ -144,7 +144,7 @@ impl FundsService for FundsSvc {
 		// Gated exactly as `get_fund_nav`: the log of a price the caller may not see is
 		// NOT_FOUND. The request names the ALLOCATION; the registry key is the service id.
 		let caller = caller_id(&request)?;
-		let unrestricted = holds_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let unrestricted = holds_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let req = request.get_ref();
 		let service = ServiceId::parse(&req.allocation).map_err(map_err)?;
 		let view = funds_app::fund_nav_history(

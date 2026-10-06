@@ -882,7 +882,7 @@ async fn the_dispatcher_skips_a_queued_withdrawal_whose_owner_lost_their_tier() 
 }
 
 /// The operator dispatch command carries the SAME outflow policy as the user path and the
-/// sweep: `Permission::WithdrawalDispatch` says who may ask, not that the platform is
+/// sweep: `bank:withdrawal:dispatch` says who may ask, not that the platform is
 /// currently willing. Each of the three gates is proven to be the only hold, by clearing
 /// it and re-running the identical call.
 #[tokio::test]

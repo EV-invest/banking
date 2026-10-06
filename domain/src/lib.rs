@@ -7,7 +7,7 @@
 //!
 //! It carries the cross-cutting [`error::DomainError`], re-exports the `ev`
 //! architecture building blocks, and holds the hub's bounded contexts — `auth` /
-//! `authz` (identity + the RBAC matrix), `balance` / `money` (the chart of accounts
+//! `authz` (the mirrored seat), `balance` / `money` (the chart of accounts
 //! and the 18-dp USDT unit), `allocations` (the registry of investable products), `fees`
 //! (the management + performance fee policy), `issuance` (an operator minting units in
 //! kind, to an investor or the company), `book` (the secondary market in a product's

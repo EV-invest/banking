@@ -17,6 +17,7 @@ use std::{
 	time::{Duration, Instant},
 };
 
+use concierge_domain::authz::bank;
 use evconcierge_contracts::concierge::v1::{
 	PullUserLifecycleRequest, PullUserLifecycleResponse, UserLifecycleEvent,
 	user_events_server::{UserEvents, UserEventsServer},
@@ -246,12 +247,6 @@ async fn role_changed_mirrors_role_onto_the_projection() {
 				.await
 				.unwrap();
 			assert_eq!(role, "admin", "ROLE_CHANGED mirrors the granted role onto the banking projection");
-			let user_id = user_id_for(&pool, &subject).await.expect("user provisioned");
-			assert_eq!(
-				bridge::role_of(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
-				domain::authz::Role::Admin,
-				"role_of reads it back for the operator gate"
-			);
 		}
 	})
 	.await;
@@ -268,6 +263,7 @@ async fn permissions_of(pool: &PgPool, subject: &str) -> Option<Vec<String>> {
 /// `permissions` is a snapshot on every row, like the role: a ROLE_CHANGED that only left the
 /// set to a later PERMISSIONS_CHANGED would leave the two disagreeing in between, and a
 /// parked row that replayed without its set would read as "holds nothing".
+/// What lands is what the money-op gate then asks.
 #[tokio::test]
 async fn permissions_ride_every_kind_live_and_from_the_parking_lot() {
 	let Some(pool) = pool().await else {
@@ -296,6 +292,15 @@ async fn permissions_ride_every_kind_live_and_from_the_parking_lot() {
 		);
 		assert_eq!(permissions_of(&pool, &redefined).await, Some(set(&["bank:payment:open"])));
 		assert_eq!(cursor_position(&pool).await, count, "a kind this build names moves the cursor on");
+
+		let gate = |subject: String| {
+			let pool = pool.clone();
+			async move { bridge::permissions_of(&pool, domain::users::UserId::from_raw(user_id_for(&pool, &subject).await.expect("provisioned"))).await.unwrap() }
+		};
+		let admin = gate(promoted.clone()).await;
+		assert!(admin.may(bank::UserBalance::Read), "the mirrored set admits what it names");
+		assert!(!admin.may(bank::Payment::Open), "and refuses what it does not, whatever the role says");
+		assert!(gate(redefined.clone()).await.may(bank::Payment::Open));
 
 		PgUsers::new(pool.clone())
 			.provision(
@@ -390,14 +395,14 @@ async fn redelivery_is_idempotent() {
 	.await;
 }
 
-/// THE MIRRORED COLUMN IS THE ONLY SOURCE OF THE ROLE.
+/// THE MIRRORED COLUMN IS THE ONLY SOURCE OF A PERMISSION.
 ///
 /// The money plane used to promote subjects listed in an `ADMIN_SUBJECTS` env var to
 /// `Role::Owner` inside `require_permission`, ahead of this lookup. That produced owners
 /// the consilium could not count (it reads the persisted roster) and a second UUID list an
 /// operator had to keep in sync with concierge's by hand. The override is gone: a subject
-/// with no row in the local projection resolves to `Role::default()` and holds nothing —
-/// least of all the permission that pays the fund's own revenue out.
+/// with no row in the local projection holds nothing — least of all the permission that
+/// governs the fund's own money.
 #[tokio::test]
 async fn a_subject_absent_from_the_projection_is_never_an_owner() {
 	let Some(pool) = pool().await else {
@@ -406,13 +411,8 @@ async fn a_subject_absent_from_the_projection_is_never_an_owner() {
 	// Never provisioned by the bridge, so no `users` row exists for it.
 	let stranger = domain::users::UserId::from_raw(uuid::Uuid::new_v4());
 
-	let role = bridge::role_of(&pool, stranger).await.unwrap();
-	assert_eq!(role, domain::authz::Role::default(), "no local row ⇒ the default role, not an inherited privilege");
-	assert_ne!(role, domain::authz::Role::Owner, "nothing outside the mirrored column may grant ownership");
-	assert!(
-		!domain::authz::grants(role, domain::authz::Permission::ConsiliumManage),
-		"an unknown subject must not be able to move the fund's revenue"
-	);
+	let held = bridge::permissions_of(&pool, stranger).await.unwrap();
+	assert!(!held.may(bank::Treasury::Read) && !held.may(bank::Consilium::Manage), "no local row ⇒ nothing, not an inherited privilege");
 }
 
 /// AN OWNER MUST NEVER REACH THE MONEY PLANE WITHOUT A ROSTER-JOURNAL ROW.

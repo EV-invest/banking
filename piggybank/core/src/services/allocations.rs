@@ -2,7 +2,7 @@
 //!
 //! Reads are open to any authenticated user and filtered to what that user may see;
 //! every write, and the unfiltered view of the catalog, is gated on
-//! [`Permission::AllocationManage`] (Admin/Owner) — the same trust seam as posting a
+//! `bank:allocation:manage` (Admin/Owner) — the same trust seam as posting a
 //! valuation, because registering a product is what brings a fund into existence at
 //! all, and opening it to an investor is what lets their money in.
 //!
@@ -24,9 +24,9 @@
 //! type we don't control, so the large-err lint does not apply in this module.
 #![allow(clippy::result_large_err)]
 
+use concierge_domain::authz::bank;
 use domain::{
 	allocations::{AllocationAccess, AllocationBacking, AllocationIcon},
-	authz::Permission,
 	balance::ServiceId,
 	issuance::{IdempotencyKey, UnitHolder},
 	money::{Shares, Usdt},
@@ -92,7 +92,7 @@ impl AllocationsService for AllocationsSvc {
 		// Refuse rather than silently downgrade to the visible list: a caller that asked
 		// for drafts and got a filtered list would read it as "there are none".
 		if include_unlisted {
-			require_permission(&self.state, &request, Permission::AllocationManage).await?;
+			require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		}
 		let records = allocations_app::list_for(self.state.allocations.as_ref(), caller, include_unlisted).await.map_err(map_err)?;
 		Ok(Response::new(pb::AllocationList {
@@ -108,7 +108,7 @@ impl AllocationsService for AllocationsSvc {
 		// its units: a holder of the hidden `fee`/`fund` allocation reads the title of
 		// what they own (#245), the same as their position card shows its price.
 		let caller = caller_id(&request)?;
-		let unrestricted = holds_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let unrestricted = holds_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		let record = funds_app::allocation_for_holder(self.state.allocations.as_ref(), self.state.ledger.as_ref(), &service, caller, unrestricted)
 			.await
@@ -117,7 +117,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn register_allocation(&self, request: Request<pb::RegisterAllocationRequest>) -> Result<Response<pb::Allocation>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -129,7 +129,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn update_allocation(&self, request: Request<pb::UpdateAllocationRequest>) -> Result<Response<pb::Allocation>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -141,7 +141,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn set_allocation_unit_cap(&self, request: Request<pb::SetAllocationUnitCapRequest>) -> Result<Response<pb::Allocation>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -153,7 +153,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn set_allocation_state(&self, request: Request<pb::SetAllocationStateRequest>) -> Result<Response<pb::Allocation>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -174,7 +174,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn set_allocation_access(&self, request: Request<pb::SetAllocationAccessRequest>) -> Result<Response<pb::Allocation>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -184,7 +184,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn set_allocation_backing(&self, request: Request<pb::SetAllocationBackingRequest>) -> Result<Response<pb::Allocation>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -194,7 +194,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn grant_allocation_access(&self, request: Request<pb::GrantAllocationAccessRequest>) -> Result<Response<pb::AllocationAccessGrant>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let granted_by = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -209,7 +209,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn revoke_allocation_access(&self, request: Request<pb::RevokeAllocationAccessRequest>) -> Result<Response<pb::RevokeAllocationAccessResponse>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let revoked_by = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -221,7 +221,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn list_allocation_access_grants(&self, request: Request<pb::ListAllocationAccessGrantsRequest>) -> Result<Response<pb::AllocationAccessGrantList>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		let grants = allocations_app::list_grants(self.state.allocations.as_ref(), &service).await.map_err(map_err)?;
 		Ok(Response::new(pb::AllocationAccessGrantList {
@@ -230,7 +230,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn issue_units(&self, request: Request<pb::IssueUnitsRequest>) -> Result<Response<pb::UnitIssuance>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let holder = self.resolve_holder(&req.user_id).await?;
@@ -264,7 +264,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn retire_units(&self, request: Request<pb::RetireUnitsRequest>) -> Result<Response<pb::UnitIssuance>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let holder = self.resolve_holder(&req.user_id).await?;
@@ -297,7 +297,7 @@ impl AllocationsService for AllocationsSvc {
 	}
 
 	async fn list_unit_holders(&self, request: Request<pb::ListUnitHoldersRequest>) -> Result<Response<pb::UnitHolders>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		let view = issuance_app::unit_holders(self.state.allocations.as_ref(), self.state.ledger.as_ref(), self.state.issuances.as_ref(), service)
 			.await

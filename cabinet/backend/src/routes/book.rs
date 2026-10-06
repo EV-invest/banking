@@ -298,8 +298,9 @@ mod book_route_tests {
 
 	#[derive(Clone)]
 	struct Hub {
-		/// The role `GetMe` reports — what `require_admin` gates the policy write on.
 		role: String,
+		/// What `GetMe` resolves the seat to — what `require_permission` gates the policy write on.
+		permissions: Vec<String>,
 		/// When set, every book RPC fails with this code (the upstream-refusal cases).
 		fail_with: Option<Code>,
 		seen: Arc<Mutex<Seen>>,
@@ -309,6 +310,12 @@ mod book_route_tests {
 		fn new(role: &str) -> Self {
 			Self {
 				role: role.to_string(),
+				permissions: concierge_domain::authz::Role::parse(role)
+					.expect("stubs sit in concierge's seats")
+					.permissions()
+					.iter()
+					.map(|p| (*p).to_owned())
+					.collect(),
 				fail_with: None,
 				seen: Arc::new(Mutex::new(Seen::default())),
 			}
@@ -428,12 +435,13 @@ mod book_route_tests {
 
 	#[tonic::async_trait]
 	impl UserDirectory for Hub {
-		/// `require_admin` reads the caller's role from here per request — the only thing
-		/// standing between an investor and the policy write.
+		/// `require_permission` reads the caller's permissions from here per request — the
+		/// only thing standing between an investor and the policy write.
 		async fn get_me(&self, _: GrpcRequest<cc::GetMeRequest>) -> Result<GrpcResponse<cc::UserProfile>, Status> {
 			Ok(GrpcResponse::new(cc::UserProfile {
 				user_id: "user-1".into(),
 				role: self.role.clone(),
+				permissions: self.permissions.clone(),
 				..Default::default()
 			}))
 		}

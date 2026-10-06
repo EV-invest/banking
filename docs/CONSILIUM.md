@@ -79,7 +79,7 @@ because **the initiator is necessarily one of the `N`**. That fact is enforced i
 the RBAC matrix does not suggest, so it is worth stating plainly:
 
 - The **RPC boundary** gates each open on an operator permission — `OpenHolderGrant` on
-  `Permission::ConsiliumManage` (the owner-surface permission, `services/consilium.rs`), `OpenValuationOverride` on `ValuationPost`, `OpenPayment` on
+  `bank:consilium:manage` (the owner-surface permission, `services/consilium.rs`), `OpenValuationOverride` on `ValuationPost`, `OpenPayment` on
   `PaymentOpen`, `ScheduleFeePolicy` on `AllocationManage`, `SeedCapital` on
   `CapitalManage` — and the matrix (`domain::authz::grants`) grants those to **`Admin`
   *and* `Owner`** — role-granting is the identity plane's concern, so the money plane
@@ -492,7 +492,7 @@ withdrawal (`application/payments.rs`).
 There is deliberately **no cell in which one admin moves fund money alone**. `service:fee → user:<x>`
 on a single say-so would be the retired revenue payout reopened through the back door: the
 recipient can then withdraw under their own authority. The matrix
-(`Permission::PaymentOpen`, Admin and Owner) gates *proposing*; the source decides who
+(`bank:payment:open`, Admin and Owner) gates *proposing*; the source decides who
 authorizes.
 
 Everything the execution will check is checked at **open**, so nobody spends 72 hours

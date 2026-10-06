@@ -1,8 +1,8 @@
 //! The payments console: `/api/admin/payments/**` — an order that moves money between
 //! two named ends of the platform.
 //!
-//! Money plane, money token, Admin|Owner: the plane holds `Permission::PaymentOpen` and
-//! re-checks it per RPC. What the BFF decides here is only the shape — a destination that
+//! Money plane, money token: the BFF admits `bank:treasury:read`, the plane holds
+//! `bank:payment:open` and re-checks it per RPC. What the BFF decides here is only the shape — a destination that
 //! names both an internal party and an address, or neither, is refused before the plane
 //! is asked — and the vocabulary: the browser sends lowercase state names and gets them
 //! back, exactly as the consilium surface does.
@@ -18,13 +18,14 @@ use axum::{
 	http::HeaderMap,
 };
 use axum_extra::extract::cookie::CookieJar;
+use concierge_domain::authz::bank;
 use evbanking_contracts::banking::v1 as bk;
 use serde::Deserialize;
 
 use crate::{
 	dto,
 	error::ApiError,
-	routes::{require_admin, require_money_token, verify_csrf},
+	routes::{require_money_token, require_permission, verify_csrf},
 	state::AppState,
 };
 
@@ -70,7 +71,7 @@ struct ExternalDestination {
 /// `GET /api/admin/payments?state=&limit=` — the history, newest first. Nothing is ever
 /// deleted, so a closed order stays readable.
 pub async fn list(State(st): State<AppState>, jar: CookieJar, Query(q): Query<ListQuery>) -> Result<Json<dto::PaymentList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	// An unrecognised word is refused rather than widened to "every state": a filter that
 	// silently stops filtering shows the reader rows they did not ask for.
@@ -90,7 +91,7 @@ pub async fn list(State(st): State<AppState>, jar: CookieJar, Query(q): Query<Li
 
 /// `GET /api/admin/payments/{id}` — one order in full, including its consent seat.
 pub async fn get(State(st): State<AppState>, jar: CookieJar, Path(id): Path<String>) -> Result<Json<dto::Payment>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let payment = st.grpc.get_payment(&token, &id).await.map_err(|s| ApiError::read(s, "payment unavailable"))?;
 	Ok(Json(payment.into()))
@@ -104,7 +105,7 @@ pub async fn open(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let req = wire(&body)?;
 	Ok(Json(st.grpc.open_payment(&token, req).await?.into()))
@@ -116,7 +117,7 @@ pub async fn cancel(State(st): State<AppState>, jar: CookieJar, Path(id): Path<S
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	Ok(Json(st.grpc.cancel_payment(&token, &id).await?.into()))
 }

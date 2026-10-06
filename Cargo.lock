@@ -542,6 +542,8 @@ dependencies = [
  "axum",
  "axum-extra",
  "color-eyre",
+ "concierge_iam",
+ "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404)",
  "dotenvy",
  "ev_lib 0.23.0",
  "evbanking_contracts",
@@ -752,6 +754,26 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
+]
+
+[[package]]
+name = "concierge_iam"
+version = "0.1.0"
+source = "git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404#94f3562e954c31c329a96bd077adef1607f60404"
+dependencies = [
+ "concierge_iam_derive",
+ "serde",
+]
+
+[[package]]
+name = "concierge_iam_derive"
+version = "0.1.0"
+source = "git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404#94f3562e954c31c329a96bd077adef1607f60404"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1636,6 +1658,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "domain"
+version = "0.1.0"
+source = "git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404#94f3562e954c31c329a96bd077adef1607f60404"
+dependencies = [
+ "concierge_iam",
+ "ev_lib 0.24.2",
+ "getrandom 0.4.3",
+ "serde",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "dotenvy"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1817,6 +1852,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8308234abaf3a3bf588e9b5ba0db5a1e4066ae2dd38c593226501d6a482a06ef"
 dependencies = [
  "async-trait",
+ "dioxus",
  "jiff",
  "js-sys",
  "reqwest 0.13.4",
@@ -3795,7 +3831,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "color-eyre",
- "domain",
+ "concierge_iam",
+ "domain 0.1.0",
+ "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404)",
  "dotenvy",
  "ev_lib 0.23.0",
  "evbanking_auth",
@@ -3832,7 +3870,7 @@ dependencies = [
  "base64",
  "chacha20poly1305",
  "color-eyre",
- "domain",
+ "domain 0.1.0",
  "dotenvy",
  "ed25519-dalek",
  "ev_lib 0.23.0",

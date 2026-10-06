@@ -34,6 +34,8 @@ jiff.workspace = true
 reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 
 color-eyre.workspace = true
+concierge_domain.workspace = true
+concierge_iam.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
 ev = { workspace = true, features = ["analytics", "error_monitoring", "otel", "settings", "settings_drift"] }
