@@ -30,8 +30,8 @@ chacha20poly1305 = "0.10"
 color-eyre = "0.6"
 # What a concierge seat means, `bank:*` included: the gates ask for these names. At the contracts'
 # rev; `concierge_iam` must match the domain's, or its `Permission` trait is another crate's.
-concierge_domain = { package = "domain", git = "https://github.com/EV-invest/concierge.git", rev = "7930abfe66b6370d40f75d480ceed4f1b418f406" }
-concierge_iam = { git = "https://github.com/EV-invest/concierge.git", rev = "7930abfe66b6370d40f75d480ceed4f1b418f406" }
+concierge_domain = { package = "domain", git = "https://github.com/EV-invest/concierge.git", rev = "94f3562e954c31c329a96bd077adef1607f60404" }
+concierge_iam = { git = "https://github.com/EV-invest/concierge.git", rev = "94f3562e954c31c329a96bd077adef1607f60404" }
 # Hub-internal crates. Other service repos depend on `evbanking_contracts` (and,
 # transitively, `evbanking_auth`) by git, so they get the wire stubs and the shared
 # auth verification flow from one place.
