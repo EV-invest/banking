@@ -543,7 +543,7 @@ dependencies = [
  "axum-extra",
  "color-eyre",
  "concierge_iam",
- "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404)",
+ "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26)",
  "dotenvy",
  "ev_lib",
  "evbanking_contracts",
@@ -759,7 +759,7 @@ dependencies = [
 [[package]]
 name = "concierge_iam"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404#94f3562e954c31c329a96bd077adef1607f60404"
+source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
 dependencies = [
  "concierge_iam_derive",
  "serde",
@@ -768,7 +768,7 @@ dependencies = [
 [[package]]
 name = "concierge_iam_derive"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404#94f3562e954c31c329a96bd077adef1607f60404"
+source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -1660,12 +1660,13 @@ dependencies = [
 [[package]]
 name = "domain"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404#94f3562e954c31c329a96bd077adef1607f60404"
+source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
 dependencies = [
  "concierge_iam",
  "ev_lib",
  "getrandom 0.4.3",
  "serde",
+ "strum",
  "thiserror 2.0.18",
  "uuid",
 ]
@@ -1878,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_auth"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404#94f3562e954c31c329a96bd077adef1607f60404"
+source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
 dependencies = [
  "color-eyre",
  "ev_lib",
@@ -1900,7 +1901,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_contracts"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404#94f3562e954c31c329a96bd077adef1607f60404"
+source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
 dependencies = [
  "prost 0.14.4",
  "tonic 0.14.6",
@@ -3813,7 +3814,7 @@ dependencies = [
  "color-eyre",
  "concierge_iam",
  "domain 0.1.0",
- "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=94f3562e954c31c329a96bd077adef1607f60404)",
+ "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26)",
  "dotenvy",
  "ev_lib",
  "evbanking_auth",
@@ -5422,6 +5423,27 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
+name = "strum"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
+dependencies = [
+ "strum_macros",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "subsecond"
