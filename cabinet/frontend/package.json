@@ -15,7 +15,8 @@
     "build:mfe": "node mfe/build.mjs && tailwindcss -i mfe/account-chip/mfe.css -o public/mfe/account-chip.css --minify",
     "predev": "npm run build:mfe",
     "prebuild": "npm run build:mfe",
-    "i18n:check": "tsx scripts/i18n-check.mts"
+    "i18n:extract": "evinvest-i18n-extract --root . --exclude public,messages",
+    "i18n:check": "evinvest-i18n-check --root . --exclude public,messages && tsx scripts/i18n-check.mts"
   },
   "dependencies": {
     "@evinvest/analytics": "^0.4.0",

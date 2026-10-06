@@ -1915,10 +1915,6 @@
     "en": "This account holds an owner's seat, so its role cannot be changed here. A seat is given up by resigning, or taken by a removal the other owners vote through, in",
     "t": "Аккаунт занимает место владельца, поэтому роль отсюда не меняется. Место освобождается сложением полномочий или исключением, за которое голосуют остальные владельцы, — в разделе"
   },
-  "admin.users.ownerSeatVia": {
-    "en": "Owner is not on this list. A seat is written by the founding seed at start-up, or granted by an admission the current owners vote through — never from here. Open one in",
-    "t": "Роли «Владелец» в списке нет. Место записывает посев при старте сервиса либо приём, за который голосуют действующие владельцы, — но никогда не эта форма. Открыть предложение можно в разделе"
-  },
   "admin.users.proposeAdmin": {
     "en": "Propose admin",
     "t": "Предложить админа"
@@ -1955,10 +1951,6 @@
     "en": "Why this account, in one line",
     "t": "Почему именно этот аккаунт, одной строкой"
   },
-  "admin.users.reinstate": {
-    "en": "Reinstate",
-    "t": "Включить"
-  },
   "admin.users.revokeAllSessions": {
     "en": "Revoke all sessions",
     "t": "Отозвать все сеансы"
@@ -1987,10 +1979,6 @@
     "en": "Suspended by the owners' vote. It does not lapse, and one admin cannot lift it.",
     "t": "Приостановлен голосованием владельцев. Не спадает, и один админ его не снимет."
   },
-  "admin.users.standingHeld": {
-    "en": "Held. It lapses {when} unless the owners make it permanent.",
-    "t": "Удержан. Спадёт {when}, если владельцы не сделают блокировку постоянной."
-  },
   "admin.users.standingHold": {
     "en": "Held by one operator. It lapses on its own unless the owners vote to make it permanent.",
     "t": "Удержан одним админом. Спадёт сам, если владельцы не проголосуют сделать блокировку постоянной."
@@ -2010,10 +1998,6 @@
   "admin.users.subtitle": {
     "en": "Investors and operators — identities, KYC, roles and sessions",
     "t": "Инвесторы и операторы — личности, KYC, роли и сеансы"
-  },
-  "admin.users.suspend": {
-    "en": "Suspend",
-    "t": "Отключить"
   },
   "admin.users.tokenVersion": {
     "en": "Token version",
@@ -4039,14 +4023,6 @@
     "en": "Carried over",
     "t": "Перенесено"
   },
-  "invest.companyStake": {
-    "en": "Company stake",
-    "t": "Доля компании"
-  },
-  "invest.companyStakeValue": {
-    "en": "{pct} · {units} units",
-    "t": "{pct} · {units} паёв"
-  },
   "invest.costBasis": {
     "en": "Cost basis",
     "t": "Цена приобретения"
@@ -5495,10 +5471,6 @@
     "en": "Your identity as the fund records it",
     "t": "Ваша личность, как её учитывает фонд"
   },
-  "settings.phone": {
-    "en": "Phone",
-    "t": "Телефон"
-  },
   "settings.preferencesSub": {
     "en": "How the cabinet is displayed to you. Saved to your account, so every device follows",
     "t": "Как кабинет показывается вам. Хранится в аккаунте, поэтому действует на всех устройствах"
@@ -6738,10 +6710,6 @@
   "ui.accountStatus": {
     "en": "Account status",
     "t": "Статус аккаунта"
-  },
-  "ui.activity": {
-    "en": "Activity",
-    "t": "История"
   },
   "ui.addFunds": {
     "en": "Add funds",

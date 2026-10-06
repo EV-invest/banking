@@ -25,8 +25,19 @@ the React / Rust-WASM producer recipes.
 
 Five locales (`en` `ru` `vi` `fr` `de`) through `@evinvest/i18n`, under the same
 translation policy as the public site: English is canonical, and a translation
-whose English source has since changed is refused and falls back to English. Run
-`npm run i18n:check` — it fails on drift, not on untranslated keys. The checker
+whose English source has since changed is refused and falls back to English.
+
+English is written where it renders: every call is `t("key", "English sentence")`
+with both arguments literal, and `messages/en/common.json` is generated from the
+code by `npm run i18n:extract` — do not edit it by hand. A wire value that picks
+its words (a state, a role) goes through a table of literal `t()` calls looked up
+by the value (`shared/lib/wire-words.ts`), never a key assembled at runtime: the
+extractor refuses one, since it has no English to extract.
+
+`npm run i18n:check` is two gates. `evinvest-i18n-check` fails when the committed
+English catalogue no longer matches the code, or on drift. The cabinet's own
+`scripts/i18n-check.mts` then holds every locale at 100 % coverage and refuses a
+translation identical to its English. The second checker
 runs under `tsx` rather than node's `--experimental-strip-types` (which the unit
 tests use) because it imports `shared/config/i18n.ts`, and that module loads the
 catalogues through the `@/messages/...` tsconfig path alias, which bare node

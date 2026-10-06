@@ -8,8 +8,8 @@
 // Fails on *drift* and on *missing keys* alike. The check used to tolerate
 // untranslated keys so a locale could be filled in over time — and three locales
 // sat at 86 % for a release cycle while every new consilium screen shipped in
-// English. All five catalogues are complete now, so the floor is 100 %: a new key
-// lands in `en` and in all four translations in the same change, or CI is red.
+// English. All five catalogues are complete now, so the floor is 100 %: a new
+// `t(key, English)` lands with all four translations in the same change, or CI is red.
 //
 // Drift has two faces. The policy catches *key* drift — the `en` field no longer
 // matches today's English. It cannot catch *copy* drift: a translator who pastes
