@@ -5379,6 +5379,10 @@
     "en": "Open source",
     "t": "Mã nguồn mở"
   },
+  "settings.documents.sourceCodeSub": {
+    "en": "The fund's code, on GitHub",
+    "t": "Mã nguồn của quỹ, trên GitHub"
+  },
   "settings.documents.sub": {
     "en": "What the fund has published, and how your money is held",
     "t": "Quỹ đã công bố gì và tiền của bạn được giữ ra sao"

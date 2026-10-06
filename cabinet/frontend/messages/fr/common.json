@@ -5379,6 +5379,10 @@
     "en": "Open source",
     "t": "Code ouvert"
   },
+  "settings.documents.sourceCodeSub": {
+    "en": "The fund's code, on GitHub",
+    "t": "Le code du fonds, sur GitHub"
+  },
   "settings.documents.sub": {
     "en": "What the fund has published, and how your money is held",
     "t": "Ce que le fonds a publié et comment votre argent est détenu"

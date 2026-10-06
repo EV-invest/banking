@@ -1362,6 +1362,7 @@
   "settings.documents.risk": "Risk",
   "settings.documents.rowSub": "Whitepaper, open source, how funds are held, risk",
   "settings.documents.sourceCode": "Open source",
+  "settings.documents.sourceCodeSub": "The fund's code, on GitHub",
   "settings.documents.sub": "What the fund has published, and how your money is held",
   "settings.documents.title": "Documents and disclosures",
   "settings.documents.whitepaper": "Whitepaper",
