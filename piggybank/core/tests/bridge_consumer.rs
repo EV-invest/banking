@@ -19,7 +19,7 @@ use std::{
 
 use concierge_domain::authz::bank;
 use evconcierge_contracts::concierge::v1::{
-	PullUserLifecycleRequest, PullUserLifecycleResponse, UserLifecycleEvent,
+	PullUserLifecycleRequest, PullUserLifecycleResponse, SeatPermissions, UserLifecycleEvent,
 	user_events_server::{UserEvents, UserEventsServer},
 	user_lifecycle_event::Kind,
 };
@@ -103,6 +103,7 @@ fn event(subject: &str, kind: Kind, sequence: u64) -> UserLifecycleEvent {
 		// ROLE_CHANGED test overrides this field explicitly.
 		role: String::new(),
 		permissions: Vec::new(),
+		seat_permissions: None,
 	}
 }
 
@@ -260,9 +261,10 @@ async fn permissions_of(pool: &PgPool, subject: &str) -> Option<Vec<String>> {
 		.unwrap()
 }
 
-/// `permissions` is a snapshot on every row, like the role: a ROLE_CHANGED that only left the
-/// set to a later PERMISSIONS_CHANGED would leave the two disagreeing in between, and a
-/// parked row that replayed without its set would read as "holds nothing".
+/// `seat_permissions` is a snapshot on every row, like the role: a ROLE_CHANGED that only left
+/// the set to a later PERMISSIONS_CHANGED would leave the two disagreeing in between, and a
+/// parked row that replayed without its set would read as "holds nothing". Absent says
+/// nothing and keeps the mirror; a stated empty set is a demotion and lands as one.
 /// What lands is what the money-op gate then asks.
 #[tokio::test]
 async fn permissions_ride_every_kind_live_and_from_the_parking_lot() {
@@ -270,17 +272,35 @@ async fn permissions_ride_every_kind_live_and_from_the_parking_lot() {
 		return;
 	};
 	let set = |ps: &[&str]| ps.iter().map(|p| p.to_string()).collect::<Vec<_>>();
-	let (created, promoted, redefined, orphan) = (unique_subject(), unique_subject(), unique_subject(), unique_subject());
+	let stated = |ps: &[&str]| Some(SeatPermissions { bank: set(ps) });
+	let (created, promoted, redefined, orphan, kept, demoted) = (unique_subject(), unique_subject(), unique_subject(), unique_subject(), unique_subject(), unique_subject());
 	let mut seated = event(&created, Kind::Created, 1);
-	seated.permissions = set(&["bank:treasury:read"]);
+	seated.seat_permissions = stated(&["bank:treasury:read"]);
 	let mut promote = event(&promoted, Kind::RoleChanged, 2);
 	promote.role = "admin".into();
-	promote.permissions = set(&["bank:treasury:read", "bank:user_balance:read"]);
+	promote.seat_permissions = stated(&["bank:treasury:read", "bank:user_balance:read"]);
 	let mut redefine = event(&redefined, Kind::PermissionsChanged, 2);
-	redefine.permissions = set(&["bank:payment:open"]);
+	redefine.seat_permissions = stated(&["bank:payment:open"]);
 	let mut parked = event(&orphan, Kind::KycChanged, 2);
-	parked.permissions = set(&["bank:user_balance:read"]);
-	let events = vec![seated, event(&promoted, Kind::Created, 1), promote, event(&redefined, Kind::Created, 1), redefine, parked];
+	parked.seat_permissions = stated(&["bank:user_balance:read"]);
+	let mut keep = event(&kept, Kind::Created, 1);
+	keep.seat_permissions = stated(&["bank:treasury:read"]);
+	let mut admin_seat = event(&demoted, Kind::Created, 1);
+	admin_seat.seat_permissions = stated(&["bank:payment:open"]);
+	let mut demote = event(&demoted, Kind::RoleChanged, 2);
+	demote.seat_permissions = stated(&[]);
+	let events = vec![
+		seated,
+		event(&promoted, Kind::Created, 1),
+		promote,
+		event(&redefined, Kind::Created, 1),
+		redefine,
+		parked,
+		keep,
+		event(&kept, Kind::KycChanged, 2),
+		admin_seat,
+		demote,
+	];
 	let count = events.len() as i64;
 
 	drive(&pool, events, move |pool| async move {
@@ -291,16 +311,23 @@ async fn permissions_ride_every_kind_live_and_from_the_parking_lot() {
 			"ROLE_CHANGED carries the set of the new seat"
 		);
 		assert_eq!(permissions_of(&pool, &redefined).await, Some(set(&["bank:payment:open"])));
+		assert_eq!(permissions_of(&pool, &kept).await, Some(set(&["bank:treasury:read"])), "an unstated set keeps what is mirrored");
+		assert_eq!(permissions_of(&pool, &demoted).await, Some(vec![]), "a stated empty set is a demotion");
 		assert_eq!(cursor_position(&pool).await, count, "a kind this build names moves the cursor on");
 
 		let gate = |subject: String| {
 			let pool = pool.clone();
-			async move { bridge::permissions_of(&pool, domain::users::UserId::from_raw(user_id_for(&pool, &subject).await.expect("provisioned"))).await.unwrap() }
+			async move {
+				bridge::permissions_of(&pool, domain::users::UserId::from_raw(user_id_for(&pool, &subject).await.expect("provisioned")))
+					.await
+					.unwrap()
+			}
 		};
 		let admin = gate(promoted.clone()).await;
 		assert!(admin.may(bank::UserBalance::Read), "the mirrored set admits what it names");
 		assert!(!admin.may(bank::Payment::Open), "and refuses what it does not, whatever the role says");
 		assert!(gate(redefined.clone()).await.may(bank::Payment::Open));
+		assert!(!gate(demoted.clone()).await.may(bank::Payment::Open));
 
 		PgUsers::new(pool.clone())
 			.provision(
@@ -412,7 +439,10 @@ async fn a_subject_absent_from_the_projection_is_never_an_owner() {
 	let stranger = domain::users::UserId::from_raw(uuid::Uuid::new_v4());
 
 	let held = bridge::permissions_of(&pool, stranger).await.unwrap();
-	assert!(!held.may(bank::Treasury::Read) && !held.may(bank::Consilium::Manage), "no local row ⇒ nothing, not an inherited privilege");
+	assert!(
+		!held.may(bank::Treasury::Read) && !held.may(bank::Consilium::Manage),
+		"no local row ⇒ nothing, not an inherited privilege"
+	);
 }
 
 /// AN OWNER MUST NEVER REACH THE MONEY PLANE WITHOUT A ROSTER-JOURNAL ROW.

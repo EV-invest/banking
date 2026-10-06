@@ -153,6 +153,7 @@ fn created(subject: &str) -> UserLifecycleEvent {
 		token_version: 0,
 		role: String::new(),
 		permissions: Vec::new(),
+		seat_permissions: None,
 	}
 }
 
