@@ -14,8 +14,8 @@
 //! don't control, so the large-err lint does not apply in this module.
 #![allow(clippy::result_large_err)]
 
+use concierge_domain::authz::bank;
 use domain::{
-	authz::Permission,
 	balance::{Party, ServiceId},
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
@@ -279,7 +279,7 @@ fn consent_err(err: DomainError) -> Status {
 #[tonic::async_trait]
 impl PaymentsService for PaymentsSvc {
 	async fn open_payment(&self, request: Request<pb::OpenPaymentRequest>) -> Result<Response<pb::Payment>, Status> {
-		require_permission(&self.state, &request, Permission::PaymentOpen).await?;
+		require_permission(&self.state, &request, bank::Payment::Open).await?;
 		let initiator = caller_id(&request)?;
 		let req = request.into_inner();
 		let source = self.state.parse_party(req.source.as_ref()).await?;
@@ -304,7 +304,7 @@ impl PaymentsService for PaymentsSvc {
 	}
 
 	async fn list_payments(&self, request: Request<pb::ListPaymentsRequest>) -> Result<Response<pb::PaymentList>, Status> {
-		require_permission(&self.state, &request, Permission::PaymentOpen).await?;
+		require_permission(&self.state, &request, bank::Payment::Open).await?;
 		let req = request.into_inner();
 		let limit = if req.limit == 0 { DEFAULT_LIST_LIMIT } else { req.limit.min(MAX_LIST_LIMIT) };
 		let party = match req.party.as_ref() {
@@ -323,14 +323,14 @@ impl PaymentsService for PaymentsSvc {
 	}
 
 	async fn get_payment(&self, request: Request<pb::GetPaymentRequest>) -> Result<Response<pb::Payment>, Status> {
-		require_permission(&self.state, &request, Permission::PaymentOpen).await?;
+		require_permission(&self.state, &request, bank::Payment::Open).await?;
 		let id = parse_payment_id(&request.get_ref().payment_id)?;
 		let view = payments_app::find(self.state.payments.as_ref(), id).await.map_err(map_err)?;
 		Ok(Response::new(payment_to_proto(&view)))
 	}
 
 	async fn cancel_payment(&self, request: Request<pb::CancelPaymentRequest>) -> Result<Response<pb::Payment>, Status> {
-		require_permission(&self.state, &request, Permission::PaymentOpen).await?;
+		require_permission(&self.state, &request, bank::Payment::Open).await?;
 		let caller = caller_id(&request)?;
 		let id = parse_payment_id(&request.get_ref().payment_id)?;
 		let view = payments_app::cancel(&self.state.payment_ports(), id, caller, unix_now()).await.map_err(map_err)?;

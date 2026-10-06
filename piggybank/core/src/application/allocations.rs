@@ -2,7 +2,7 @@
 //!
 //! Pure control plane: nothing here touches TigerBeetle or the relay, so no handler
 //! notifies it. The write side is Admin/Owner-gated at the service boundary
-//! (`Permission::AllocationManage`); the read side is open to any authenticated user,
+//! (`bank:allocation:manage`); the read side is open to any authenticated user,
 //! filtered to what that user may see, with the unrestricted view behind the same
 //! permission.
 //!

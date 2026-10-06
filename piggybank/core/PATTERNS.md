@@ -119,7 +119,7 @@ an unregistered slug); `Subscribe` refuses below `invest` with `DomainError::Pre
 the permission reads the product, it does not invest in it. Grant/revoke facts land in
 `event_log` under the allocation aggregate (`relay = false`, like every registry event).
 
-**Authorization.** Registration and every transition need `Permission::AllocationManage`
+**Authorization.** Registration and every transition need `bank:allocation:manage`
 — Admin/Owner, alongside `ValuationPost`, never Operator: bringing a fund into existence
 is not a read. Reads are open to any authenticated user; `include_unlisted` (drafts +
 closed) is behind the same permission and **refuses** rather than silently downgrading to
@@ -1060,7 +1060,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 
 | RPC | Who | Boundary | In-tx invariant |
 | --- | --- | --- | --- |
-| `GetTreasury` / `RecordDeposit` | operator | `require_permission` (RBAC matrix) | chain-proven arrival (amount + party read off the chain) ∧ `tx_ref` gate |
+| `GetTreasury` / `RecordDeposit` | operator | `require_permission` | chain-proven arrival (amount + party read off the chain) ∧ `tx_ref` gate |
 | `SeedCapital` | an owner (`CapitalManage` admits to the door; `Consilium::open` refuses a non-owner) | `require_permission` + `expected_amount` required | opens a `seed_capital` consilium: chain-proven treasury arrival at exactly that amount, reference not yet booked, depositor active, `fund` open and fresh — the deposit + `fund` subscription are booked only when the quorum executes |
 | `Subscribe` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | available claim ≥ cash ∧ fresh NAV (TB flag backstop) |
 | `Redeem` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
@@ -1070,35 +1070,36 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `GetDepositAddress` | the user | `sub == user` | `kyc_level ≥ 1` (else `permission_denied`) |
 | `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | owner not frozen (`frozen ∨ disabled`, via `OutflowPolicy::standing`) ∧ `kyc_level ≥ 1` ∧ available claim ≥ gross (TB flag backstop) |
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
-| `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ **not read-only** ∧ (user source) owner not frozen ∧ `kyc_level ≥ 1` — fail-closed, no `force` |
-| `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
-| `PostFundValuation` | operator | `require_permission` (RBAC matrix) | allocation registered ∧ units outstanding > 0 ∧ NAV move ≤ threshold vs the previous mark ∧ vs the rolling-window anchor — **no override**; beyond it: `ConsiliumService.OpenValuationOverride` (same `ValuationPost` permission, initiator must hold an owner seat, owners' quorum executes the mark) |
+| `DispatchWithdrawal` | operator (treasury) | `require_permission` | state is `queued` (idempotent) ∧ **not read-only** ∧ (user source) owner not frozen ∧ `kyc_level ≥ 1` — fail-closed, no `force` |
+| `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` | state is `processing` (idempotent) |
+| `PostFundValuation` | operator | `require_permission` | allocation registered ∧ units outstanding > 0 ∧ NAV move ≤ threshold vs the previous mark ∧ vs the rolling-window anchor — **no override**; beyond it: `ConsiliumService.OpenValuationOverride` (same `ValuationPost` permission, initiator must hold an owner seat, owners' quorum executes the mark) |
 | `Redeem` / `SettleRedemption` (cooldown) | the user / operator | as above | the redeeming user posted **no** mark for this fund within `VALUATION_REDEEM_COOLDOWN_SECS` (`failed_precondition` otherwise; checked at request and again at settle) |
-| `IssueUnits` / `RetireUnits` / `ListUnitHolders` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | `service` not reserved ∧ holder is a user (`Forbidden` otherwise) ∧ allocation registered (any state) ∧ user holder exists and is active ∧ fresh NAV ∧ (issue) issued + units ≤ cap / (retire) `closed` unless `force` ∧ holder's available units ≥ units; idempotent by `(service, idempotency_key)`, one key space for mints and retirements |
-| `RegisterAllocation` / `UpdateAllocation` / `SetAllocationState` / `SetAllocationUnitCap` / `SetAllocationAccess` / `SetAllocationBacking` / `Grant`/`RevokeAllocationAccess` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | `service` not reserved (`refuse_on_reserved` → `Forbidden`; a reserved slug cannot be registered either) |
-| `OpenHolderGrant` | an owner (`ConsiliumManage` — the owner-surface permission — admits to the door; `Consilium::open` refuses a non-owner) | `require_permission` (RBAC matrix) | terms name a reserved allocation ∧ units > 0 ∧ grantee is an active mirrored user ∧ `fee`/`fund` prices fresh; executed by the owners' quorum through `issuance::grant_units` (cap ∧ fresh NAV re-checked at execution, idempotent by `holder-grant:<consilium>`) |
-| `SettleFeeShares` | operator (`AllocationManage`) | `require_permission` (RBAC matrix) | `0 < units ≤ FeeShares.available` ∧ the settler posted **no** mark for the product within `VALUATION_REDEEM_COOLDOWN_SECS` ∧ fresh NAV ∧ `service:<svc>.available ≥ cash + queued redemptions at that NAV` |
+| `IssueUnits` / `RetireUnits` / `ListUnitHolders` | admin (`AllocationManage`) | `require_permission` | `service` not reserved ∧ holder is a user (`Forbidden` otherwise) ∧ allocation registered (any state) ∧ user holder exists and is active ∧ fresh NAV ∧ (issue) issued + units ≤ cap / (retire) `closed` unless `force` ∧ holder's available units ≥ units; idempotent by `(service, idempotency_key)`, one key space for mints and retirements |
+| `RegisterAllocation` / `UpdateAllocation` / `SetAllocationState` / `SetAllocationUnitCap` / `SetAllocationAccess` / `SetAllocationBacking` / `Grant`/`RevokeAllocationAccess` | admin (`AllocationManage`) | `require_permission` | `service` not reserved (`refuse_on_reserved` → `Forbidden`; a reserved slug cannot be registered either) |
+| `OpenHolderGrant` | an owner (`ConsiliumManage` — the owner-surface permission — admits to the door; `Consilium::open` refuses a non-owner) | `require_permission` | terms name a reserved allocation ∧ units > 0 ∧ grantee is an active mirrored user ∧ `fee`/`fund` prices fresh; executed by the owners' quorum through `issuance::grant_units` (cap ∧ fresh NAV re-checked at execution, idempotent by `holder-grant:<consilium>`) |
+| `SettleFeeShares` | operator (`AllocationManage`) | `require_permission` | `0 < units ≤ FeeShares.available` ∧ the settler posted **no** mark for the product within `VALUATION_REDEEM_COOLDOWN_SECS` ∧ fresh NAV ∧ `service:<svc>.available ≥ cash + queued redemptions at that NAV` |
 | `PlaceOrder` | the user | `sub == user`, `is_access`, **not frozen**, **not read-only** | allocation visible ∧ `invest` (state ignored) ∧ `book_open` ∧ on tick/lot ∧ free units / claim ≥ escrow (TB flag backstop → `rejected`); idempotent by `client_order_id` |
 | `CancelOrder` | the user | `sub == user`, `is_access` | owns it ∧ state is resting (idempotent on cancelled) |
 | `ListOpenOrders` / `ListOrderHistory` / `ListUserTrades` | the user | `sub == user` | — |
 | `GetBook` / `ListTrades` / `ListCandles` / `WatchBook` / `GetBookPolicy` | the user | `sub == user`; allocation visible to the caller (`AllocationManage` sees all) | — |
-| `SetBookPolicy` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | allocation registered; bps ≤ 10000, tick and lot > 0 |
-| `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ (settle) position projection tracks ≥ the redeemed units |
-| `GetUserBalance` | operator | `require_permission` (RBAC matrix); resolves the CONCIERGE id first via the bridge mirror (`users.concierge_user_id`), then the banking id; unknown ⇒ `NOT_FOUND` | — |
-| `ListParkedEvents` | operator | `require_permission` (RBAC matrix) | — |
-| `UnparkEvent` | admin (`OutboxManage`) | `require_permission` (RBAC matrix) | parked ∧ not dispatched ∧ **not compensated** (the double-apply guard) |
+| `SetBookPolicy` | admin (`AllocationManage`) | `require_permission` | allocation registered; bps ≤ 10000, tick and lot > 0 |
+| `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` | state is `queued` (idempotent) ∧ (settle) position projection tracks ≥ the redeemed units |
+| `GetUserBalance` | operator | `require_permission`; resolves the CONCIERGE id first via the bridge mirror (`users.concierge_user_id`), then the banking id; unknown ⇒ `NOT_FOUND` | — |
+| `ListParkedEvents` | operator | `require_permission` | — |
+| `UnparkEvent` | admin (`OutboxManage`) | `require_permission` | parked ∧ not dispatched ∧ **not compensated** (the double-apply guard) |
 
 The `kyc_level ≥ 1` arms above are the **enforced** position of the deployment switch
 (`KYC_GATE_ENABLED`, enforced unless explicitly lifted — see **The switch** under the
 verification gate below); every other arm in this matrix is unconditional.
 
-`require_permission` (`services::support`) is `is_access` + the pure RBAC matrix
-(`domain::authz::grants` — the single place the matrix is defined) over the caller's
-bridge-mirrored role, **after** the account gates, in the money-path gate's order: a stale
-`token_version` is `unauthenticated` first, then a `disabled` (or frozen) operator is
-`permission_denied`. The mirrored `users.role` column is the
-**only** source of the role — there is no environment-driven override, so a caller with
-no local row holds nothing and a non-UUID subject is refused outright.
+`require_permission` (`services::support`) is `is_access` + a `bank:*` permission
+(`concierge_domain::authz::bank`) looked up in the caller's bridge-mirrored
+`users.permissions` — concierge decides what a seat holds — **after** the account gates, in
+the money-path gate's order: a stale `token_version` is `unauthenticated` first, then a
+`disabled` (or frozen) operator is `permission_denied`. The mirrored column is the **only**
+source — there is no environment-driven override, so a caller with no local row, or one
+concierge has not told us about yet (NULL), holds nothing and a non-UUID subject is refused
+outright.
 
 **Money-path gate** (`services::support::unfrozen_caller`): the value-leaving RPCs above
 (`Subscribe`/`Redeem`/`RequestWithdrawal`) run one `IssuanceTarget` resolve and one

@@ -10,8 +10,8 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use concierge_iam::{Permission, PermissionSet};
 use domain::{
-	authz::{Permission, Role, grants},
 	error::DomainError,
 	money::Network,
 	redemptions::RedemptionId,
@@ -95,25 +95,18 @@ fn money_caller_gate(token_version: u64, target: Option<&IssuanceTarget>, paused
 	}
 }
 
-/// Gate an RPC on a required money-plane [`Permission`], resolved from the caller's
-/// mirrored [`Role`] (the RBAC matrix). Only a human access token qualifies — a service
-/// token never carries a user role.
-///
-/// The role has exactly one source: the persisted `users.role` column the concierge →
-/// banking bridge mirrors from the identity plane (`ROLE_CHANGED`). There is no
-/// environment-driven override here — the money plane holds no roster of its own, so
-/// ownership is whatever concierge persisted and nothing else. Every path fails closed:
-/// no local row is [`Role::default`] (holds nothing), a non-UUID subject is
-/// `UNAUTHENTICATED`, and a control-plane read failure is `UNAVAILABLE` — an admin op
-/// never proceeds when the gate can't be read. The revoke and disable gates run before the
-/// role, so `RevokeTokens`/`DisableUser` bite on the most privileged principals too —
-/// revoke first, as [`money_caller_gate`] answers an investor: a revoked operator is not
-/// authenticated, and learns nothing about their standing, not even that it is disabled.
-pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>, permission: Permission) -> Result<(), Status> {
+/// Gate an RPC on a `bank:*` permission, read from the caller's mirrored `users.permissions`
+/// (concierge's resolution of their seat, over the bridge). Only a human access token
+/// qualifies. Every path fails closed: no local row, or a row concierge has not yet told us
+/// about (NULL), holds nothing; a non-UUID subject is `UNAUTHENTICATED`; a control-plane read
+/// failure is `UNAVAILABLE`. Revoke and disable are answered before the permission, so
+/// `RevokeTokens`/`DisableUser` bite on the most privileged principals too — revoke first, as
+/// [`money_caller_gate`] answers an investor.
+pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>, permission: impl Permission) -> Result<(), Status> {
 	if holds_permission(state, request, permission).await? {
 		Ok(())
 	} else {
-		Err(Status::permission_denied("insufficient role"))
+		Err(Status::permission_denied(format!("requires {}", permission.as_str())))
 	}
 }
 
@@ -122,7 +115,7 @@ pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>
 /// control plane — only the final "no" comes back as `Ok(false)` instead of
 /// `PERMISSION_DENIED`. For handlers that serve everyone and merely *widen* for a
 /// permission holder (an investor's filtered catalog versus a manager's full one).
-pub(super) async fn holds_permission<T>(state: &AppState, request: &Request<T>, permission: Permission) -> Result<bool, Status> {
+pub(super) async fn holds_permission<T>(state: &AppState, request: &Request<T>, permission: impl Permission) -> Result<bool, Status> {
 	let (is_access, sub, token_version) = {
 		let claims = claims_of(request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
 		(claims.is_access(), claims.sub.clone(), claims.token_version)
@@ -132,7 +125,7 @@ pub(super) async fn holds_permission<T>(state: &AppState, request: &Request<T>, 
 	}
 	let id = parse_user_id(&sub)?;
 	let target = state.users.resolve_issuance_by_banking_id(id).await.map_err(|_| Status::unavailable("internal error"))?;
-	let role = match target {
+	let held = match target {
 		Some(target) => {
 			if token_version < target.token_version {
 				return Err(Status::unauthenticated("tokens revoked"));
@@ -140,12 +133,11 @@ pub(super) async fn holds_permission<T>(state: &AppState, request: &Request<T>, 
 			if target.disabled {
 				return Err(Status::permission_denied("account is disabled"));
 			}
-			crate::infrastructure::bridge::role_of(&state.pool, id).await.map_err(|_| Status::unavailable("internal error"))?
+			crate::infrastructure::bridge::permissions_of(&state.pool, id).await.map_err(|_| Status::unavailable("internal error"))?
 		}
-		// No local row: nothing the mirror can grant, so the caller holds nothing.
-		None => Role::default(),
+		None => std::iter::empty::<&str>().collect::<PermissionSet>(),
 	};
-	Ok(grants(role, permission))
+	Ok(held.may(permission))
 }
 
 /// Resolve the user an admin RPC names. The operator console carries CONCIERGE ids

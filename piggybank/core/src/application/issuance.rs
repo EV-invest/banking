@@ -8,7 +8,7 @@
 //! spending a balance: they are recording that a holder owns a share of an asset the
 //! product was registered against.
 //!
-//! Admin-only at the boundary (`Permission::AllocationManage`). The allocation must be
+//! Admin-only at the boundary (`bank:allocation:manage`). The allocation must be
 //! registered but may be in any state: a product sized and seeded before it opens is the
 //! normal case, and a closed one may still need its cap table corrected.
 //!

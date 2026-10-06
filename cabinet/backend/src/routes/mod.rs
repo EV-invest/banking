@@ -27,6 +27,7 @@ use axum::{
 	routing::{get, post},
 };
 use axum_extra::extract::cookie::CookieJar;
+use concierge_iam::{Permission, PermissionSet};
 use evconcierge_auth::Claims;
 use serde_json::Value;
 use subtle::ConstantTimeEq;
@@ -113,9 +114,8 @@ fn requests(state: AppState) -> Router {
 		.route("/api/book/orders/cancel", post(book::cancel_order))
 		.route("/api/book/orders/history", get(book::list_order_history))
 		.route("/api/book/fills", get(book::list_fills))
-		// Admin console — role-gated at the BFF (coarse: any non-investor; the fee routes
-		// narrower: admin or owner) AND re-checked per-permission by the owning plane
-		// (defense in depth). Identity/platform routes hit concierge; money/treasury routes
+		// Admin console — gated at the BFF on a named permission per route AND re-checked
+		// per-permission by the owning plane (defense in depth). Identity/platform routes hit concierge; money/treasury routes
 		// hit the piggybank money plane.
 		.route("/api/admin/users", get(admin::list_users))
 		.route("/api/admin/users/detail", get(admin::get_user))
@@ -281,46 +281,18 @@ pub async fn require_money_token(state: &AppState, jar: &CookieJar) -> Result<St
 	}
 }
 
-/// Coarse admin gate for the console routes: the verified caller must hold a
-/// non-investor role. This is defense in depth — the owning plane re-checks the
-/// SPECIFIC permission and returns `PermissionDenied` (→ 403) if the role is
-/// insufficient for that action; here we only cheaply reject a plain investor before
-/// any privileged call. The JWT stays role-free on purpose, so the role comes from the
-/// concierge directory per admin request (admin traffic is low; the lookup is one
-/// local-plane RPC).
-pub async fn require_admin(state: &AppState, jar: &CookieJar) -> Result<(), ApiError> {
-	let role = caller_role(state, jar).await?;
-	if role.is_empty() || role == "investor" {
-		return Err(ApiError::Grpc(Status::permission_denied("admin access required")));
-	}
-	Ok(())
-}
-
-/// The roles the money plane lets administer fees (`/api/admin/fees/*`). Spelled as the
-/// concierge directory reports them (`UserProfile.role`, snake_case:
-/// investor/operator/admin/owner).
-const FEE_ADMIN_ROLES: &[&str] = &["admin", "owner"];
-
-/// The narrower gate for the fee routes: `admin` or `owner` only. [`require_admin`]
-/// would let an `operator` through to `/api/admin/fees/*`, where the money plane refuses
-/// every call — so the console showed a fees screen that answered 403 to everything it
-/// tried. Refusing here, before the CSRF check and before a money token is minted, keeps
-/// the plane's rule but answers it at the BFF where the screen can act on it. Same
-/// defense in depth as the coarse gate: the money plane still re-checks the permission.
-pub async fn require_fee_admin(state: &AppState, jar: &CookieJar) -> Result<(), ApiError> {
-	let role = caller_role(state, jar).await?;
-	if !FEE_ADMIN_ROLES.contains(&role.as_str()) {
-		return Err(ApiError::Grpc(Status::permission_denied("fee administration requires the admin or owner role")));
-	}
-	Ok(())
-}
-
-/// The verified caller's platform role, read from the concierge directory. Shared by the
-/// role gates so each one is a comparison and not a second copy of the lookup.
-async fn caller_role(state: &AppState, jar: &CookieJar) -> Result<String, ApiError> {
+/// The console gate: the verified caller must hold `permission` among what concierge's
+/// first-party `GetMe` resolves for their seat. Defense in depth — the owning plane re-checks
+/// its own act; refusing here keeps an investor out before any privileged call, and answers
+/// a screen whose plane would refuse everything at the BFF, where it can act on it. Read per
+/// request: the JWT carries no permissions.
+pub async fn require_permission(state: &AppState, jar: &CookieJar, permission: impl Permission) -> Result<(), ApiError> {
 	let (token, _claims) = require_identity(state, jar).await?;
 	let me = state.grpc.get_me(&token).await.map_err(|_| ApiError::Unauthenticated)?;
-	Ok(me.role)
+	if !me.permissions.into_iter().collect::<PermissionSet>().may(permission) {
+		return Err(ApiError::Grpc(Status::permission_denied(format!("requires {}", permission.as_str()))));
+	}
+	Ok(())
 }
 
 /// CSRF double-submit: the `x-ev-csrf` header must equal the readable `ev_csrf` cookie.

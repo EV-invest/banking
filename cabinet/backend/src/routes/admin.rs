@@ -1,12 +1,11 @@
 //! Admin-console routes — the operator surface behind `/api/admin/*`.
 //!
-//! Every handler is role-gated first — coarsely by [`require_admin`] (a non-investor
-//! session), and the `/api/admin/fees/*` routes by the narrower [`require_fee_admin`]
-//! (`admin` or `owner`, the roles the money plane actually lets administer fees) — and
-//! then forwards the correct plane token — the concierge identity token for
+//! Every handler is gated first by [`require_permission`] on a named permission — the
+//! `/api/admin/fees/*` routes on `bank:allocation:manage`, the one the money plane checks
+//! for fees — and then forwards the correct plane token — the concierge identity token for
 //! identity/platform RPCs, the banking money token for money/treasury RPCs — which the
-//! owning plane re-checks against the specific permission (defense in depth; an
-//! insufficient role surfaces as 403). Mutations verify CSRF right after the gate,
+//! owning plane re-checks against the specific permission (defense in depth; a missing
+//! one surfaces as 403). Mutations verify CSRF right after the gate,
 //! exactly like the money routes.
 
 use axum::{
@@ -16,6 +15,7 @@ use axum::{
 	http::HeaderMap,
 };
 use axum_extra::extract::cookie::CookieJar;
+use concierge_domain::authz::{Platform, Users, bank};
 use evbanking_contracts::{
 	allocation::{access as wire_access, backing as wire_backing, icon as wire_icon},
 	banking::v1 as bk,
@@ -28,7 +28,7 @@ use tonic::Status;
 use crate::{
 	dto,
 	error::ApiError,
-	routes::{editable, parse_body, require_admin, require_fee_admin, require_identity, require_money_token, require_token, required, required_u32, verify_csrf},
+	routes::{editable, parse_body, require_permission, require_identity, require_money_token, require_token, required, required_u32, verify_csrf},
 	state::AppState,
 };
 
@@ -85,7 +85,7 @@ fn rate_field(v: &Value, key: &str) -> Option<u32> {
 
 /// `GET /api/admin/users` — paginated/filtered user list.
 pub async fn list_users(State(st): State<AppState>, jar: CookieJar, Query(q): Query<ListUsersQuery>) -> Result<Json<dto::AdminUserList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Users::Read).await?;
 	let token = require_token(&st, &jar).await?;
 	let req = cc::ListUsersRequest {
 		query: q.query.unwrap_or_default(),
@@ -100,7 +100,7 @@ pub async fn list_users(State(st): State<AppState>, jar: CookieJar, Query(q): Qu
 
 /// `GET /api/admin/users/detail?user_id=` — any user's full profile.
 pub async fn get_user(State(st): State<AppState>, jar: CookieJar, Query(q): Query<UserIdQuery>) -> Result<Json<dto::UserProfile>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Users::Read).await?;
 	let token = require_token(&st, &jar).await?;
 	let user_id = q.user_id.unwrap_or_default();
 	let profile = st.grpc.admin_get_user(&token, &user_id).await.map_err(|s| ApiError::read(s, "user unavailable"))?;
@@ -109,7 +109,7 @@ pub async fn get_user(State(st): State<AppState>, jar: CookieJar, Query(q): Quer
 
 /// `POST /api/admin/users/role` — grant a role (Owner-only at the plane).
 pub async fn set_role(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Users::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -134,7 +134,7 @@ pub async fn set_role(State(st): State<AppState>, jar: CookieJar, headers: Heade
 /// identity mutations for which that is true. It is what the owners asked to ratify the
 /// hold are reading, and the refusal is more legible one hop from the console than five.
 pub async fn hold_user(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Users::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -156,7 +156,7 @@ pub async fn hold_user(State(st): State<AppState>, jar: CookieJar, headers: Head
 /// consilium and the consilium would be advisory. That refusal reaches the browser as the
 /// plane's own 4xx; the console reads `suspended_by` and offers the proposal instead.
 pub async fn reinstate_user(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Users::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -171,7 +171,7 @@ pub async fn reinstate_user(State(st): State<AppState>, jar: CookieJar, headers:
 
 /// `POST /api/admin/users/revoke` — revoke all of a user's sessions (bump token_version).
 pub async fn revoke_sessions(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Users::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -223,7 +223,7 @@ const KYC_SELF_DENIED: &str = "kyc_self";
 /// acting on a form a third-party page may have composed. The part of the rule that
 /// matters is kept: nothing upstream is called, and the answer names who can act.
 pub async fn set_kyc(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Users::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -247,7 +247,7 @@ pub async fn set_kyc(State(st): State<AppState>, jar: CookieJar, headers: Header
 
 /// `GET /api/admin/users/balance?user_id=` — any user's live balance (money plane).
 pub async fn user_balance(State(st): State<AppState>, jar: CookieJar, Query(q): Query<UserIdQuery>) -> Result<Json<dto::UserBalance>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::UserBalance::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let user_id = q.user_id.unwrap_or_default();
 	let balance = st.grpc.admin_user_balance(&token, &user_id).await.map_err(|s| ApiError::read(s, "balance unavailable"))?;
@@ -258,7 +258,7 @@ pub async fn user_balance(State(st): State<AppState>, jar: CookieJar, Query(q): 
 
 /// `GET /api/admin/treasury` — the two-layer chart of accounts.
 pub async fn treasury(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::Treasury>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let treasury = st.grpc.treasury(&token).await.map_err(|s| ApiError::read(s, "treasury unavailable"))?;
 	Ok(Json(treasury.into()))
@@ -275,7 +275,7 @@ pub async fn treasury(State(st): State<AppState>, jar: CookieJar) -> Result<Json
 /// (`txhash:logIndex` on an EVM rail) so a re-submission, and any watcher that later scans
 /// the same transfer, collapse onto the same key.
 pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -312,7 +312,7 @@ pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar,
 /// amount the terms carry, and the `consilium_id` the owners' room shows. The plane
 /// re-checks `CapitalManage` and refuses a proposer who holds no owner seat.
 pub async fn seed_capital(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::SeedCapitalProposal>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -340,7 +340,7 @@ pub async fn seed_capital(State(st): State<AppState>, jar: CookieJar, headers: H
 
 /// `GET /api/admin/fees/policies` — every fund's fee terms, for the fees table.
 pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::FeePolicyList>, ApiError> {
-	require_fee_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Allocation::Manage).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let mut list: dto::FeePolicyList = st.grpc.fee_policies(&token).await.map_err(|s| ApiError::read(s, "fee policies unavailable"))?.into();
 	name_notice_waivers(&st, &jar, list.policies.iter_mut().filter_map(|policy| policy.pending.as_mut())).await?;
@@ -356,7 +356,7 @@ pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Re
 /// or 0 = as soon as the notice allows) and `reason` (required by the hub when the change
 /// needs the owners) travel as given; the hub decides the requirement and the moment.
 pub async fn schedule_fee_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
-	require_fee_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Allocation::Manage).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -397,7 +397,7 @@ pub async fn schedule_fee_policy(State(st): State<AppState>, jar: CookieJar, hea
 
 /// `POST /api/admin/fees/policy/cancel` — withdraw a pending change of terms.
 pub async fn cancel_fee_policy_change(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
-	require_fee_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Allocation::Manage).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -415,7 +415,7 @@ pub async fn cancel_fee_policy_change(State(st): State<AppState>, jar: CookieJar
 /// of a scheduled change who could not be told, so a tightening binds over them. The hub
 /// decides who may (the requester or an owner) and whether there is anything to acknowledge.
 pub async fn acknowledge_undelivered_notices(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
-	require_fee_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Allocation::Manage).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -431,7 +431,7 @@ pub async fn acknowledge_undelivered_notices(State(st): State<AppState>, jar: Co
 
 /// `GET /api/admin/fees/changes?service=` — a fund's whole history of terms, newest first.
 pub async fn list_fee_policy_changes(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeePolicyChangeList>, ApiError> {
-	require_fee_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Allocation::Manage).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -448,7 +448,7 @@ pub async fn list_fee_policy_changes(State(st): State<AppState>, jar: CookieJar,
 
 /// `GET /api/admin/fees/shares?service=` — uncollected fee units in one fund, and their value.
 pub async fn fee_shares(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeeShares>, ApiError> {
-	require_fee_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Allocation::Manage).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -463,7 +463,7 @@ pub async fn fee_shares(State(st): State<AppState>, jar: CookieJar, Query(q): Qu
 /// Refused rather than queued when the fund's claim cannot cover it on top of its queued
 /// redemptions — the manager is paid last.
 pub async fn settle_fee_shares(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeeSettlement>, ApiError> {
-	require_fee_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Allocation::Manage).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -478,7 +478,7 @@ pub async fn settle_fee_shares(State(st): State<AppState>, jar: CookieJar, heade
 
 /// `GET /api/admin/fees/assessments?service=` — every charge this fund has made.
 pub async fn fund_fee_assessments(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeeAssessmentList>, ApiError> {
-	require_fee_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Allocation::Manage).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -493,7 +493,7 @@ pub async fn fund_fee_assessments(State(st): State<AppState>, jar: CookieJar, Qu
 
 /// `GET /api/admin/valuation/queue` — the cross-user redemption queue awaiting settle.
 pub async fn redemption_queue(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::RedemptionQueue>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let queue = st.grpc.redemption_queue(&token).await.map_err(|s| ApiError::read(s, "redemption queue unavailable"))?;
 	Ok(Json(queue.into()))
@@ -501,7 +501,7 @@ pub async fn redemption_queue(State(st): State<AppState>, jar: CookieJar) -> Res
 
 /// `GET /api/admin/allocations` — the full catalog, drafts and closed included.
 pub async fn list_allocations(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AllocationList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let list = st.grpc.list_allocations(&token, true).await.map_err(|s| ApiError::read(s, "allocations unavailable"))?;
 	Ok(Json(list.into()))
@@ -541,7 +541,7 @@ fn allocation_icon(v: &Value) -> Result<Option<String>, ApiError> {
 /// `POST /api/admin/allocations/register` — register a new investable product (`draft`).
 /// This is the only way a fund comes into existence.
 pub async fn register_allocation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -564,7 +564,7 @@ pub async fn register_allocation(State(st): State<AppState>, jar: CookieJar, hea
 
 /// `POST /api/admin/allocations/update` — edit an allocation's presentation fields.
 pub async fn update_allocation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -588,7 +588,7 @@ pub async fn update_allocation(State(st): State<AppState>, jar: CookieJar, heade
 /// `POST /api/admin/allocations/state` — open or close an allocation. Closing stops new
 /// subscriptions only; redemptions keep working so no investor is trapped.
 pub async fn set_allocation_state(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -605,7 +605,7 @@ pub async fn set_allocation_state(State(st): State<AppState>, jar: CookieJar, he
 /// Separate from `/update` because this one gates money: the hub refuses a subscription
 /// that would carry the issued supply past it.
 pub async fn set_allocation_unit_cap(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -640,7 +640,7 @@ fn allocation_access_level(v: &Value, key: &str, grantable: bool) -> Result<Stri
 /// (`hidden` | `view` | `invest`). Orthogonal to `/state`: that says whether the product
 /// deals, this says with whom by default. Per-investor grants are untouched.
 pub async fn set_allocation_access(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -661,7 +661,7 @@ pub async fn set_allocation_access(State(st): State<AppState>, jar: CookieJar, h
 /// units — or corrects a product back. Idempotent. The vocabulary is checked here, like
 /// an access level, so a typo is refused before a money-plane token is minted for it.
 pub async fn set_allocation_backing(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -689,7 +689,7 @@ pub async fn set_allocation_backing(State(st): State<AppState>, jar: CookieJar, 
 /// directory cannot name — a banking-only mirror, a lapsed account, an outage — lists
 /// with `email: null` rather than hiding a grant that stands (banking#252).
 pub async fn list_allocation_access_grants(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::AllocationAccessGrantList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -782,7 +782,7 @@ async fn name_notice_waivers<'a>(st: &AppState, jar: &CookieJar, changes: impl I
 /// id the console carries for the user (concierge-first, banking as a fallback — the
 /// hub resolves it the way `/users/balance` does).
 pub async fn grant_allocation_access(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::AllocationAccessGrant>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -800,7 +800,7 @@ pub async fn grant_allocation_access(State(st): State<AppState>, jar: CookieJar,
 /// fall to the product's default. Idempotent: revoking a grant that does not stand is
 /// still `ok`. Units they already hold are untouched and stay redeemable.
 pub async fn revoke_allocation_access(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -822,7 +822,7 @@ pub async fn revoke_allocation_access(State(st): State<AppState>, jar: CookieJar
 /// console generates one per form submission and re-sends the same one on a timeout, so
 /// a double click lands one mint.
 pub async fn issue_units(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::UnitIssuance>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -847,7 +847,7 @@ pub async fn issue_units(State(st): State<AppState>, jar: CookieJar, headers: He
 /// `GET /api/admin/allocations/holders?service=` — the product's cap table: the settled
 /// supply and every holder of it (people and the `fee` allocation), largest first.
 pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::UnitHolders>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
@@ -866,7 +866,7 @@ pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query
 /// mint, with `source: "retire"` and positive `units`. The key is the same retry
 /// contract, in the same per-product key space as `/allocations/issue`.
 pub async fn retire_units(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::UnitIssuance>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -904,7 +904,7 @@ pub async fn retire_units(State(st): State<AppState>, jar: CookieJar, headers: H
 /// acknowledgement that the book trades units the fund holds no cash for is given, never
 /// presumed; the hub refuses to open an `in_kind` product's book without it.
 pub async fn set_book_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::BookPolicy>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -939,7 +939,7 @@ pub async fn set_book_policy(State(st): State<AppState>, jar: CookieJar, headers
 /// `override` in the body any more (banking#232): a mark the guard refuses goes through
 /// [`propose_valuation_override`] and the owners' vote.
 pub async fn post_valuation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FundNav>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -957,7 +957,7 @@ pub async fn post_valuation(State(st): State<AppState>, jar: CookieJar, headers:
 /// emailed invitations then show. Same admin + CSRF gate as `/post`; the plane re-checks
 /// `ValuationPost` and refuses a proposer who holds no owner seat.
 pub async fn propose_valuation_override(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Consilium>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -972,7 +972,7 @@ pub async fn propose_valuation_override(State(st): State<AppState>, jar: CookieJ
 
 /// `POST /api/admin/valuation/settle` — settle a queued redemption.
 pub async fn settle_redemption(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Redemption>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -985,7 +985,7 @@ pub async fn settle_redemption(State(st): State<AppState>, jar: CookieJar, heade
 
 /// `POST /api/admin/valuation/fail` — fail (void + refund units) a queued redemption.
 pub async fn fail_redemption(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Redemption>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1001,7 +1001,7 @@ pub async fn fail_redemption(State(st): State<AppState>, jar: CookieJar, headers
 /// `GET /api/admin/withdrawals/queue` — cross-user withdrawals awaiting operator
 /// action (queued / processing), oldest first.
 pub async fn withdrawal_queue(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::WithdrawalQueue>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let queue = st.grpc.withdrawal_queue(&token).await.map_err(|s| ApiError::read(s, "withdrawal queue unavailable"))?;
 	Ok(Json(queue.into()))
@@ -1010,7 +1010,7 @@ pub async fn withdrawal_queue(State(st): State<AppState>, jar: CookieJar) -> Res
 /// `POST /api/admin/withdrawals/dispatch` — dispatch a queued withdrawal whose rail
 /// now has liquidity.
 pub async fn dispatch_withdrawal(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1025,7 +1025,7 @@ pub async fn dispatch_withdrawal(State(st): State<AppState>, jar: CookieJar, hea
 /// `POST /api/admin/withdrawals/settle` — settle a processing withdrawal with its
 /// mined on-chain tx reference.
 pub async fn settle_withdrawal(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1045,7 +1045,7 @@ pub async fn settle_withdrawal(State(st): State<AppState>, jar: CookieJar, heade
 /// chain (voids the reservation, refunding the user). The hub refuses when a
 /// broadcast row exists; the reason is an audit note.
 pub async fn fail_withdrawal(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1067,7 +1067,7 @@ pub async fn fail_withdrawal(State(st): State<AppState>, jar: CookieJar, headers
 /// pays it out from this surface (#245): a holder redeems, or the owners approve a
 /// payment out of `service:fee` through `/api/admin/payments`.
 pub async fn fund_revenue(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AllocationTreasury>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let revenue = st.grpc.fund_revenue(&token).await.map_err(|s| ApiError::read(s, "fund revenue unavailable"))?;
 	Ok(Json(revenue.into()))
@@ -1077,7 +1077,7 @@ pub async fn fund_revenue(State(st): State<AppState>, jar: CookieJar) -> Result<
 
 /// `GET /api/admin/outbox/parked` — outbox rows the relay parked (needs-intervention).
 pub async fn parked_events(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::ParkedEventList>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let list = st.grpc.parked_events(&token).await.map_err(|s| ApiError::read(s, "parked events unavailable"))?;
 	Ok(Json(list.into()))
@@ -1086,7 +1086,7 @@ pub async fn parked_events(State(st): State<AppState>, jar: CookieJar) -> Result
 /// `POST /api/admin/outbox/unpark` — CSRF-checked: clear a park so the relay re-drives
 /// the event (the hub refuses compensated/dispatched rows).
 pub async fn unpark_event(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1104,7 +1104,7 @@ pub async fn unpark_event(State(st): State<AppState>, jar: CookieJar, headers: H
 /// flag (banking, best-effort). The MFE registry is served separately at
 /// `/api/mfe-registry`.
 pub async fn cabinet_config(State(st): State<AppState>, jar: CookieJar) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Platform::Read).await?;
 	let token = require_token(&st, &jar).await?;
 	let config: dto::PlatformConfig = st.grpc.platform_config(&token).await.map_err(|s| ApiError::read(s, "platform config unavailable"))?.into();
 	// The read-only kill-switch lives on the money plane; fetch best-effort so the screen
@@ -1118,7 +1118,7 @@ pub async fn cabinet_config(State(st): State<AppState>, jar: CookieJar) -> Resul
 
 /// `POST /api/admin/cabinet/maintenance` — toggle the cabinet maintenance holding page.
 pub async fn set_maintenance(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::PlatformConfig>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Platform::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1129,7 +1129,7 @@ pub async fn set_maintenance(State(st): State<AppState>, jar: CookieJar, headers
 
 /// `POST /api/admin/cabinet/read-only` — toggle the money-plane read-only kill-switch.
 pub async fn set_read_only(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::OperationsMode>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1140,7 +1140,7 @@ pub async fn set_read_only(State(st): State<AppState>, jar: CookieJar, headers: 
 
 /// `GET /api/admin/rails` — every rail with whether it is run and whether it is frozen.
 pub async fn rails(State(st): State<AppState>, jar: CookieJar) -> Result<Json<Vec<dto::Rail>>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	let token = require_money_token(&st, &jar).await?;
 	let rails = st.grpc.rails(&token).await.map_err(|s| ApiError::read(s, "rails unavailable"))?;
 	Ok(Json(rails.rails.into_iter().map(Into::into).collect()))
@@ -1148,7 +1148,7 @@ pub async fn rails(State(st): State<AppState>, jar: CookieJar) -> Result<Json<Ve
 
 /// `POST /api/admin/rails/frozen` — freeze or unfreeze one rail; answers the whole list.
 pub async fn set_rail_frozen(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Vec<dto::Rail>>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, bank::Treasury::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1169,7 +1169,7 @@ pub async fn set_rail_frozen(State(st): State<AppState>, jar: CookieJar, headers
 
 /// `POST /api/admin/cabinet/announcement` — set/clear the live announcement banner.
 pub async fn set_announcement(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::PlatformConfig>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Platform::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1186,7 +1186,7 @@ pub async fn set_announcement(State(st): State<AppState>, jar: CookieJar, header
 
 /// `POST /api/admin/cabinet/flag` — upsert a feature flag.
 pub async fn set_flag(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::PlatformConfig>, ApiError> {
-	require_admin(&st, &jar).await?;
+	require_permission(&st, &jar, Platform::Read).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
@@ -1372,8 +1372,9 @@ mod admin_route_tests {
 
 	#[derive(Clone)]
 	struct Hub {
-		/// The role `GetMe` reports — what [`require_admin`] and [`require_fee_admin`] gate on.
 		role: String,
+		/// What `GetMe` resolves the seat to — what [`require_permission`] gates on.
+		permissions: Vec<String>,
 		/// When set, every fees RPC fails with this code (the upstream-refusal cases).
 		fail_with: Option<Code>,
 		seen: Arc<Mutex<Seen>>,
@@ -1383,6 +1384,12 @@ mod admin_route_tests {
 		fn new(role: &str) -> Self {
 			Self {
 				role: role.to_string(),
+				permissions: concierge_domain::authz::Role::parse(role)
+					.expect("stubs sit in concierge's seats")
+					.permissions()
+					.iter()
+					.map(|p| (*p).to_owned())
+					.collect(),
 				fail_with: None,
 				seen: Arc::new(Mutex::new(Seen::default())),
 			}
@@ -1431,14 +1438,14 @@ mod admin_route_tests {
 
 	#[tonic::async_trait]
 	impl UserDirectory for Hub {
-		/// `require_admin` reads the caller's role from here per request — the JWT stays
-		/// role-free on purpose, so this is the only thing standing between an investor
-		/// and the console.
+		/// `require_permission` reads the caller's permissions from here per request — the
+		/// JWT carries none, so this is the only thing standing between an investor and the
+		/// console.
 		async fn get_me(&self, _: GrpcRequest<cc::GetMeRequest>) -> Result<GrpcResponse<cc::UserProfile>, Status> {
 			Ok(GrpcResponse::new(cc::UserProfile {
 				user_id: "user-1".into(),
 				role: self.role.clone(),
-				permissions: vec!["sa:work:leads:read".into(), "bank:treasury:read".into()],
+				permissions: self.permissions.clone(),
 				..Default::default()
 			}))
 		}
@@ -2019,12 +2026,12 @@ mod admin_route_tests {
 		assert!(seen.lock().unwrap().set_policy.is_none(), "a refused caller must never reach the hub");
 	}
 
-	/// An `operator` passes the coarse console gate but not the fee one. The money plane
-	/// refuses every fee call from an operator, so before this gate the console showed
-	/// the fees screen and then answered 403 to everything on it. The refusal has to be
-	/// decided at the BFF, before the CSRF check and before a money token is minted — the
-	/// hub must not see the request at all, and the message must name the roles that do
-	/// get through, so the screen can say so instead of a bare "request failed".
+	/// An `operator` passes the console but not the fee routes. The money plane refuses
+	/// every fee call from an operator, so before this gate the console showed the fees
+	/// screen and then answered 403 to everything on it. The refusal has to be decided at
+	/// the BFF, before the CSRF check and before a money token is minted — the hub must not
+	/// see the request at all, and the message must name what gets through, so the screen
+	/// can say so instead of a bare "request failed".
 	#[tokio::test]
 	async fn an_operator_is_refused_the_fees_routes_but_not_the_console() {
 		let hub = Hub::new("operator");
@@ -2033,15 +2040,15 @@ mod admin_route_tests {
 
 		let (status, response) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
 		assert_eq!(status, StatusCode::FORBIDDEN, "an operator must not read the fees table");
-		assert_eq!(response["error"], "fee administration requires the admin or owner role");
+		assert_eq!(response["error"], "requires bank:allocation:manage");
 
 		let body = r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#;
 		let (status, response) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
 		assert_eq!(status, StatusCode::FORBIDDEN, "an operator must not price a fund");
-		assert_eq!(response["error"], "fee administration requires the admin or owner role");
+		assert_eq!(response["error"], "requires bank:allocation:manage");
 
-		// The same session is still an operator elsewhere on the console: the narrower gate
-		// is on the fee routes alone, not a demotion of the role.
+		// The same session is still an operator elsewhere on the console: the refusal is
+		// the fee routes' permission, not a demotion of the seat.
 		let (status, _) = send(&app, signed("POST", "/api/admin/users/kyc", Some(r#"{"user_id":"u1","kyc_level":2}"#), true)).await;
 		assert_eq!(status, StatusCode::OK, "an operator keeps the rest of the console");
 
@@ -2055,7 +2062,7 @@ mod admin_route_tests {
 	/// test happens to poke. The acknowledgement route once sat behind the coarse gate
 	/// alone, so an operator passed the BFF, the CSRF check and a money-token mint, and
 	/// only the hub said no — a 403 with the hub's wording instead of the one the screen
-	/// reads the roles from. Every route here answers the same refusal before the hub.
+	/// reads the permission from. Every route here answers the same refusal before the hub.
 	#[tokio::test]
 	async fn an_operator_is_refused_every_fees_route_before_the_hub() {
 		let hub = Hub::new("operator");
@@ -2077,8 +2084,8 @@ mod admin_route_tests {
 			let (status, response) = send(&app, signed(method, uri, body, true)).await;
 			assert_eq!(status, StatusCode::FORBIDDEN, "{method} {uri} must refuse an operator");
 			assert_eq!(
-				response["error"], "fee administration requires the admin or owner role",
-				"{method} {uri} must name the roles that get through"
+				response["error"], "requires bank:allocation:manage",
+				"{method} {uri} must name the permission that gets through"
 			);
 		}
 
@@ -2109,6 +2116,26 @@ mod admin_route_tests {
 
 			assert!(seen.lock().unwrap().set_policy.is_some(), "{role}'s change of terms must reach the hub");
 		}
+	}
+
+	/// The gate reads what concierge resolved the seat to, never the seat's name: an owner
+	/// whose permissions concierge has not reported is refused like an investor.
+	#[tokio::test]
+	async fn a_seat_without_resolved_permissions_holds_nothing() {
+		let hub = Hub {
+			permissions: Vec::new(),
+			..Hub::new("owner")
+		};
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, _) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN);
+		let (status, _) = send(&app, signed("POST", "/api/admin/users/kyc", Some(r#"{"user_id":"u1","kyc_level":2}"#), true)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN);
+
+		let seen = seen.lock().unwrap();
+		assert!(seen.set_kyc.is_none() && seen.set_policy.is_none(), "a refused caller must never reach the hub");
 	}
 
 	/// The double-submit gate on the two mutations. A valid session is not enough: a
@@ -3326,7 +3353,11 @@ mod admin_route_tests {
 	/// the panel link without a second round trip.
 	#[tokio::test]
 	async fn the_profile_carries_the_callers_permissions() {
-		let app = app(serve(Hub::new("investor")).await);
+		let hub = Hub {
+			permissions: vec!["sa:work:leads:read".into(), "bank:treasury:read".into()],
+			..Hub::new("investor")
+		};
+		let app = app(serve(hub).await);
 		let (status, body) = send(&app, signed("GET", "/api/users", None, false)).await;
 		assert_eq!(status, StatusCode::OK, "{body}");
 		assert_eq!(body["permissions"], serde_json::json!(["sa:work:leads:read", "bank:treasury:read"]));

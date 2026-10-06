@@ -2,15 +2,15 @@
 //!
 //! Every RPC is authorized from the verified [`Claims`](evbanking_auth::Claims)
 //! injected by core's inbound auth layer. Self-service RPCs act on the caller's own
-//! `sub` (`caller_id`); admin RPCs are gated by the RBAC matrix over the caller's
-//! bridge-mirrored `users.role` (`require_permission`).
+//! `sub` (`caller_id`); admin RPCs are gated on the caller's bridge-mirrored
+//! `bank:*` permissions (`require_permission`).
 //!
 //! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large
 //! type we don't control, so the large-err lint does not apply in this module.
 #![allow(clippy::result_large_err)]
 
+use concierge_domain::authz::bank;
 use domain::{
-	authz::Permission,
 	balance::LedgerAccountKey,
 	money::Usdt,
 	users::{ProfileFields, User},
@@ -81,7 +81,7 @@ impl UsersService for UsersSvc {
 	}
 
 	async fn revoke_tokens(&self, request: Request<pb::RevokeTokensRequest>) -> Result<Response<pb::RevokeTokensResponse>, Status> {
-		require_permission(&self.state, &request, Permission::UserRevoke).await?;
+		require_permission(&self.state, &request, bank::Users::Revoke).await?;
 		let target = parse_user_id(&request.get_ref().user_id)?;
 		let user = users_app::revoke_tokens(self.state.users.as_ref(), target).await.map_err(map_err)?;
 		Ok(Response::new(pb::RevokeTokensResponse {
@@ -90,14 +90,14 @@ impl UsersService for UsersSvc {
 	}
 
 	async fn disable_user(&self, request: Request<pb::DisableUserRequest>) -> Result<Response<pb::DisableUserResponse>, Status> {
-		require_permission(&self.state, &request, Permission::UserSuspend).await?;
+		require_permission(&self.state, &request, bank::Users::Suspend).await?;
 		let target = parse_user_id(&request.get_ref().user_id)?;
 		users_app::disable_user(self.state.users.as_ref(), target).await.map_err(map_err)?;
 		Ok(Response::new(pb::DisableUserResponse {}))
 	}
 
 	async fn get_user_balance(&self, request: Request<pb::AdminBalanceRequest>) -> Result<Response<pb::UserBalanceResponse>, Status> {
-		require_permission(&self.state, &request, Permission::UserBalanceRead).await?;
+		require_permission(&self.state, &request, bank::UserBalance::Read).await?;
 		// Concierge-first, then the banking id; never an authoritative zero for an id
 		// matching neither. See `resolve_target_user` for why disabled/frozen targets
 		// still resolve.

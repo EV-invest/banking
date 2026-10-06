@@ -183,7 +183,7 @@ rotation refused») и после себя оставляет старый ад�
 ретайра адреса, на который пользователи ещё шлют деньги. Ослаблять его нельзя.
 
 Поэтому у фазы отдельный путь — `MigrateAddressToCustodian` (хаб: `MigrateDepositAddressToCustodian`
-под собственным `Permission::DepositAddressMigrate`), зеркальный ротации по предусловиям:
+под собственным `bank:deposit_address:migrate`), зеркальный ротации по предусловиям:
 
 | | `RotateAddress` | `MigrateAddressToCustodian` |
 |---|---|---|

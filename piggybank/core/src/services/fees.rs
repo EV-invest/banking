@@ -4,9 +4,9 @@
 //! user who can see the product: an investor is entitled to know what they are paying
 //! before they pay it, what they will be paying next, and how the terms came to be; a
 //! product hidden from them is `NOT_FOUND`, exactly as `GetAllocation` answers, unless they
-//! hold [`Permission::AllocationManage`]. Reads of a *charge* are scoped
+//! hold `bank:allocation:manage`. Reads of a *charge* are scoped
 //! to the caller's own statement. Everything that changes terms or moves value is gated on
-//! [`Permission::AllocationManage`] — the same trust seam as registering the product or
+//! `bank:allocation:manage` — the same trust seam as registering the product or
 //! posting its valuation, because a fee policy is part of what the product *is* — and a
 //! change that tightens the terms beyond the house envelope needs the owners besides
 //! (`docs/FEES.md` § "Changing the terms").
@@ -20,8 +20,8 @@
 //! we don't control, so the large-err lint does not apply in this module.
 #![allow(clippy::result_large_err)]
 
+use concierge_domain::authz::bank;
 use domain::{
-	authz::Permission,
 	balance::ServiceId,
 	fees::{CrystallizationPeriod, FeePolicy, FeePolicyChangeId, ManagementBasis},
 	money::Shares,
@@ -103,7 +103,7 @@ impl FeesService for FeesSvc {
 	}
 
 	async fn schedule_fee_policy(&self, request: Request<pb::ScheduleFeePolicyRequest>) -> Result<Response<pb::FeePolicyChange>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		// The requester is the trust seam on the terms, exactly as `posted_by` is on a
 		// valuation — and, for a change that needs the owners, the initiator of their consilium.
 		let requester = caller_id(&request)?;
@@ -138,7 +138,7 @@ impl FeesService for FeesSvc {
 	}
 
 	async fn cancel_fee_policy_change(&self, request: Request<pb::CancelFeePolicyChangeRequest>) -> Result<Response<pb::FeePolicyChange>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let by = caller_id(&request)?;
 		let req = request.get_ref();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -150,7 +150,7 @@ impl FeesService for FeesSvc {
 	}
 
 	async fn acknowledge_undelivered_notices(&self, request: Request<pb::AcknowledgeUndeliveredNoticesRequest>) -> Result<Response<pb::FeePolicyChange>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let by = caller_id(&request)?;
 		let req = request.get_ref();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -196,7 +196,7 @@ impl FeesService for FeesSvc {
 	}
 
 	async fn list_fund_fee_assessments(&self, request: Request<pb::ListFundFeeAssessmentsRequest>) -> Result<Response<pb::FeeAssessmentList>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		let records = fee_app::list_fund_assessments(self.state.fees.assessments.as_ref(), &service).await.map_err(map_err)?;
 		Ok(Response::new(pb::FeeAssessmentList {
@@ -244,7 +244,7 @@ impl FeesService for FeesSvc {
 	}
 
 	async fn get_fee_shares(&self, request: Request<pb::GetFeeSharesRequest>) -> Result<Response<pb::FeeShares>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		let (units, value) = fee_app::fee_shares(self.state.ledger.as_ref(), self.state.nav.as_ref(), &service, unix_now())
 			.await
@@ -257,7 +257,7 @@ impl FeesService for FeesSvc {
 	}
 
 	async fn settle_fee_shares(&self, request: Request<pb::SettleFeeSharesRequest>) -> Result<Response<pb::FeeSettlement>, Status> {
-		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		require_permission(&self.state, &request, bank::Allocation::Manage).await?;
 		let settler = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
@@ -302,7 +302,7 @@ enum Audience {
 /// handlers serve everyone and merely widen for a manager.
 async fn reader_of<'a, T>(state: &'a AppState, request: &Request<T>) -> Result<(PolicyReader<'a>, Audience), Status> {
 	let caller = caller_id(request)?;
-	let unrestricted = holds_permission(state, request, Permission::AllocationManage).await?;
+	let unrestricted = holds_permission(state, request, bank::Allocation::Manage).await?;
 	let reader = PolicyReader {
 		allocations: state.allocations.as_ref(),
 		caller,
