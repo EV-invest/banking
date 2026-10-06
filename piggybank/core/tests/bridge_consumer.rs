@@ -265,23 +265,37 @@ async fn permissions_of(pool: &PgPool, subject: &str) -> Option<Vec<String>> {
 		.unwrap()
 }
 
-/// PERMISSIONS_CHANGED is mirrored as sent, and a parked one replays with its set: a
-/// replay that dropped it would read as "holds nothing".
+/// `permissions` is a snapshot on every row, like the role: a ROLE_CHANGED that only left the
+/// set to a later PERMISSIONS_CHANGED would leave the two disagreeing in between, and a
+/// parked row that replayed without its set would read as "holds nothing".
 #[tokio::test]
-async fn permissions_changed_mirrors_the_set_live_and_from_the_parking_lot() {
+async fn permissions_ride_every_kind_live_and_from_the_parking_lot() {
 	let Some(pool) = pool().await else {
 		return;
 	};
-	let seated = unique_subject();
-	let mut changed = event(&seated, Kind::PermissionsChanged, 2);
-	changed.permissions = vec!["bank:treasury:read".into(), "bank:user_balance:read".into()];
-	let orphan = unique_subject();
-	let mut parked = event(&orphan, Kind::PermissionsChanged, 2);
-	parked.permissions = vec!["bank:payment:open".into()];
+	let set = |ps: &[&str]| ps.iter().map(|p| p.to_string()).collect::<Vec<_>>();
+	let (created, promoted, redefined, orphan) = (unique_subject(), unique_subject(), unique_subject(), unique_subject());
+	let mut seated = event(&created, Kind::Created, 1);
+	seated.permissions = set(&["bank:treasury:read"]);
+	let mut promote = event(&promoted, Kind::RoleChanged, 2);
+	promote.role = "admin".into();
+	promote.permissions = set(&["bank:treasury:read", "bank:user_balance:read"]);
+	let mut redefine = event(&redefined, Kind::PermissionsChanged, 2);
+	redefine.permissions = set(&["bank:payment:open"]);
+	let mut parked = event(&orphan, Kind::KycChanged, 2);
+	parked.permissions = set(&["bank:user_balance:read"]);
+	let events = vec![seated, event(&promoted, Kind::Created, 1), promote, event(&redefined, Kind::Created, 1), redefine, parked];
+	let count = events.len() as i64;
 
-	drive(&pool, vec![event(&seated, Kind::Created, 1), changed, parked], move |pool| async move {
-		assert_eq!(permissions_of(&pool, &seated).await, Some(vec!["bank:treasury:read".into(), "bank:user_balance:read".into()]));
-		assert_eq!(cursor_position(&pool).await, 3, "a kind this build names moves the cursor on");
+	drive(&pool, events, move |pool| async move {
+		assert_eq!(permissions_of(&pool, &created).await, Some(set(&["bank:treasury:read"])), "CREATED seats the row with its set");
+		assert_eq!(
+			permissions_of(&pool, &promoted).await,
+			Some(set(&["bank:treasury:read", "bank:user_balance:read"])),
+			"ROLE_CHANGED carries the set of the new seat"
+		);
+		assert_eq!(permissions_of(&pool, &redefined).await, Some(set(&["bank:payment:open"])));
+		assert_eq!(cursor_position(&pool).await, count, "a kind this build names moves the cursor on");
 
 		PgUsers::new(pool.clone())
 			.provision(
@@ -293,7 +307,7 @@ async fn permissions_changed_mirrors_the_set_live_and_from_the_parking_lot() {
 			.expect("first sign-in provisions the row");
 		let replayed = eventually(|| {
 			let (pool, orphan) = (pool.clone(), orphan.clone());
-			async move { permissions_of(&pool, &orphan).await == Some(vec!["bank:payment:open".into()]) }
+			async move { permissions_of(&pool, &orphan).await == Some(vec!["bank:user_balance:read".into()]) }
 		})
 		.await;
 		assert!(replayed, "the parked set replays onto the row");

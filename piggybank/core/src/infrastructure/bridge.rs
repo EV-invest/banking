@@ -445,8 +445,8 @@ impl BridgeConsumer {
 			// `RETURNING id` yields a row ONLY when this statement actually inserted;
 			// `ON CONFLICT DO NOTHING` returns nothing when the row already existed.
 			let seated: Option<uuid::Uuid> = sqlx::query_scalar(
-				"INSERT INTO users (id, auth_subject, concierge_user_id, email, email_verified, kyc_level, role, last_lifecycle_sequence) \
-				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (auth_subject) DO NOTHING RETURNING id",
+				"INSERT INTO users (id, auth_subject, concierge_user_id, email, email_verified, kyc_level, role, permissions, last_lifecycle_sequence) \
+				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (auth_subject) DO NOTHING RETURNING id",
 			)
 			.bind(subject)
 			.bind(concierge_user_id)
@@ -454,6 +454,7 @@ impl BridgeConsumer {
 			.bind(event.email_verified)
 			.bind(event.kyc_level as i32)
 			.bind(role.as_str())
+			.bind(&event.permissions)
 			.bind(sequence)
 			.fetch_optional(&mut *tx)
 			.await?;
@@ -498,6 +499,12 @@ impl BridgeConsumer {
 		if freshness == Freshness::Live {
 			refresh_profile_snapshot(&mut tx, subject, event).await?;
 		}
+		// Unlike the profile, a parked row carries it, so a replay applies it too.
+		sqlx::query("UPDATE users SET permissions = $2 WHERE auth_subject = $1")
+			.bind(subject)
+			.bind(&event.permissions)
+			.execute(&mut *tx)
+			.await?;
 
 		match event.kind() {
 			// CREATED already upserted above; stamp the sequence, refresh KYC, and backfill
@@ -576,9 +583,8 @@ impl BridgeConsumer {
 				}
 			}
 			Kind::PermissionsChanged => {
-				sqlx::query("UPDATE users SET permissions = $2, last_lifecycle_sequence = $3, updated_at = now() WHERE auth_subject = $1")
+				sqlx::query("UPDATE users SET last_lifecycle_sequence = $2, updated_at = now() WHERE auth_subject = $1")
 					.bind(subject)
-					.bind(&event.permissions)
 					.bind(sequence)
 					.execute(&mut *tx)
 					.await?;
