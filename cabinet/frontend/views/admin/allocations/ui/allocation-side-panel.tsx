@@ -11,6 +11,7 @@
 
 import { Drawer, DrawerContent, DrawerTitle } from "@evinvest/uikit";
 
+import { tenantOf } from "@/entities/grant/lib/access";
 import { PanelAccessCard } from "@/features/panel-access";
 import { useIsCompact } from "@/shared/lib/use-is-compact";
 import { Panel, PanelPresence, PanelSwap } from "@/shared/ui/motion";
@@ -32,8 +33,11 @@ function PanelBody({ panel, onClose, className }: { panel: OpenAllocationPanel; 
       return <IssuancePanel key={panel.row.service} allocation={panel.row} onClose={onClose} className={className} />;
     case "book":
       return <BookPanel key={panel.row.service} allocation={panel.row} onClose={onClose} className={className} />;
-    case "panelAccess":
-      return <PanelAccessCard key={panel.row.service} service={panel.row.service} header={<PanelHeader allocation={panel.row} onClose={onClose} />} className={className} />;
+    case "panelAccess": {
+      const namespace = tenantOf(panel.row.service);
+      if (namespace === null) throw new Error(`panel access opened on ${panel.row.service}, which has no tenant`);
+      return <PanelAccessCard key={panel.row.service} namespace={namespace} header={<PanelHeader allocation={panel.row} onClose={onClose} />} className={className} />;
+    }
   }
 }
 

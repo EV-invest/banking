@@ -5331,6 +5331,12 @@ export type ConciergeV1CatalogAlias = {
      * members
      */
     members?: Array<string>;
+    /**
+     * delegates
+     *
+     * Aliases of this catalog its holders may grant and revoke (GrantPermission).
+     */
+    delegates?: Array<string>;
 };
 
 /**
@@ -5338,7 +5344,7 @@ export type ConciergeV1CatalogAlias = {
  *
  * A relying party's token pair. Expiries are unix SECONDS. Deliberately carries no
  * profile: the client reads that from `UserDirectory.GetMe` with the access token, and
- * GetMe is also what it re-checks `scopes` against on every request.
+ * GetMe is also what it re-checks `permissions` against on every request.
  */
 export type ConciergeV1ClientTokenResponse = {
     /**
@@ -5781,48 +5787,6 @@ export type ConciergeV1GrantPermissionResponse = {
 };
 
 /**
- * GrantScopeRequest
- */
-export type ConciergeV1GrantScopeRequest = {
-    /**
-     * scope
-     */
-    scope?: string;
-    /**
-     * role
-     *
-     * operator/admin.
-     */
-    role?: string;
-    /**
-     * reason
-     *
-     * Recorded verbatim on the audit row.
-     */
-    reason?: string;
-} & ({
-    /**
-     * email
-     */
-    email: string;
-} | {
-    /**
-     * user_id
-     */
-    user_id: string;
-});
-
-/**
- * GrantScopeResponse
- */
-export type ConciergeV1GrantScopeResponse = {
-    /**
-     * grant
-     */
-    grant?: ConciergeV1ScopedGrant;
-};
-
-/**
  * HoldUserRequest
  */
 export type ConciergeV1HoldUserRequest = {
@@ -5954,28 +5918,6 @@ export type ConciergeV1ListOwnerRemovalsRequest = {
  */
 export type ConciergeV1ListOwnersRequest = {
     [key: string]: never;
-};
-
-/**
- * ListScopedGrantsRequest
- */
-export type ConciergeV1ListScopedGrantsRequest = {
-    /**
-     * scope
-     */
-    scope?: string;
-};
-
-/**
- * ListScopedGrantsResponse
- */
-export type ConciergeV1ListScopedGrantsResponse = {
-    /**
-     * holders
-     *
-     * Oldest grant first.
-     */
-    holders?: Array<ConciergeV1ScopeHolder>;
 };
 
 /**
@@ -6916,7 +6858,8 @@ export type ConciergeV1PublishCatalogRequest = {
     /**
      * version
      *
-     * Monotonic per client (a build timestamp); at most 2^63-1.
+     * Unix SECONDS of the commit the client was built from (nix `self.lastModified`):
+     * build time, not boot time, so a restarting older replica never supersedes a newer one.
      */
     version?: number | string;
     /**
@@ -7061,39 +7004,6 @@ export type ConciergeV1RevokePermissionResponse = {
 };
 
 /**
- * RevokeScopeRequest
- */
-export type ConciergeV1RevokeScopeRequest = {
-    /**
-     * scope
-     */
-    scope?: string;
-    /**
-     * reason
-     *
-     * Recorded verbatim on the audit row.
-     */
-    reason?: string;
-} & ({
-    /**
-     * email
-     */
-    email: string;
-} | {
-    /**
-     * user_id
-     */
-    user_id: string;
-});
-
-/**
- * RevokeScopeResponse
- */
-export type ConciergeV1RevokeScopeResponse = {
-    [key: string]: never;
-};
-
-/**
  * RevokeSessionRequest
  */
 export type ConciergeV1RevokeSessionRequest = {
@@ -7143,69 +7053,6 @@ export type ConciergeV1RevokeTokensResponse = {
      * token_version
      */
     token_version?: number | string;
-};
-
-/**
- * ScopeHolder
- *
- * One holder of a scope, with enough identity to render the row.
- */
-export type ConciergeV1ScopeHolder = {
-    /**
-     * grant
-     */
-    grant?: ConciergeV1ScopedGrant;
-    /**
-     * email
-     */
-    email?: string;
-    /**
-     * legal_name
-     *
-     * Empty until the user sets them (see UserProfile). Both are also empty for a caller
-     * who is only the scope's admin.
-     */
-    legal_name?: string;
-    /**
-     * preferred_name
-     */
-    preferred_name?: string;
-};
-
-/**
- * ScopedGrant
- *
- * A user's role over one resource.
- */
-export type ConciergeV1ScopedGrant = {
-    /**
-     * user_id
-     */
-    user_id?: string;
-    /**
-     * scope
-     *
-     * `allocation:<service_id>`, service_id in [a-z0-9_]{1,64}.
-     */
-    scope?: string;
-    /**
-     * role
-     *
-     * operator/admin.
-     */
-    role?: string;
-    /**
-     * granted_by
-     *
-     * Who made this grant (user id).
-     */
-    granted_by?: string;
-    /**
-     * granted_at
-     *
-     * Unix SECONDS.
-     */
-    granted_at?: number | string;
 };
 
 /**
@@ -7654,21 +7501,11 @@ export type ConciergeV1UserProfile = {
      */
     hold_expires_at?: number | string;
     /**
-     * scopes
-     *
-     * The caller's ACTIVE scoped grants, as the `<tenant>:operator`/`:admin` grants of the tenant
-     * whose legacy scope this is. Filled by GetMe only — every other RPC returning
-     * a UserProfile leaves it empty, so an empty list elsewhere means "not reported", not
-     * "holds none". A global role is NOT folded in here: a panel that admits global
-     * admins/owners reads `role` above for that.
-     */
-    scopes?: Array<ConciergeV1ScopedGrant>;
-    /**
      * permissions
      *
      * What the caller may do, concrete: no alias, no wildcard. Filled by GetMe only. To a
      * relying party, its tenant's namespace and nothing else; to a first-party session, the
-     * seat's permissions plus every tenant's.
+     * seat's permissions plus every tenant's. A relying party gates on this alone.
      */
     permissions?: Array<string>;
 };
@@ -11756,35 +11593,6 @@ export type ConciergeV1UserDirectoryGrantPermissionResponses = {
 
 export type ConciergeV1UserDirectoryGrantPermissionResponse = ConciergeV1UserDirectoryGrantPermissionResponses[keyof ConciergeV1UserDirectoryGrantPermissionResponses];
 
-export type ConciergeV1UserDirectoryGrantScopeData = {
-    body: ConciergeV1GrantScopeRequest;
-    headers: {
-        'Connect-Protocol-Version': ConnectProtocolVersion;
-        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
-    };
-    path?: never;
-    query?: never;
-    url: '/concierge.v1.UserDirectory/GrantScope';
-};
-
-export type ConciergeV1UserDirectoryGrantScopeErrors = {
-    /**
-     * Error
-     */
-    default: ConnectError;
-};
-
-export type ConciergeV1UserDirectoryGrantScopeError = ConciergeV1UserDirectoryGrantScopeErrors[keyof ConciergeV1UserDirectoryGrantScopeErrors];
-
-export type ConciergeV1UserDirectoryGrantScopeResponses = {
-    /**
-     * Success
-     */
-    200: ConciergeV1GrantScopeResponse;
-};
-
-export type ConciergeV1UserDirectoryGrantScopeResponse = ConciergeV1UserDirectoryGrantScopeResponses[keyof ConciergeV1UserDirectoryGrantScopeResponses];
-
 export type ConciergeV1UserDirectoryHoldUserData = {
     body: ConciergeV1HoldUserRequest;
     headers: {
@@ -11842,35 +11650,6 @@ export type ConciergeV1UserDirectoryListGrantsResponses = {
 };
 
 export type ConciergeV1UserDirectoryListGrantsResponse = ConciergeV1UserDirectoryListGrantsResponses[keyof ConciergeV1UserDirectoryListGrantsResponses];
-
-export type ConciergeV1UserDirectoryListScopedGrantsData = {
-    body: ConciergeV1ListScopedGrantsRequest;
-    headers: {
-        'Connect-Protocol-Version': ConnectProtocolVersion;
-        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
-    };
-    path?: never;
-    query?: never;
-    url: '/concierge.v1.UserDirectory/ListScopedGrants';
-};
-
-export type ConciergeV1UserDirectoryListScopedGrantsErrors = {
-    /**
-     * Error
-     */
-    default: ConnectError;
-};
-
-export type ConciergeV1UserDirectoryListScopedGrantsError = ConciergeV1UserDirectoryListScopedGrantsErrors[keyof ConciergeV1UserDirectoryListScopedGrantsErrors];
-
-export type ConciergeV1UserDirectoryListScopedGrantsResponses = {
-    /**
-     * Success
-     */
-    200: ConciergeV1ListScopedGrantsResponse;
-};
-
-export type ConciergeV1UserDirectoryListScopedGrantsResponse = ConciergeV1UserDirectoryListScopedGrantsResponses[keyof ConciergeV1UserDirectoryListScopedGrantsResponses];
 
 export type ConciergeV1UserDirectoryListUsersData = {
     body: ConciergeV1ListUsersRequest;
@@ -11958,35 +11737,6 @@ export type ConciergeV1UserDirectoryRevokePermissionResponses = {
 };
 
 export type ConciergeV1UserDirectoryRevokePermissionResponse = ConciergeV1UserDirectoryRevokePermissionResponses[keyof ConciergeV1UserDirectoryRevokePermissionResponses];
-
-export type ConciergeV1UserDirectoryRevokeScopeData = {
-    body: ConciergeV1RevokeScopeRequest;
-    headers: {
-        'Connect-Protocol-Version': ConnectProtocolVersion;
-        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
-    };
-    path?: never;
-    query?: never;
-    url: '/concierge.v1.UserDirectory/RevokeScope';
-};
-
-export type ConciergeV1UserDirectoryRevokeScopeErrors = {
-    /**
-     * Error
-     */
-    default: ConnectError;
-};
-
-export type ConciergeV1UserDirectoryRevokeScopeError = ConciergeV1UserDirectoryRevokeScopeErrors[keyof ConciergeV1UserDirectoryRevokeScopeErrors];
-
-export type ConciergeV1UserDirectoryRevokeScopeResponses = {
-    /**
-     * Success
-     */
-    200: ConciergeV1RevokeScopeResponse;
-};
-
-export type ConciergeV1UserDirectoryRevokeScopeResponse = ConciergeV1UserDirectoryRevokeScopeResponses[keyof ConciergeV1UserDirectoryRevokeScopeResponses];
 
 export type ConciergeV1UserDirectoryRevokeTokensData = {
     body: ConciergeV1RevokeTokensRequest;

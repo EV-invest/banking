@@ -6,11 +6,12 @@ import { useT } from "@evinvest/i18n/react";
 import { Button, Card } from "@evinvest/uikit";
 
 import { config } from "@/config";
-import { usePanelViewer } from "@/features/panel-access";
+import { usePanelManager, usePanelViewer } from "@/features/panel-access";
 import { cn } from "@/shared/lib/cn";
 import { Link } from "@/shared/ui/cabinet-link";
 import { CARD_PAD } from "@/views/dashboard/lib/chrome";
-import { SERVICE_ARB, servicePanelLink } from "@/views/dashboard/lib/service-panel";
+import { canOpenPanel } from "@/entities/grant/lib/access";
+import { SERVICE_ARB, SERVICE_ARB_TENANT, servicePanelLink } from "@/views/dashboard/lib/service-panel";
 
 // The way into the Service-Arb panel for the people who work it. A name and a link, nothing
 // else: the panel is its own origin and says what it is once opened. Same tab — it signs in
@@ -18,7 +19,9 @@ import { SERVICE_ARB, servicePanelLink } from "@/views/dashboard/lib/service-pan
 export function ServicePanelCard({ className }: { className?: string }) {
   const t = useT();
   const viewer = usePanelViewer();
-  const link = viewer.ready ? servicePanelLink(config.public.saPanelUrl, viewer.role, viewer.scopes) : null;
+  // Asked only of someone the card is for: anyone else would only collect a 403.
+  const manage = usePanelManager(canOpenPanel(viewer.permissions, SERVICE_ARB_TENANT) ? SERVICE_ARB_TENANT : null);
+  const link = viewer.ready ? servicePanelLink(config.public.saPanelUrl, viewer.permissions, manage) : null;
   if (!link) return null;
 
   return (

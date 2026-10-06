@@ -41,10 +41,9 @@ fn user_profile_is_wire_identical_across_planes() {
 		// re-encodes SHORT from the banking side and the byte assertion below catches it.
 		suspended_by: "admin_hold".into(),
 		hold_expires_at: 1_700_086_400,
-		// Empty on purpose, the two fields banking's duplicate does NOT mirror: concierge
-		// fills them on GetMe only, and the cabinet reads them from there. The money
-		// plane's copy serves its admin/operator path, where neither travels.
-		scopes: Vec::new(),
+		// Empty on purpose, the one field banking's duplicate does NOT mirror: concierge
+		// fills it on GetMe only, and the cabinet reads it from there. The money plane's
+		// copy serves its admin/operator path, where it never travels.
 		permissions: Vec::new(),
 	};
 

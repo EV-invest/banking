@@ -6,40 +6,38 @@ import { type ReactNode, useState } from "react";
 import { useT } from "@evinvest/i18n/react";
 import { Alert, AlertDescription, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
-import { grantScope, revokeScope } from "@/entities/scope/api/scope-client";
-import { canRevokeHolder, grantableRoles, type ScopeRole } from "@/entities/scope/lib/access";
-import { scopeErrorKey, type ScopeAction } from "@/entities/scope/lib/errors";
-import { scopeHoldersResource } from "@/entities/scope/model/scope-resource";
-import { usePanelViewer } from "@/features/panel-access/model/use-panel-viewer";
-import { GrantScopeForm } from "@/features/panel-access/ui/grant-scope-form";
-import { RevokeScopeDialog } from "@/features/panel-access/ui/revoke-scope-dialog";
-import { ScopeHoldersTable } from "@/features/panel-access/ui/scope-holders-table";
-import type { ScopeHolder } from "@/shared/contracts";
+import { grantPermission, revokePermission } from "@/entities/grant/api/grant-client";
+import { grantErrorKey, type GrantAction } from "@/entities/grant/lib/errors";
+import { grantHoldersResource } from "@/entities/grant/model/grant-resource";
+import { GrantForm } from "@/features/panel-access/ui/grant-form";
+import { GrantHoldersTable } from "@/features/panel-access/ui/grant-holders-table";
+import { RevokeGrantDialog } from "@/features/panel-access/ui/revoke-grant-dialog";
+import type { GrantHolder } from "@/shared/contracts";
 import { RequestError, errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 
-// Who may open this allocation's panel — the identity plane's `allocation:<service>`
-// scope. Not the money grants beside it in the registry: nothing here moves or shows funds.
-export function PanelAccessCard({ service, header, className }: { service: string; header?: ReactNode; className?: string }) {
+// What people hold in the tenant's namespace — the grants its panel gates on. Not the money
+// grants beside it in the registry: nothing here moves or shows funds.
+export function PanelAccessCard({ namespace, header, className }: { namespace: string; header?: ReactNode; className?: string }) {
   const t = useT();
-  const { role } = usePanelViewer();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<ScopeHolder | null>(null);
+  const [confirming, setConfirming] = useState<GrantHolder | null>(null);
 
-  const read = useResource(scopeHoldersResource, service);
+  const read = useResource(grantHoldersResource, namespace);
   const holders = read.data?.holders ?? [];
+  const known = [...new Set(holders.flatMap((h) => (h.grant?.target ? [h.grant.target] : [])))];
 
-  const describe = (e: unknown, action: ScopeAction) => {
-    const key = e instanceof RequestError && e.code === null ? scopeErrorKey(e.status, action) : null;
+  const describe = (e: unknown, action: GrantAction) => {
+    const key = e instanceof RequestError && e.code === null ? grantErrorKey(e.status, action) : null;
     return key ? t(key) : errorMessage(e, t);
   };
   // A failed read belongs to the roster it failed to fill; the banner is for actions.
   const readError = read.data || !read.error ? null : describe(read.error, "list");
 
-  const run = async (key: string, action: ScopeAction, fn: () => Promise<unknown>) => {
+  const run = async (key: string, action: GrantAction, fn: () => Promise<unknown>) => {
     setBusy(key);
     setActionError(null);
     try {
@@ -54,11 +52,11 @@ export function PanelAccessCard({ service, header, className }: { service: strin
     }
   };
 
-  const grant = (email: string, scopeRole: ScopeRole) => run("grant", "grant", () => grantScope(service, email, scopeRole));
-  const revoke = (holder: ScopeHolder) => {
+  const grant = (email: string, target: string) => run("grant", "grant", () => grantPermission(namespace, email, target));
+  const revoke = (holder: GrantHolder) => {
     setConfirming(null);
-    const userId = holder.grant?.user_id ?? "";
-    void run(`revoke:${userId}`, "revoke", () => revokeScope(service, userId));
+    const { id, user_id: userId = "", target = "" } = holder.grant ?? {};
+    void run(`revoke:${String(id ?? "")}`, "revoke", () => revokePermission(namespace, userId, target));
   };
 
   return (
@@ -73,7 +71,7 @@ export function PanelAccessCard({ service, header, className }: { service: strin
           </Alert>
         )}
 
-        <GrantScopeForm roles={grantableRoles(role)} busy={busy === "grant"} onSubmit={grant} />
+        <GrantForm namespace={namespace} known={known} busy={busy === "grant"} onSubmit={grant} />
 
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("panelAccess.roster")}</p>
@@ -90,17 +88,12 @@ export function PanelAccessCard({ service, header, className }: { service: strin
               </Alert>
             )}
             {read.data && (
-              <ScopeHoldersTable
-                holders={holders}
-                busyUserId={busy?.startsWith("revoke:") ? busy.slice("revoke:".length) : null}
-                canRevoke={(holderRole) => canRevokeHolder(role, holderRole)}
-                onRevoke={setConfirming}
-              />
+              <GrantHoldersTable holders={holders} busyGrantId={busy?.startsWith("revoke:") ? busy.slice("revoke:".length) : null} onRevoke={setConfirming} />
             )}
           </Settled>
         </div>
       </CardContent>
-      <RevokeScopeDialog holder={confirming} onCancel={() => setConfirming(null)} onConfirm={revoke} />
+      <RevokeGrantDialog holder={confirming} onCancel={() => setConfirming(null)} onConfirm={revoke} />
     </Card>
   );
 }

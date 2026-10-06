@@ -474,18 +474,6 @@ mod book_route_tests {
 			Err(Status::unimplemented("not reached by the book routes"))
 		}
 
-		async fn grant_scope(&self, _: GrpcRequest<cc::GrantScopeRequest>) -> Result<GrpcResponse<cc::GrantScopeResponse>, Status> {
-			Err(Status::unimplemented("not reached by the book routes"))
-		}
-
-		async fn revoke_scope(&self, _: GrpcRequest<cc::RevokeScopeRequest>) -> Result<GrpcResponse<cc::RevokeScopeResponse>, Status> {
-			Err(Status::unimplemented("not reached by the book routes"))
-		}
-
-		async fn list_scoped_grants(&self, _: GrpcRequest<cc::ListScopedGrantsRequest>) -> Result<GrpcResponse<cc::ListScopedGrantsResponse>, Status> {
-			Err(Status::unimplemented("not reached by the book routes"))
-		}
-
 		async fn grant_permission(&self, _: GrpcRequest<cc::GrantPermissionRequest>) -> Result<GrpcResponse<cc::GrantPermissionResponse>, Status> {
 			Err(Status::unimplemented("not reached by the book routes"))
 		}

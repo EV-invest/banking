@@ -4987,9 +4987,9 @@
     "en": "Person",
     "t": "Кто"
   },
-  "panelAccess.col.role": {
-    "en": "Role",
-    "t": "Роль"
+  "panelAccess.col.target": {
+    "en": "Access",
+    "t": "Доступ"
   },
   "panelAccess.empty": {
     "en": "No one has panel access",
@@ -5004,20 +5004,20 @@
     "t": "Этому адресу нельзя выдать доступ."
   },
   "panelAccess.err.forbidden": {
-    "en": "You can't make this change. A panel admin can add and remove operators only.",
-    "t": "Это изменение вам недоступно. Админ панели может добавлять и убирать только операторов."
+    "en": "You can't make this change. You can grant and revoke only what your own access lets you hand on.",
+    "t": "Вы не можете внести это изменение. Выдавать и отзывать можно только то, что ваш собственный доступ позволяет передать."
   },
   "panelAccess.err.forbiddenList": {
     "en": "You don't have permission to manage access to this panel.",
     "t": "У вас нет прав управлять доступом к этой панели."
   },
   "panelAccess.err.invalid": {
-    "en": "Check the email address and try again.",
-    "t": "Проверьте адрес почты и попробуйте снова."
+    "en": "Check the email address and what you're granting, then try again.",
+    "t": "Проверьте адрес почты и то, что выдаёте, и попробуйте снова."
   },
   "panelAccess.err.notHolder": {
-    "en": "This person no longer has access to the panel.",
-    "t": "У этого человека уже нет доступа к панели."
+    "en": "This person no longer holds this access.",
+    "t": "У этого человека больше нет этого доступа."
   },
   "panelAccess.err.tooMany": {
     "en": "Too many attempts. Try again later.",
@@ -5027,25 +5027,29 @@
     "en": "Email",
     "t": "Эл. почта"
   },
-  "panelAccess.field.role": {
-    "en": "Role",
-    "t": "Роль"
+  "panelAccess.field.target": {
+    "en": "What to grant",
+    "t": "Что выдать"
   },
   "panelAccess.grant": {
     "en": "Grant access",
     "t": "Выдать доступ"
   },
-  "panelAccess.grantOperator": {
-    "en": "Add operator",
-    "t": "Добавить оператора"
+  "panelAccess.orphaned": {
+    "en": "Grants nothing",
+    "t": "Ничего не даёт"
+  },
+  "panelAccess.orphanedHint": {
+    "en": "The panel no longer defines this, so it grants nothing until the panel defines it again.",
+    "t": "Панель больше не определяет этот доступ, поэтому он ничего не даёт, пока панель не определит его снова."
   },
   "panelAccess.revoke": {
     "en": "Revoke",
     "t": "Отозвать"
   },
   "panelAccess.revokeBody": {
-    "en": "{who} will no longer be able to open the panel. You can grant access again later.",
-    "t": "{who} больше не сможет открыть панель. Доступ можно выдать снова позже."
+    "en": "{who} will lose {target}. You can grant it again later.",
+    "t": "{who} потеряет {target}. Позже доступ можно выдать снова."
   },
   "panelAccess.revokeTitle": {
     "en": "Revoke panel access?",

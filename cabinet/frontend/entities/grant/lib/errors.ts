@@ -1,16 +1,16 @@
-// What a refused scope call means to the person who made it. The BFF relays concierge's
+// What a refused grant call means to the person who made it. The BFF relays concierge's
 // verdict as `{ error }` prose in English; the status is the part that is ours to word.
 //
 // Kept free of any `@/` import so the node test runner, which resolves no alias, can load it.
 
-export type ScopeAction = "list" | "grant" | "revoke";
+export type GrantAction = "list" | "grant" | "revoke";
 
 /**
  * A catalogue key for the status, or `null` to fall back to the generic error surface
  * (401 is healed or turned into a sign-in by the api client before it reaches here, and a
- * 5xx is not specific to scopes).
+ * 5xx is not specific to grants).
  */
-export function scopeErrorKey(status: number, action: ScopeAction): string | null {
+export function grantErrorKey(status: number, action: GrantAction): string | null {
   switch (status) {
     case 400:
       return "panelAccess.err.invalid";

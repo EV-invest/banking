@@ -10,8 +10,8 @@ import { ChartCandlestick, Coins, KeyRound, ShieldCheck } from "lucide-react";
 import { useT } from "@evinvest/i18n/react";
 import { Button, Spinner } from "@evinvest/uikit";
 
-import { canManagePanelAccess } from "@/entities/scope/lib/access";
-import { usePanelViewer } from "@/features/panel-access";
+import { tenantOf } from "@/entities/grant/lib/access";
+import { usePanelManager } from "@/features/panel-access";
 import type { AllocationState } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import type { AllocationPanelKind } from "@/views/admin/allocations/lib/panel";
@@ -36,10 +36,9 @@ export function AllocationRowActions({
   className?: string;
 }) {
   const t = useT();
-  const viewer = usePanelViewer();
-  // Global admins and the scope's own admin; an operator of the console sees the money
-  // grants but not who may open the vertical's panel.
-  const panelAccess = viewer.ready && canManagePanelAccess(viewer.role, viewer.scopes, service);
+  // Whoever manages the tenant's grants; an operator of the console sees the money grants
+  // but not who may open the vertical's panel.
+  const panelAccess = usePanelManager(tenantOf(service));
   return (
     // i18n-max: 12 per verb. Up to six shrink-0 controls share this cell, in two groups: the
     // panel openers, then the two row verbs. Each group wraps rather than overflows —

@@ -488,20 +488,19 @@ impl Grpc {
 		Ok(self.directory().set_role(bearer(token, req)?).await?.into_inner())
 	}
 
-	// Scoped grants — panel access per allocation. Forwarded with the caller's own identity
-	// token, never a service one: concierge decides who may list or change a scope (a
-	// global admin/owner, or the scope's own admin), so the BFF must ask as the caller.
+	// Tenant grants. Forwarded with the caller's own identity token, never a service one:
+	// concierge decides who may list or change a namespace, so the BFF must ask as the caller.
 
-	pub async fn list_scoped_grants(&self, token: &str, scope: String) -> Result<cc::ListScopedGrantsResponse, Status> {
-		Ok(self.directory().list_scoped_grants(bearer(token, cc::ListScopedGrantsRequest { scope })?).await?.into_inner())
+	pub async fn list_grants(&self, token: &str, namespace: String) -> Result<cc::ListGrantsResponse, Status> {
+		Ok(self.directory().list_grants(bearer(token, cc::ListGrantsRequest { namespace })?).await?.into_inner())
 	}
 
-	pub async fn grant_scope(&self, token: &str, req: cc::GrantScopeRequest) -> Result<cc::GrantScopeResponse, Status> {
-		Ok(self.directory().grant_scope(bearer(token, req)?).await?.into_inner())
+	pub async fn grant_permission(&self, token: &str, req: cc::GrantPermissionRequest) -> Result<cc::GrantPermissionResponse, Status> {
+		Ok(self.directory().grant_permission(bearer(token, req)?).await?.into_inner())
 	}
 
-	pub async fn revoke_scope(&self, token: &str, req: cc::RevokeScopeRequest) -> Result<(), Status> {
-		self.directory().revoke_scope(bearer(token, req)?).await?;
+	pub async fn revoke_permission(&self, token: &str, req: cc::RevokePermissionRequest) -> Result<(), Status> {
+		self.directory().revoke_permission(bearer(token, req)?).await?;
 		Ok(())
 	}
 

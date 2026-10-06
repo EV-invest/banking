@@ -4987,9 +4987,9 @@
     "en": "Person",
     "t": "Personne"
   },
-  "panelAccess.col.role": {
-    "en": "Role",
-    "t": "Rôle"
+  "panelAccess.col.target": {
+    "en": "Access",
+    "t": "Accès"
   },
   "panelAccess.empty": {
     "en": "No one has panel access",
@@ -5004,20 +5004,20 @@
     "t": "Impossible d'accorder l'accès à cette adresse."
   },
   "panelAccess.err.forbidden": {
-    "en": "You can't make this change. A panel admin can add and remove operators only.",
-    "t": "Vous ne pouvez pas effectuer cette modification. Un administrateur du panneau ne peut ajouter ou retirer que des opérateurs."
+    "en": "You can't make this change. You can grant and revoke only what your own access lets you hand on.",
+    "t": "Vous ne pouvez pas effectuer cette modification. Vous ne pouvez accorder et retirer que ce que votre propre accès vous permet de transmettre."
   },
   "panelAccess.err.forbiddenList": {
     "en": "You don't have permission to manage access to this panel.",
     "t": "Vous n'avez pas le droit de gérer l'accès à ce panneau."
   },
   "panelAccess.err.invalid": {
-    "en": "Check the email address and try again.",
-    "t": "Vérifiez l'adresse e-mail et réessayez."
+    "en": "Check the email address and what you're granting, then try again.",
+    "t": "Vérifiez l'adresse e-mail et ce que vous accordez, puis réessayez."
   },
   "panelAccess.err.notHolder": {
-    "en": "This person no longer has access to the panel.",
-    "t": "Cette personne n'a plus accès au panneau."
+    "en": "This person no longer holds this access.",
+    "t": "Cette personne ne détient plus cet accès."
   },
   "panelAccess.err.tooMany": {
     "en": "Too many attempts. Try again later.",
@@ -5027,25 +5027,29 @@
     "en": "Email",
     "t": "E-mail"
   },
-  "panelAccess.field.role": {
-    "en": "Role",
-    "t": "Rôle"
+  "panelAccess.field.target": {
+    "en": "What to grant",
+    "t": "Ce qui est accordé"
   },
   "panelAccess.grant": {
     "en": "Grant access",
     "t": "Accorder l'accès"
   },
-  "panelAccess.grantOperator": {
-    "en": "Add operator",
-    "t": "Ajouter un opérateur"
+  "panelAccess.orphaned": {
+    "en": "Grants nothing",
+    "t": "N'accorde rien"
+  },
+  "panelAccess.orphanedHint": {
+    "en": "The panel no longer defines this, so it grants nothing until the panel defines it again.",
+    "t": "Le panneau ne définit plus cet accès : il n'accorde rien tant que le panneau ne le redéfinit pas."
   },
   "panelAccess.revoke": {
     "en": "Revoke",
     "t": "Révoquer"
   },
   "panelAccess.revokeBody": {
-    "en": "{who} will no longer be able to open the panel. You can grant access again later.",
-    "t": "{who} ne pourra plus ouvrir le panneau. Vous pourrez accorder l'accès à nouveau plus tard."
+    "en": "{who} will lose {target}. You can grant it again later.",
+    "t": "{who} perdra {target}. Vous pourrez l'accorder à nouveau plus tard."
   },
   "panelAccess.revokeTitle": {
     "en": "Revoke panel access?",

@@ -6025,7 +6025,7 @@
           "concierge.v1.AuthService"
         ],
         "summary": "PublishCatalog",
-        "description": "A relying party publishes its tenant's catalog: the permissions and aliases its\n namespace defines. Authenticated by the client secret, like ExchangeCode. Refused\n (INVALID_ARGUMENT) when anything lies outside the tenant's namespace or an alias names\n a permission the catalog does not define; FAILED_PRECONDITION when `version` is older\n than the stored one, or equal with different content. Grants whose target the new\n catalog drops stay, grant nothing, and are listed as orphaned.",
+        "description": "A relying party publishes its tenant's catalog: the permissions and aliases its\n namespace defines. Authenticated by the client secret, like ExchangeCode. Refused\n (INVALID_ARGUMENT) when anything lies outside the tenant's namespace, an alias names\n a permission the catalog does not define, a delegated alias delegates in turn, the\n catalog exceeds 1024 permissions or 128 aliases or a name exceeds 128 characters, or\n `version` lies more than a day ahead of this plane's clock; FAILED_PRECONDITION when\n `version` is older than the stored one, or equal with different content. Every\n published catalog is kept. Grants whose target the new catalog drops stay, grant\n nothing, and are listed as orphaned.",
         "operationId": "concierge.v1.AuthService.PublishCatalog",
         "parameters": [
           {
@@ -6143,7 +6143,7 @@
           "concierge.v1.AuthService"
         ],
         "summary": "RefreshClientToken",
-        "description": "Rotate a relying party's refresh token. The client's access policy is re-checked\n on EVERY rotation, so a revoked scope ends the session at the next refresh rather\n than at the family's deadline; presenting a rotated-out token revokes the family.",
+        "description": "Rotate a relying party's refresh token. The account is re-checked on EVERY rotation,\n so a suspension ends the session at the next refresh rather than at the family's\n deadline; presenting a rotated-out token revokes the family.",
         "operationId": "concierge.v1.AuthService.RefreshClientToken",
         "parameters": [
           {
@@ -7731,8 +7731,8 @@
         "tags": [
           "concierge.v1.UserDirectory"
         ],
-        "summary": "GrantPermission",
-        "description": "Grant a user a target inside a tenant's namespace: an alias (`sa:operator`), a\n permission (`sa:work:leads:read`) or a `*` pattern (`sa:work:*`). Held by the seats\n with `iam:tenants:grant`; nothing grants that permission, nor anything in the `iam`,\n `concierge`, `bank` or `seat` namespaces (INVALID_ARGUMENT). A target the tenant's\n catalog does not define grants nothing and is INVALID_ARGUMENT. An unknown user or\n address is NOT_FOUND; an address held by several accounts, or a disabled/held\n account, is FAILED_PRECONDITION with the reason. Re-granting what is held is a no-op.",
+        "summary": "Grant a user a target inside a tenant's namespace: an alias (`sa:operator`), a\n permission (`sa:work:leads:read`) or a `*` pattern (`sa:work:*`). Nothing grants\n anything in the `iam`, `concierge`, `bank` or `seat` namespaces (INVALID_ARGUMENT),\n and nobody grants to their own account (PERMISSION_DENIED). A target the tenant's\n catalog does not define grants nothing and is INVALID_ARGUMENT. Re-granting what is\n held is a no-op.",
+        "description": "Who may: a seat holding `iam:tenants:grant` — any target. The holder of an alias the\n catalog lets delegate (`delegations`) — exactly the aliases it delegates, naming the\n user by `email` only (a `user_id` is PERMISSION_DENIED: ids are visible in the\n roster, and granting one would reveal its owner's address). Anyone else, or a target\n outside the delegation: PERMISSION_DENIED, before the user is looked up.\n\n To a seat: an unknown user or address is NOT_FOUND; an address held by several\n accounts, or a disabled/held account, is FAILED_PRECONDITION with the reason. To a\n delegate all three are the SAME FAILED_PRECONDITION (\"this address cannot be granted\n access\"), so a grant never tells them whether, or how, an address is known. A\n delegate gets a budget of GrantPermission + RevokePermission calls per hour\n (refusals included); past it, RESOURCE_EXHAUSTED.",
         "operationId": "concierge.v1.UserDirectory.GrantPermission",
         "parameters": [
           {
@@ -7778,65 +7778,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.GrantPermissionResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/concierge.v1.UserDirectory/GrantScope": {
-      "post": {
-        "tags": [
-          "concierge.v1.UserDirectory"
-        ],
-        "summary": "Give a user a role over ONE resource (`allocation:\u003cservice_id\u003e`), replacing the role\n they hold there if any. Non-money access only — a vertical's panel; it never crosses\n the bridge. Echoes the grant now in effect; re-granting the role already held is a\n no-op.",
-        "description": "Who may: a global admin/owner — any scope, any role. The scope's own `admin` —\n `operator` inside that scope, and never an `admin` grant in either direction\n (neither minting one nor moving an existing one). Anyone else: PERMISSION_DENIED.\n A malformed scope or role is INVALID_ARGUMENT — including `viewer`, which no longer\n exists: a read-only holder is just an ordinary user and gets no grant.\n\n To a global admin/owner: an unknown user or address is NOT_FOUND; an address held by\n several accounts, or a disabled/held account, is FAILED_PRECONDITION with the reason.\n To a scope admin all three are the SAME FAILED_PRECONDITION (\"this address cannot be\n granted access\"), so a grant never tells them whether, or how, an address is known.\n\n A caller without global authority gets a budget of GrantScope + RevokeScope calls\n per hour (refusals included); past it, RESOURCE_EXHAUSTED.",
-        "operationId": "concierge.v1.UserDirectory.GrantScope",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/concierge.v1.GrantScopeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/concierge.v1.GrantScopeResponse"
                 }
               }
             }
@@ -7909,7 +7850,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "ListGrants",
-        "description": "The active grants inside one tenant namespace, with each holder's identity. Same\n authority as GrantPermission.",
+        "description": "The active grants inside one tenant namespace, with each holder's identity. A seat\n holding `iam:tenants:grant`, or a delegate of that namespace — who gets `legal_name`\n AND `preferred_name` empty: the team sees each other's email and grant, and nothing\n that says who an address belongs to.",
         "operationId": "concierge.v1.UserDirectory.ListGrants",
         "parameters": [
           {
@@ -7955,65 +7896,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.ListGrantsResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/concierge.v1.UserDirectory/ListScopedGrants": {
-      "post": {
-        "tags": [
-          "concierge.v1.UserDirectory"
-        ],
-        "summary": "ListScopedGrants",
-        "description": "The active grants on one scope, with each holder's email and names, for the\n cabinet's \"Access\" tab. Global admin/owner, or the scope's `admin` — who gets\n `legal_name` AND `preferred_name` empty: the team sees each other's email and grant,\n and nothing that says who an address belongs to.",
-        "operationId": "concierge.v1.UserDirectory.ListScopedGrants",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/concierge.v1.ListScopedGrantsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/concierge.v1.ListScopedGrantsResponse"
                 }
               }
             }
@@ -8145,7 +8027,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "RevokePermission",
-        "description": "Take a grant away. NOT_FOUND when the user holds no active grant of that target.",
+        "description": "Take a grant away. Same authority as GrantPermission, either addressing form for a\n delegate too: the answer depends only on a grant they can already list. NOT_FOUND when\n the user holds no active grant of that target — including an address nobody, or\n several accounts, hold. Shares GrantPermission's budget.",
         "operationId": "concierge.v1.UserDirectory.RevokePermission",
         "parameters": [
           {
@@ -8191,65 +8073,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.RevokePermissionResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/concierge.v1.UserDirectory/RevokeScope": {
-      "post": {
-        "tags": [
-          "concierge.v1.UserDirectory"
-        ],
-        "summary": "RevokeScope",
-        "description": "Take a user's grant on a scope away. Same authority rule as GrantScope: a scope\n admin may revoke `operator` grants in their scope, never an `admin` one.\n NOT_FOUND when the user holds no active grant there — including an address nobody,\n or several accounts, hold. Shares GrantScope's per-hour budget.",
-        "operationId": "concierge.v1.UserDirectory.RevokeScope",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/concierge.v1.RevokeScopeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/concierge.v1.RevokeScopeResponse"
                 }
               }
             }
@@ -13592,6 +13415,14 @@
               "type": "string"
             },
             "title": "members"
+          },
+          "delegates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "delegates",
+            "description": "Aliases of this catalog its holders may grant and revoke (GrantPermission)."
           }
         },
         "title": "CatalogAlias",
@@ -13632,7 +13463,7 @@
         },
         "title": "ClientTokenResponse",
         "additionalProperties": false,
-        "description": "A relying party's token pair. Expiries are unix SECONDS. Deliberately carries no\n profile: the client reads that from `UserDirectory.GetMe` with the access token, and\n GetMe is also what it re-checks `scopes` against on every request."
+        "description": "A relying party's token pair. Expiries are unix SECONDS. Deliberately carries no\n profile: the client reads that from `UserDirectory.GetMe` with the access token, and\n GetMe is also what it re-checks `permissions` against on every request."
       },
       "concierge.v1.DisableUserRequest": {
         "type": "object",
@@ -14047,72 +13878,6 @@
         "title": "GrantPermissionResponse",
         "additionalProperties": false
       },
-      "concierge.v1.GrantScopeRequest": {
-        "type": "object",
-        "allOf": [
-          {
-            "properties": {
-              "scope": {
-                "type": "string",
-                "title": "scope"
-              },
-              "role": {
-                "type": "string",
-                "title": "role",
-                "description": "operator/admin."
-              },
-              "reason": {
-                "type": "string",
-                "title": "reason",
-                "description": "Recorded verbatim on the audit row."
-              }
-            }
-          },
-          {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "email": {
-                    "type": "string",
-                    "title": "email"
-                  }
-                },
-                "title": "email",
-                "required": [
-                  "email"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "user_id": {
-                    "type": "string",
-                    "title": "user_id"
-                  }
-                },
-                "title": "user_id",
-                "required": [
-                  "user_id"
-                ]
-              }
-            ]
-          }
-        ],
-        "title": "GrantScopeRequest",
-        "additionalProperties": false
-      },
-      "concierge.v1.GrantScopeResponse": {
-        "type": "object",
-        "properties": {
-          "grant": {
-            "title": "grant",
-            "$ref": "#/components/schemas/concierge.v1.ScopedGrant"
-          }
-        },
-        "title": "GrantScopeResponse",
-        "additionalProperties": false
-      },
       "concierge.v1.HoldUserRequest": {
         "type": "object",
         "properties": {
@@ -14250,32 +14015,6 @@
       "concierge.v1.ListOwnersRequest": {
         "type": "object",
         "title": "ListOwnersRequest",
-        "additionalProperties": false
-      },
-      "concierge.v1.ListScopedGrantsRequest": {
-        "type": "object",
-        "properties": {
-          "scope": {
-            "type": "string",
-            "title": "scope"
-          }
-        },
-        "title": "ListScopedGrantsRequest",
-        "additionalProperties": false
-      },
-      "concierge.v1.ListScopedGrantsResponse": {
-        "type": "object",
-        "properties": {
-          "holders": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/concierge.v1.ScopeHolder"
-            },
-            "title": "holders",
-            "description": "Oldest grant first."
-          }
-        },
-        "title": "ListScopedGrantsResponse",
         "additionalProperties": false
       },
       "concierge.v1.ListSessionsRequest": {
@@ -15208,7 +14947,7 @@
             ],
             "title": "version",
             "format": "int64",
-            "description": "Monotonic per client (a build timestamp); at most 2^63-1."
+            "description": "Unix SECONDS of the commit the client was built from (nix `self.lastModified`):\n build time, not boot time, so a restarting older replica never supersedes a newer one."
           },
           "permissions": {
             "type": "array",
@@ -15388,61 +15127,6 @@
         "title": "RevokePermissionResponse",
         "additionalProperties": false
       },
-      "concierge.v1.RevokeScopeRequest": {
-        "type": "object",
-        "allOf": [
-          {
-            "properties": {
-              "scope": {
-                "type": "string",
-                "title": "scope"
-              },
-              "reason": {
-                "type": "string",
-                "title": "reason",
-                "description": "Recorded verbatim on the audit row."
-              }
-            }
-          },
-          {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "email": {
-                    "type": "string",
-                    "title": "email"
-                  }
-                },
-                "title": "email",
-                "required": [
-                  "email"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "user_id": {
-                    "type": "string",
-                    "title": "user_id"
-                  }
-                },
-                "title": "user_id",
-                "required": [
-                  "user_id"
-                ]
-              }
-            ]
-          }
-        ],
-        "title": "RevokeScopeRequest",
-        "additionalProperties": false
-      },
-      "concierge.v1.RevokeScopeResponse": {
-        "type": "object",
-        "title": "RevokeScopeResponse",
-        "additionalProperties": false
-      },
       "concierge.v1.RevokeSessionRequest": {
         "type": "object",
         "properties": {
@@ -15495,67 +15179,6 @@
         },
         "title": "RevokeTokensResponse",
         "additionalProperties": false
-      },
-      "concierge.v1.ScopeHolder": {
-        "type": "object",
-        "properties": {
-          "grant": {
-            "title": "grant",
-            "$ref": "#/components/schemas/concierge.v1.ScopedGrant"
-          },
-          "email": {
-            "type": "string",
-            "title": "email"
-          },
-          "legal_name": {
-            "type": "string",
-            "title": "legal_name",
-            "description": "Empty until the user sets them (see UserProfile). Both are also empty for a caller\n who is only the scope's admin."
-          },
-          "preferred_name": {
-            "type": "string",
-            "title": "preferred_name"
-          }
-        },
-        "title": "ScopeHolder",
-        "additionalProperties": false,
-        "description": "One holder of a scope, with enough identity to render the row."
-      },
-      "concierge.v1.ScopedGrant": {
-        "type": "object",
-        "properties": {
-          "user_id": {
-            "type": "string",
-            "title": "user_id"
-          },
-          "scope": {
-            "type": "string",
-            "title": "scope",
-            "description": "`allocation:\u003cservice_id\u003e`, service_id in [a-z0-9_]{1,64}."
-          },
-          "role": {
-            "type": "string",
-            "title": "role",
-            "description": "operator/admin."
-          },
-          "granted_by": {
-            "type": "string",
-            "title": "granted_by",
-            "description": "Who made this grant (user id)."
-          },
-          "granted_at": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "granted_at",
-            "format": "int64",
-            "description": "Unix SECONDS."
-          }
-        },
-        "title": "ScopedGrant",
-        "additionalProperties": false,
-        "description": "A user's role over one resource."
       },
       "concierge.v1.SendGovernanceMailRequest": {
         "type": "object",
@@ -15994,21 +15617,13 @@
             "format": "int64",
             "description": "Unix SECONDS an \"admin_hold\" lapses. 0 when nothing lapses."
           },
-          "scopes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/concierge.v1.ScopedGrant"
-            },
-            "title": "scopes",
-            "description": "The caller's ACTIVE scoped grants, as the `\u003ctenant\u003e:operator`/`:admin` grants of the tenant\n whose legacy scope this is. Filled by GetMe only — every other RPC returning\n a UserProfile leaves it empty, so an empty list elsewhere means \"not reported\", not\n \"holds none\". A global role is NOT folded in here: a panel that admits global\n admins/owners reads `role` above for that."
-          },
           "permissions": {
             "type": "array",
             "items": {
               "type": "string"
             },
             "title": "permissions",
-            "description": "What the caller may do, concrete: no alias, no wildcard. Filled by GetMe only. To a\n relying party, its tenant's namespace and nothing else; to a first-party session, the\n seat's permissions plus every tenant's."
+            "description": "What the caller may do, concrete: no alias, no wildcard. Filled by GetMe only. To a\n relying party, its tenant's namespace and nothing else; to a first-party session, the\n seat's permissions plus every tenant's. A relying party gates on this alone."
           }
         },
         "title": "UserProfile",

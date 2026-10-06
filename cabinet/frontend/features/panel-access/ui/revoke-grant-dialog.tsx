@@ -12,19 +12,20 @@ import {
   AlertDialogTitle,
 } from "@evinvest/uikit";
 
-import type { ScopeHolder } from "@/shared/contracts";
+import type { GrantHolder } from "@/shared/contracts";
 
-// Revoking signs the person out of the panel on their next request, so it is confirmed —
-// and the confirmation names who, since the roster row is out of sight behind the overlay.
-export function RevokeScopeDialog({ holder, onCancel, onConfirm }: { holder: ScopeHolder | null; onCancel: () => void; onConfirm: (holder: ScopeHolder) => void }) {
+// Revoking takes effect in the panel on the person's next request, so it is confirmed — and
+// the confirmation names who and what, since the roster row is out of sight behind the overlay.
+export function RevokeGrantDialog({ holder, onCancel, onConfirm }: { holder: GrantHolder | null; onCancel: () => void; onConfirm: (holder: GrantHolder) => void }) {
   const t = useT();
   const who = holder?.email || holder?.grant?.user_id || "";
+  const target = holder?.grant?.target ?? "";
   return (
     <AlertDialog open={holder !== null} onOpenChange={(open) => !open && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("panelAccess.revokeTitle")}</AlertDialogTitle>
-          <AlertDialogDescription>{t("panelAccess.revokeBody", { who })}</AlertDialogDescription>
+          <AlertDialogDescription>{t("panelAccess.revokeBody", { who, target })}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("ui.cancel")}</AlertDialogCancel>

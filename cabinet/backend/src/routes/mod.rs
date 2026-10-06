@@ -4,12 +4,12 @@ pub mod book;
 pub mod book_ws;
 pub mod consilium;
 pub mod governance_ws;
+pub mod grants;
 pub mod identity;
 pub mod money;
 pub mod notifications;
 pub mod payments;
 pub mod platform;
-pub mod scopes;
 pub mod system;
 #[cfg(test)]
 mod test_support;
@@ -144,10 +144,9 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/allocations/backing", post(admin::set_allocation_backing))
 		.route("/api/admin/allocations/holders", get(admin::list_unit_holders))
 		.route("/api/admin/allocations/book", post(admin::set_book_policy))
-		// Panel access — who may open a vertical's panel (`allocation:<service_id>` scopes).
-		// Identity plane only, and gated on the session alone: a scope's own admin usually
-		// holds no global role, so concierge — not a coarse role gate here — decides.
-		.route("/api/admin/allocations/{service_id}/scopes", get(scopes::list).post(scopes::grant).delete(scopes::revoke))
+		// Gated on the session alone: a tenant's delegate usually holds no global role, so
+		// concierge — not a coarse role gate here — decides.
+		.route("/api/admin/tenants/{namespace}/grants", get(grants::list).post(grants::grant).delete(grants::revoke))
 		.route("/api/admin/fees/policies", get(admin::list_fee_policies))
 		.route("/api/admin/fees/policy", post(admin::schedule_fee_policy))
 		.route("/api/admin/fees/policy/cancel", post(admin::cancel_fee_policy_change))
