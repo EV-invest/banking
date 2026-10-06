@@ -200,7 +200,7 @@ impl TreasuryDrift {
 				%network,
 				%expected,
 				%actual,
-				"treasury drift: the chain holds MORE USDT than the ledger records — an arrival was never credited; record it against its on-chain reference"
+				"treasury drift: the chain holds MORE USDT than the ledger records — an arrival was never credited. On a user's deposit address: RecordDeposit with its tx hash. On the treasury: an owner opens SeedCapital naming the sender (owners' consilium; RecordDeposit refuses it). See docs/RUNBOOK-withdrawals.md § Treasury surplus"
 			),
 			// The ledger promises funds the chain cannot show. Either money left without a
 			// ledger fact, or a credit was posted for a transfer that never landed.
