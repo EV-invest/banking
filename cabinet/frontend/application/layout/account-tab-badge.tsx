@@ -24,7 +24,7 @@ export function AccountTabBadge() {
     // Capped at 99+ like the rail pill: the tab has even less room. The accessible name
     // carries the real number, the one piece of information the cap throws away.
     <span
-      aria-label={t("notif.unreadCount", { n: unread })}
+      aria-label={t("notif.unreadCount", "Unread · {n}", { n: unread })}
       className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold leading-none tabular-nums text-on-primary"
     >
       {unread > 99 ? "99+" : unread}

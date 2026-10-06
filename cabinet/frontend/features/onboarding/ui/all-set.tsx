@@ -28,12 +28,12 @@ export function AllSet({ className }: { className?: string }) {
           <Sparkles aria-hidden />
         </ItemMedia>
         <ItemContent className="min-w-0 gap-0.5">
-          <ItemTitle className="block w-auto font-semibold">{t("onboarding.allSet.title")}</ItemTitle>
-          <ItemDescription className="line-clamp-none leading-snug">{t("onboarding.allSet.body", { own: t("dash.investedWhatIOwn"), ops: t("dash.recentOperations") })}</ItemDescription>
+          <ItemTitle className="block w-auto font-semibold">{t("onboarding.allSet.title", "You're all set")}</ItemTitle>
+          <ItemDescription className="line-clamp-none leading-snug">{t("onboarding.allSet.body", "Your holdings and their split are under {own}; every movement lands in {ops}.", { own: t("dash.investedWhatIOwn", "Invested · what I own"), ops: t("dash.recentOperations", "Recent activity") })}</ItemDescription>
         </ItemContent>
         <ItemActions className="shrink-0 self-center">
           <Button type="button" variant="outline" size="sm" onClick={acknowledge}>
-            {t("onboarding.allSet.dismiss")}
+            {t("onboarding.allSet.dismiss", "Got it")}
           </Button>
         </ItemActions>
       </Item>
@@ -47,7 +47,7 @@ export function CompleteLine({ className }: { className?: string }) {
   return (
     <p className={cn("flex items-center gap-2 text-xs font-medium text-ink-soft", className)}>
       <CircleCheck className="size-4 text-primary-ink" aria-hidden />
-      {t("onboarding.status.complete")}
+      {t("onboarding.status.complete", "Verified · funded · invested")}
     </p>
   );
 }

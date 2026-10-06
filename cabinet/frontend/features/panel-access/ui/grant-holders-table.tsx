@@ -24,8 +24,8 @@ export function GrantHoldersTable({ holders, busyGrantId, onRevoke }: { holders:
           <EmptyMedia variant="icon">
             <ShieldCheck />
           </EmptyMedia>
-          <EmptyTitle>{t("panelAccess.empty")}</EmptyTitle>
-          <EmptyDescription>{t("panelAccess.emptyHint")}</EmptyDescription>
+          <EmptyTitle>{t("panelAccess.empty", "No one has panel access")}</EmptyTitle>
+          <EmptyDescription>{t("panelAccess.emptyHint", "Grant access by email. The person must have signed in to the cabinet at least once.")}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -36,9 +36,9 @@ export function GrantHoldersTable({ holders, busyGrantId, onRevoke }: { holders:
       <TableHeader>
         {/* i18n-max: 10 per header — the roster sits in a 340px panel. */}
         <TableRow>
-          <TableHead className={HEAD}>{t("panelAccess.col.person")}</TableHead>
-          <TableHead className={HEAD}>{t("panelAccess.col.target")}</TableHead>
-          <TableHead className="sr-only">{t("panelAccess.revoke")}</TableHead>
+          <TableHead className={HEAD}>{t("panelAccess.col.person", "Person")}</TableHead>
+          <TableHead className={HEAD}>{t("panelAccess.col.target", "Access")}</TableHead>
+          <TableHead className="sr-only">{t("panelAccess.revoke", "Revoke")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -63,8 +63,8 @@ export function GrantHoldersTable({ holders, busyGrantId, onRevoke }: { holders:
                   {h.grant?.target}
                 </div>
                 {h.grant?.orphaned && (
-                  <Badge variant="outline" title={t("panelAccess.orphanedHint")}>
-                    {t("panelAccess.orphaned")}
+                  <Badge variant="outline" title={t("panelAccess.orphanedHint", "The panel no longer defines this, so it grants nothing until the panel defines it again.")}>
+                    {t("panelAccess.orphaned", "Grants nothing")}
                   </Badge>
                 )}
               </TableCell>
@@ -72,7 +72,7 @@ export function GrantHoldersTable({ holders, busyGrantId, onRevoke }: { holders:
                 {/* Offered on every row: which targets the caller may revoke is their
                     delegation, which the cabinet cannot read, so the plane says no. An icon,
                     not the word: the panel is 340px and the word is in the confirmation. */}
-                <Button type="button" icon variant="ghost" size="sm" aria-label={t("panelAccess.revoke")} title={t("panelAccess.revoke")} disabled={busyGrantId !== null} onClick={() => onRevoke(h)}>
+                <Button type="button" icon variant="ghost" size="sm" aria-label={t("panelAccess.revoke", "Revoke")} title={t("panelAccess.revoke", "Revoke")} disabled={busyGrantId !== null} onClick={() => onRevoke(h)}>
                   {busyGrantId === grantId ? <Spinner /> : <UserMinus className="size-4" aria-hidden />}
                 </Button>
               </TableCell>

@@ -56,16 +56,16 @@ export function StartVerificationRow() {
             <>
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <RowLabel
-                  title={running ? t("profile.kyc.caseTitle") : t("profile.kyc.startTitle")}
-                  sub={running ? (canStart ? t("profile.kyc.caseResumeSub") : t("profile.kyc.caseReviewSub")) : t("profile.kyc.startSub")}
+                  title={running ? t("profile.kyc.caseTitle", "Verification in progress") : t("profile.kyc.startTitle", "Verify your identity")}
+                  sub={running ? (canStart ? t("profile.kyc.caseResumeSub", "You've already started — pick up where you left off") : t("profile.kyc.caseReviewSub", "Your documents are with our reviewers — we'll email you the decision")) : t("profile.kyc.startSub", "A photo of your ID and a selfie — a few minutes")}
                 />
                 {/* i18n-max: 12 — a `shrink-0` Button or Pill beside the `min-w-0` row label. */}
                 {canStart ? (
                   <Button type="button" size="sm" className="shrink-0 rounded-lg font-semibold" onClick={() => setOpen(true)}>
-                    {running ? t("profile.kyc.continue") : t("profile.kyc.start")}
+                    {running ? t("profile.kyc.continue", "Continue") : t("profile.kyc.start", "Start")}
                   </Button>
                 ) : reviewing ? (
-                  <Pill tone="pending">{t("profile.kyc.casePill")}</Pill>
+                  <Pill tone="pending">{t("profile.kyc.casePill", "In review")}</Pill>
                 ) : null}
               </div>
               {reviewing && <ReviewContact />}

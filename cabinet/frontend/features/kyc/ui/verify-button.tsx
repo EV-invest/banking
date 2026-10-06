@@ -26,7 +26,7 @@ export function VerifyButton({ size, className }: { size?: ButtonSize; className
     <>
       {/* i18n-max: 14 — see ./verification-required, which declares the same budget. */}
       <Button type="button" size={size} className={className} onClick={() => setOpen(true)}>
-        {runningCase !== null ? t("profile.kyc.continue") : t("kyc.verifyNow")}
+        {runningCase !== null ? t("profile.kyc.continue", "Continue") : t("kyc.verifyNow", "Verify now")}
       </Button>
       <VerificationDialog open={open} onOpenChange={setOpen} />
     </>

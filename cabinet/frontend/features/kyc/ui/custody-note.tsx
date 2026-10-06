@@ -21,7 +21,7 @@ export function CustodyNote({ className }: { className?: string }) {
   return (
     <p className={cn("flex items-start gap-1.5 text-xs leading-relaxed text-ink-soft", className)}>
       <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-primary-ink" aria-hidden />
-      {t("kyc.custodyNote")}
+      {t("kyc.custodyNote", "Deposits are held in Turnkey custody under your identity verified by Didit; nothing moves without it.")}
     </p>
   );
 }

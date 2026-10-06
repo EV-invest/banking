@@ -25,11 +25,11 @@ export function GrantForm({ namespace, known, busy, onSubmit }: { namespace: str
   return (
     <form onSubmit={submit} className="flex flex-col gap-3 rounded-lg border border-border bg-secondary p-3">
       <Field>
-        <FieldLabel htmlFor={`${id}-email`}>{t("panelAccess.field.email")}</FieldLabel>
+        <FieldLabel htmlFor={`${id}-email`}>{t("panelAccess.field.email", "Email")}</FieldLabel>
         <Input id={`${id}-email`} type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full" />
       </Field>
       <Field>
-        <FieldLabel htmlFor={`${id}-target`}>{t("panelAccess.field.target")}</FieldLabel>
+        <FieldLabel htmlFor={`${id}-target`}>{t("panelAccess.field.target", "What to grant")}</FieldLabel>
         <Input
           id={`${id}-target`}
           list={`${id}-known`}
@@ -48,7 +48,7 @@ export function GrantForm({ namespace, known, busy, onSubmit }: { namespace: str
       </Field>
       <Button type="submit" className="w-full" disabled={busy || !trimmedEmail || !trimmedTarget}>
         {busy ? <Spinner aria-hidden /> : null}
-        {t("panelAccess.grant")}
+        {t("panelAccess.grant", "Grant access")}
       </Button>
     </form>
   );

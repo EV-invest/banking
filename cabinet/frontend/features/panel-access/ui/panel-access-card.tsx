@@ -3,11 +3,12 @@
 import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { Alert, AlertDescription, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { grantPermission, revokePermission } from "@/entities/grant/api/grant-client";
-import { grantErrorKey, type GrantAction } from "@/entities/grant/lib/errors";
+import { type GrantAction, grantErrorKey, type GrantErrorKey } from "@/entities/grant/lib/errors";
 import { grantHoldersResource } from "@/entities/grant/model/grant-resource";
 import { GrantForm } from "@/features/panel-access/ui/grant-form";
 import { GrantHoldersTable } from "@/features/panel-access/ui/grant-holders-table";
@@ -17,6 +18,15 @@ import { RequestError, errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
+
+const grantErrorWords = (t: Translate): Record<GrantErrorKey, string> => ({
+  "panelAccess.err.invalid": t("panelAccess.err.invalid", "Check the email address and what you're granting, then try again."),
+  "panelAccess.err.forbiddenList": t("panelAccess.err.forbiddenList", "You don't have permission to manage access to this panel."),
+  "panelAccess.err.forbidden": t("panelAccess.err.forbidden", "You can't make this change. You can grant and revoke only what your own access lets you hand on."),
+  "panelAccess.err.notHolder": t("panelAccess.err.notHolder", "This person no longer holds this access."),
+  "panelAccess.err.cannotGrant": t("panelAccess.err.cannotGrant", "Access can't be granted to this address."),
+  "panelAccess.err.tooMany": t("panelAccess.err.tooMany", "Too many attempts. Try again later."),
+});
 
 // What people hold in the tenant's namespace — the grants its panel gates on. Not the money
 // grants beside it in the registry: nothing here moves or shows funds.
@@ -32,7 +42,7 @@ export function PanelAccessCard({ namespace, header, className }: { namespace: s
 
   const describe = (e: unknown, action: GrantAction) => {
     const key = e instanceof RequestError && e.code === null ? grantErrorKey(e.status, action) : null;
-    return key ? t(key) : errorMessage(e, t);
+    return key ? grantErrorWords(t)[key] : errorMessage(e, t);
   };
   // A failed read belongs to the roster it failed to fill; the banner is for actions.
   const readError = read.data || !read.error ? null : describe(read.error, "list");
@@ -74,7 +84,7 @@ export function PanelAccessCard({ namespace, header, className }: { namespace: s
         <GrantForm namespace={namespace} known={known} busy={busy === "grant"} onSubmit={grant} />
 
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("panelAccess.roster")}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("panelAccess.roster", "Who has access")}</p>
           <Settled loading={!read.data && !read.error} skeleton={<Skeleton className="h-24 w-full" />}>
             {readError && (
               <Alert variant="destructive">
@@ -82,7 +92,7 @@ export function PanelAccessCard({ namespace, header, className }: { namespace: s
                 <AlertDescription className="flex flex-col items-start gap-2">
                   {readError}
                   <Button type="button" variant="outline" size="sm" onClick={() => void read.refresh()}>
-                    {t("status.tryAgain")}
+                    {t("status.tryAgain", "Try again")}
                   </Button>
                 </AlertDescription>
               </Alert>

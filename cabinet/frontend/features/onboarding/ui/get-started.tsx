@@ -1,5 +1,6 @@
 "use client";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
@@ -49,23 +50,23 @@ export function GetStarted({ checklist, verifyAction, className }: { checklist: 
   return (
     <Card className={cn("gap-3 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
-        <CardTitle>{t("onboarding.title")}</CardTitle>
-        <CardDescription>{t("onboarding.subtitle")}</CardDescription>
-        <CardAction className="text-xs font-medium tabular-nums text-ink-soft">{t("onboarding.progress", { done: checklist.done, total: STEP_COUNT })}</CardAction>
+        <CardTitle>{t("onboarding.title", "Get started")}</CardTitle>
+        <CardDescription>{t("onboarding.subtitle", "Three steps to your first investment.")}</CardDescription>
+        <CardAction className="text-xs font-medium tabular-nums text-ink-soft">{t("onboarding.progress", "{done} of {total} done", { done: checklist.done, total: STEP_COUNT })}</CardAction>
       </CardHeader>
       <CardContent className={CARD_PAD}>
         <ItemGroup>
-          <StepRow n={1} state={checklist.verify} title={t("onboarding.verify.title")} body={t(VERIFY_BODY[checklist.verify])} action={verifyStepAction(checklist.verify, verifyAction, t("profile.kyc.casePill"))} />
+          <StepRow n={1} state={checklist.verify} title={t("onboarding.verify.title", "Verify your identity")} body={verifyBody(t)[checklist.verify]} action={verifyStepAction(checklist.verify, verifyAction, t("profile.kyc.casePill", "In review"))} />
           <ItemSeparator />
           <StepRow
             n={2}
             state={checklist.deposit}
-            title={t("onboarding.deposit.title")}
-            body={t(DEPOSIT_BODY[checklist.deposit])}
+            title={t("onboarding.deposit.title", "Make your first deposit")}
+            body={depositBody(t)[checklist.deposit]}
             action={
               checklist.deposit === "current" && (
                 <Button asChild size="sm">
-                  <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
+                  <Link href="/wallet/deposit">{t("ui.deposit", "Deposit")}</Link>
                 </Button>
               )
             }
@@ -74,12 +75,12 @@ export function GetStarted({ checklist, verifyAction, className }: { checklist: 
           <StepRow
             n={3}
             state={checklist.invest}
-            title={t("onboarding.invest.title")}
-            body={t(INVEST_BODY[checklist.invest])}
+            title={t("onboarding.invest.title", "Choose a strategy")}
+            body={investBody(t)[checklist.invest]}
             action={
               checklist.invest === "current" && (
                 <Button asChild size="sm">
-                  <Link href="/invest">{t("dash.browseStrategies")}</Link>
+                  <Link href="/invest">{t("dash.browseStrategies", "Browse strategies")}</Link>
                 </Button>
               )
             }
@@ -94,26 +95,26 @@ export function GetStarted({ checklist, verifyAction, className }: { checklist: 
 // the check, "credited once the network confirms it" for the deposit. No figure appears
 // that the dialog does not already state.
 // TODO(#385): sourced figures
-const VERIFY_BODY: Readonly<Record<VerifyState, string>> = {
-  current: "kyc.dialog.timeBody",
-  review: "onboarding.verify.review",
-  done: "onboarding.verify.done",
+const verifyBody = (t: Translate): Readonly<Record<VerifyState, string>> => ({
+  current: t("kyc.dialog.timeBody", "A few minutes to submit. Most checks are decided within the hour."),
+  review: t("onboarding.verify.review", "Nothing to do on your side — your documents are with our reviewers and we'll email you the decision."),
+  done: t("onboarding.verify.done", "Your deposit address and withdrawals are open."),
   // Unreachable — the first step is never behind another — but the map is total so a state
   // added later cannot fall through to an empty line.
-  locked: "kyc.dialog.timeBody",
-};
+  locked: t("kyc.dialog.timeBody", "A few minutes to submit. Most checks are decided within the hour."),
+});
 
-const DEPOSIT_BODY: Readonly<Record<StepState, string>> = {
-  locked: "onboarding.deposit.locked",
-  current: "onboarding.deposit.current",
-  done: "onboarding.deposit.done",
-};
+const depositBody = (t: Translate): Readonly<Record<StepState, string>> => ({
+  locked: t("onboarding.deposit.locked", "Opens once your identity is verified."),
+  current: t("onboarding.deposit.current", "Send funds to your deposit address — credited once the network confirms it."),
+  done: t("onboarding.deposit.done", "Funds received."),
+});
 
-const INVEST_BODY: Readonly<Record<StepState, string>> = {
-  locked: "onboarding.invest.locked",
-  current: "onboarding.invest.current",
-  done: "onboarding.invest.done",
-};
+const investBody = (t: Translate): Readonly<Record<StepState, string>> => ({
+  locked: t("onboarding.invest.locked", "Opens once a deposit is credited."),
+  current: t("onboarding.invest.current", "Pick a strategy and subscribe with your available balance."),
+  done: t("onboarding.invest.done", "You hold units."),
+});
 
 /** In review there is nothing to press: a pending mark stands where the button would. */
 function verifyStepAction(state: VerifyState, verifyAction: ReactNode, reviewLabel: string): ReactNode {

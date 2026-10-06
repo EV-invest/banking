@@ -47,17 +47,17 @@ export function VerificationDialog({ open, onOpenChange }: { open: boolean; onOp
           is the only thing keeping a phone's dialog off both edges of the screen. */}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("kyc.dialog.title")}</DialogTitle>
+          <DialogTitle>{t("kyc.dialog.title", "Verify your identity")}</DialogTitle>
           {/* The gate as the hub actually applies it (#179): a deposit ADDRESS is what is
               withheld, so this must not say "you cannot receive funds" — someone who was
               verified once already holds an address and is still credited. */}
-          <DialogDescription>{t("kyc.dialog.intro")}</DialogDescription>
+          <DialogDescription>{t("kyc.dialog.intro", "A short identity check by our verification provider. Your deposit address and withdrawals open once it is done.")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          <Step icon={IdCard} title={t("kyc.dialog.needTitle")} body={t("kyc.dialog.needBody")} />
-          <Step icon={Clock} title={t("kyc.dialog.timeTitle")} body={t("kyc.dialog.timeBody")} />
-          <Step icon={ShieldCheck} title={t("kyc.dialog.afterTitle")} body={t("kyc.dialog.afterBody")} />
+          <Step icon={IdCard} title={t("kyc.dialog.needTitle", "What you'll need")} body={t("kyc.dialog.needBody", "A government-issued ID, and a phone or webcam for a selfie.")} />
+          <Step icon={Clock} title={t("kyc.dialog.timeTitle", "How long it takes")} body={t("kyc.dialog.timeBody", "A few minutes to submit. Most checks are decided within the hour.")} />
+          <Step icon={ShieldCheck} title={t("kyc.dialog.afterTitle", "What happens next")} body={t("kyc.dialog.afterBody", "We'll email you the result. You can close the tab — the check keeps running without it.")} />
         </div>
 
         <DialogFooter>
@@ -71,7 +71,7 @@ export function VerificationDialog({ open, onOpenChange }: { open: boolean; onOp
           <div className="sm:mr-auto">
             <VerificationOutcome start={start} />
           </div>
-          <StartVerificationButton start={start} label={t("kyc.dialog.action")} className="w-full sm:w-auto" />
+          <StartVerificationButton start={start} label={t("kyc.dialog.action", "Start verification")} className="w-full sm:w-auto" />
         </DialogFooter>
       </DialogContent>
     </Dialog>
