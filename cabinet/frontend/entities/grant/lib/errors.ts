@@ -5,12 +5,20 @@
 
 export type GrantAction = "list" | "grant" | "revoke";
 
+export type GrantErrorKey =
+  | "panelAccess.err.invalid"
+  | "panelAccess.err.forbiddenList"
+  | "panelAccess.err.forbidden"
+  | "panelAccess.err.notHolder"
+  | "panelAccess.err.cannotGrant"
+  | "panelAccess.err.tooMany";
+
 /**
  * A catalogue key for the status, or `null` to fall back to the generic error surface
  * (401 is healed or turned into a sign-in by the api client before it reaches here, and a
  * 5xx is not specific to grants).
  */
-export function grantErrorKey(status: number, action: GrantAction): string | null {
+export function grantErrorKey(status: number, action: GrantAction): GrantErrorKey | null {
   switch (status) {
     case 400:
       return "panelAccess.err.invalid";

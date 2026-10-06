@@ -33,7 +33,7 @@ import type {
 } from "@/shared/contracts/governance";
 import type { ConsentDecision, PaymentConsentInvitation, PaymentConsentResult } from "@/shared/contracts/payments";
 import { apiPath } from "@/shared/config/base-path";
-import { RequestError } from "@/shared/lib/api-client";
+import { type ErrorCode, RequestError } from "@/shared/lib/api-client";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 
 /**
@@ -54,7 +54,7 @@ export class ApprovalUnavailableError extends Error {
 }
 
 /** The BFF's fixed error strings that these routes can produce, keyed for translation. */
-const FRIENDLY: Record<string, { code: string; en: string }> = {
+const FRIENDLY: Record<string, { code: ErrorCode; en: string }> = {
   csrf: { code: "err.csrf", en: "This page went stale. Reload it and try again." },
   "request failed": { code: "err.requestFailed", en: "Something went wrong on our side. Please try again." },
 };

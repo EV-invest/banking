@@ -31,7 +31,7 @@ export function PaymentEndSummary({ end, className }: { end: PaymentEnd; classNa
           <span className="shrink-0">{networkLabel(end.network)}</span>
           <span className="min-w-0 truncate font-mono-tech">{shortAddress(end.address)}</span>
           <InfoTip>
-            <InfoTipTrigger label={t("payment.end.fullAddress")} />
+            <InfoTipTrigger label={t("payment.end.fullAddress", "Show the full address")} />
             <InfoTipContent className="w-auto max-w-80 break-all font-mono-tech text-xs">{end.address}</InfoTipContent>
           </InfoTip>
         </span>

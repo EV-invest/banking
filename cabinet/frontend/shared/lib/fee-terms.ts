@@ -14,6 +14,7 @@
 
 import type { Translate } from "@evinvest/i18n";
 
+import { wordFor } from "./wire-words.ts";
 /** The schedule a fund charges by. Rates in basis points; the two words are the plane's
  *  closed vocabularies (`BASES`, `CRYSTALLIZATIONS`), carried as open strings so a member
  *  added later renders as its wire word rather than breaking the build. */
@@ -117,26 +118,24 @@ export function requirementFor(current: FeeTermsLike | null, next: FeeTermsLike)
 // One wire value has one name across the cabinet: the admin console, the product page and
 // the owners' room all point at the same catalogue entries.
 
-const BASIS_LABEL_KEYS: Record<string, string> = {
-  invested_capital: "admin.fees.basis.investedCapital",
-  market_value: "admin.fees.basis.marketValue",
-};
+const basisWords = (t: Translate): Readonly<Record<string, string>> => ({
+  invested_capital: t("admin.fees.basis.investedCapital", "Invested capital"),
+  market_value: t("admin.fees.basis.marketValue", "Market value"),
+});
 
-const CRYSTALLIZATION_LABEL_KEYS: Record<string, string> = {
-  monthly: "admin.fees.period.monthly",
-  quarterly: "admin.fees.period.quarterly",
-  semi_annual: "admin.fees.period.semiAnnual",
-  annual: "admin.fees.period.annual",
-};
+const crystallizationWords = (t: Translate): Readonly<Record<string, string>> => ({
+  monthly: t("admin.fees.period.monthly", "Monthly"),
+  quarterly: t("admin.fees.period.quarterly", "Quarterly"),
+  semi_annual: t("admin.fees.period.semiAnnual", "Every 6 months"),
+  annual: t("admin.fees.period.annual", "Annually"),
+});
 
 /** A basis in the reader's language; a word this build has no name for is shown as the
  *  hub sent it rather than swallowed. */
 export function basisLabel(basis: string | undefined, t: Translate): string {
-  const key = BASIS_LABEL_KEYS[basis ?? ""];
-  return key ? t(key) : basis || "—";
+  return wordFor(basisWords(t), basis) ?? (basis || "—");
 }
 
 export function crystallizationLabel(period: string | undefined, t: Translate): string {
-  const key = CRYSTALLIZATION_LABEL_KEYS[period ?? ""];
-  return key ? t(key) : period || "—";
+  return wordFor(crystallizationWords(t), period) ?? (period || "—");
 }

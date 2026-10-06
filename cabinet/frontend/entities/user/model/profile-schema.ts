@@ -13,7 +13,9 @@
 // flattens the issues and is the one place a translator is in reach.
 import { z } from "zod";
 import { Email, PhoneNumber } from "@evinvest/types";
-import type { Translate } from "@evinvest/i18n";
+import type { MessageValues, Translate } from "@evinvest/i18n";
+
+import { wordFor } from "@/shared/lib/wire-words";
 
 const NAME_MAX = Object.freeze({
   legal_name: 256,
@@ -140,13 +142,34 @@ export const profileEditableSchema = z.object({
 export type ProfileEditable = z.infer<typeof profileEditableSchema>;
 
 // The four name rules are the only ones whose message names its field and its limit.
-// The label is a catalogue key rather than the raw `legal_name`, which is what the
+// The label is the field's own name rather than the raw `legal_name`, which is what the
 // English message used to interpolate — a wire identifier reads badly in any language.
-const NAME_FIELD_LABEL: Readonly<Record<keyof typeof NAME_MAX, string>> = Object.freeze({
-  legal_name: "profile.legalName",
-  preferred_name: "profile.preferredName",
-  nationality: "profile.nationality",
-  tax_residence: "profile.taxResidence",
+const nameFieldLabels = (t: Translate): Record<keyof typeof NAME_MAX, string> => ({
+  legal_name: t("profile.legalName", "Legal name"),
+  preferred_name: t("profile.preferredName", "Preferred name"),
+  nationality: t("profile.nationality", "Nationality"),
+  tax_residence: t("profile.taxResidence", "Tax residence"),
+});
+
+// Every message key the rules above can raise, in words. A message Zod raises on its own
+// (a type mismatch) is not in here and passes through as Zod's English.
+const issueWords = (t: Translate, values?: MessageValues): Readonly<Record<string, string>> => ({
+  "err.field.maxLength": t("err.field.maxLength", "{field} must be at most {n, plural, one {# character} other {# characters}}", values),
+  "err.field.nameChars": t("err.field.nameChars", "{field} may only contain letters, spaces, hyphens, apostrophes, and periods", values),
+  "err.field.minLetters": t("err.field.minLetters", "{field} must contain at least 2 letters", values),
+  "err.phone.maxLength": t("err.phone.maxLength", "Phone number must be at most 32 characters"),
+  "err.phone.invalid": t("err.phone.invalid", "Enter a valid phone number starting with + or country code"),
+  "err.email.maxLength": t("err.email.maxLength", "Email address must be at most 320 characters"),
+  "err.email.invalid": t("err.email.invalid", "Enter a valid email address"),
+  "err.dob.format": t("err.dob.format", "Date of birth must be a valid YYYY-MM-DD date"),
+  "err.dob.range": t("err.dob.range", "Date of birth must be a real date between 1900 and 2100"),
+  "err.address.maxLength": t("err.address.maxLength", "Residential address must be at most 256 characters"),
+  "err.address.controlChars": t("err.address.controlChars", "Residential address must not contain control characters"),
+  "err.language.maxLength": t("err.language.maxLength", "Language must be at most 16 characters"),
+  "err.language.format": t("err.language.format", "Language must be a BCP 47 code such as 'en' or 'en-US'"),
+  "err.currency.format": t("err.currency.format", "Base currency must be a 3-letter code such as 'USD'"),
+  "err.timezone.maxLength": t("err.timezone.maxLength", "Time zone must be at most 64 characters"),
+  "err.timezone.format": t("err.timezone.format", "Time zone must be 'UTC', 'GMT', or an IANA name such as 'Asia/Ho_Chi_Minh'"),
 });
 
 const isNameField = (field: string): field is keyof typeof NAME_MAX => field in NAME_MAX;
@@ -165,9 +188,8 @@ export function validateProfileForm(
     const field = issue.path[0] as string;
     // Keep the first error per field.
     if (!errors[field]) {
-      errors[field] = isNameField(field)
-        ? t(issue.message, { field: t(NAME_FIELD_LABEL[field]), n: NAME_MAX[field] })
-        : t(issue.message);
+      const values = isNameField(field) ? { field: nameFieldLabels(t)[field], n: NAME_MAX[field] } : undefined;
+      errors[field] = wordFor(issueWords(t, values), issue.message) ?? issue.message;
     }
   }
   return errors;

@@ -27,7 +27,7 @@ export function SupportLink({ contact = SUPPORT_EMAIL, subject, className }: { c
   const t = useT();
   return (
     <a href={supportHref({ contact, subject })} className={cn("rounded-sm font-medium text-primary-ink underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring", className)}>
-      {t("profile.kyc.contact", { contact })}
+      {t("profile.kyc.contact", "Contact {contact}", { contact })}
     </a>
   );
 }

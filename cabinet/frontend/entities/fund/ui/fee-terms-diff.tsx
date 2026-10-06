@@ -22,12 +22,12 @@ const HEAD = "h-8 px-3 text-xs font-medium text-ink-soft";
 
 export function FeeTermsDiff({ from, to }: { from: FeeTermsLike | null | undefined; to: FeeTermsLike }) {
   const t = useT();
-  const rows: { key: string; now: string | null; next: string }[] = [
-    { key: "admin.fees.field.management", now: from ? t("invest.perAnnum", { pct: pct(from.management_bps) }) : null, next: t("invest.perAnnum", { pct: pct(to.management_bps) }) },
-    { key: "admin.fees.field.performance", now: from ? t("invest.ofTheGain", { pct: pct(from.performance_bps) }) : null, next: t("invest.ofTheGain", { pct: pct(to.performance_bps) }) },
-    { key: "admin.fees.field.hurdle", now: from ? pct(from.hurdle_bps) : null, next: pct(to.hurdle_bps) },
-    { key: "admin.fees.chargedOn", now: from ? basisLabel(from.basis, t) : null, next: basisLabel(to.basis, t) },
-    { key: "invest.lockedIn", now: from ? crystallizationLabel(from.crystallization, t) : null, next: crystallizationLabel(to.crystallization, t) },
+  const rows: { key: string; label: string; now: string | null; next: string }[] = [
+    { key: "admin.fees.field.management", label: t("admin.fees.field.management", "Management"), now: from ? t("invest.perAnnum", "{pct} p.a.", { pct: pct(from.management_bps) }) : null, next: t("invest.perAnnum", "{pct} p.a.", { pct: pct(to.management_bps) }) },
+    { key: "admin.fees.field.performance", label: t("admin.fees.field.performance", "Performance"), now: from ? t("invest.ofTheGain", "{pct} of the gain", { pct: pct(from.performance_bps) }) : null, next: t("invest.ofTheGain", "{pct} of the gain", { pct: pct(to.performance_bps) }) },
+    { key: "admin.fees.field.hurdle", label: t("admin.fees.field.hurdle", "Hurdle"), now: from ? pct(from.hurdle_bps) : null, next: pct(to.hurdle_bps) },
+    { key: "admin.fees.chargedOn", label: t("admin.fees.chargedOn", "Charged on"), now: from ? basisLabel(from.basis, t) : null, next: basisLabel(to.basis, t) },
+    { key: "invest.lockedIn", label: t("invest.lockedIn", "Locked in"), now: from ? crystallizationLabel(from.crystallization, t) : null, next: crystallizationLabel(to.crystallization, t) },
   ];
   return (
     // The kit's wrapper already scrolls; the border is the frame the approval page draws
@@ -37,8 +37,8 @@ export function FeeTermsDiff({ from, to }: { from: FeeTermsLike | null | undefin
         <TableHeader>
           <TableRow>
             <TableHead className={HEAD} />
-            <TableHead className={HEAD}>{t("consilium.feePolicy.now")}</TableHead>
-            <TableHead className={HEAD}>{t("consilium.feePolicy.proposed")}</TableHead>
+            <TableHead className={HEAD}>{t("consilium.feePolicy.now", "Now")}</TableHead>
+            <TableHead className={HEAD}>{t("consilium.feePolicy.proposed", "Proposed")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -48,8 +48,8 @@ export function FeeTermsDiff({ from, to }: { from: FeeTermsLike | null | undefin
             const moved = row.now !== row.next;
             return (
               <TableRow key={row.key}>
-                <TableCell className="whitespace-normal px-3 text-ink-soft">{t(row.key)}</TableCell>
-                <TableCell className="whitespace-normal px-3 tabular-nums text-ink-soft">{row.now ?? t("consilium.feePolicy.nothingCharged")}</TableCell>
+                <TableCell className="whitespace-normal px-3 text-ink-soft">{row.label}</TableCell>
+                <TableCell className="whitespace-normal px-3 tabular-nums text-ink-soft">{row.now ?? t("consilium.feePolicy.nothingCharged", "Nothing charged")}</TableCell>
                 <TableCell className={cn("whitespace-normal px-3 tabular-nums", moved ? "font-semibold text-accent-warn" : "text-ink")}>{row.next}</TableCell>
               </TableRow>
             );

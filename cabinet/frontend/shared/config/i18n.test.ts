@@ -26,13 +26,13 @@ const translate = (locale: Locale) =>
 
 for (const key of ["meta.title", "meta.description"]) {
   test(`${key} is translated in every non-English locale`, () => {
-    // `translator` answers a missing key with the key itself, never an empty string — so
-    // presence is checked on the catalogue, not on the resolved text.
+    // `translator` answers a missing key with the English it was handed, never an empty
+    // string — so presence is checked on the catalogue, not on the resolved text.
     assert.ok(key in en, `${key} is missing from messages/en/common.json`);
-    const source = translate(DEFAULT_LOCALE)(key);
+    const source = translate(DEFAULT_LOCALE)(key, en[key] ?? key);
     for (const locale of LOCALES) {
       if (locale === DEFAULT_LOCALE) continue;
-      const text = translate(locale)(key);
+      const text = translate(locale)(key, source);
       assert.notEqual(text, source, `${locale}/${key} is still the English "${source}"`);
     }
   });

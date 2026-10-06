@@ -3,7 +3,7 @@
 // emailed approvals. Each takes the caller's `t`, as `views/admin/lib/format.ts` does,
 // because this is a plain module with no translator of its own.
 //
-// Every lookup is guarded by a set and falls back to the bare wire word: the state
+// Every lookup is guarded by its table and falls back to the bare wire word: the state
 // machine lives in the money plane, and a state it grows tomorrow should render as
 // `reconciling`, not as `payment.state.reconciling` (see `shared/contracts/payments.ts`).
 
@@ -11,12 +11,39 @@ import type { Translate } from "@evinvest/i18n";
 
 import type { PaymentConsent } from "@/shared/contracts/payments";
 import { settledConsent } from "@/shared/lib/decision";
+import { wordFor } from "@/shared/lib/wire-words";
 
-const KNOWN_STATES: ReadonlySet<string> = new Set(["pending", "approved", "executed", "execution_failed", "rejected", "expired", "cancelled"]);
+const stateWords = (t: Translate): Readonly<Record<string, string>> => ({
+  pending: t("payment.state.pending", "Pending"),
+  approved: t("payment.state.approved", "Approved"),
+  executed: t("payment.state.executed", "Executed"),
+  execution_failed: t("payment.state.execution_failed", "Execution failed"),
+  rejected: t("payment.state.rejected", "Rejected"),
+  expired: t("payment.state.expired", "Expired"),
+  cancelled: t("payment.state.cancelled", "Cancelled"),
+});
 
-const KNOWN_TIERS: ReadonlySet<string> = new Set(["internal", "service", "external"]);
+const tierWords = (t: Translate): Readonly<Record<string, string>> => ({
+  internal: t("payment.tier.internal", "Internal"),
+  service: t("payment.tier.service", "To a product"),
+  external: t("payment.tier.external", "External"),
+});
 
-const KNOWN_REQUIREMENTS: ReadonlySet<string> = new Set(["owner_consilium", "subject_consent"]);
+const tierHints = (t: Translate): Readonly<Record<string, string>> => ({
+  internal: t("payment.tier.hint.internal", "Between two claims inside the fund. No money leaves the ledger."),
+  service: t("payment.tier.hint.service", "Into one of the fund's products, as its pooled claim."),
+  external: t("payment.tier.hint.external", "Out to an on-chain address. Ships as a withdrawal once approved."),
+});
+
+const requirementWords = (t: Translate): Readonly<Record<string, string>> => ({
+  owner_consilium: t("payment.requirement.owner_consilium", "Owners' consilium"),
+  subject_consent: t("payment.requirement.subject_consent", "The investor's consent"),
+});
+
+const requirementHints = (t: Translate): Readonly<Record<string, string>> => ({
+  owner_consilium: t("payment.requirement.hint.owner_consilium", "Fund-owned money: more than half of the owners must confirm from their mailboxes."),
+  subject_consent: t("payment.requirement.hint.subject_consent", "An investor's own money: that investor alone is emailed and must agree."),
+});
 
 /** Still waiting on an answer — the only state the initiator can still cancel. */
 export function isPaymentOpen(state: string): boolean {
@@ -24,7 +51,7 @@ export function isPaymentOpen(state: string): boolean {
 }
 
 export function paymentStateLabel(state: string, t: Translate): string {
-  return KNOWN_STATES.has(state) ? t(`payment.state.${state}`) : state;
+  return wordFor(stateWords(t), state) ?? state;
 }
 
 /** Token classes for a state pill. Neutral unless the state carries real news. */
@@ -44,16 +71,21 @@ export function paymentStateTone(state: string): string {
 }
 
 export function tierLabel(tier: string, t: Translate): string {
-  return KNOWN_TIERS.has(tier) ? t(`payment.tier.${tier}`) : tier;
+  return wordFor(tierWords(t), tier) ?? tier;
 }
 
 /** What the tier means for the money, in a sentence — for a reader who is not an operator. */
 export function tierHint(tier: string, t: Translate): string {
-  return KNOWN_TIERS.has(tier) ? t(`payment.tier.hint.${tier}`) : tier;
+  return wordFor(tierHints(t), tier) ?? tier;
 }
 
 export function requirementLabel(requirement: string, t: Translate): string {
-  return KNOWN_REQUIREMENTS.has(requirement) ? t(`payment.requirement.${requirement}`) : requirement;
+  return wordFor(requirementWords(t), requirement) ?? requirement;
+}
+
+/** Who has to agree, in a sentence — the requirement's hint beside its label. */
+export function requirementHint(requirement: string, t: Translate): string {
+  return wordFor(requirementHints(t), requirement) ?? requirement;
 }
 
 /**
@@ -65,11 +97,11 @@ export function requirementLabel(requirement: string, t: Translate): string {
  * truthy "pending" string.
  */
 export function consentLabel(consent: PaymentConsent, t: Translate): string {
-  if (consent.invalidated) return t("payment.consent.invalidated");
+  if (consent.invalidated) return t("payment.consent.invalidated", "Consent void");
   const settled = settledConsent(consent.decision);
-  if (settled === "approve") return t("payment.consent.approve");
-  if (settled === "reject") return t("payment.consent.reject");
-  return consent.notified ? t("payment.consent.pending") : t("payment.consent.unsent");
+  if (settled === "approve") return t("payment.consent.approve", "Consented");
+  if (settled === "reject") return t("payment.consent.reject", "Declined");
+  return consent.notified ? t("payment.consent.pending", "Awaiting the investor") : t("payment.consent.unsent", "Email not yet sent");
 }
 
 export function consentTone(consent: PaymentConsent): string {
