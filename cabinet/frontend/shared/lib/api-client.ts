@@ -28,6 +28,7 @@ import { apiPath } from "@/shared/config/base-path";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { replaying } from "@/shared/lib/replay";
 import { cachedSession, refreshIfStale, refreshSession, sessionGeneration } from "@/shared/lib/session";
+import { wordFor } from "@/shared/lib/wire-words";
 
 /** The session is provably gone — offer sign-in, not a retry. */
 export class SessionExpiredError extends Error {
@@ -80,7 +81,9 @@ export class RequestError extends Error {
  */
 export function errorMessage(error: unknown, t: Translate): string {
   if (error instanceof SessionExpiredError) return errorWords(t)[error.code];
-  if (error instanceof RequestError) return error.code ? errorWords(t)[error.code] : error.message;
+  // `wordFor`, not a bare index: `code` is typed, but any caller can cast into the
+  // constructor, and an unknown code must still say its English message, never `undefined`.
+  if (error instanceof RequestError) return (error.code && wordFor(errorWords(t), error.code)) || error.message;
   return t("err.requestFailed", "Something went wrong on our side. Please try again.");
 }
 
