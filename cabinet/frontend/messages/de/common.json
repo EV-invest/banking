@@ -2687,6 +2687,14 @@
     "en": "Sign out",
     "t": "Abmelden"
   },
+  "auth.manageAccount": {
+    "en": "Manage account",
+    "t": "Konto verwalten"
+  },
+  "auth.switchAccount": {
+    "en": "Switch account",
+    "t": "Konto wechseln"
+  },
   "auth.signedOut": {
     "en": "Signed out",
     "t": "Abgemeldet"
@@ -6922,6 +6930,10 @@
   "ui.verified": {
     "en": "Verified",
     "t": "Bestätigt"
+  },
+  "ui.services": {
+    "en": "Services",
+    "t": "Dienste"
   },
   "ui.walletHistory": {
     "en": "History",

@@ -1,7 +1,7 @@
 "use client";
 
-import { BadgeCheck, LogOut } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { translator, type Translate } from "@evinvest/i18n";
 
@@ -17,7 +17,12 @@ import { SESSION_UNAVAILABLE, useSession } from "@/shared/lib/use-session";
 import { signInHref } from "../lib/sign-in-href";
 import { clearIdentity, readIdentity, writeIdentity } from "../model/identity-cache";
 
-// The chip's three controls are hand-written so the bundle stays free of the uikit Button,
+// Inlined by `mfe/build.mjs`; unset, the menu offers no Service-Arb. Not through `config`:
+// that reads every variable off `process`, which this bundle does not have on the host page.
+// eslint-disable-next-line no-restricted-properties
+const SA_PANEL_URL = process.env.NEXT_PUBLIC_SA_PANEL_URL;
+
+// The chip's controls are hand-written so the bundle stays free of the uikit Button,
 // which means the keyboard focus ring has to be written out too.
 const CHIP_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -28,7 +33,7 @@ const CHIP_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
  * below: this bundle mounts on the CONDUCTOR origin, where none of the cabinet's React
  * tree — and so no `I18nProvider` — exists above it. The hook would throw. It reads the
  * locale the way it already reads it for every link it builds, off the document it was
- * mounted into, and constructs a translator over `chip-messages.ts` — the four strings
+ * mounted into, and constructs a translator over `chip-messages.ts` — the strings
  * this component renders, and nothing else. Not the cabinet's `messagesFor()`: that pulls
  * all five `common.json` files and runs the resolve policy over them at module scope,
  * which put 532 KB of catalogue into a bundle the conductor injects on every page of the
@@ -50,7 +55,8 @@ function chipTranslator(): Translate {
 // header (registered in site_conductor's mfe-registry as `cabinet.account`). It replaces
 // the header's old "Investor Portal" button and owns all three states itself:
 //   • loading      → a compact skeleton
-//   • authenticated → avatar + name + Verified + sign-out
+//   • authenticated → avatar + name, opening the account menu in the order every service
+//                     keeps (lib ts/uikit README, "The top bar contract")
 //   • signed-out   → the Cabinet CTA (so anonymous marketing-site visitors still
 //                     get a way into the cabinet)
 //
@@ -171,35 +177,105 @@ function AuthedChip({
   }
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <a
-        href={chipHref()}
-        className={cn("flex min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-ink/5", CHIP_FOCUS)}
+    <AccountMenu className={className} email={email} name={name} onSignOut={signOut} />
+  );
+}
+
+/**
+ * Name / email, Manage account, the services, Switch account, Sign out. A disclosure, not
+ * an ARIA menu: its entries are plain links Tab already walks, and Escape or a click
+ * elsewhere closes it.
+ */
+function AccountMenu({
+  className,
+  email,
+  name,
+  onSignOut,
+}: {
+  className?: string;
+  email: string | null;
+  name: string | null;
+  onSignOut: () => void;
+}) {
+  const t = chipTranslator();
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  const here = typeof document === "undefined" ? "/" : document.location.pathname + document.location.search;
+  // Spelled out to the reset: the host page's base styles are not this bundle's to rely on.
+  const entry = cn(
+    "block w-full rounded-md bg-transparent px-2 py-1.5 text-left text-sm text-ink no-underline transition-colors hover:bg-ink/5",
+    CHIP_FOCUS,
+  );
+  const rule = "my-1 border-0 border-t border-solid border-border";
+  return (
+    <div ref={root} className={cn("relative", className)}>
+      <button
+        ref={trigger}
+        type="button"
+        aria-expanded={open}
+        aria-controls="ev-account-menu"
+        onClick={() => setOpen((o) => !o)}
+        className={cn("flex min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-1.5 py-1 transition-colors hover:bg-ink/5", CHIP_FOCUS)}
       >
         <span className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-primary-ink/15 text-xs font-semibold text-primary-ink">
           {initialsOf(email)}
         </span>
-        <div className="min-w-0">
-          {name ? (
-            <p className="truncate text-sm font-semibold text-ink">{name}</p>
-          ) : (
-            <span className="my-1 block h-3 w-24 animate-pulse rounded bg-ink/10" aria-hidden />
-          )}
-          {/* i18n-max: 12 — sits under the name inside the chip's `min-w-0` column, which
-              is what the conductor's central nav is centred against. */}
-          <p className="flex items-center gap-1 text-xs font-medium text-primary-ink">
-            <BadgeCheck className="size-3 shrink-0" /> {t("ui.verified", "Verified")}
-          </p>
-        </div>
-      </a>
-      <button
-        type="button"
-        onClick={signOut}
-        aria-label={t("auth.signOut", "Sign out")}
-        className={cn("shrink-0 rounded-md text-ink-soft transition-colors hover:text-ink", CHIP_FOCUS)}
-      >
-        <LogOut className="size-4" />
+        {name ? (
+          <span className="truncate text-sm font-semibold text-ink">{name}</span>
+        ) : (
+          <span className="block h-3 w-24 animate-pulse rounded bg-ink/10" aria-hidden />
+        )}
+        <ChevronDown className="size-4 shrink-0 text-ink-soft" aria-hidden />
       </button>
+      {open && (
+        <div
+          id="ev-account-menu"
+          className="absolute right-0 top-full z-50 mt-2 flex w-64 flex-col rounded-lg border border-border bg-popover p-1 shadow-md"
+        >
+          <a href={chipHref()} className={cn(entry, "flex flex-col")}>
+            {name && <span className="truncate font-semibold">{name}</span>}
+            <span className="truncate text-ink-soft">{email}</span>
+          </a>
+          <a href={cabinetPath(documentLocale(), "/settings")} className={entry}>
+            {t("auth.manageAccount", "Manage account")}
+          </a>
+          {SA_PANEL_URL && (
+            <>
+              <hr className={rule} />
+              <p className="m-0 px-2 py-1 text-xs text-ink-soft">{t("ui.services", "Services")}</p>
+              <a href={SA_PANEL_URL} className={entry}>
+                Service-Arb
+              </a>
+            </>
+          )}
+          <hr className={rule} />
+          {/* Google's chooser is on every sign-in; the new session closes this one. */}
+          <a href={`/api/auth/login?returnTo=${encodeURIComponent(here)}`} className={entry}>
+            {t("auth.switchAccount", "Switch account")}
+          </a>
+          <button type="button" onClick={onSignOut} className={cn(entry, "cursor-pointer border-0")}>
+            {t("auth.signOut", "Sign out")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
