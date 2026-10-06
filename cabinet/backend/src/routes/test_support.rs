@@ -87,4 +87,8 @@ impl AuthService for ConciergeJwks {
 	async fn revoke_session(&self, _: Request<cc::RevokeSessionRequest>) -> Result<Response<cc::RevokeSessionResponse>, Status> {
 		not_reached()
 	}
+
+	async fn publish_catalog(&self, _: Request<cc::PublishCatalogRequest>) -> Result<Response<cc::PublishCatalogResponse>, Status> {
+		not_reached()
+	}
 }

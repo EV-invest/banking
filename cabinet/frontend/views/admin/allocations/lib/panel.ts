@@ -5,7 +5,7 @@
 import type { Allocation } from "@/shared/contracts/admin";
 
 // `panelAccess` is the odd one out: who may open the vertical's own panel (identity-plane
-// scopes), not a money right — hence a name that cannot be read as the `grants` beside it.
+// tenant grants), not a money right — hence a name that cannot be read as the `grants` beside it.
 export type AllocationPanelKind = "grants" | "issue" | "book" | "panelAccess";
 
 /** The one side panel open beside the table — a row and which of its panels. One slot,

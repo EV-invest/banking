@@ -90,9 +90,9 @@ export type {
   ConciergeV1UpdateProfileRequest as UpdateProfileRequest,
   ConciergeV1Session as Session,
   ConciergeV1ListSessionsResponse as SessionList,
-  // Who may open a vertical's panel: `allocation:<service_id>` grants, read and changed
-  // through `/api/admin/allocations/{service_id}/scopes` and listed on `GET /api/users`.
-  ConciergeV1ScopedGrant as ScopedGrant,
-  ConciergeV1ScopeHolder as ScopeHolder,
-  ConciergeV1ListScopedGrantsResponse as ScopeHolderList,
+  // What a user holds inside a tenant's namespace, read and changed through
+  // `/api/admin/tenants/{namespace}/grants`.
+  ConciergeV1PermissionGrant as PermissionGrant,
+  ConciergeV1GrantHolder as GrantHolder,
+  ConciergeV1ListGrantsResponse as GrantHolderList,
 } from "./gen";

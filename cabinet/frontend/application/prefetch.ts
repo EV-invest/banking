@@ -33,8 +33,8 @@ import { allocationsResource, fundNavResource, positionsResource, redemptionsRes
 import { notificationSettingsResource, notificationsResource } from "@/entities/notification/model/notification-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
 import { paymentsResource } from "@/entities/payment/model/payment-resource";
-import { isServiceId } from "@/entities/scope/lib/access";
-import { scopeHoldersResource } from "@/entities/scope/model/scope-resource";
+import { isServiceId, tenantOf } from "@/entities/grant/lib/access";
+import { grantHoldersResource } from "@/entities/grant/model/grant-resource";
 import { sessionsResource } from "@/entities/session/model/session-resource";
 import { profileResource } from "@/entities/user/model/profile-resource";
 import { depositsResource, walletResource, withdrawalsResource } from "@/entities/wallet/model/wallet-resource";
@@ -64,13 +64,14 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
     },
   },
   { prefix: "/admin/revenue", warm: () => fundRevenueResource.prefetch() },
-  // `/admin/allocations/<service>` is the panel-access page, open to a scope's admin who
-  // cannot read the registry — warming that would only buy them a 403.
+  // `/admin/allocations/<service>` is the panel-access page, open to a delegate who cannot
+  // read the registry — warming that would only buy them a 403.
   {
     prefix: "/admin/allocations/",
     warm: (path) => {
       const service = path.slice("/admin/allocations/".length).split("/")[0] ?? "";
-      if (isServiceId(service)) scopeHoldersResource.prefetch(service);
+      const namespace = isServiceId(service) ? tenantOf(service) : null;
+      if (namespace !== null) grantHoldersResource.prefetch(namespace);
     },
   },
   { prefix: "/admin/allocations", warm: () => adminAllocationsResource.prefetch() },

@@ -2,7 +2,7 @@
 
 import { type ReactNode } from "react";
 
-import { isPanelAccessRoute } from "@/entities/scope/lib/access";
+import { isPanelAccessRoute } from "@/entities/grant/lib/access";
 import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { useSession } from "@/shared/lib/use-session";
 import { ForbiddenScreen } from "@/shared/ui/forbidden-screen";
@@ -23,8 +23,8 @@ import { ForbiddenScreen } from "@/shared/ui/forbidden-screen";
 // the fetch is in flight would flash it at every operator on every admin load.
 //
 // One page is let through without a console role: an allocation's panel-access page,
-// which a scope's own admin — usually no operator at all — has to reach. It gates itself
-// on the scope, and the identity plane re-checks every call it makes.
+// which a tenant's delegate — usually no operator at all — has to reach. The identity
+// plane checks every call it makes.
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const session = useSession();
   const pathname = useCabinetPathname();

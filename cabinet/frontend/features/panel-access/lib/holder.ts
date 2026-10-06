@@ -7,7 +7,7 @@ export interface HolderLike {
 }
 
 /** The name to show beside the email: what the person asked to be called, else their legal
- *  name (empty for a caller who is only the scope's admin), else nothing. */
+ *  name (empty for a caller who is only a delegate), else nothing. */
 export function holderName(holder: HolderLike): string {
   return holder.preferred_name?.trim() || holder.legal_name?.trim() || "";
 }

@@ -4987,9 +4987,9 @@
     "en": "Person",
     "t": "Người dùng"
   },
-  "panelAccess.col.role": {
-    "en": "Role",
-    "t": "Vai trò"
+  "panelAccess.col.target": {
+    "en": "Access",
+    "t": "Quyền"
   },
   "panelAccess.empty": {
     "en": "No one has panel access",
@@ -5004,20 +5004,20 @@
     "t": "Không thể cấp quyền cho địa chỉ này."
   },
   "panelAccess.err.forbidden": {
-    "en": "You can't make this change. A panel admin can add and remove operators only.",
-    "t": "Bạn không thể thực hiện thay đổi này. Quản trị viên bảng chỉ có thể thêm và gỡ người vận hành."
+    "en": "You can't make this change. You can grant and revoke only what your own access lets you hand on.",
+    "t": "Bạn không thể thực hiện thay đổi này. Bạn chỉ có thể cấp và thu hồi những gì quyền của chính bạn cho phép chuyển giao."
   },
   "panelAccess.err.forbiddenList": {
     "en": "You don't have permission to manage access to this panel.",
     "t": "Bạn không có quyền quản lý quyền truy cập bảng này."
   },
   "panelAccess.err.invalid": {
-    "en": "Check the email address and try again.",
-    "t": "Kiểm tra lại địa chỉ email và thử lại."
+    "en": "Check the email address and what you're granting, then try again.",
+    "t": "Kiểm tra địa chỉ email và quyền bạn đang cấp, rồi thử lại."
   },
   "panelAccess.err.notHolder": {
-    "en": "This person no longer has access to the panel.",
-    "t": "Người này không còn quyền vào bảng."
+    "en": "This person no longer holds this access.",
+    "t": "Người này không còn giữ quyền này."
   },
   "panelAccess.err.tooMany": {
     "en": "Too many attempts. Try again later.",
@@ -5027,25 +5027,29 @@
     "en": "Email",
     "t": "Địa chỉ email"
   },
-  "panelAccess.field.role": {
-    "en": "Role",
-    "t": "Vai trò"
+  "panelAccess.field.target": {
+    "en": "What to grant",
+    "t": "Quyền cấp"
   },
   "panelAccess.grant": {
     "en": "Grant access",
     "t": "Cấp quyền"
   },
-  "panelAccess.grantOperator": {
-    "en": "Add operator",
-    "t": "Thêm người vận hành"
+  "panelAccess.orphaned": {
+    "en": "Grants nothing",
+    "t": "Không cấp gì"
+  },
+  "panelAccess.orphanedHint": {
+    "en": "The panel no longer defines this, so it grants nothing until the panel defines it again.",
+    "t": "Bảng điều khiển không còn định nghĩa quyền này, nên nó không cấp gì cho đến khi được định nghĩa lại."
   },
   "panelAccess.revoke": {
     "en": "Revoke",
     "t": "Thu hồi"
   },
   "panelAccess.revokeBody": {
-    "en": "{who} will no longer be able to open the panel. You can grant access again later.",
-    "t": "{who} sẽ không thể mở bảng nữa. Bạn có thể cấp lại quyền sau."
+    "en": "{who} will lose {target}. You can grant it again later.",
+    "t": "{who} sẽ mất {target}. Bạn có thể cấp lại sau."
   },
   "panelAccess.revokeTitle": {
     "en": "Revoke panel access?",
