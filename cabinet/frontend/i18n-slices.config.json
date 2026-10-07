@@ -1,0 +1,9 @@
+{
+  "tables": [
+    {
+      "table": "shared/tips/copy.ts",
+      "keys": ["tips.*.title", "tips.*.body"],
+      "ignore": ["shared/tips/catalog.ts"]
+    }
+  ]
+}
