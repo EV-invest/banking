@@ -47,8 +47,11 @@ export const catalogueReport = () => Object.values(RESOLVED);
 // `evinvest-i18n-slices` from the import graph, gated by `i18n:check`) says which
 // keys the client tree under each layout and each page actually renders.
 //
-// English is left as it was: `t(key, English)` carries the copy at the call site
-// and the `en` provider never reads its catalogue, so there is nothing to slice.
+// English gets no catalogue at all. `t(key, English)` carries the copy at the
+// call site, and the registry's translator ignores `messages` for the default
+// locale (`source = locale === defaultLocale ? null : messages` in
+// @evinvest/i18n's registry.ts) — `I18nScope` short-circuits on it too — so the
+// ~1800 English strings it used to serialise into every page were never read.
 //
 // `satisfies` and not an annotation: the annotation would widen `routes` to
 // `Record<string, …>` and a mistyped route would compile.
@@ -57,11 +60,12 @@ const SLICES = slices satisfies MessageSlices;
 /** A page entry under `app/`, exactly as `i18n-slices.json` keys it. */
 export type RouteEntry = keyof typeof SLICES.routes;
 
+// One shared empty object for `en`, from the provider and every scope alike.
 const NO_MESSAGES: Messages = Object.freeze({});
 
 /** The root provider's catalogue: what layouts and boundary files render. */
 export const shellMessages = (locale: Locale): Messages =>
-  locale === "en" ? messagesFor(locale) : pickMessages(messagesFor(locale), SLICES.shell);
+  locale === "en" ? NO_MESSAGES : pickMessages(messagesFor(locale), SLICES.shell);
 
 /**
  * What a page's `<I18nScope>` lays over the shell. `route` is the page file's
