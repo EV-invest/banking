@@ -1,13 +1,6 @@
 import { createSentrySink } from "@evinvest/error-monitoring";
 
-/**
- * A code-split chunk that failed to download. Both bundlers name the error this way, and
- * Turbopack caches the rejected chunk for the life of the page: asking again without a
- * reload replays the same failure, so the only honest recovery offered is a reload.
- */
-export function isChunkLoadError(error: unknown): boolean {
-  return error instanceof Error && error.name === "ChunkLoadError";
-}
+export { isChunkLoadError } from "./chunk-load-error.ts";
 
 /**
  * Reports a lazily loaded module that never arrived and was degraded around rather than
