@@ -170,8 +170,14 @@ async function renewIfLapsing(req: NextRequest): Promise<Renewal | null> {
 
 // Appended last, as raw lines: `res.cookies.set` rewrites the Set-Cookie header from its
 // own map, so anything it is asked to do after this would drop them.
+//
+// A response carrying someone's fresh credential must never be stored by a shared cache.
+// Pages are no-store today only because the root layout happens to read `headers()`; this
+// says it where the credential is added.
 function withSetCookies(res: NextResponse, lines: readonly string[]): NextResponse {
+  if (lines.length === 0) return res;
   for (const line of lines) res.headers.append("set-cookie", line);
+  res.headers.set("cache-control", "private, no-store");
   return res;
 }
 
