@@ -5,11 +5,12 @@ import { isLocale, negotiate, type Locale } from "@evinvest/i18n";
 
 import { experiments } from "@/application/experiments";
 import { config as appConfig } from "@/config";
-import { BASE_PATH, isNonPagePath, localeRepairedPath, zonePathname } from "@/shared/config/base-path";
+import { isNonPagePath, localeRepairedPath } from "@/shared/config/base-path";
 import { COOKIES } from "@/shared/config/cookies";
-import { isPublicPath, isTokenApprovalPath, zoneGatePath } from "@/shared/config/public-routes";
+import { isTokenApprovalPath } from "@/shared/config/public-routes";
 import { contentSecurityPolicy, websocketOrigin } from "@/shared/config/security";
 import { needsRenewal, renewAccess, type Renewal } from "@/shared/lib/access-renewal";
+import { decideSession } from "@/shared/lib/session-gate";
 
 const CSP_HEADER = "content-security-policy";
 const REFERRER_HEADER = "referrer-policy";
@@ -49,7 +50,7 @@ export async function proxy(req: NextRequest) {
   // asset hot path.
   if (isNonPagePath(pathname)) return NextResponse.next();
 
-  let signedIn = Boolean(req.cookies.get(COOKIES.session)?.value);
+  const signedIn = Boolean(req.cookies.get(COOKIES.session)?.value);
   const locale = localeOf(pathname);
 
   // Per-request nonce: written onto the forwarded request headers so Next applies
@@ -131,32 +132,18 @@ export async function proxy(req: NextRequest) {
   // `shared/lib/access-renewal.ts`. The renewed token replaces the stale one on the
   // forwarded request (the A/B proxy forwards `req.headers`, so the CSP header set above
   // rides along), and the identity plane's Set-Cookie lines go to the browser verbatim.
+  // What follows from the outcome is decided in `shared/lib/session-gate.ts`.
   const renewal = signedIn ? await renewIfLapsing(req) : null;
-  if (renewal?.kind === "alive" && renewal.access) req.cookies.set(COOKIES.access, renewal.access);
-  if (renewal?.kind === "gone") {
-    // Same as arriving without a session: the cleared cookies go out with the bounce.
-    signedIn = false;
-    req.cookies.delete(COOKIES.session);
-    req.cookies.delete(COOKIES.access);
-  }
-  const finish = (res: NextResponse) => withRenewedCookies(res, renewal);
+  const decision = decideSession({ pathname, search, locale, hasSession: signedIn, renewal, cookieNames: COOKIES });
+  for (const [name, value] of Object.entries(decision.requestCookies)) req.cookies.set(name, value);
+  for (const name of decision.deleteCookies) req.cookies.delete(name);
+  const finish = (res: NextResponse) => withSetCookies(res, decision.setCookies);
 
-  if (!isPublicPath(pathname) && !signedIn) {
+  if (decision.redirect) {
     const url = req.nextUrl.clone();
-    url.pathname = `/${locale ?? "en"}${BASE_PATH}/login`;
+    url.pathname = decision.redirect.pathname;
     url.search = "";
-    // Zone-relative, like `SessionKeeper`'s: the login view puts `/{locale}/cabinet` back
-    // on when it hands returnTo to the shell. Passing the real path here doubled the
-    // prefix and landed every deep link on `/cabinet/{locale}/cabinet/…` (#390).
-    const returnTo = `${zonePathname(pathname)}${search}`;
-    if (returnTo !== "/") url.searchParams.set("returnTo", returnTo);
-    return finish(withCsp(NextResponse.redirect(url), csp));
-  }
-
-  if (signedIn && zoneGatePath(pathname) === "/login") {
-    const url = req.nextUrl.clone();
-    url.pathname = `/${locale ?? "en"}${BASE_PATH}`;
-    url.search = "";
+    if (decision.redirect.returnTo) url.searchParams.set("returnTo", decision.redirect.returnTo);
     return finish(withCsp(NextResponse.redirect(url), csp));
   }
 
@@ -175,10 +162,8 @@ async function renewIfLapsing(req: NextRequest): Promise<Renewal | null> {
 
 // Appended last, as raw lines: `res.cookies.set` rewrites the Set-Cookie header from its
 // own map, so anything it is asked to do after this would drop them.
-function withRenewedCookies(res: NextResponse, renewal: Renewal | null): NextResponse {
-  if (renewal && renewal.kind !== "unknown") {
-    for (const line of renewal.setCookies) res.headers.append("set-cookie", line);
-  }
+function withSetCookies(res: NextResponse, lines: readonly string[]): NextResponse {
+  for (const line of lines) res.headers.append("set-cookie", line);
   return res;
 }
 
