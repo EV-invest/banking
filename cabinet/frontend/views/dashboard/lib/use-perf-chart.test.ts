@@ -45,6 +45,19 @@ const mountPlot = (usePerfChart: Hook["usePerfChart"]) => {
   return renderHook(() => usePerfChart(host, SERIES, FORMAT), undefined);
 };
 
+/** Collects the process's unhandled rejections while `body` runs. */
+async function unhandledDuring(body: () => Promise<void>): Promise<unknown[]> {
+  const seen: unknown[] = [];
+  const record = (reason: unknown) => void seen.push(reason);
+  process.on("unhandledRejection", record);
+  try {
+    await body();
+  } finally {
+    process.off("unhandledRejection", record);
+  }
+  return seen;
+}
+
 test("both lines are drawn once the engine lands", async () => {
   const { engine, mod } = await freshHook();
   const plot = await mountPlot(mod.usePerfChart);
@@ -89,6 +102,16 @@ test("the preload and the plot share one download", async () => {
 
   assert.equal(engine.downloads, 1);
   assert.equal(engine.charts.length, 1);
+  await plot.unmount();
+});
+
+test("an engine that fails to download leaves no unhandled rejection behind", async () => {
+  const { engine, mod } = await freshHook();
+  const plot = await mountPlot(mod.usePerfChart);
+
+  const unhandled = await unhandledDuring(() => settle(() => engine.fail(new Error("chunk refused"))));
+
+  assert.deepEqual(unhandled, []);
   await plot.unmount();
 });
 
