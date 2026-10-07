@@ -8,7 +8,7 @@
 import { LineChart } from "lucide-react";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { type NavSeries, toNavSeries } from "@/entities/fund/lib/nav-series";
 import { fundNavHistoryResource } from "@/entities/fund/model/fund-history-resource";
@@ -18,7 +18,7 @@ import { Settled } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { EMPTY_BOX } from "@/views/dashboard/lib/chrome";
 import { formatPct, formatUsdt } from "@/views/dashboard/lib/format";
-import { type PerfFormat, usePerfChart } from "@/views/dashboard/lib/use-perf-chart";
+import { type PerfFormat, preloadPerfEngine, usePerfChart } from "@/views/dashboard/lib/use-perf-chart";
 
 // The plot's own height: tall enough for a curve to have a shape, and from `xl` whatever
 // the hero has left after its header, so the card fills the side column's two rows.
@@ -41,6 +41,9 @@ export function PerfChart({ allocation, from, className }: PerfChartProps) {
   // line is the caller's stake in USDT — the ledger unit, not the dashboard's summary "$".
   const format = useMemo<PerfFormat>(() => ({ performance: (pct) => formatPct(pct, locale), participation: (usdt) => formatUsdt(usdt, locale) }), [locale]);
   const loading = allocation === null || history.isLoading;
+  // The engine is fetched on demand; starting it here overlaps its download with the
+  // history request, so the plot does not wait on the two in turn.
+  useEffect(preloadPerfEngine, []);
 
   return (
     <Settled loading={loading} skeleton={<Skeleton className={PLOT_BOX} />} className={cn("flex flex-col gap-2", className)}>
