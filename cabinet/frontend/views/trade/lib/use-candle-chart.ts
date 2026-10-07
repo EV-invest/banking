@@ -5,11 +5,13 @@
 // pane. The engine is lightweight-charts (Apache-2.0, attribution kept on); nothing
 // outside this file names it, so an Advanced Charts swap is this file and a datafeed.
 //
-// The engine is ~50 KB gz, so it is fetched on demand rather than shipped with the route;
-// until it arrives the pane shows the same "loading" state as while history is in flight.
+// The engine is ~50 KB gz, so it is fetched on demand rather than shipped with the route.
+// The history request does not wait for it: both start on mount, and the bars land on the
+// chart when the second of the two arrives, so a cold cache costs max(engine, history)
+// rather than their sum. Until then the pane shows its "loading" state.
 
 import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useState, type RefObject } from "react";
 
 import type { CandleResolution } from "@/shared/contracts/book";
 import type { Bar } from "@/views/trade/lib/candles";
@@ -52,22 +54,17 @@ interface Plot {
   candles: ISeriesApi<"Candlestick">;
 }
 
-/** A load's outcome, stamped with what it was loaded for. */
-interface Outcome {
-  feed: ChartFeed;
-  resolution: CandleResolution;
-  state: ChartState;
-}
+/** One history request's result, stamped with what it was requested for. */
+type History = { feed: ChartFeed; resolution: CandleResolution } & ({ kind: "bars"; bars: Bar[] } | { kind: "failed"; error: unknown });
 
 const LOADING: ChartState = { kind: "loading" };
 
 export function useCandleChart(host: RefObject<HTMLDivElement | null>, feed: ChartFeed, resolution: CandleResolution): ChartState {
-  // State, not refs: the data effect must run again once the engine has arrived.
   const [plot, setPlot] = useState<Plot | null>(null);
   const [engineError, setEngineError] = useState<{ error: unknown } | null>(null);
-  // "Loading" is derived rather than set: an outcome stamped with another feed or
-  // resolution is stale, so a switch reads as loading from its first render on.
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [history, setHistory] = useState<History | null>(null);
+  // The history whose live tape has delivered a bar: an empty chart turns "ready" on it.
+  const [live, setLive] = useState<History | null>(null);
 
   // The engine and its one series live as long as the host does; a resolution change
   // swaps the data, not the chart, so the viewport's zoom survives it.
@@ -110,35 +107,46 @@ export function useCandleChart(host: RefObject<HTMLDivElement | null>, feed: Cha
     };
   }, [host]);
 
+  // The history request, independent of the engine: it starts on mount and on every
+  // resolution switch, whether or not there is a chart to draw it on yet.
   useEffect(() => {
-    if (!plot) return;
-    const { api, candles } = plot;
     let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
-    const settle = (state: ChartState) => setOutcome({ feed, resolution, state });
     const { from, to } = historyWindow(resolution);
     feed
       .history(resolution, from, to)
       .then((bars) => {
-        if (cancelled) return;
-        candles.setData(bars.map(toCandle));
-        api.timeScale().fitContent();
-        settle({ kind: bars.length === 0 ? "empty" : "ready" });
-        // `update` extends or replaces the last bar — never `setData` per tick.
-        unsubscribe = feed.subscribe(resolution, bars[bars.length - 1] ?? null, (bar) => {
-          candles.update(toCandle(bar));
-          setOutcome((o) => (o?.state.kind === "empty" ? { ...o, state: { kind: "ready" } } : o));
-        });
+        if (!cancelled) setHistory({ feed, resolution, kind: "bars", bars });
       })
       .catch((error: unknown) => {
-        if (!cancelled) settle({ kind: "failed", error });
+        if (!cancelled) setHistory({ feed, resolution, kind: "failed", error });
       });
     return () => {
       cancelled = true;
-      unsubscribe?.();
     };
-  }, [plot, feed, resolution]);
+  }, [feed, resolution]);
 
+  const current = history && history.feed === feed && history.resolution === resolution ? history : null;
+
+  // The meeting point: runs once both the chart and the current history are here. A layout
+  // effect, so the bars are on the series before the frame that drops the loading overlay.
+  useLayoutEffect(() => {
+    if (!plot || current?.kind !== "bars") return;
+    const { api, candles } = plot;
+    const { bars } = current;
+    candles.setData(bars.map(toCandle));
+    api.timeScale().fitContent();
+    // `update` extends or replaces the last bar — never `setData` per tick.
+    return current.feed.subscribe(current.resolution, bars[bars.length - 1] ?? null, (bar) => {
+      candles.update(toCandle(bar));
+      setLive(current);
+    });
+  }, [plot, current]);
+
+  // "Loading" is derived rather than set: a history stamped with another feed or
+  // resolution is stale, so a switch reads as loading from its first render on.
   if (engineError) return { kind: "failed", error: engineError.error };
-  return outcome && outcome.feed === feed && outcome.resolution === resolution ? outcome.state : LOADING;
+  if (!current) return LOADING;
+  if (current.kind === "failed") return { kind: "failed", error: current.error };
+  if (!plot) return LOADING;
+  return current.bars.length === 0 && live !== current ? { kind: "empty" } : { kind: "ready" };
 }
