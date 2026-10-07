@@ -10,9 +10,11 @@ import test from "node:test";
 
 import { deferred, installModuleHooks, renderHook, settle, type Deferred } from "../../../shared/__tests__/react-hook-harness.ts";
 import { fakeChartEngine } from "../../../shared/__tests__/fake-chart-engine.ts";
+import { chunkLoadError } from "../../../shared/__tests__/fake-download.ts";
 import type { CandleResolution } from "../../../shared/contracts/book.ts";
 import type { Bar } from "./candles.ts";
 import type { ChartFeed } from "./chart-feed.ts";
+import { chartOverlay } from "./chart-overlay.ts";
 
 type Hook = typeof import("./use-candle-chart.ts");
 
@@ -243,5 +245,31 @@ test("an empty market reads empty until the first live bar, then ready", async (
 
   assert.deepEqual(chart.current, { kind: "ready" });
   assert.equal(engine.charts[0]?.series[0]?.updates.length, 1);
+  await chart.unmount();
+});
+
+test("an engine chunk that never arrives ends in the pane's reload overlay", async () => {
+  const { engine, useCandleChart } = await freshHook();
+  const { feed, requests } = fakeFeed();
+  const chart = await mountPane(useCandleChart, feed, "1h");
+
+  await settle(() => {
+    requests[0]?.reply.resolve([bar(3600, "1.00")]);
+    return engine.fail(chunkLoadError());
+  });
+
+  assert.deepEqual(chartOverlay(chart.current), { kind: "reload" });
+  await chart.unmount();
+});
+
+test("a failed history read keeps the pane's error text, not the reload", async () => {
+  const { useCandleChart } = await freshHook();
+  const { feed, requests } = fakeFeed();
+  const chart = await mountPane(useCandleChart, feed, "1h");
+  const refused = Object.assign(new Error("candles unavailable"), { name: "RequestError" });
+
+  await settle(() => requests[0]?.reply.reject(refused));
+
+  assert.deepEqual(chartOverlay(chart.current), { kind: "error", error: refused });
   await chart.unmount();
 });

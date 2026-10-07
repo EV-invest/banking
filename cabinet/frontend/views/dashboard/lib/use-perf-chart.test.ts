@@ -9,6 +9,7 @@ import test from "node:test";
 
 import { installModuleHooks, renderHook, settle } from "../../../shared/__tests__/react-hook-harness.ts";
 import { fakeChartEngine } from "../../../shared/__tests__/fake-chart-engine.ts";
+import { chunkLoadError } from "../../../shared/__tests__/fake-download.ts";
 import type { NavSeries } from "../../../entities/fund/lib/nav-series.ts";
 import type { PerfFormat } from "./use-perf-chart.ts";
 
@@ -126,4 +127,56 @@ test("after a failed download the hook asks for the engine again on the next plo
   assert.equal(engine.downloads, 2);
   assert.equal(engine.charts.length, 1);
   await plot.unmount();
+});
+
+test("the plot reads loading until the engine lands, then ready", async () => {
+  const { engine, mod } = await freshHook();
+  const plot = await mountPlot(mod.usePerfChart);
+  assert.deepEqual(plot.current, { kind: "loading" });
+
+  await settle(() => engine.arrive());
+
+  assert.deepEqual(plot.current, { kind: "ready" });
+  await plot.unmount();
+});
+
+test("a download that fails reads failed, carrying the bundler's error", async () => {
+  const { engine, mod } = await freshHook();
+  const plot = await mountPlot(mod.usePerfChart);
+  const refused = chunkLoadError();
+
+  await settle(() => engine.fail(refused));
+
+  assert.deepEqual(plot.current, { kind: "failed", error: refused });
+  assert.equal(engine.charts.length, 0);
+  await plot.unmount();
+});
+
+test("the surface's own reader starts the download before any plot exists", async () => {
+  const { engine, mod } = await freshHook();
+
+  const surface = await renderHook(() => mod.usePerfEngine(), undefined);
+  const beforeArrival = surface.current;
+  // `arrive` waits for a download to start: without one this would never return.
+  await settle(() => engine.arrive());
+
+  assert.deepEqual(beforeArrival, { kind: "loading" });
+  assert.deepEqual(surface.current, { kind: "ready" });
+  await surface.unmount();
+});
+
+test("after a failure the next reader is back to loading, then ready on the second download", async () => {
+  const { engine, mod } = await freshHook();
+  const first = await renderHook(() => mod.usePerfEngine(), undefined);
+  await settle(() => engine.fail(chunkLoadError()));
+  await first.unmount();
+
+  const second = await renderHook(() => mod.usePerfEngine(), undefined);
+  const onMount = second.current;
+  await settle(() => engine.arrive());
+
+  assert.deepEqual(onMount, { kind: "loading" });
+  assert.deepEqual(second.current, { kind: "ready" });
+  assert.equal(engine.downloads, 2);
+  await second.unmount();
 });
