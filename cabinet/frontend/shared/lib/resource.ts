@@ -102,8 +102,9 @@ export interface ResourceConfig<T, A extends unknown[]> {
 /**
  * A value read before this page's JavaScript ran — by a server component, in the same
  * request — handed to {@link useSeededResource} so the first paint and the hydration agree
- * on real figures instead of a skeleton. `fetchedAt` is epoch ms of the read; the
- * resource's `revalidate` window counts from it, exactly as from a browser read.
+ * on real figures instead of a skeleton. `fetchedAt` is epoch ms of the read by the
+ * SERVER's clock — diagnostic only: the cache times a seed by when this browser first saw
+ * it (see `seed`), because two machines' clocks cannot be ordered against each other.
  */
 export interface ResourceSeed<T> {
   data: T;
@@ -167,11 +168,16 @@ interface Entry<T> {
   /** 0 until the first successful read — the "never loaded" marker `isStale` reads. */
   fetchedAt: number;
   /**
-   * Epoch ms of the last tag invalidation or sign-out. A seed read before it predates the
-   * change the invalidation announced (a router-cached page replayed by Back), so it is
-   * refused — see {@link seed}.
+   * Epoch ms of the last tag invalidation or sign-out. A seed received before it predates
+   * the change the invalidation announced, so it is refused — see {@link seed}.
    */
   invalidatedAt: number;
+  /**
+   * Seed objects already decided on. A view re-renders with the same seed prop for as long
+   * as it is mounted, and Back replays it from the router cache; deciding each object once
+   * keeps a seed from coming back over a value read after it.
+   */
+  readonly seeds: WeakSet<object>;
   /** Seeded during a render, which may not notify; the next subscribe tells the others. */
   unannounced: boolean;
   /**
@@ -241,12 +247,17 @@ function publishSnapshot<T>(entry: Entry<T>): void {
  * writes the snapshot without notifying — telling another component to update while this
  * one renders is an error. `unannounced` defers that to the next subscribe.
  *
- * Refused when the entry holds a value at least as recent, or was invalidated after the
- * seed was read. The seed's clock is clamped to this one's: a server clock running ahead
- * would otherwise keep the value "fresh" past its window.
+ * Decided once per seed object, at the moment this browser first sees it, and timed by
+ * this browser's clock alone: `value.fetchedAt` is the server's clock, and comparing it
+ * with times taken here lets any skew between the two machines reorder events — a server
+ * running ahead made a pre-withdrawal balance outrank the read that followed the
+ * withdrawal. Refused when received no later than the last invalidation or than the value
+ * the entry already holds.
  */
 function seed<T>(entry: Entry<T>, value: ResourceSeed<T>): void {
-  const fetchedAt = Math.min(value.fetchedAt, Date.now());
+  if (entry.seeds.has(value)) return;
+  entry.seeds.add(value);
+  const fetchedAt = Date.now();
   if (fetchedAt <= entry.invalidatedAt) return;
   if (entry.data !== undefined && entry.fetchedAt >= fetchedAt) return;
   entry.data = value.data;
@@ -506,6 +517,7 @@ export function defineResource<T, A extends unknown[] = []>(config: ResourceConf
       denied: false,
       fetchedAt: 0,
       invalidatedAt: 0,
+      seeds: new WeakSet(),
       unannounced: false,
       // Sound because the sweep only ever hands it `entry.data`, which is this `T`.
       poll: (config.poll as PollPolicy<unknown> | undefined) ?? null,
