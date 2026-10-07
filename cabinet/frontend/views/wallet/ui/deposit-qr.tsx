@@ -11,7 +11,17 @@ type QrProps = { value: string };
 
 // The QR encoder is only needed once an address is on screen, so it is fetched on demand
 // rather than shipped with the route.
-const loadPlate = () => import("@/views/wallet/ui/deposit-qr-plate");
+//
+// `loaded` is the module cache of an encoder that has already arrived (normally through
+// `preloadDepositQr` while the address was in flight). `lazy` suspends on its first render
+// even when its promise has long settled, and the Suspense reveal is then throttled, so the
+// QR would trail the address by a few hundred milliseconds for no download at all.
+let loaded: ComponentType<QrProps> | null = null;
+const loadPlate = () =>
+  import("@/views/wallet/ui/deposit-qr-plate").then((m) => {
+    loaded = m.DepositQr;
+    return m;
+  });
 
 // A chunk that never arrives must not take the screen down with it: the address and its
 // copy button are the deposit, the QR is a convenience. A failed download resolves to a
@@ -29,6 +39,8 @@ const LazyPlate = lazy<ComponentType<QrProps>>(() =>
 // The slot keeps the address-loading skeleton's exact box while the encoder arrives, so
 // the hand-off is skeleton → QR with nothing in between.
 export function DepositQr({ value }: QrProps) {
+  const Plate = loaded;
+  if (Plate) return <Plate value={value} />;
   return (
     <Suspense fallback={<Skeleton className="size-40 shrink-0 rounded-xl lg:size-45 lg:rounded-2xl" />}>
       <LazyPlate value={value} />
