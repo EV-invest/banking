@@ -5,9 +5,12 @@
 // pinning here is the policy: a fresh value is never re-fetched, a stale one is, a failed
 // read never destroys the value already held, and a mutation's tags reach every key.
 import assert from "node:assert/strict";
-import test, { beforeEach } from "node:test";
+import test, { afterEach, beforeEach, mock } from "node:test";
 
-import { clearResources, defineResource, mountForTests, pollSweepForTests, resetResourcesForTests, revalidateTag } from "./resource.ts";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
+
+import { clearResources, defineResource, mountForTests, pollSweepForTests, resetResourcesForTests, revalidateTag, useSeededResource, type Resource, type ResourceSeed } from "./resource.ts";
 
 beforeEach(() => {
   resetResourcesForTests();
@@ -400,4 +403,171 @@ test("a refused profile is not polled — a 403 is a verdict, not a pending case
   pollSweepForTests(25_000);
   await flush();
   assert.equal(state.calls, 1, "a refusal must not be collected once per poll");
+});
+
+// ── Seeds from server reads ─────────────────────────────────────────────────
+//
+// A server component hands its read to `useSeededResource`, which writes it into the shared
+// entry during render. The hook is the only way in, so these cases render it — with
+// `renderToString` and a stand-in `window`, which is what makes the hook take its browser
+// path (the server path deliberately never touches the shared registry). A re-render with
+// the same seed object is how a router-cache replay (browser Back) looks to the cache.
+
+const NOW = 1_800_000_000_000;
+
+/** Render one component that reads `resource` seeded with `initial`, as the browser would. */
+function renderSeeded<T>(resource: Resource<T, []>, initial: ResourceSeed<T> | undefined): void {
+  function Probe() {
+    useSeededResource(resource, initial);
+    return null;
+  }
+  Reflect.set(globalThis, "window", globalThis);
+  try {
+    renderToString(createElement(Probe));
+  } finally {
+    Reflect.deleteProperty(globalThis, "window");
+  }
+}
+
+/** A Map-backed `sessionStorage`, so the persisted half of an entry can be observed. */
+function installSessionStorage(initial: Record<string, string> = {}): Map<string, string> {
+  const store = new Map(Object.entries(initial));
+  Reflect.set(globalThis, "sessionStorage", {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+  });
+  return store;
+}
+
+afterEach(() => {
+  mock.timers.reset();
+  Reflect.deleteProperty(globalThis, "sessionStorage");
+});
+
+test("a seed fills an empty entry", () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60 });
+
+  renderSeeded(balance, { data: "98765.43", fetchedAt: NOW });
+
+  assert.equal(balance.peek(), "98765.43");
+});
+
+test("a seeded value is served without a request while it is fresh", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { state, fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60 });
+  renderSeeded(balance, { data: "98765.43", fetchedAt: NOW });
+
+  mock.timers.setTime(NOW + 59_999);
+  assert.equal(await balance.read(), "98765.43");
+  assert.equal(state.calls, 0, "a fresh seed must not be re-read from the browser");
+
+  mock.timers.setTime(NOW + 60_000);
+  assert.equal(await balance.read(), "from-browser");
+  assert.equal(state.calls, 1, "the seed ages on its own fetchedAt like any read");
+});
+
+test("a seed does not overwrite a value newer than itself", () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60 });
+  balance.publish("70.00");
+
+  renderSeeded(balance, { data: "100.00", fetchedAt: NOW - 5_000 });
+
+  assert.equal(balance.peek(), "70.00");
+});
+
+test("a seed read before a tag invalidation is refused — the withdrawal moved the balance since", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { state, fetch } = counted(() => "70.00");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, tags: ["wallet"] });
+  const beforeWithdrawal = { data: "100.00", fetchedAt: NOW - 1_000 };
+  renderSeeded(balance, beforeWithdrawal);
+
+  mock.timers.setTime(NOW + 1_000);
+  revalidateTag("wallet");
+  mock.timers.setTime(NOW + 2_000);
+  renderSeeded(balance, beforeWithdrawal);
+
+  assert.equal(await balance.read(), "70.00", "the pre-withdrawal seed must not count as fresh again");
+  assert.equal(state.calls, 1);
+});
+
+test("a seed read at the very moment of the invalidation is refused too", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { state, fetch } = counted(() => "70.00");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, tags: ["wallet"] });
+  renderSeeded(balance, undefined);
+
+  revalidateTag("wallet");
+  renderSeeded(balance, { data: "100.00", fetchedAt: NOW });
+
+  assert.equal(await balance.read(), "70.00");
+  assert.equal(state.calls, 1);
+});
+
+test("a seed read after a tag invalidation is adopted", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { state, fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, tags: ["wallet"] });
+  renderSeeded(balance, undefined);
+  revalidateTag("wallet");
+
+  mock.timers.setTime(NOW + 2_000);
+  renderSeeded(balance, { data: "70.00", fetchedAt: NOW + 1_500 });
+
+  assert.equal(await balance.read(), "70.00");
+  assert.equal(state.calls, 0);
+});
+
+test("a seed beats an older snapshot persisted by a previous visit", () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const store = installSessionStorage({ "ev.cabinet.resource:t.balance()": JSON.stringify({ v: "100.00", t: NOW - 10_000 }) });
+  const { fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, persist: true });
+
+  renderSeeded(balance, { data: "70.00", fetchedAt: NOW - 1_000 });
+
+  assert.equal(balance.peek(), "70.00");
+  assert.deepEqual(JSON.parse(store.get("ev.cabinet.resource:t.balance()") ?? "null"), { v: "70.00", t: NOW - 1_000 });
+});
+
+test("a persisted snapshot newer than the seed is kept", () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  installSessionStorage({ "ev.cabinet.resource:t.balance()": JSON.stringify({ v: "70.00", t: NOW - 1_000 }) });
+  const { fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, persist: true });
+
+  renderSeeded(balance, { data: "100.00", fetchedAt: NOW - 10_000 });
+
+  assert.equal(balance.peek(), "70.00");
+});
+
+test("a seed stamped by a clock running ahead is clamped to now", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { state, fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 15 });
+  renderSeeded(balance, { data: "98765.43", fetchedAt: NOW + 3_600_000 });
+
+  mock.timers.setTime(NOW + 15_000);
+  assert.equal(await balance.read(), "from-browser", "an hour-ahead stamp must not keep the value fresh for an hour");
+  assert.equal(state.calls, 1);
+});
+
+test("clearResources refuses a seed read before the sign-out", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60 });
+  const previousAccount = { data: "100.00", fetchedAt: NOW - 1_000 };
+  renderSeeded(balance, previousAccount);
+
+  clearResources();
+  mock.timers.setTime(NOW + 1_000);
+  renderSeeded(balance, previousAccount);
+
+  assert.equal(balance.peek(), undefined, "the previous account's figure must not come back from a replayed render");
 });
