@@ -7115,6 +7115,10 @@
     "en": "{network} address",
     "t": "Địa chỉ {network}"
   },
+  "wallet.qrUnavailable": {
+    "en": "QR code unavailable — use the address below.",
+    "t": "Không hiển thị được mã QR — hãy dùng địa chỉ bên dưới."
+  },
   "wallet.railActionUnavailable": {
     "en": "{action} is not available on this network yet",
     "t": "{action} chưa khả dụng trên mạng này"

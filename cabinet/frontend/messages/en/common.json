@@ -1796,6 +1796,7 @@
   "wallet.overviewVerifyTitle": "Verify your identity to use these networks",
   "wallet.pendWd": "PEND WD",
   "wallet.placeholder.railAddress": "{network} address",
+  "wallet.qrUnavailable": "QR code unavailable — use the address below.",
   "wallet.railActionUnavailable": "{action} is not available on this network yet",
   "wallet.railHazard": "Only send USDT on the {network} network to this address. Funds sent on any other network will be lost permanently.",
   "wallet.railUsdt": "{network} · USDT",

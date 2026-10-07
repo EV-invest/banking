@@ -7115,6 +7115,10 @@
     "en": "{network} address",
     "t": "Adresse {network}"
   },
+  "wallet.qrUnavailable": {
+    "en": "QR code unavailable — use the address below.",
+    "t": "QR code indisponible — utilisez l’adresse ci-dessous."
+  },
   "wallet.railActionUnavailable": {
     "en": "{action} is not available on this network yet",
     "t": "{action} n’est pas encore disponible sur ce réseau"
