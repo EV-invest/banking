@@ -253,8 +253,10 @@ message MigrateAddressToCustodianRequest {
   // signer refuses unless this equals the address it is about to retire, in that
   // chain's own equality rule.
   //
-  // The seam is already authenticated (service token + mTLS) and the hub is its only
-  // caller, so this is not a trust boundary being widened. And a mistaken attestation
+  // The seam is already authenticated (the hub's service token; TLS whenever the bind is
+  // non-loopback, mTLS only when SIGNER_TLS_CLIENT_CA_PEM_FILE is set, which the deployment
+  // does not do today) and the hub is its only caller, so this is not a trust boundary
+  // being widened. And a mistaken attestation
   // is NOT the rotation failure mode: the archived row keeps its sealed blob and the
   // KEK stays loaded until phase 5, so funds left behind are recoverable by an
   // operator, not stranded.

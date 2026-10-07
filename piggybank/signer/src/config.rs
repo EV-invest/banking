@@ -79,6 +79,13 @@ impl SignerConfig {
 
 		// The seam verifies the hub's service token, not a client access token: pin the
 		// service audience + `typ=service` so a user/client token can never drive it.
+		//
+		// The JWKS is served by the auth service in the hub, so a compromised hub can mint a
+		// token this accepts. Pinning the key here would not change that — the hub is the
+		// seam's only caller and already holds a valid service token — and would add a manual
+		// rotation step. The token only answers "is this the hub"; what a compromised hub can
+		// get signed is bounded by the signer's own policy (`policy.rs`: sweep destination,
+		// caps, windows, spend brake), and that is the boundary.
 		let verifier = VerifierConfig {
 			issuer: env::var("AUTH_ISSUER").unwrap_or_else(|_| "https://auth.banking.ev".to_string()),
 			audiences: split_csv(&env::var("AUTH_SERVICE_AUDIENCE").unwrap_or_else(|_| "banking-services".to_string())),

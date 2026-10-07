@@ -37,7 +37,11 @@ cookie, and the core/auth listeners trust any caller that can route to them. The
 **hub↔signer seam IS authenticated**: the signer mounts the shared verify layer and
 accepts only the hub's service token (`aud=banking-services`, `typ=service`), and requires
 TLS (mTLS recommended via `SIGNER_TLS_*`) whenever its bind/target is non-loopback —
-network reachability is not its trust boundary. Every listener still **defaults to
+network reachability is not its trust boundary. Client mTLS is supported but not configured
+in the deployment today. The token is not the boundary against a compromised hub either: the
+signer fetches its JWKS from the hub's auth service, so whoever owns the hub can mint a
+token it accepts. What bounds that case is the signer's own spend policy
+(`piggybank/signer/src/policy.rs` — sweep destination, caps, windows, spend brake). Every listener still **defaults to
 loopback** (`127.0.0.1`): the BFF (`CABINET_BACKEND_BIND`), the hub's
 `GRPC_ADDR`/`AUTH_GRPC_ADDR`, and the signer's `SIGNER_GRPC_ADDR`. A wider bind (`0.0.0.0`)
 is an explicit opt-in and is only safe **behind an upstream firewall / network ACL** that
