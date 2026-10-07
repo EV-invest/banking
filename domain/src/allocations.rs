@@ -28,7 +28,12 @@
 use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
 
-use crate::{balance::ServiceId, error::DomainError, money::Shares, users::UserId};
+use crate::{
+	balance::ServiceId,
+	error::DomainError,
+	money::{Shares, contains_url},
+	users::UserId,
+};
 
 /// The longest accepted display title.
 const MAX_TITLE_LEN: usize = 120;
@@ -750,6 +755,13 @@ fn validate_title(raw: &str) -> Result<String, DomainError> {
 	if title.chars().count() > MAX_TITLE_LEN {
 		return Err(DomainError::Validation(format!("allocation title must be at most {MAX_TITLE_LEN} characters")));
 	}
+	// The title is printed into consent and approval mail. Concierge refuses a URL there,
+	// which leaves the consilium waiting for an invitation that is never sent; an address
+	// it lets through, but a mail client still renders it as a link. A bare domain stays
+	// allowed: products are legitimately named after their sites (`Aquafix.ae`).
+	if contains_url(title) || title.contains('@') {
+		return Err(DomainError::Validation("allocation title must not contain a link or an address".into()));
+	}
 	Ok(title.to_owned())
 }
 
@@ -1221,6 +1233,18 @@ mod tests {
 		assert!(allocation.update_details("ok", &"x".repeat(MAX_SUMMARY_LEN + 1), Some(AllocationIcon::Fund)).is_err());
 		// An empty summary is legitimate — not every product needs a one-liner.
 		assert!(allocation.update_details("ok", "", Some(AllocationIcon::Fund)).is_ok());
+	}
+
+	#[test]
+	fn title_refuses_anything_a_mail_would_link() {
+		let mut allocation = registered();
+		for title in ["Fund https://evil.example", "See HTTP://x", "WWW.evil", "mail ops@evil.example"] {
+			assert!(allocation.update_details(title, "", None).is_err(), "{title} must be refused");
+		}
+		for title in ["EV Fund v2.0", "Acme Inc.", "Aquafix.ae", "St.Petersburg", "Service-Arb 80/20"] {
+			assert!(allocation.update_details(title, "", None).is_ok(), "{title} must be accepted");
+		}
+		assert!(Allocation::register(AllocationId::new(), svc(), "go to https://x", "", AllocationIcon::Fund).is_err());
 	}
 
 	#[test]
