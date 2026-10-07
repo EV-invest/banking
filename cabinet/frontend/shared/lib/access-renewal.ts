@@ -86,6 +86,23 @@ export function setCookieValue(line: string, name: string): string | null {
   return pair.slice(eq + 1).trim();
 }
 
+/**
+ * Whether a Set-Cookie line from the identity plane may be passed to the browser: one of
+ * the auth cookies this zone knows by name, host-only (no `Domain`), `Path=/`, and `Secure`
+ * whenever the cookies are meant to be. The plane is trusted, but this process is the one
+ * writing into the visitor's cookie jar, so it states what it is willing to write.
+ */
+export function acceptedSetCookie(line: string, names: readonly string[], secure: boolean): boolean {
+  const [pair = "", ...attributes] = line.split(";").map((part) => part.trim());
+  const eq = pair.indexOf("=");
+  if (eq === -1 || !names.includes(pair.slice(0, eq).trim())) return false;
+  const attrs = attributes.map((attr) => attr.toLowerCase());
+  if (attrs.some((attr) => attr.startsWith("domain"))) return false;
+  const paths = attrs.filter((attr) => attr.startsWith("path"));
+  if (paths.length !== 1 || paths[0]?.replace(/\s+/g, "") !== "path=/") return false;
+  return !secure || attrs.includes("secure");
+}
+
 export type Renewal =
   /** Signed in. `access` is the token to render with, or null if none was re-set. */
   | { kind: "alive"; access: string | null; setCookies: readonly string[] }
@@ -99,6 +116,10 @@ export interface RenewalRequest {
   authWebUrl: string;
   sessionCookie: { name: string; value: string };
   accessCookieName: string;
+  /** The CSRF cookie's name — the third cookie the plane may (re)set or clear. */
+  csrfCookieName?: string;
+  /** Require `Secure` on every Set-Cookie line passed through (`AUTH_COOKIE_SECURE`). */
+  secure?: boolean;
   timeoutMs?: number;
   fetch?: typeof fetch;
 }
@@ -138,7 +159,7 @@ interface Outcome {
 const NO_VERDICT: Outcome = { renewal: UNKNOWN, planeFailed: false };
 const PLANE_FAILED: Outcome = { renewal: UNKNOWN, planeFailed: true };
 
-async function callSession({ authWebUrl, sessionCookie, accessCookieName, timeoutMs = RENEW_TIMEOUT_MS, fetch: fetchImpl = fetch }: RenewalRequest): Promise<Outcome> {
+async function callSession({ authWebUrl, sessionCookie, accessCookieName, csrfCookieName, secure = false, timeoutMs = RENEW_TIMEOUT_MS, fetch: fetchImpl = fetch }: RenewalRequest): Promise<Outcome> {
   // Only the session id: the endpoint needs nothing else, and nothing else of the
   // browser's should leave this process.
   const headers = { accept: "application/json", cookie: `${sessionCookie.name}=${sessionCookie.value}` };
@@ -166,7 +187,8 @@ async function callSession({ authWebUrl, sessionCookie, accessCookieName, timeou
     return cause instanceof Error && cause.name === "TimeoutError" ? PLANE_FAILED : NO_VERDICT;
   }
   if (typeof body !== "object" || body === null || !("authenticated" in body) || typeof body.authenticated !== "boolean") return NO_VERDICT;
-  const setCookies = res.headers.getSetCookie();
+  const names = [sessionCookie.name, accessCookieName, ...(csrfCookieName ? [csrfCookieName] : [])];
+  const setCookies = res.headers.getSetCookie().filter((line) => acceptedSetCookie(line, names, secure));
   if (!body.authenticated) return { renewal: { kind: "gone", setCookies }, planeFailed: false };
   const access = setCookies.map((line) => setCookieValue(line, accessCookieName) ?? undefined).find(isAccessToken) ?? null;
   return { renewal: { kind: "alive", access, setCookies }, planeFailed: false };

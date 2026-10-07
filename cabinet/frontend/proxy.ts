@@ -159,7 +159,13 @@ async function renewIfLapsing(req: NextRequest): Promise<Renewal | null> {
   const authWebUrl = appConfig.authWebUrl;
   const session = req.cookies.get(COOKIES.session)?.value;
   if (!authWebUrl || !isSessionId(session) || !needsRenewal(req.cookies.get(COOKIES.access)?.value, Date.now())) return null;
-  return renewAccess({ authWebUrl, sessionCookie: { name: COOKIES.session, value: session }, accessCookieName: COOKIES.access });
+  return renewAccess({
+    authWebUrl,
+    sessionCookie: { name: COOKIES.session, value: session },
+    accessCookieName: COOKIES.access,
+    csrfCookieName: COOKIES.csrf,
+    secure: appConfig.authCookieSecure,
+  });
 }
 
 // Appended last, as raw lines: `res.cookies.set` rewrites the Set-Cookie header from its
