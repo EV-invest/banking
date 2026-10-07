@@ -238,7 +238,7 @@ impl TurnkeyBackend {
 		let client = builder.build().wrap_err("failed to build the Turnkey client")?;
 
 		let interval = duration_ms("TURNKEY_MIN_REQUEST_INTERVAL_MS", DEFAULT_MIN_REQUEST_INTERVAL)?;
-		tracing::info!(%organization_id, min_request_interval_ms = interval.as_millis(), "signer key backend: turnkey");
+		tracing::info!(organization_id = %redact_id(&organization_id), min_request_interval_ms = interval.as_millis(), "signer key backend: turnkey");
 		Ok(Self {
 			client,
 			organization_id,
@@ -612,6 +612,16 @@ fn decode_hex(value: &str) -> Option<Vec<u8>> {
 	hex::decode(value.strip_prefix("0x").unwrap_or(value)).ok()
 }
 
+/// The organization id is half of what a stolen API key needs to act, so boot logs carry only
+/// enough of it to tell two organizations apart.
+fn redact_id(id: &str) -> String {
+	const SHOWN: usize = 8;
+	match id.char_indices().nth(SHOWN) {
+		Some((cut, _)) => format!("{}…", &id[..cut]),
+		None => "<redacted>".to_owned(),
+	}
+}
+
 fn required(name: &'static str, missing: &mut Vec<&'static str>) -> String {
 	match env::var(name) {
 		Ok(value) if !value.trim().is_empty() => value,
@@ -645,6 +655,14 @@ mod tests {
 	/// assert it where it actually lands: the gRPC code `custody.rs` branches on.
 	fn code_for(err: &TurnkeyClientError) -> Code {
 		Status::from(classify(err, "test")).code()
+	}
+
+	#[test]
+	fn organization_id_is_logged_as_a_prefix_only() {
+		assert_eq!(redact_id("3f2c9a1e-7b4d-4e8a-9c21-5d6e7f8a9b0c"), "3f2c9a1e…");
+		// Too short to cut without showing all of it.
+		assert_eq!(redact_id("org-1"), "<redacted>");
+		assert_eq!(redact_id("12345678"), "<redacted>");
 	}
 
 	#[test]
