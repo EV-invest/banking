@@ -155,6 +155,11 @@ export async function proxy(req: NextRequest) {
 // Only when the cookie is missing or close to lapsing, so the common request — a fresh
 // token, an asset, a prefetch inside the TTL — never leaves this process. Unset
 // `AUTH_WEB_URL` turns the whole step off.
+//
+// A router prefetch cannot be told apart here: Next strips `next-router-prefetch` (with
+// the other flight headers) from the request before the proxy sees it. None arrive today
+// because `shared/ui/cabinet-link.tsx` turns link prefetching off; turning it back on would
+// let a hovered link slide the session's expiry.
 async function renewIfLapsing(req: NextRequest): Promise<Renewal | null> {
   const authWebUrl = appConfig.authWebUrl;
   const session = req.cookies.get(COOKIES.session)?.value;
