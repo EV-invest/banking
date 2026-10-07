@@ -26,6 +26,11 @@ function getSettings() {
       AUTH_COOKIE_SECURE: opt(bool()),
       // Extra CSP/MFE allow-list origins not present in mfe-registry.json.
       MFE_ALLOWED_ORIGINS: opt(str()),
+      // The concierge auth web surface, reached server-to-server (the same value the
+      // conductor rewrites /api/auth/* to). Lets the proxy renew a lapsing access cookie
+      // before a server render reads it. Unset ⇒ no server-side renewal: the browser's
+      // SessionKeeper still rotates the cookie, the first server read just may find it stale.
+      AUTH_WEB_URL: opt(url()),
       // Next.js sets NODE_ENV during build and at runtime; unset in tests.
       NODE_ENV: opt(str()),
     },
@@ -64,6 +69,7 @@ function getSettings() {
       CABINET_BACKEND_URL: process.env.CABINET_BACKEND_URL,
       AUTH_COOKIE_SECURE: process.env.AUTH_COOKIE_SECURE,
       MFE_ALLOWED_ORIGINS: process.env.MFE_ALLOWED_ORIGINS,
+      AUTH_WEB_URL: process.env.AUTH_WEB_URL,
       NODE_ENV: process.env.NODE_ENV,
       NEXT_PUBLIC_MFE_ALLOWED_ORIGINS: process.env.NEXT_PUBLIC_MFE_ALLOWED_ORIGINS,
       NEXT_PUBLIC_KYC_PROVIDER_HOST: process.env.NEXT_PUBLIC_KYC_PROVIDER_HOST,
@@ -104,6 +110,7 @@ export const config = ((): Readonly<{
   backendUrl: string;
   authCookieSecure: boolean;
   mfeAllowedOrigins: string | undefined;
+  authWebUrl: string | undefined;
   isProduction: boolean;
   isDevelopment: boolean;
   public: Readonly<{
@@ -124,6 +131,9 @@ export const config = ((): Readonly<{
     },
     get mfeAllowedOrigins(): string | undefined {
       return _isServer ? getSettings().MFE_ALLOWED_ORIGINS : undefined;
+    },
+    get authWebUrl(): string | undefined {
+      return _isServer ? getSettings().AUTH_WEB_URL : undefined;
     },
     get isProduction(): boolean {
       return _isServer ? computeIsProduction() : false;
@@ -168,6 +178,7 @@ export function assertConfig(): void {
   void config.backendUrl;
   void config.authCookieSecure;
   void config.mfeAllowedOrigins;
+  void config.authWebUrl;
   void config.isProduction;
   void config.isDevelopment;
   void config.public.mfeAllowedOrigins;

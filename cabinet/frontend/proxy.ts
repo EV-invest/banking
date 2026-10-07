@@ -9,6 +9,7 @@ import { BASE_PATH, isNonPagePath, localeRepairedPath, zonePathname } from "@/sh
 import { COOKIES } from "@/shared/config/cookies";
 import { isPublicPath, isTokenApprovalPath, zoneGatePath } from "@/shared/config/public-routes";
 import { contentSecurityPolicy, websocketOrigin } from "@/shared/config/security";
+import { needsRenewal, renewAccess, type Renewal } from "@/shared/lib/access-renewal";
 
 const CSP_HEADER = "content-security-policy";
 const REFERRER_HEADER = "referrer-policy";
@@ -36,7 +37,7 @@ function localeOf(pathname: string): Locale | null {
   return isLocale(first) ? first : null;
 }
 
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
   // Assets, the BFF and the MFE bundles are not pages: no locale redirect, no
@@ -48,7 +49,7 @@ export function proxy(req: NextRequest) {
   // asset hot path.
   if (isNonPagePath(pathname)) return NextResponse.next();
 
-  const signedIn = Boolean(req.cookies.get(COOKIES.session)?.value);
+  let signedIn = Boolean(req.cookies.get(COOKIES.session)?.value);
   const locale = localeOf(pathname);
 
   // Per-request nonce: written onto the forwarded request headers so Next applies
@@ -126,6 +127,20 @@ export function proxy(req: NextRequest) {
     }
   }
 
+  // Renew a lapsing access cookie before anything renders with it — see
+  // `shared/lib/access-renewal.ts`. The renewed token replaces the stale one on the
+  // forwarded request (the A/B proxy forwards `req.headers`, so the CSP header set above
+  // rides along), and the identity plane's Set-Cookie lines go to the browser verbatim.
+  const renewal = signedIn ? await renewIfLapsing(req) : null;
+  if (renewal?.kind === "alive" && renewal.access) req.cookies.set(COOKIES.access, renewal.access);
+  if (renewal?.kind === "gone") {
+    // Same as arriving without a session: the cleared cookies go out with the bounce.
+    signedIn = false;
+    req.cookies.delete(COOKIES.session);
+    req.cookies.delete(COOKIES.access);
+  }
+  const finish = (res: NextResponse) => withRenewedCookies(res, renewal);
+
   if (!isPublicPath(pathname) && !signedIn) {
     const url = req.nextUrl.clone();
     url.pathname = `/${locale ?? "en"}${BASE_PATH}/login`;
@@ -135,17 +150,36 @@ export function proxy(req: NextRequest) {
     // prefix and landed every deep link on `/cabinet/{locale}/cabinet/…` (#390).
     const returnTo = `${zonePathname(pathname)}${search}`;
     if (returnTo !== "/") url.searchParams.set("returnTo", returnTo);
-    return withCsp(NextResponse.redirect(url), csp);
+    return finish(withCsp(NextResponse.redirect(url), csp));
   }
 
   if (signedIn && zoneGatePath(pathname) === "/login") {
     const url = req.nextUrl.clone();
     url.pathname = `/${locale ?? "en"}${BASE_PATH}`;
     url.search = "";
-    return withCsp(NextResponse.redirect(url), csp);
+    return finish(withCsp(NextResponse.redirect(url), csp));
   }
 
-  return withReferrerPolicy(withCsp(withLocale(req, ab(req)), csp), pathname);
+  return finish(withReferrerPolicy(withCsp(withLocale(req, ab(req)), csp), pathname));
+}
+
+// Only when the cookie is missing or close to lapsing, so the common request — a fresh
+// token, an asset, a prefetch inside the TTL — never leaves this process. Unset
+// `AUTH_WEB_URL` turns the whole step off.
+async function renewIfLapsing(req: NextRequest): Promise<Renewal | null> {
+  const authWebUrl = appConfig.authWebUrl;
+  const session = req.cookies.get(COOKIES.session)?.value;
+  if (!authWebUrl || !session || !needsRenewal(req.cookies.get(COOKIES.access)?.value, Date.now())) return null;
+  return renewAccess({ authWebUrl, sessionCookie: { name: COOKIES.session, value: session }, accessCookieName: COOKIES.access });
+}
+
+// Appended last, as raw lines: `res.cookies.set` rewrites the Set-Cookie header from its
+// own map, so anything it is asked to do after this would drop them.
+function withRenewedCookies(res: NextResponse, renewal: Renewal | null): NextResponse {
+  if (renewal && renewal.kind !== "unknown") {
+    for (const line of renewal.setCookies) res.headers.append("set-cookie", line);
+  }
+  return res;
 }
 
 // On the two approval pages the URL *is* the credential, so the cabinet's default
