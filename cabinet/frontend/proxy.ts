@@ -9,7 +9,7 @@ import { isNonPagePath, localeRepairedPath } from "@/shared/config/base-path";
 import { COOKIES } from "@/shared/config/cookies";
 import { isTokenApprovalPath } from "@/shared/config/public-routes";
 import { contentSecurityPolicy, websocketOrigin } from "@/shared/config/security";
-import { needsRenewal, renewAccess, type Renewal } from "@/shared/lib/access-renewal";
+import { isSessionId, needsRenewal, renewAccess, type Renewal } from "@/shared/lib/access-renewal";
 import { decideSession } from "@/shared/lib/session-gate";
 
 const CSP_HEADER = "content-security-policy";
@@ -50,7 +50,9 @@ export async function proxy(req: NextRequest) {
   // asset hot path.
   if (isNonPagePath(pathname)) return NextResponse.next();
 
-  const signedIn = Boolean(req.cookies.get(COOKIES.session)?.value);
+  // A value concierge could not have minted is no session at all — and must never be
+  // written into an outgoing Cookie header (see `shared/lib/access-renewal.ts`).
+  const signedIn = isSessionId(req.cookies.get(COOKIES.session)?.value);
   const locale = localeOf(pathname);
 
   // Per-request nonce: written onto the forwarded request headers so Next applies
@@ -156,7 +158,7 @@ export async function proxy(req: NextRequest) {
 async function renewIfLapsing(req: NextRequest): Promise<Renewal | null> {
   const authWebUrl = appConfig.authWebUrl;
   const session = req.cookies.get(COOKIES.session)?.value;
-  if (!authWebUrl || !session || !needsRenewal(req.cookies.get(COOKIES.access)?.value, Date.now())) return null;
+  if (!authWebUrl || !isSessionId(session) || !needsRenewal(req.cookies.get(COOKIES.access)?.value, Date.now())) return null;
   return renewAccess({ authWebUrl, sessionCookie: { name: COOKIES.session, value: session }, accessCookieName: COOKIES.access });
 }
 

@@ -22,12 +22,36 @@ export const RENEW_WITHIN_S = 60;
 export const RENEW_TIMEOUT_MS = 1_500;
 
 /**
- * After a call that got no verdict, how long every request skips renewal. A plane that is
- * down or unreachable (a dropped packet waits out the whole timeout) would otherwise add
- * `RENEW_TIMEOUT_MS` to every page with a lapsing cookie; this caps it at one such page per
- * window per process. The browser's SessionKeeper renews in the meantime.
+ * After the identity plane failed (unreachable, timed out, 5xx), how long every request
+ * skips renewal. A plane that is down (a dropped packet waits out the whole timeout) would
+ * otherwise add `RENEW_TIMEOUT_MS` to every page with a lapsing cookie; this caps it at one
+ * such page per window per process. The browser's SessionKeeper renews in the meantime.
+ *
+ * Only a failure of the PLANE arms it. The backoff is shared by every visitor of this
+ * process, so a failure a request brings on itself — a 4xx, a malformed answer — must not
+ * switch renewal off for everyone else.
  */
 export const RENEW_BACKOFF_MS = 30_000;
+
+// What the cookie values must look like before they are written into an outgoing Cookie
+// header. Next hands them over percent-DECODED, so an encoded `;` or `=` would otherwise
+// become a separator there, and a CR/LF or non-Latin-1 character makes fetch throw.
+//
+// The session id is concierge's `random_token(32)`: 32 random bytes, URL-safe base64
+// without padding — 43 characters (runner/src/web/session.rs). The access token is a JWT:
+// three base64url segments.
+const SESSION_ID = /^[A-Za-z0-9_-]{43}$/;
+const ACCESS_TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
+/** Whether this is a session id concierge could have minted. Anything else is no session. */
+export function isSessionId(value: string | undefined): value is string {
+  return value !== undefined && SESSION_ID.test(value);
+}
+
+/** Whether this has the shape of a JWT, and so is safe to forward as the access cookie. */
+export function isAccessToken(value: string | undefined): value is string {
+  return value !== undefined && ACCESS_TOKEN.test(value);
+}
 
 /**
  * Seconds until the JWT's `exp`, or null when the value is not a readable JWT.
@@ -49,7 +73,7 @@ export function secondsUntilExpiry(token: string, nowMs: number): number | null 
 
 /** Whether a request carrying this access cookie (or none) should be renewed first. */
 export function needsRenewal(access: string | undefined, nowMs: number): boolean {
-  if (!access) return true;
+  if (!isAccessToken(access)) return true;
   const left = secondsUntilExpiry(access, nowMs);
   return left === null || left < RENEW_WITHIN_S;
 }
@@ -96,8 +120,8 @@ export function renewAccess(request: RenewalRequest, nowMs = Date.now()): Promis
   const existing = inflight.get(key);
   if (existing) return existing;
   const pending = callSession(request)
-    .then((renewal) => {
-      if (renewal.kind === "unknown") backoffUntil = Date.now() + RENEW_BACKOFF_MS;
+    .then(({ renewal, planeFailed }) => {
+      if (planeFailed) backoffUntil = Date.now() + RENEW_BACKOFF_MS;
       return renewal;
     })
     .finally(() => inflight.delete(key));
@@ -105,32 +129,47 @@ export function renewAccess(request: RenewalRequest, nowMs = Date.now()): Promis
   return pending;
 }
 
-async function callSession({ authWebUrl, sessionCookie, accessCookieName, timeoutMs = RENEW_TIMEOUT_MS, fetch: fetchImpl = fetch }: RenewalRequest): Promise<Renewal> {
+interface Outcome {
+  renewal: Renewal;
+  /** The plane itself failed (network, timeout, 5xx) — see {@link RENEW_BACKOFF_MS}. */
+  planeFailed: boolean;
+}
+
+const NO_VERDICT: Outcome = { renewal: UNKNOWN, planeFailed: false };
+const PLANE_FAILED: Outcome = { renewal: UNKNOWN, planeFailed: true };
+
+async function callSession({ authWebUrl, sessionCookie, accessCookieName, timeoutMs = RENEW_TIMEOUT_MS, fetch: fetchImpl = fetch }: RenewalRequest): Promise<Outcome> {
+  // Only the session id: the endpoint needs nothing else, and nothing else of the
+  // browser's should leave this process.
+  const headers = { accept: "application/json", cookie: `${sessionCookie.name}=${sessionCookie.value}` };
+  try {
+    // Validated apart from the call, so a value that cannot be a header fails here, on
+    // this request alone, instead of reading as the plane being down.
+    new Headers(headers);
+  } catch {
+    return NO_VERDICT;
+  }
   let res: Response;
   try {
-    res = await fetchImpl(`${authWebUrl.replace(/\/+$/, "")}/auth/session`, {
-      // Only the session id: the endpoint needs nothing else, and nothing else of the
-      // browser's should leave this process.
-      headers: { accept: "application/json", cookie: `${sessionCookie.name}=${sessionCookie.value}` },
-      cache: "no-store",
-      redirect: "manual",
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    res = await fetchImpl(`${authWebUrl.replace(/\/+$/, "")}/auth/session`, { headers, cache: "no-store", redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
   } catch {
-    return UNKNOWN;
+    return PLANE_FAILED;
   }
-  if (!res.ok) return UNKNOWN;
+  if (res.status >= 500) return PLANE_FAILED;
+  if (!res.ok) return NO_VERDICT;
   let body: unknown;
   try {
     body = await res.json();
-  } catch {
-    return UNKNOWN;
+  } catch (cause) {
+    // A body that stalls past the timeout is the plane being slow; one that is not JSON
+    // is something answering in its place, which says nothing about the plane.
+    return cause instanceof Error && cause.name === "TimeoutError" ? PLANE_FAILED : NO_VERDICT;
   }
-  if (typeof body !== "object" || body === null || !("authenticated" in body) || typeof body.authenticated !== "boolean") return UNKNOWN;
+  if (typeof body !== "object" || body === null || !("authenticated" in body) || typeof body.authenticated !== "boolean") return NO_VERDICT;
   const setCookies = res.headers.getSetCookie();
-  if (!body.authenticated) return { kind: "gone", setCookies };
-  const access = setCookies.map((line) => setCookieValue(line, accessCookieName)).find((value) => value) ?? null;
-  return { kind: "alive", access, setCookies };
+  if (!body.authenticated) return { renewal: { kind: "gone", setCookies }, planeFailed: false };
+  const access = setCookies.map((line) => setCookieValue(line, accessCookieName) ?? undefined).find(isAccessToken) ?? null;
+  return { renewal: { kind: "alive", access, setCookies }, planeFailed: false };
 }
 
 /** Test seam: forget in-flight renewals and any backoff so each case starts cold. */

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 import { config } from "@/config";
 import { COOKIES } from "@/shared/config/cookies";
+import { isAccessToken } from "@/shared/lib/access-renewal";
 
 // Server-render reads from the BFF — the server half of `shared/lib/api-client.ts`.
 //
@@ -31,8 +32,10 @@ const READ_TIMEOUT_MS = 3_000;
  * cast into a type it does not have.
  */
 export async function bffRead<T>(path: `/api/${string}`, accept: (body: unknown) => body is T): Promise<ServerRead<T> | null> {
+  // Next hands cookie values over percent-decoded; only a JWT-shaped value is safe to
+  // write back into a Cookie header, where an encoded `;` would have become a separator.
   const access = (await cookies()).get(COOKIES.access)?.value;
-  if (!access) return null;
+  if (!isAccessToken(access)) return null;
   try {
     const res = await fetch(`${config.backendUrl.replace(/\/+$/, "")}${path}`, {
       headers: { accept: "application/json", cookie: `${COOKIES.access}=${access}` },
