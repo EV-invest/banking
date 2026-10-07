@@ -61,3 +61,41 @@ test("no PPR or Cache Components in next.config — the other premise behind pre
       "default in shared/ui/cabinet-link.tsx before enabling either.",
   );
 });
+
+// The proxy renews a lapsing session before rendering, and it cannot tell a router prefetch
+// from a click: Next strips `next-router-prefetch` before the proxy runs (see the note on
+// `renewIfLapsing` in proxy.ts). A prefetch would then slide the session's expiry for a link
+// the reader only scrolled past. Nothing prefetches today; these keep it that way.
+
+const SOURCE_DIRS = ["app", "application", "views", "features", "entities", "shared", "mfe"].map((dir) => join(FRONTEND_ROOT, dir));
+
+function sources(): string[] {
+  return SOURCE_DIRS.flatMap((dir) => walk(dir)).filter((path) => /\.(tsx?|jsx?|mjs)$/.test(path) && !/\.test\.tsx?$/.test(path));
+}
+
+test("only cabinet-link.tsx imports next/link — a bare one prefetches by default", () => {
+  const importers = sources()
+    .filter((path) => /from\s+["']next\/link["']/.test(readFileSync(path, "utf8")))
+    .map((path) => relative(FRONTEND_ROOT, path));
+
+  assert.deepEqual(importers, ["shared/ui/cabinet-link.tsx"], `Route these through shared/ui/cabinet-link.tsx: ${importers.join(", ")}`);
+});
+
+test("no link opts back into prefetching", () => {
+  const optedIn = sources()
+    .filter((path) => /\bprefetch=\{(?!false\})/.test(readFileSync(path, "utf8")))
+    .map((path) => relative(FRONTEND_ROOT, path));
+
+  assert.deepEqual(optedIn, [], `A prefetching link renews the session through the proxy on scroll: ${optedIn.join(", ")}`);
+});
+
+test("no code calls the router's prefetch", () => {
+  const callers = sources()
+    .filter((path) => {
+      const source = readFileSync(path, "utf8");
+      return /\buseRouter\b/.test(source) && /\.prefetch\(/.test(source);
+    })
+    .map((path) => relative(FRONTEND_ROOT, path));
+
+  assert.deepEqual(callers, [], `router.prefetch renews the session through the proxy without a click: ${callers.join(", ")}`);
+});
