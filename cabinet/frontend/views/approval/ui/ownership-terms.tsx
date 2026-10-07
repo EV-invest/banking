@@ -27,11 +27,11 @@ export function renderableSeedCapital(terms: SeedCapitalTerms | null | undefined
 export function HolderGrantTermsBlock({ terms, payloadHash }: { terms: HolderGrantTerms; payloadHash: string }) {
   const t = useT();
   const locale = useLocale();
-  const allocation = terms.allocation === "fee" || terms.allocation === "fund" ? t(`approval.holderGrant.allocation.${terms.allocation}`) : terms.allocation;
+  const allocation = terms.allocation === "fee" ? t("approval.holderGrant.allocation.fee", "of the fee allocation") : terms.allocation === "fund" ? t("approval.holderGrant.allocation.fund", "of the fund allocation") : terms.allocation;
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <FieldCaption>{t("approval.holderGrant.units")}</FieldCaption>
+        <FieldCaption>{t("approval.holderGrant.units", "Units to mint")}</FieldCaption>
         <p className="text-4xl font-semibold leading-none tabular-nums text-ink">
           {/* The wire string, digit for digit — `payload_hash` covers the exact decimal. */}
           {formatUnits(terms.units, locale)}
@@ -40,12 +40,12 @@ export function HolderGrantTermsBlock({ terms, payloadHash }: { terms: HolderGra
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <DetailRow label={t("approval.holderGrant.holder")} value={terms.user_id} mono />
-        <DetailRow label={t("approval.payloadHash")} value={hashPrefix(payloadHash)} mono />
+        <DetailRow label={t("approval.holderGrant.holder", "Holder")} value={terms.user_id} mono />
+        <DetailRow label={t("approval.payloadHash", "Request fingerprint")} value={hashPrefix(payloadHash)} mono />
       </div>
 
-      <p className="text-xs text-ink-soft">{t("approval.holderGrant.executes")}</p>
-      <p className="text-xs text-ink-soft">{t("approval.holderGrant.payloadHashHint")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.holderGrant.executes", "If it passes, the units are minted to this person in kind, and they hold that share of the allocation from then on.")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.holderGrant.payloadHashHint", "The fingerprint is taken over the allocation, the person and the units above. It is checked again before anything is minted, so a request cannot be edited after you have agreed to it.")}</p>
 
       <Separator />
     </>
@@ -58,23 +58,23 @@ export function SeedCapitalTermsBlock({ terms, payloadHash }: { terms: SeedCapit
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <FieldCaption>{t("approval.seedCapital.amount")}</FieldCaption>
+        <FieldCaption>{t("approval.seedCapital.amount", "Amount")}</FieldCaption>
         <p className="text-4xl font-semibold leading-none tabular-nums text-ink">
           {formatExactUsdt(terms.amount, locale)}
           <span className="ml-2 text-base font-medium text-ink-soft">USDT</span>
         </p>
       </div>
 
-      <FullAddress label={t("approval.seedCapital.reference")} address={terms.tx_ref} />
+      <FullAddress label={t("approval.seedCapital.reference", "On-chain reference")} address={terms.tx_ref} />
 
       <div className="flex flex-col gap-2.5">
-        <DetailRow label={t("approval.network")} value={networkLabel(terms.network)} />
-        <DetailRow label={t("approval.seedCapital.depositor")} value={terms.depositor_user_id || "—"} mono />
-        <DetailRow label={t("approval.payloadHash")} value={hashPrefix(payloadHash)} mono />
+        <DetailRow label={t("approval.network", "Network")} value={networkLabel(terms.network)} />
+        <DetailRow label={t("approval.seedCapital.depositor", "Depositor")} value={terms.depositor_user_id || "—"} mono />
+        <DetailRow label={t("approval.payloadHash", "Request fingerprint")} value={hashPrefix(payloadHash)} mono />
       </div>
 
-      <p className="text-xs text-ink-soft">{t("approval.seedCapital.executes")}</p>
-      <p className="text-xs text-ink-soft">{t("approval.seedCapital.payloadHashHint")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.seedCapital.executes", "If it passes, the transfer is verified on chain and booked as this person's deposit and subscription into the fund allocation — in one step, or not at all.")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.seedCapital.payloadHashHint", "The fingerprint is taken over the reference, the rail, the amount and the depositor above. It is checked again before anything is booked, so a request cannot be edited after you have agreed to it.")}</p>
 
       <Separator />
     </>

@@ -62,7 +62,7 @@ export function InvestView() {
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <PageFrame title={t("invest.title")} width="content">
+    <PageFrame title={t("invest.title", "Invest")} width="content">
       {/* `invest.overview` is a SECTION tip — a descriptor block, not an inline ⓘ — so
           it cannot live inside the heading row: it laid a full-width bordered box across
           the title. It belongs under the header, which is also the one place this
@@ -72,7 +72,7 @@ export function InvestView() {
         <TipAnchor anchor="invest.overview" />
       </StaggerItem>
 
-      {error && <ResourceError variant="alert" title={t("err.positionsLoad")} message={error} />}
+      {error && <ResourceError variant="alert" title={t("err.positionsLoad", "Couldn't load your positions")} message={error} />}
 
       {!products ? (
         <StaggerItem className="space-y-4">
@@ -88,15 +88,15 @@ export function InvestView() {
 
           <StaggerItem as="section" className="space-y-3">
             <SectionLabel className="flex items-center gap-2">
-              {t("invest.products")}
+              {t("invest.products", "Products")}
               {products.length > 0 && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary-ink">{products.length}</span>}
             </SectionLabel>
             {products.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-ink-soft">
                   <Sparkles className="size-6" />
-                  <p className="text-sm">{t("invest.noFunds")}</p>
-                  <p className="max-w-sm text-xs">{t("invest.noFundsHint")}</p>
+                  <p className="text-sm">{t("invest.noFunds", "No funds are open for subscription right now.")}</p>
+                  <p className="max-w-sm text-xs">{t("invest.noFundsHint", "A fund appears here once it is registered and opened for subscription. Nothing you hold is affected.")}</p>
                 </CardContent>
               </Card>
             ) : (

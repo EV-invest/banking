@@ -36,7 +36,7 @@ export function PortfolioBand({ invested, cost, funds, available, queued }: { in
           this way the desktop state is the unclassed default and nothing competes. */}
       <CardContent className="flex py-5 max-md:flex-col max-md:gap-6 md:items-center">
         <div className="space-y-1.5 md:flex-1">
-          <SectionLabel tone="accent">{t("invest.investedValue")}</SectionLabel>
+          <SectionLabel tone="accent">{t("invest.investedValue", "Invested value")}</SectionLabel>
           <div className="flex flex-wrap items-baseline gap-2.5">
             <span className="text-3xl font-semibold leading-none tabular-nums">{formatUsdt(fromBaseUnits(invested), locale)}</span>
             <span className="text-sm text-ink-soft">USDT</span>
@@ -47,26 +47,26 @@ export function PortfolioBand({ invested, cost, funds, available, queued }: { in
               </span>
             )}
           </div>
-          <p className="text-xs text-ink-soft">{funds === 0 ? t("invest.noUnitsHeld") : t("invest.acrossFunds", { n: funds })}</p>
+          <p className="text-xs text-ink-soft">{funds === 0 ? t("invest.noUnitsHeld", "You hold no units yet.") : t("invest.acrossFunds", "{n, plural, one {Across # fund} other {Across # funds}}", { n: funds })}</p>
         </div>
 
         <div className="flex flex-wrap gap-8 md:border-l md:border-border md:px-7">
-          <BandStat label={t("invest.costBasis")} value={`${formatUsdt(fromBaseUnits(cost), locale)} USDT`} />
-          <BandStat label={t("invest.fundsHeld")} value={String(funds)} />
+          <BandStat label={t("invest.costBasis", "Cost basis")} value={`${formatUsdt(fromBaseUnits(cost), locale)} USDT`} />
+          <BandStat label={t("invest.fundsHeld", "Funds held")} value={String(funds)} />
           <BandStat
-            label={t("invest.awaitingSettlement")}
-            value={queued === 0 ? t("ui.none") : t("admin.valuation.queuedCount", { n: queued })}
+            label={t("invest.awaitingSettlement", "Awaiting settlement")}
+            value={queued === 0 ? t("ui.none", "None") : t("admin.valuation.queuedCount", "{n, plural, one {# queued} other {# queued}}", { n: queued })}
             tone={queued > 0 ? "text-accent-warn" : undefined}
           />
         </div>
 
         <div className="space-y-2 md:border-l md:border-border md:pl-7">
           <p className="flex items-center gap-1.5 text-xs text-ink-soft">
-            <Wallet className="size-3.5" /> {t("invest.availableToInvest")}
+            <Wallet className="size-3.5" /> {t("invest.availableToInvest", "Available to invest")}
           </p>
           <p className="text-xl font-semibold tabular-nums">{available === null ? "—" : `${formatUsdt(available, locale)} USDT`}</p>
           <Button asChild type="button" variant="outline" size="sm">
-            <Link href="/wallet">{t("invest.topUp")}</Link>
+            <Link href="/wallet">{t("invest.topUp", "Top up")}</Link>
           </Button>
         </div>
       </CardContent>

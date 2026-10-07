@@ -63,7 +63,7 @@ export function ConsentApprovalView({ token }: { token: string }) {
   if (!renderablePayment(invitation)) {
     return (
       <ApprovalPage>
-        <ApprovalUnrenderable description={t("consent.unavailableBody")} onRetry={() => void summary.refresh()} retrying={summary.isValidating} />
+        <ApprovalUnrenderable description={t("consent.unavailableBody", "The terms of this payment didn't arrive, so there is nothing here to agree to and no decision is offered. This is a problem on our side, not with your link. Try again in a moment.")} onRetry={() => void summary.refresh()} retrying={summary.isValidating} />
       </ApprovalPage>
     );
   }
@@ -75,22 +75,22 @@ export function ConsentApprovalView({ token }: { token: string }) {
     <ApprovalPage>
       <Card>
         <CardHeader>
-          <ApprovalTitle>{t("consent.title")}</ApprovalTitle>
+          <ApprovalTitle>{t("consent.title", "Your money is asked to move")}</ApprovalTitle>
           <CardDescription className="text-balance">
             {/* Two keys, one sentence each: the first is the whole point of the page, and it
                 carries its weight in markup rather than in capitals a screen reader spells
                 out letter by letter. */}
-            <strong className="font-semibold text-ink">{t("consent.leadOwn")}</strong> {t("consent.lead", { initiator: invitation.initiator_email })}
+            <strong className="font-semibold text-ink">{t("consent.leadOwn", "This is your money.")}</strong> {t("consent.lead", "{initiator} is asking for it to be moved as set out below. Nothing happens unless you agree — nobody else is asked, and nobody else can answer for you.", { initiator: invitation.initiator_email })}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          <PaymentTermsBlock terms={invitation} payloadHash={invitation.payload_hash} reasonLabel={t("consent.reasonLabel", { initiator: invitation.initiator_email })} tierAs="hint" />
+          <PaymentTermsBlock terms={invitation} payloadHash={invitation.payload_hash} reasonLabel={t("consent.reasonLabel", "Reason given by {initiator}", { initiator: invitation.initiator_email })} tierAs="hint" />
           <div className="flex flex-col gap-2.5">
-            <DetailRow label={t("consent.askedBy")} value={invitation.initiator_email} />
-            <DetailRow label={t("consent.yourMoney")} value={invitation.subject_email} />
+            <DetailRow label={t("consent.askedBy", "Asked by")} value={invitation.initiator_email} />
+            <DetailRow label={t("consent.yourMoney", "Whose money")} value={invitation.subject_email} />
             <DetailRow
-              label={t("approval.expires")}
-              value={t("approval.expiresValue", { at: formatMoment(invitation.expires_at, locale), left: expiresIn(invitation.expires_at, t) })}
+              label={t("approval.expires", "Expires")}
+              value={t("approval.expiresValue", "{at} · {left}", { at: formatMoment(invitation.expires_at, locale), left: expiresIn(invitation.expires_at, t) })}
               tone={expired ? "text-accent-error" : undefined}
             />
           </div>
@@ -98,21 +98,21 @@ export function ConsentApprovalView({ token }: { token: string }) {
       </Card>
 
       {burned ? (
-        <ApprovalBurned description={t("consent.burned.body")} />
+        <ApprovalBurned description={t("consent.burned.body", "The code was entered incorrectly too many times, so the link was closed. Nothing was approved and your money has not moved. Whoever asked can open a new request.")} />
       ) : expired ? (
         <ApprovalExpired />
       ) : settled ? (
         <ApprovalOutcome
           icon={settled === "approve" ? <CheckCircle2 /> : <XCircle />}
           tone={settled === "approve" ? "text-positive" : "text-ink-soft"}
-          title={t(settled === "approve" ? "consent.decided.approvedTitle" : "consent.decided.rejectedTitle")}
-          description={t(justDecided ? (settled === "approve" ? "consent.decided.approvedFresh" : "consent.decided.rejectedFresh") : "approval.decided.body")}
+          title={(settled === "approve" ? t("consent.decided.approvedTitle", "You approved this payment") : t("consent.decided.rejectedTitle", "You rejected this payment"))}
+          description={(justDecided ? settled === "approve" ? t("consent.decided.approvedFresh", "Your answer has been recorded and the payment goes ahead. There is nothing further to do here.") : t("consent.decided.rejectedFresh", "Your answer has been recorded. Your money stays exactly where it is, and whoever asked has been told.") : t("approval.decided.body", "You answered this earlier, and that answer stands. An answer cannot be changed once it is given."))}
         />
       ) : (
         <ConsentDecisionCard email={invitation.subject_email} pending={pending} rejectedAttempts={rejectedAttempts} error={error} onDecide={decide} />
       )}
 
-      <p className="text-center text-xs text-ink-soft">{t("approval.footnote")}</p>
+      <p className="text-center text-xs text-ink-soft">{t("approval.footnote", "This link was made for you alone. It works once, expires 72 hours after it was sent, and should not be forwarded.")}</p>
     </ApprovalPage>
   );
 }

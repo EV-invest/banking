@@ -66,7 +66,7 @@ export function ProductCard({ product, gated }: { product: Product; gated: boole
           {/* A non-shrinking sibling of the `min-w-0 flex-1` title column, so a long badge
               is taken straight out of the fund's name. i18n-max: 12. */}
           <Badge variant="outline" className={cn(closed || stale ? "border-accent-warn/40 text-accent-warn" : locked ? "border-border text-ink-soft" : "border-positive/40 text-positive")}>
-            {closed ? t("invest.badge.redeemOnly") : locked ? t("invest.badge.locked") : stale ? t("invest.badge.staleNav") : t("invest.badge.open")}
+            {closed ? t("invest.badge.redeemOnly", "Redeem only") : locked ? t("invest.badge.locked", "Locked") : stale ? t("invest.badge.staleNav", "Stale NAV") : t("invest.badge.open", "Open")}
           </Badge>
         </div>
 
@@ -78,15 +78,15 @@ export function ProductCard({ product, gated }: { product: Product; gated: boole
         </div>
 
         <div className="flex flex-wrap gap-x-6 gap-y-3 border-y border-border py-3.5">
-          <CardStat label={t("invest.navPerUnit")} value={nav ? formatUsdt(nav.nav, locale) : "—"} large>
-            {navRead.error && !nav ? t("err.fundRefresh") : <MarkDate nav={nav} />}
+          <CardStat label={t("invest.navPerUnit", "NAV / unit")} value={nav ? formatUsdt(nav.nav, locale) : "—"} large>
+            {navRead.error && !nav ? t("err.fundRefresh", "Couldn't refresh this fund") : <MarkDate nav={nav} />}
           </CardStat>
           {held ? (
             <>
-              <CardStat label={t("invest.yourUnits")} value={formatUnits(held.units, locale)} />
-              <CardStat label={t("invest.value")} value={formatUsdt(held.value, locale)} />
+              <CardStat label={t("invest.yourUnits", "Your units")} value={formatUnits(held.units, locale)} />
+              <CardStat label={t("invest.value", "Value")} value={formatUsdt(held.value, locale)} />
               <CardStat
-                label={t("invest.pnl")}
+                label={t("invest.pnl", "P&L")}
                 value={formatSignedUsdt(held.pnl, locale)}
                 tone={trend}
                 icon={trend === "loss" ? <TrendingDown className="size-3.5" /> : trend === "gain" ? <TrendingUp className="size-3.5" /> : undefined}
@@ -94,8 +94,8 @@ export function ProductCard({ product, gated }: { product: Product; gated: boole
             </>
           ) : (
             <div className="ml-auto space-y-1 text-right">
-              <p className="text-xs text-ink-soft">{t("invest.yourPosition")}</p>
-              <p className="text-sm text-ink-soft">{t("invest.notInvestedYet")}</p>
+              <p className="text-xs text-ink-soft">{t("invest.yourPosition", "Your position")}</p>
+              <p className="text-sm text-ink-soft">{t("invest.notInvestedYet", "Not invested yet")}</p>
             </div>
           )}
         </div>

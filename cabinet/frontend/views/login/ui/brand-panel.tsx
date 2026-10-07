@@ -32,21 +32,21 @@ export function BrandPanel({ t, locale }: { t: Translate; locale: Locale }) {
       <div className="relative flex max-w-md flex-col gap-5">
         {/* The brand mark itself, not a phrase — it reads "EV INVEST" in every locale. */}
         <p className="text-xs font-semibold tracking-widest text-primary-ink">EV INVEST</p>
-        <h2 className="text-5xl font-semibold leading-tight text-white">{t("auth.brandHeadline")}</h2>
-        <p className="text-base leading-6 text-ink-soft">{t("auth.brandBlurb")}</p>
+        <h2 className="text-5xl font-semibold leading-tight text-white">{t("auth.brandHeadline", "Private capital for Vietnam's coastal economy.")}</h2>
+        <p className="text-base leading-6 text-ink-soft">{t("auth.brandBlurb", "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.")}</p>
       </div>
 
       <div className="relative flex flex-col gap-4">
         <div className="flex gap-8">
-          <BrandStat value={figures.targetIrr} label={t("auth.stat.targetIrr")} />
-          <BrandStat value={figures.closingTarget} label={t("auth.stat.closingTarget")} />
+          <BrandStat value={figures.targetIrr} label={t("auth.stat.targetIrr", "Target IRR")} />
+          <BrandStat value={figures.closingTarget} label={t("auth.stat.closingTarget", "Closing target")} />
         </div>
         {/* Only once the owner has dated the figures: a placeholder date beside a return
             figure would read as a fact (see `FUND_FIGURES.asOf`). */}
-        {figures.asOf !== undefined && <p className="text-xs text-ink-soft">{t("auth.stat.asOf", { date: figures.asOf })}</p>}
+        {figures.asOf !== undefined && <p className="text-xs text-ink-soft">{t("auth.stat.asOf", "As of {date}", { date: figures.asOf })}</p>}
         {/* The risk beside the benefit, at the same place on the page: a target is not a
             forecast, and the panel must not read as a promise. */}
-        <p className="text-xs leading-5 text-ink-soft">{t("auth.stat.risk")}</p>
+        <p className="text-xs leading-5 text-ink-soft">{t("auth.stat.risk", "Capital at risk. A target is not a forecast, and returns are not guaranteed.")}</p>
       </div>
     </aside>
   );

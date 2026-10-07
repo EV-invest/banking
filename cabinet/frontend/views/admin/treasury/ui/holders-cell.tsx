@@ -18,7 +18,7 @@ const SHOWN_HOLDERS = 3;
 export function HoldersCell({ holders }: { holders: UnitHolding[] }) {
   const t = useT();
   const locale = useLocale();
-  if (holders.length === 0) return <span className="text-xs text-ink-soft">{t("admin.treasury.allocations.noHolders")}</span>;
+  if (holders.length === 0) return <span className="text-xs text-ink-soft">{t("admin.treasury.allocations.noHolders", "no holders")}</span>;
   const shown = holders.slice(0, SHOWN_HOLDERS);
   const rest = holders.length - shown.length;
   return (
@@ -33,7 +33,7 @@ export function HoldersCell({ holders }: { holders: UnitHolding[] }) {
           </li>
         );
       })}
-      {rest > 0 && <li className="text-ink-soft">{t("admin.treasury.allocations.moreHolders", { n: rest })}</li>}
+      {rest > 0 && <li className="text-ink-soft">{t("admin.treasury.allocations.moreHolders", "+{n} more", { n: rest })}</li>}
     </ul>
   );
 }

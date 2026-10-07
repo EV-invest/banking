@@ -70,7 +70,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
 
   // A skeleton, not a verdict, until the tier is known — the same rule the wallet applies.
   if (tierLoading) return <Skeleton className="h-36 w-full rounded-lg" />;
-  if (gated) return <VerificationRequired title={t("invest.subscribeVerifyTitle")} description={t("invest.subscribeVerifyBody")} />;
+  if (gated) return <VerificationRequired title={t("invest.subscribeVerifyTitle", "Verify your identity to invest")} description={t("invest.subscribeVerifyBody", "Subscriptions open once your identity is verified. Your balance is untouched in the meantime.")} />;
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-secondary p-4">
@@ -82,8 +82,8 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
           <Panel key="receipt" from="bottom">
             <Alert>
               <Sparkles className="size-4 text-positive" />
-              <AlertTitle>{t("invest.subscribeReceived")}</AlertTitle>
-              <AlertDescription>{t("invest.subscribeReceiptBody", { n: Number(done.units ?? 0), units: formatUnits(done.units, locale), nav: formatUsdt(done.nav, locale) })}</AlertDescription>
+              <AlertTitle>{t("invest.subscribeReceived", "Subscription received")}</AlertTitle>
+              <AlertDescription>{t("invest.subscribeReceiptBody", "Minted {n, plural, one {{units} unit} other {{units} units}} at {nav} USDT NAV — your position updates shortly.", { n: Number(done.units ?? 0), units: formatUnits(done.units, locale), nav: formatUsdt(done.nav, locale) })}</AlertDescription>
             </Alert>
           </Panel>
         )}
@@ -91,7 +91,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
           <Panel key="error" from="bottom">
             <Alert variant="destructive">
               <TriangleAlert className="size-4" />
-              <AlertTitle>{t("invest.subscribeFailed")}</AlertTitle>
+              <AlertTitle>{t("invest.subscribeFailed", "Subscription failed")}</AlertTitle>
               <AlertDescription>{errorMessage(error, t)}</AlertDescription>
             </Alert>
           </Panel>
@@ -110,7 +110,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
             {/* Names the outcome once there is one to name, and names it EXACTLY: the check
                 runs at 18 dp, so a rounding formatter could read "0.00" over an amount
                 that still buys a fraction of a unit and submits. */}
-            {check.preview !== null ? t("invest.investAmount", { amount: formatExactUsdt(amount, locale) }) : t("invest.subscribe")}
+            {check.preview !== null ? t("invest.investAmount", "Invest {amount} USDT", { amount: formatExactUsdt(amount, locale) }) : t("invest.subscribe", "Subscribe")}
           </Button>
         }
       />

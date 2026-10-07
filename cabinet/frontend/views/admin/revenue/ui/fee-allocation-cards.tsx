@@ -18,14 +18,14 @@ export function FeeAllocationCards({ fee, loading, unavailable }: { fee: Allocat
   const locale = useLocale();
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <MoneyCard label={t("admin.revenue.cashAvailable")} value={fee?.claim.available} hint={t("admin.revenue.cashAvailableHint")} loading={loading} unavailable={unavailable} emphasis />
-      <MoneyCard label={t("admin.revenue.cashPosted")} value={fee?.claim.posted} hint={t("admin.revenue.cashPostedHint")} loading={loading} unavailable={unavailable} />
-      <FigureCard label={t("admin.alloc.holders.outstanding")} value={fee ? formatUnits(fee.units_outstanding, locale) : undefined} hint={t("admin.revenue.unitsHint")} loading={loading} unavailable={unavailable} />
+      <MoneyCard label={t("admin.revenue.cashAvailable", "Cash · available")} value={fee?.claim.available} hint={t("admin.revenue.cashAvailableHint", "free of approved payments")} loading={loading} unavailable={unavailable} emphasis />
+      <MoneyCard label={t("admin.revenue.cashPosted", "Cash · posted")} value={fee?.claim.posted} hint={t("admin.revenue.cashPostedHint", "settled fees + settled 2-and-20, reserved included")} loading={loading} unavailable={unavailable} />
+      <FigureCard label={t("admin.alloc.holders.outstanding", "Outstanding")} value={fee ? formatUnits(fee.units_outstanding, locale) : undefined} hint={t("admin.revenue.unitsHint", "units of the fee allocation, held by people")} loading={loading} unavailable={unavailable} />
       <FigureCard
         label="NAV"
         value={fee ? formatNav(fee.nav, locale) : undefined}
         // `"0"` is "never marked" — priced at seed — not a mark at the epoch.
-        hint={fee && hasUnixStamp(fee.nav_posted_at) ? t("admin.revenue.navPosted", { ago: ago(fee.nav_posted_at, t) }) : t("admin.treasury.allocations.unmarked")}
+        hint={fee && hasUnixStamp(fee.nav_posted_at) ? t("admin.revenue.navPosted", "marked {ago}", { ago: ago(fee.nav_posted_at, t) }) : t("admin.treasury.allocations.unmarked", "not yet marked")}
         loading={loading}
         unavailable={unavailable}
       />

@@ -26,7 +26,7 @@ export function ProductCta({ cta, service, title }: { cta: CardCta; service: str
       return (
         <Button asChild className={className} variant={cta === "invest" ? "primary" : "outline"}>
           <Link href={page}>
-            {t(cta === "invest" ? "nav.invest" : cta === "manage" ? "ui.manage" : "ui.details")}
+            {(cta === "invest" ? t("nav.invest", "Invest") : cta === "manage" ? t("ui.manage", "Manage") : t("ui.details", "Details"))}
             <ArrowRight className="size-4" />
           </Link>
         </Button>
@@ -36,7 +36,7 @@ export function ProductCta({ cta, service, title }: { cta: CardCta; service: str
         <Button asChild className={className} variant="outline">
           <Link href={`${page}/trade`}>
             <ChartCandlestick className="size-4" />
-            {t("invest.cta.trade")}
+            {t("invest.cta.trade", "Trade on the book")}
           </Link>
         </Button>
       );
@@ -47,9 +47,9 @@ export function ProductCta({ cta, service, title }: { cta: CardCta; service: str
       // "ask" means the support mailbox, with the product named for them.
       return (
         <Button asChild className={className} variant="outline">
-          <a href={supportHref({ subject: t("invest.cta.lockedSubject", { title }) })}>
+          <a href={supportHref({ subject: t("invest.cta.lockedSubject", "Access to {title}", { title }) })}>
             <Lock className="size-4" />
-            {t("invest.cta.locked")}
+            {t("invest.cta.locked", "Locked: ask for access")}
           </a>
         </Button>
       );
@@ -68,7 +68,7 @@ export function VerifyToInvestCta({ className }: { className?: string }) {
     <Button asChild className={className} variant="outline">
       <Link href="/profile">
         <ShieldCheck className="size-4" />
-        {t("invest.cta.verify")}
+        {t("invest.cta.verify", "Verify to invest")}
       </Link>
     </Button>
   );

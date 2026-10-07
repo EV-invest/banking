@@ -48,9 +48,9 @@ export function CollectCard({ service }: { service: string }) {
       revalidateTag(TAG.adminFees, TAG.adminRevenue);
       // Fee cash is USDT, and `formatUsdt` carries no symbol: the unit rides in the value so
       // the sentence still names it, the way the "worth" row below does.
-      setDone(t("admin.fees.settledAtNav", { cash: `${formatUsdt(settlement.cash, locale)} USDT`, nav: settlement.nav }));
+      setDone(t("admin.fees.settledAtNav", "{cash} settled at NAV {nav}.", { cash: `${formatUsdt(settlement.cash, locale)} USDT`, nav: settlement.nav }));
     } catch (e) {
-      setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feeSettle"));
+      setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feeSettle", "Could not settle these units."));
     } finally {
       setBusy(false);
     }
@@ -60,8 +60,8 @@ export function CollectCard({ service }: { service: string }) {
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
         <div className="space-y-1">
-          <p className="text-sm font-semibold">{t("admin.fees.collected")}</p>
-          <p className="text-xs text-ink-soft">{t("admin.fees.collectedSub")}</p>
+          <p className="text-sm font-semibold">{t("admin.fees.collected", "Collected, not yet converted")}</p>
+          <p className="text-xs text-ink-soft">{t("admin.fees.collectedSub", "Units the sweeper has clawed back from holders. No cash has moved yet.")}</p>
         </div>
 
         {shares.isLoading ? (
@@ -70,25 +70,25 @@ export function CollectCard({ service }: { service: string }) {
           <ResourceError error={shares.error} onRetry={() => void shares.refresh()} retrying={shares.isValidating} />
         ) : (
           <dl className="space-y-2.5 text-sm">
-            <Row label={t("admin.fees.unitsHeld")} value={formatUnits(data?.units, locale)} />
-            <Row label={t("admin.fees.worthAtNav")} value={`${formatUsdt(data?.value, locale)} USDT`} />
+            <Row label={t("admin.fees.unitsHeld", "Fee units held")} value={formatUnits(data?.units, locale)} />
+            <Row label={t("admin.fees.worthAtNav", "Worth at current NAV")} value={`${formatUsdt(data?.value, locale)} USDT`} />
           </dl>
         )}
 
-        <p className="text-xs text-ink-soft">{t("admin.fees.settleNote")}</p>
+        <p className="text-xs text-ink-soft">{t("admin.fees.settleNote", "Settling burns these units and moves their value from the fund's claim into fee revenue. It is refused — never queued — when the fund's claim cannot cover it on top of its queued redemptions: investors waiting to exit are paid before the manager is.")}</p>
 
         {problem && <p className="text-xs text-accent-error">{problem}</p>}
         {/* Two independently complete sentences, so the settlement line and the pointer to
             the payout screen stay separate keys; the screen's own name is interpolated so it
             tracks whatever the nav calls it. The emphasis on that name is the one casualty
             of keeping the sentence whole for translators. */}
-        {done && !problem && <p className="text-xs text-positive">{`${done} ${t("admin.fees.withdrawableFrom", { screen: t("nav.revenue") })}`}</p>}
+        {done && !problem && <p className="text-xs text-positive">{`${done} ${t("admin.fees.withdrawableFrom", "It is withdrawable on-chain from {screen}.", { screen: t("nav.revenue", "Revenue stats") })}`}</p>}
 
         <Button type="button" variant="outline" onClick={settle} disabled={busy || data === null || nothing}>
           {busy && <Spinner aria-hidden />}
-          {t("admin.fees.settleAll")}
+          {t("admin.fees.settleAll", "Settle all units")}
         </Button>
-        {nothing && <p className="text-xs text-ink-soft">{t("admin.fees.nothingToSettle")}</p>}
+        {nothing && <p className="text-xs text-ink-soft">{t("admin.fees.nothingToSettle", "Nothing to settle — no fee has been charged in this fund yet.")}</p>}
       </CardContent>
     </Card>
   );

@@ -9,6 +9,7 @@
 
 import { useId, useState } from "react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { Button, Field, FieldDescription, FieldError, FieldLabel, Input, Textarea } from "@evinvest/uikit";
 
@@ -17,11 +18,21 @@ import type { Payment } from "@/shared/contracts/payments";
 import { errorMessage } from "@/shared/lib/api-client";
 import { classifyConsiliumRefusal, coolingOffLiftsAt, type ConsiliumRefusal } from "@/shared/lib/consilium-refusal";
 import { ResourceError } from "@/shared/ui/resource-error";
-import { EMPTY_END, END_KINDS, PARTY_KINDS, REASON_MAX_BYTES, draftProblem, reasonBytes, toRequest, type EndDraft } from "@/views/admin/payments/lib/terms";
+import { EMPTY_END, END_KINDS, PARTY_KINDS, REASON_MAX_BYTES, draftProblem, type DraftProblem, reasonBytes, toRequest, type EndDraft } from "@/views/admin/payments/lib/terms";
 import { EndPicker } from "@/views/admin/payments/ui/end-picker";
 import { OpenedReceipt } from "@/views/admin/payments/ui/opened-receipt";
 import { ReviewPanel, TermsPreview } from "@/views/admin/payments/ui/terms-preview";
 import { RefusalNotice } from "@/views/admin/ui/refusal-notice";
+
+const problemWords = (t: Translate): Record<DraftProblem, string> => ({
+  "admin.payments.err.pickSource": t("admin.payments.err.pickSource", "Choose which product or investor the money comes from."),
+  "admin.payments.err.pickDestination": t("admin.payments.err.pickDestination", "Complete the destination."),
+  "admin.payments.err.sameEnds": t("admin.payments.err.sameEnds", "The source and the destination are the same claim."),
+  "admin.payments.err.noRailFromPooled": t("admin.payments.err.noRailFromPooled", "An allocation's pooled claim — a product's, or the platform's fee and fund — cannot ship to an address. A holder redeems onto their own claim and withdraws from there."),
+  "admin.payments.err.enterAmount": t("admin.payments.err.enterAmount", "Enter an amount."),
+  "admin.payments.err.enterReason": t("admin.payments.err.enterReason", "A reason is required — it is what the approvers read."),
+  "admin.payments.err.reasonTooLong": t("admin.payments.err.reasonTooLong", "The reason is over 500 bytes."),
+});
 
 export function OpenPaymentForm() {
   const t = useT();
@@ -80,21 +91,21 @@ export function OpenPaymentForm() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-ink-soft">{t("admin.payments.formNote")}</p>
+      <p className="text-xs text-ink-soft">{t("admin.payments.formNote", "Opening a payment moves no money. Fund-owned money is proposed to the owners' consilium; an investor's own money is put to that investor by email. Only once they agree does anything move.")}</p>
       {refusal && <RefusalNotice refusal={refusal.detail} liftsAt={refusal.liftsAt} />}
       {opened && <OpenedReceipt payment={opened} onDismiss={() => setOpened(null)} />}
       {error !== null && <ResourceError message={errorMessage(error, t)} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <EndPicker label={t("admin.payments.source")} value={source} onChange={edit(setSource)} kinds={PARTY_KINDS} />
-        <EndPicker label={t("ui.destination")} value={destination} onChange={edit(setDestination)} kinds={END_KINDS} />
+        <EndPicker label={t("admin.payments.source", "Source")} value={source} onChange={edit(setSource)} kinds={PARTY_KINDS} />
+        <EndPicker label={t("ui.destination", "Destination")} value={destination} onChange={edit(setDestination)} kinds={END_KINDS} />
       </div>
 
       <TermsPreview source={source} destination={destination} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field data-invalid={amountProblem !== null || undefined}>
-          <FieldLabel htmlFor={amountId}>{t("admin.payments.amountUsdt")}</FieldLabel>
+          <FieldLabel htmlFor={amountId}>{t("admin.payments.amountUsdt", "Amount (USDT)")}</FieldLabel>
           <Input
             id={amountId}
             value={amount}
@@ -105,33 +116,33 @@ export function OpenPaymentForm() {
             aria-describedby={amountProblem ? `${amountId}-error` : undefined}
             className="tabular-nums"
           />
-          {amountProblem && <FieldError id={`${amountId}-error`}>{t(amountProblem)}</FieldError>}
+          {amountProblem && <FieldError id={`${amountId}-error`}>{problemWords(t)[amountProblem]}</FieldError>}
         </Field>
         <Field className="sm:col-span-2" data-invalid={reasonProblem !== null || undefined}>
-          <FieldLabel htmlFor={reasonId}>{t("admin.payments.reason")}</FieldLabel>
+          <FieldLabel htmlFor={reasonId}>{t("admin.payments.reason", "Reason")}</FieldLabel>
           <Textarea
             id={reasonId}
             value={reason}
             onChange={(e) => edit(setReason)(e.target.value)}
             rows={3}
-            placeholder={t("admin.payments.placeholder.reason")}
+            placeholder={t("admin.payments.placeholder.reason", "Why this money moves — the approvers read exactly this")}
             aria-invalid={reasonProblem !== null || undefined}
             aria-describedby={reasonProblem ? `${reasonId}-error ${reasonHintId}` : reasonHintId}
           />
           <FieldDescription id={reasonHintId} className="text-xs tabular-nums">
-            {t("admin.payments.reasonHint", { used: reasonBytes(reason.trim()), max: REASON_MAX_BYTES })}
+            {t("admin.payments.reasonHint", "Required. {used} of {max} bytes. Part of what is approved, and covered by the request fingerprint — it cannot be changed afterwards.", { used: reasonBytes(reason.trim()), max: REASON_MAX_BYTES })}
           </FieldDescription>
-          {reasonProblem && <FieldError id={`${reasonId}-error`}>{t(reasonProblem)}</FieldError>}
+          {reasonProblem && <FieldError id={`${reasonId}-error`}>{problemWords(t)[reasonProblem]}</FieldError>}
         </Field>
       </div>
 
-      {endsProblem && <p className="text-xs text-accent-error">{t(endsProblem)}</p>}
+      {endsProblem && <p className="text-xs text-accent-error">{problemWords(t)[endsProblem]}</p>}
 
       {confirming ? (
         <ReviewPanel source={source} destination={destination} amount={amount} reason={reason} busy={busy} onConfirm={() => void submit()} onBack={() => setConfirming(false)} />
       ) : (
         <Button type="button" size="sm" disabled={problem !== null || busy} onClick={() => setConfirming(true)}>
-          {t("admin.payments.review")}
+          {t("admin.payments.review", "Review payment")}
         </Button>
       )}
     </div>

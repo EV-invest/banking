@@ -4,6 +4,8 @@
 
 import type { Translate } from "@evinvest/i18n";
 
+import { roleWords, statusWords } from "@/shared/lib/status-words";
+import { wordFor } from "@/shared/lib/wire-words";
 import type { PillTone } from "@/shared/ui/list-card";
 
 /** Max chars a display name takes up before ellipsis in the chip and headings. */
@@ -21,7 +23,7 @@ export function truncateName(name: string, max: number = MAX_DISPLAY): string {
  *  component that already holds one, so this module stays React-free. */
 export function displayName(email: string | null | undefined, t: Translate): string {
   if (email === undefined) return "…";
-  if (!email) return t("ui.account");
+  if (!email) return t("ui.account", "Account");
   const handle = email.split("@")[0] ?? email;
   const parts = handle.split(/[._-]+/).filter(Boolean);
   const first = parts[0] ? cap(parts[0]) : handle;
@@ -67,14 +69,12 @@ function titleCase(value: string): string {
 /**
  * A wire enum as words. `titleCase` alone is English capitalisation applied to an
  * English wire value, so it stayed English under every locale; these resolve through the
- * shared `admin.status.*` / `admin.role.*` entries instead. The translator hands back the
- * key itself for a value no entry names — a hub enum we have not catalogued yet — so that
- * case falls back to the old capitalisation rather than printing a key on screen.
+ * shared role and status words instead. A value no entry names — a hub enum we have not
+ * catalogued yet — falls back to the old capitalisation rather than a key on screen.
  */
 export function enumLabel(namespace: "admin.status" | "admin.role", value: string, t: Translate): string {
-  const key = `${namespace}.${value}`;
-  const label = t(key);
-  return label === key ? titleCase(value) : label;
+  const words = namespace === "admin.status" ? statusWords(t) : roleWords(t);
+  return wordFor(words, value) ?? titleCase(value);
 }
 
 export function statusTone(status: string): PillTone {

@@ -24,24 +24,24 @@ export function OpenedReceipt({ payment, onDismiss }: { payment: Payment; onDism
   return (
     <Alert role="status" variant="success">
       <CheckCircle2 className="size-4" />
-      <AlertTitle>{t("admin.payments.openedTitle")}</AlertTitle>
+      <AlertTitle>{t("admin.payments.openedTitle", "Opened — no money has moved")}</AlertTitle>
       <AlertDescription className="gap-3">
         <p className="leading-relaxed">
           {consent
-            ? t("admin.payments.openedConsentBody", { email: consent.subject_email })
-            : t("admin.payments.openedConsiliumBody")}
+            ? t("admin.payments.openedConsentBody", "{email} has been emailed a link and a code. Nothing moves until they agree — this is their money, and only they can say so.", { email: consent.subject_email })
+            : t("admin.payments.openedConsiliumBody", "The owners have each been emailed a link. Nothing moves until more than half of them confirm from their own mailboxes; the live tally is in the consilium.")}
         </p>
         <p className="text-xs tabular-nums text-ink-soft">
-          {t("admin.payments.openedExpires", { at: formatMoment(payment.expires_at, locale), left: expiresIn(payment.expires_at, t) })}
+          {t("admin.payments.openedExpires", "Expires {at} · {left}", { at: formatMoment(payment.expires_at, locale), left: expiresIn(payment.expires_at, t) })}
         </p>
         <div className="flex flex-wrap gap-2 text-ink">
           {payment.consilium_id && (
             <Button asChild size="sm" variant="outline">
-              <Link href="/consilium">{t("admin.payments.openConsilium")}</Link>
+              <Link href="/consilium">{t("admin.payments.openConsilium", "Open the consilium")}</Link>
             </Button>
           )}
           <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
-            {t("ui.close")}
+            {t("ui.close", "Close")}
           </Button>
         </div>
       </AlertDescription>

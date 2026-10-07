@@ -17,7 +17,7 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag } from "@/shared/lib/resource";
 import { backingOf, oppositeBacking } from "@/views/admin/allocations/lib/backing";
-import { BackingBadge, backingHintKey } from "@/views/admin/allocations/ui/backing-badge";
+import { BackingBadge, backingHint } from "@/views/admin/allocations/ui/backing-badge";
 
 export function BackingAction({ allocation }: { allocation: Allocation }) {
   const t = useT();
@@ -48,28 +48,28 @@ export function BackingAction({ allocation }: { allocation: Allocation }) {
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.backing.title")}</p>
-          <p className="text-xs text-ink-soft">{t(backingHintKey(backing))}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.backing.title", "Backing")}</p>
+          <p className="text-xs text-ink-soft">{backingHint(backing, t)}</p>
         </div>
         <BackingBadge backing={backing} verbose className="shrink-0" />
       </div>
       {confirming ? (
         <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
-          <p className="text-xs">{t(next === "cash" ? "admin.alloc.backing.confirmCash" : "admin.alloc.backing.confirmInKind", { service: allocation.service })}</p>
+          <p className="text-xs">{(next === "cash" ? t("admin.alloc.backing.confirmCash", "Mark {service} as cash-backed. Redeem will pay holders out of the fund's cash at NAV — make sure that cash is actually there.", { service: allocation.service }) : t("admin.alloc.backing.confirmInKind", "Mark {service} as in-kind. Redeem will be refused, and holders exit by selling their units on the book.", { service: allocation.service }))}</p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy} onClick={() => setConfirming(false)}>
-              {t("ui.cancel")}
+              {t("ui.cancel", "Cancel")}
             </Button>
             <Button type="button" size="sm" className="flex-1" disabled={busy} onClick={flip}>
               {busy ? <Spinner aria-hidden /> : null}
-              {t(next === "cash" ? "admin.alloc.backing.markCash" : "admin.alloc.backing.markInKind")}
+              {(next === "cash" ? t("admin.alloc.backing.markCash", "Mark as cash-backed") : t("admin.alloc.backing.markInKind", "Mark as in-kind"))}
             </Button>
           </div>
         </div>
       ) : (
         <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setConfirming(true)}>
           <RefreshCw className="size-3.5" />
-          {t(next === "cash" ? "admin.alloc.backing.markCash" : "admin.alloc.backing.markInKind")}
+          {(next === "cash" ? t("admin.alloc.backing.markCash", "Mark as cash-backed") : t("admin.alloc.backing.markInKind", "Mark as in-kind"))}
         </Button>
       )}
       {error && (

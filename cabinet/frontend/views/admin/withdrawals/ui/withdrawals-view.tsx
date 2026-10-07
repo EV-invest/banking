@@ -64,18 +64,18 @@ export function WithdrawalsView() {
 
   return (
     <AdminScreen className="space-y-8">
-      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.withdrawals")} subtitle={t("admin.withdrawals.subtitle")} />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer", "Administer")} title={t("nav.withdrawals", "Withdrawals")} subtitle={t("admin.withdrawals.subtitle", "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts")} />
 
       {error && <ResourceError message={error} />}
 
       <StaggerItem as="section" className="space-y-3">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
-          {t("admin.withdrawals.awaitingAction")}
+          {t("admin.withdrawals.awaitingAction", "Awaiting action")}
           {/* The count pill lands on the same step as the label it trails, so its fill and
               accent colour — not a smaller size — are what set it apart. */}
           {queue && (
             <span className="whitespace-nowrap rounded-full bg-accent-warn/15 px-2 py-0.5 text-xs font-semibold text-accent-warn">
-              {t("admin.withdrawals.openCount", { n: queue.length })}
+              {t("admin.withdrawals.openCount", "{n, plural, one {# open} other {# open}}", { n: queue.length })}
             </span>
           )}
         </p>
@@ -96,8 +96,8 @@ export function WithdrawalsView() {
                       <EmptyMedia variant="icon">
                         <Inbox />
                       </EmptyMedia>
-                      <EmptyTitle>{t("admin.withdrawals.empty")}</EmptyTitle>
-                      <EmptyDescription>{t("admin.withdrawals.emptyHint")}</EmptyDescription>
+                      <EmptyTitle>{t("admin.withdrawals.empty", "No withdrawals awaiting action")}</EmptyTitle>
+                      <EmptyDescription>{t("admin.withdrawals.emptyHint", "A withdrawal appears here once an investor asks for one.")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 </div>
@@ -107,27 +107,27 @@ export function WithdrawalsView() {
                     {/* i18n-max: 14 per header — auto-layout table; the address cell is
                         the one that gives width back before the kit's wrapper scrolls. */}
                     <TableRow>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.user")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.user", "User")}</TableHead>
                       <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>
                         <span className="flex items-center gap-1.5">
-                          {t("ui.destination")}
+                          {t("ui.destination", "Destination")}
                           <TipAnchor anchor="admin.withdrawals.destination" />
                         </span>
                       </TableHead>
                       <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>
                         <span className="flex items-center gap-1.5">
-                          {t("admin.withdrawals.col.grossNet")}
+                          {t("admin.withdrawals.col.grossNet", "Gross / net")}
                           <TipAnchor anchor="admin.withdrawals.gross-net" />
                         </span>
                       </TableHead>
                       <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>
                         <span className="flex items-center gap-1.5">
-                          {t("admin.col.state")}
+                          {t("admin.col.state", "State")}
                           <TipAnchor anchor="admin.withdrawals.state" />
                         </span>
                       </TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.age")}</TableHead>
-                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL)}>{t("admin.col.age", "Age")}</TableHead>
+                      <TableHead className={cn(TABLE_HEAD, EDGE_CELL, "text-right")}>{t("admin.col.actions", "Actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -157,7 +157,7 @@ export function WithdrawalsView() {
             </Settled>
           </CardContent>
         </Card>
-        <p className="max-w-3xl text-xs text-ink-soft">{t("admin.withdrawals.footnote")}</p>
+        <p className="max-w-3xl text-xs text-ink-soft">{t("admin.withdrawals.footnote", "Dispatch broadcasts a queued withdrawal once its rail has liquidity. Settle records the mined transaction and releases the reservation. Fail voids and refunds — ONLY safe when nothing reached the chain; the hub refuses it while a broadcast record exists.")}</p>
       </StaggerItem>
     </AdminScreen>
   );
@@ -199,7 +199,7 @@ function WithdrawalRow({
               earnings out. Naming that beats rendering a blank User cell, and it tells
               the operator whose money the dispatch/settle below is about to move. */}
           {item.source === "revenue" ? (
-            <p className="font-medium text-positive">{t("admin.fundRevenue")}</p>
+            <p className="font-medium text-positive">{t("admin.fundRevenue", "Fund revenue")}</p>
           ) : (
             <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
           )}
@@ -221,7 +221,7 @@ function WithdrawalRow({
         </TableCell>
         <TableCell className={cn(EDGE_CELL, "tabular-nums")}>
           <p>{formatUsdt(item.amount, locale)} USDT</p>
-          <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", { amount: formatUsdt(item.net_amount, locale) })}</p>
+          <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", "{amount} net", { amount: formatUsdt(item.net_amount, locale) })}</p>
         </TableCell>
         <TableCell className={EDGE_CELL}>
           <span className={queued ? "text-accent-warn" : "text-positive"}>{stateLabel(item.state, t)}</span>
@@ -233,12 +233,12 @@ function WithdrawalRow({
             {queued ? (
               <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onDispatch}>
                 {busy ? <Spinner aria-hidden /> : null}
-                {t("admin.dispatch")}
+                {t("admin.dispatch", "Dispatch")}
               </Button>
             ) : (
               <>
                 <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onOpen({ id: item.withdrawal_id, kind: "settle" })}>
-                  {t("admin.settle")}
+                  {t("admin.settle", "Settle")}
                 </Button>
                 <Button
                   type="button"
@@ -248,7 +248,7 @@ function WithdrawalRow({
                   disabled={busy}
                   onClick={() => onOpen({ id: item.withdrawal_id, kind: "fail" })}
                 >
-                  {t("admin.fail")}
+                  {t("admin.fail", "Fail")}
                 </Button>
               </>
             )}
@@ -263,23 +263,23 @@ function WithdrawalRow({
                 <Input
                   value={txRef}
                   onChange={(e) => onTxRef(e.target.value)}
-                  placeholder={t("admin.withdrawals.placeholder.txHash")}
+                  placeholder={t("admin.withdrawals.placeholder.txHash", "Mined transaction hash (0x…)")}
                   spellCheck={false}
                   className="max-w-xl font-mono-tech text-xs"
                 />
                 <TipAnchor anchor="admin.withdrawals.settle.tx-hash" />
                 <Button type="button" size="sm" disabled={busy || !txRef.trim()} onClick={onSettle}>
                   {busy ? <Spinner aria-hidden /> : null}
-                  {t("admin.withdrawals.confirmSettle")}
+                  {t("admin.withdrawals.confirmSettle", "Confirm settle")}
                 </Button>
               </div>
             ) : (
               <div className="space-y-2">
                 <p className="flex items-center gap-2 text-xs text-accent-error">
-                  <TriangleAlert className="size-4" /> {t("admin.withdrawals.failWarning")}
+                  <TriangleAlert className="size-4" /> {t("admin.withdrawals.failWarning", "Failing refunds the user. If the broadcast reached the chain this would double-pay — the hub refuses while a broadcast record exists, but verify on-chain first.")}
                 </p>
                 <div className="flex items-center gap-3">
-                  <Input value={reason} onChange={(e) => onReason(e.target.value)} placeholder={t("admin.withdrawals.placeholder.reason")} className="max-w-xl text-xs" />
+                  <Input value={reason} onChange={(e) => onReason(e.target.value)} placeholder={t("admin.withdrawals.placeholder.reason", "Reason (audit note, optional)")} className="max-w-xl text-xs" />
                   <Button
                     type="button"
                     size="sm"
@@ -289,7 +289,7 @@ function WithdrawalRow({
                     onClick={onFail}
                   >
                     {busy ? <Spinner aria-hidden /> : null}
-                    {t("admin.withdrawals.confirmFail")}
+                    {t("admin.withdrawals.confirmFail", "Confirm fail")}
                   </Button>
 
                 </div>

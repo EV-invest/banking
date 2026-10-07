@@ -42,12 +42,12 @@ export function ProfileSummaryCard({ loading, name, email, verified }: { loading
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-sm font-semibold text-ink">{name}</span>
             {/* i18n-max: 12 — a `shrink-0` Pill beside the truncated display name. */}
-            {verified && <Pill tone="success" icon={BadgeCheck}>{t("ui.verified")}</Pill>}
+            {verified && <Pill tone="success" icon={BadgeCheck}>{t("ui.verified", "Verified")}</Pill>}
           </div>
         )}
-        {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-xs text-ink-soft">{formatEmail(email) || t("auth.notSignedIn")}</span>}
+        {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-xs text-ink-soft">{formatEmail(email) || t("auth.notSignedIn", "Not signed in")}</span>}
         {/* Says where the tap goes: without it the card read as a header, not a destination. */}
-        <span className="text-xs font-medium text-primary-ink">{t("settings.viewProfile")}</span>
+        <span className="text-xs font-medium text-primary-ink">{t("settings.viewProfile", "View profile")}</span>
       </div>
       <Chevron className="size-5" />
     </Link>
@@ -77,18 +77,18 @@ export function PreferencesCard({
 
   return (
     <ListCard>
-      <ListCardTitle sub={t("settings.preferencesSub")}>{t("settings.nav.preferences")}</ListCardTitle>
+      <ListCardTitle sub={t("settings.preferencesSub", "How the cabinet is displayed to you. Saved to your account, so every device follows")}>{t("settings.nav.preferences", "Preferences")}</ListCardTitle>
       <Hairline />
-      <ExpandableRow label={t("lang.switch")} value={form ? labelOf(LANGUAGES, form.language) : ""} hint={t("settings.hint.language")} loading={!ready} open={open === "language"} onToggle={() => toggle("language")}>
-        {form && <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder={t("settings.selectLanguage")} error={fieldErrors.language} />}
+      <ExpandableRow label={t("lang.switch", "Language")} value={form ? labelOf(LANGUAGES, form.language) : ""} hint={t("settings.hint.language", "Applies as soon as you save; the whole cabinet switches.")} loading={!ready} open={open === "language"} onToggle={() => toggle("language")}>
+        {form && <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder={t("settings.selectLanguage", "Select language")} error={fieldErrors.language} />}
       </ExpandableRow>
       <Hairline />
-      <ExpandableRow label={t("settings.baseCurrency")} value={form ? labelOf(currencies, form.base_currency) : ""} hint={t("settings.hint.baseCurrency")} loading={!ready} open={open === "base_currency"} onToggle={() => toggle("base_currency")}>
-        {form && <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={currencies} placeholder={t("settings.selectCurrency")} error={fieldErrors.base_currency} />}
+      <ExpandableRow label={t("settings.baseCurrency", "Base currency")} value={form ? labelOf(currencies, form.base_currency) : ""} hint={t("settings.hint.baseCurrency", "Saved to your account. Balances in the cabinet are always shown in USD.")} loading={!ready} open={open === "base_currency"} onToggle={() => toggle("base_currency")}>
+        {form && <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={currencies} placeholder={t("settings.selectCurrency", "Select currency")} error={fieldErrors.base_currency} />}
       </ExpandableRow>
       <Hairline />
-      <ExpandableRow label={t("settings.timeZone")} value={form ? labelOf(timezones, form.timezone) : ""} hint={t("settings.hint.timeZone")} loading={!ready} open={open === "timezone"} onToggle={() => toggle("timezone")}>
-        {form && <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={timezones} placeholder={t("settings.selectTimeZone")} error={fieldErrors.timezone} />}
+      <ExpandableRow label={t("settings.timeZone", "Time zone")} value={form ? labelOf(timezones, form.timezone) : ""} hint={t("settings.hint.timeZone", "Saved to your account. The cabinet itself shows times in your device's time zone.")} loading={!ready} open={open === "timezone"} onToggle={() => toggle("timezone")}>
+        {form && <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={timezones} placeholder={t("settings.selectTimeZone", "Select time zone")} error={fieldErrors.timezone} />}
       </ExpandableRow>
     </ListCard>
   );
@@ -101,7 +101,7 @@ export function PersonalDetailsCard({ onOpen }: { onOpen: () => void }) {
   return (
     <ListCard>
       <button type="button" onClick={onOpen} className={ROW_INTERACTIVE}>
-        <RowLabel title={t("settings.nav.personal")} sub={t("settings.personalRowSub")} />
+        <RowLabel title={t("settings.nav.personal", "Personal details")} sub={t("settings.personalRowSub", "Name, phone, address, tax residence")} />
         <Chevron />
       </button>
     </ListCard>
@@ -160,12 +160,12 @@ export function MobileSecurityCard({
   const t = useT();
   return (
     <ListCard>
-      <ListCardTitle>{t("ui.security")}</ListCardTitle>
+      <ListCardTitle>{t("ui.security", "Security")}</ListCardTitle>
       <Hairline />
       <Row>
-        <RowLabel title={t("ui.signedInGoogle")} sub={loading ? "…" : formatEmail(email) || "—"} />
+        <RowLabel title={t("ui.signedInGoogle", "Signed in with Google")} sub={loading ? "…" : formatEmail(email) || "—"} />
         {/* i18n-max: 12 — a `shrink-0` Pill beside the `min-w-0` row label. */}
-        <Pill>{t("settings.connected")}</Pill>
+        <Pill>{t("settings.connected", "Connected")}</Pill>
       </Row>
       <Hairline />
       <button
@@ -173,14 +173,14 @@ export function MobileSecurityCard({
         onClick={onOpenSessions}
         className={ROW_INTERACTIVE}
       >
-        <RowLabel title={t("ui.trustedSessions")} sub={t("settings.trustedSessionsSub")} />
+        <RowLabel title={t("ui.trustedSessions", "Trusted sessions")} sub={t("settings.trustedSessionsSub", "Devices signed in to your account")} />
         <span className="flex shrink-0 items-center gap-2">
           {sessions === undefined ? <Skeleton className="h-3.5 w-4" /> : <RowValue>{sessions.length}</RowValue>}
           <Chevron />
         </span>
       </button>
       <Hairline />
-      <p className="py-3 text-xs leading-relaxed text-ink-soft">{t("settings.googleManagedShort")}</p>
+      <p className="py-3 text-xs leading-relaxed text-ink-soft">{t("settings.googleManagedShort", "Your password, two-factor authentication and recovery are configured in your Google Account.")}</p>
     </ListCard>
   );
 }
@@ -195,12 +195,12 @@ export function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
   const unread = useUnreadCount();
   return (
     <ListCard>
-      <ListCardTitle>{t("nav.notifications")}</ListCardTitle>
+      <ListCardTitle>{t("nav.notifications", "Notifications")}</ListCardTitle>
       <Hairline />
       <Link href="/notifications" className={ROW_INTERACTIVE}>
-        <RowLabel title={t("settings.inbox")} sub={t("notif.subtitle")} />
+        <RowLabel title={t("settings.inbox", "Inbox")} sub={t("notif.subtitle", "Everything you follow — and how you hear about it")} />
         {/* The count the tab's badge promised, so the tap that followed it finds it here. */}
-        {unread ? <RowValue className="shrink-0 font-semibold text-primary-ink tabular-nums">{t("notif.unreadCount", { n: unread })}</RowValue> : null}
+        {unread ? <RowValue className="shrink-0 font-semibold text-primary-ink tabular-nums">{t("notif.unreadCount", "Unread · {n}", { n: unread })}</RowValue> : null}
         <Chevron />
       </Link>
       <Hairline />
@@ -209,7 +209,7 @@ export function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
         onClick={onOpen}
         className={ROW_INTERACTIVE}
       >
-        <RowLabel title={t("ui.deliveryTopics")} sub={t("settings.deliveryTopicsSub")} />
+        <RowLabel title={t("ui.deliveryTopics", "Delivery & topics")} sub={t("settings.deliveryTopicsSub", "Where we reach you and what you follow")} />
         <Chevron />
       </button>
     </ListCard>
@@ -236,7 +236,7 @@ export function SignOutButton() {
       disabled={busy}
       className="flex w-full items-center justify-center gap-2 rounded-lg border border-border py-3.5 text-sm font-semibold text-accent-error outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:bg-accent-error/10 disabled:opacity-60"
     >
-      {busy ? <Spinner aria-hidden /> : <LogOut className="size-4" />} {t("auth.signOut")}
+      {busy ? <Spinner aria-hidden /> : <LogOut className="size-4" />} {t("auth.signOut", "Sign out")}
     </button>
   );
 }

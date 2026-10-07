@@ -31,7 +31,7 @@ export function DesktopPane({ section, onSelect, personal, sessions, sessionList
           <div>
             {/* The section itself is shared with the mobile pushed screen, where the
                 app bar titles it — the header is the desktop's alone. */}
-            <SectionHeader title={t("nav.notifications")} sub={t("settings.notificationsSub")} />
+            <SectionHeader title={t("nav.notifications", "Notifications")} sub={t("settings.notificationsSub", "Which channels reach you and which events you follow")} />
             <NotificationsSection />
           </div>
         )}
@@ -40,7 +40,7 @@ export function DesktopPane({ section, onSelect, personal, sessions, sessionList
         {section === "sessions" && sessions}
         {section === "documents" && (
           <div>
-            <SectionHeader title={t("settings.documents.title")} sub={t("settings.documents.sub")} />
+            <SectionHeader title={t("settings.documents.title", "Documents and disclosures")} sub={t("settings.documents.sub", "What the fund has published, and how your money is held")} />
             <DocumentsSection />
           </div>
         )}

@@ -33,30 +33,30 @@ export function RailFunding({ rail }: { rail: RailLiquidity }) {
       {rail.treasury_address ? (
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
-            <p className="text-xs text-ink-soft">{t("nav.treasury")}</p>
+            <p className="text-xs text-ink-soft">{t("nav.treasury", "Treasury")}</p>
             <TipAnchor anchor="admin.treasury.rail.address" />
           </div>
           <CopyableAddress address={show(rail.treasury_address)} />
         </div>
       ) : (
-        <p className="text-xs text-ink-soft">{t("admin.treasury.custodyUnconfigured")}</p>
+        <p className="text-xs text-ink-soft">{t("admin.treasury.custodyUnconfigured", "— · custody unconfigured")}</p>
       )}
-      <FundingRow label={t("admin.treasury.onchainUsdt")} value={rail.onchain_usdt ? qty(rail.onchain_usdt, locale) : undefined} />
-      <FundingRow label={t("admin.treasury.gas")} value={rail.onchain_gas ? `${qty(rail.onchain_gas, locale)} ${gasSymbol}`.trimEnd() : undefined} />
+      <FundingRow label={t("admin.treasury.onchainUsdt", "On-chain USDT")} value={rail.onchain_usdt ? qty(rail.onchain_usdt, locale) : undefined} />
+      <FundingRow label={t("admin.treasury.gas", "Gas")} value={rail.onchain_gas ? `${qty(rail.onchain_gas, locale)} ${gasSymbol}`.trimEnd() : undefined} />
       {rail.gas_station_address && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5">
             {/* The accent parenthetical is its own complete thought, so it keeps its own key
                 and its own colour rather than being folded into the label. */}
             <p className="text-xs text-ink-soft">
-              {t("admin.treasury.gasStation")}{" "}
-              <span className="text-positive">{t("admin.treasury.gasStationHint", { symbol: gasSymbol || t("admin.treasury.gasWord") })}</span>
+              {t("admin.treasury.gasStation", "Gas station")}{" "}
+              <span className="text-positive">{t("admin.treasury.gasStationHint", "(fund {symbol} here — pays sweep gas drops)", { symbol: gasSymbol || t("admin.treasury.gasWord", "gas") })}</span>
             </p>
             <TipAnchor anchor="admin.treasury.rail.gas-station" />
           </div>
           <CopyableAddress address={show(rail.gas_station_address)} />
           <FundingRow
-            label={t("admin.treasury.gasStationBalance")}
+            label={t("admin.treasury.gasStationBalance", "Gas station balance")}
             value={rail.gas_station_gas ? `${qty(rail.gas_station_gas, locale)} ${gasSymbol}`.trimEnd() : undefined}
           />
         </div>
@@ -93,7 +93,7 @@ function CopyableAddress({ address, label }: { address: string; label?: string }
         <code className="flex-1 min-w-0 truncate rounded border border-border bg-secondary px-2 py-1 font-mono-tech text-xs text-ink-soft" title={address}>
           {address}
         </code>
-        <Button type="button" variant="outline" icon onClick={copy} aria-label={t("admin.treasury.a11y.copy", { what: label ?? t("ui.address") })}>
+        <Button type="button" variant="outline" icon onClick={copy} aria-label={t("admin.treasury.a11y.copy", "Copy {what}", { what: label ?? t("ui.address", "address") })}>
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         </Button>
       </div>

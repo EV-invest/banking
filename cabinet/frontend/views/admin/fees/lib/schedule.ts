@@ -9,6 +9,8 @@
 // Kept free of path-alias VALUE imports: the test runs under Node's own resolver, which
 // knows nothing of `@/`. The two modules this leans on are import-free themselves.
 
+import type { Translate } from "@evinvest/i18n";
+
 import type { ScheduleFeePolicyRequest } from "@/shared/contracts/admin";
 
 import {
@@ -46,13 +48,14 @@ const CEILING_BPS: Record<RateField, number> = {
   hurdle: MAX_HURDLE_BPS,
 };
 
-/** The label key of a rate field — `t(field...)` is the view's, so the sentence can put
- *  the field name at whichever end the language wants. */
-export const FIELD_LABEL_KEY: Record<RateField, string> = {
-  management: "admin.fees.field.management",
-  performance: "admin.fees.field.performance",
-  hurdle: "admin.fees.field.hurdle",
-};
+/** A rate field's name — the view interpolates it, so the sentence can put the field name
+ *  at whichever end the language wants. */
+export const fieldLabel = (field: RateField, t: Translate): string =>
+  ({
+    management: t("admin.fees.field.management", "Management"),
+    performance: t("admin.fees.field.performance", "Performance"),
+    hurdle: t("admin.fees.field.hurdle", "Hurdle"),
+  })[field];
 
 /** Why the draft cannot be sent, in message-key form; the view interpolates. */
 export type DraftProblem =

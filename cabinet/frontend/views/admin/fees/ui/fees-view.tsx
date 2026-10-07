@@ -79,7 +79,7 @@ export function FeesView() {
 
   return (
     <AdminScreen className="space-y-6">
-      <AdminHeader eyebrow={t("nav.fees")} title={t("admin.fees.title")} subtitle={t("admin.fees.subtitle")} />
+      <AdminHeader eyebrow={t("nav.fees", "Fees")} title={t("admin.fees.title", "Fee terms and collection")} subtitle={t("admin.fees.subtitle", "What each fund charges its investors, and converting what it has already earned into cash.")} />
 
       {forbidden ? (
         <StaggerItem as={Empty} className="border">
@@ -87,12 +87,12 @@ export function FeesView() {
             <EmptyMedia variant="icon">
               <ShieldAlert />
             </EmptyMedia>
-            <EmptyTitle>{t("admin.fees.forbidden.title")}</EmptyTitle>
-            <EmptyDescription>{t("admin.fees.forbidden.body")}</EmptyDescription>
+            <EmptyTitle>{t("admin.fees.forbidden.title", "Fee terms are set by administrators and owners")}</EmptyTitle>
+            <EmptyDescription>{t("admin.fees.forbidden.body", "Pricing a product changes what investors pay, so only an administrator or an owner can view and schedule fee terms. The rest of the console is yours as usual.")}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button asChild variant="outline">
-              <Link href="/admin/users">{t("nav.users")}</Link>
+              <Link href="/admin/users">{t("nav.users", "Users")}</Link>
             </Button>
           </EmptyContent>
         </StaggerItem>
@@ -108,8 +108,8 @@ export function FeesView() {
             <EmptyMedia variant="icon">
               <Landmark />
             </EmptyMedia>
-            <EmptyTitle>{t("admin.fees.noFunds")}</EmptyTitle>
-            <EmptyDescription>{t("admin.fees.noFundsHint")}</EmptyDescription>
+            <EmptyTitle>{t("admin.fees.noFunds", "No funds registered")}</EmptyTitle>
+            <EmptyDescription>{t("admin.fees.noFundsHint", "A fee is a property of a product. Register an allocation first, then price it here.")}</EmptyDescription>
           </EmptyHeader>
         </StaggerItem>
       ) : (

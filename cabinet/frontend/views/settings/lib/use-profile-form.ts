@@ -52,7 +52,7 @@ export function useProfileForm() {
     const errors = validateProfileForm(form, t);
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      setSaveError(t("settings.fixHighlighted"));
+      setSaveError(t("settings.fixHighlighted", "Please fix the highlighted fields"));
       return;
     }
     setFieldErrors({});

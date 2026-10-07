@@ -65,7 +65,7 @@ export function VerifiedTag() {
     <span className="inline-flex items-center gap-1">
       {/* i18n-max: 12 — sits beside a field label in a `justify-between` header row. */}
       <Pill tone="success" icon={BadgeCheck}>
-        {t("ui.verified")}
+        {t("ui.verified", "Verified")}
       </Pill>
       {/* Verified means the address, not the person — the tip says so before anyone
           reads it as KYC. */}

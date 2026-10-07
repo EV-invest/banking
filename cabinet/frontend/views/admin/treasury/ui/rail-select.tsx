@@ -25,14 +25,14 @@ export function RailSelect({ value, options, onChange }: { value: string; option
   const id = useId();
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{t("admin.rail")}</FieldLabel>
+      <FieldLabel htmlFor={id}>{t("admin.rail", "Rail")}</FieldLabel>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger id={id} className="w-full border-border bg-secondary" disabled={options.length === 0}>
           {/* The placeholder is trigger text, not a selectable item — "Select a rail…"
               is not a rail. */}
           <span className={cn("flex min-w-0 items-center gap-1.5", !value && "text-ink-soft")}>
             {value && <NetworkMark network={value} className="size-3.5 shrink-0" />}
-            <span className="truncate">{value ? railLabel(value, t) : options.length === 0 ? t("admin.treasury.noRailWithTreasury") : t("admin.treasury.selectRail")}</span>
+            <span className="truncate">{value ? railLabel(value, t) : options.length === 0 ? t("admin.treasury.noRailWithTreasury", "No rail with a treasury") : t("admin.treasury.selectRail", "Select a rail…")}</span>
           </span>
         </SelectTrigger>
         <SelectContent>

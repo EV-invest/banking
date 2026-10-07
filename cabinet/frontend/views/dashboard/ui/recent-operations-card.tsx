@@ -19,10 +19,10 @@ export function RecentOperationsCard({ ops, className }: { ops: Op[]; className?
   return (
     <StaggerItem as={Card} className={cn("gap-3 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
-        <CardTitle>{t("dash.recentOperations")}</CardTitle>
+        <CardTitle>{t("dash.recentOperations", "Recent activity")}</CardTitle>
         <CardAction>
           <Button asChild variant="link" size="sm" className="px-0">
-            <Link href="/operations">{t("ui.viewAll")}</Link>
+            <Link href="/operations">{t("ui.viewAll", "View all")}</Link>
           </Button>
         </CardAction>
       </CardHeader>
@@ -33,14 +33,14 @@ export function RecentOperationsCard({ ops, className }: { ops: Op[]; className?
               <EmptyMedia variant="icon">
                 <ArrowLeftRight />
               </EmptyMedia>
-              <EmptyTitle>{t("ui.noOperations")}</EmptyTitle>
-              <EmptyDescription>{t("dash.noOperationsHint")}</EmptyDescription>
+              <EmptyTitle>{t("ui.noOperations", "No activity yet")}</EmptyTitle>
+              <EmptyDescription>{t("dash.noOperationsHint", "Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.")}</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               {/* Same destination as the Move money card's filled Deposit, which is
                   already on screen — so this one stays outline. */}
               <Button asChild variant="outline">
-                <Link href="/wallet/deposit">{t("ui.addFunds")}</Link>
+                <Link href="/wallet/deposit">{t("ui.addFunds", "Add funds")}</Link>
               </Button>
             </EmptyContent>
           </Empty>

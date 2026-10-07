@@ -131,12 +131,12 @@ export function NotificationsView() {
 
   return (
     <PageFrame
-      title={t("nav.notifications")}
-      description={t("notif.subtitle")}
+      title={t("nav.notifications", "Notifications")}
+      description={t("notif.subtitle", "Everything you follow — and how you hear about it")}
       width="content"
       actions={
         <Button type="button" variant="outline" onClick={markAll} disabled={busy || unread === 0}>
-          {t("notif.markAllRead")}
+          {t("notif.markAllRead", "Mark all read")}
         </Button>
       }
     >
@@ -157,7 +157,7 @@ export function NotificationsView() {
             )}
           >
             {/* i18n-max: 14 — two pills in an `inline-flex` bar that cannot wrap. */}
-            {f === "all" ? t("ui.all") : unread > 0 ? t("notif.unreadCount", { n: unread }) : t("notif.unread")}
+            {f === "all" ? t("ui.all", "All") : unread > 0 ? t("notif.unreadCount", "Unread · {n}", { n: unread }) : t("notif.unread", "Unread")}
           </button>
         ))}
       </StaggerItem>
@@ -195,7 +195,7 @@ export function NotificationsView() {
       {nextCursor && items && items.length > 0 && (
         <StaggerItem className="flex justify-center">
           <Button type="button" variant="outline" onClick={loadMore} disabled={busy}>
-            {busy ? t("ui.loading") : t("notif.loadOlder")}
+            {busy ? t("ui.loading", "Loading…") : t("notif.loadOlder", "Load older")}
           </Button>
         </StaggerItem>
       )}
@@ -241,13 +241,13 @@ function EmptyState({ filter, t }: { filter: Filter; t: Translate }) {
       <span className="flex size-14 items-center justify-center rounded-xl bg-primary-ink/15">
         <Bell className="size-6 text-primary-ink" />
       </span>
-      <p className="mt-5 text-base font-semibold text-ink">{t(filter === "unread" ? "notif.nothingUnread" : "notif.nothingYet")}</p>
-      <p className="mt-2 max-w-108 text-sm text-ink-soft">{t(filter === "unread" ? "notif.allCaughtUp" : "notif.emptyHint")}</p>
+      <p className="mt-5 text-base font-semibold text-ink">{(filter === "unread" ? t("notif.nothingUnread", "Nothing unread") : t("notif.nothingYet", "Nothing yet"))}</p>
+      <p className="mt-2 max-w-108 text-sm text-ink-soft">{(filter === "unread" ? t("notif.allCaughtUp", "You're all caught up.") : t("notif.emptyHint", "Follow a fund and its NAV updates, distributions and research notes land here — and in your inbox too, if you want a copy."))}</p>
       <Link
         href="/settings"
         className={cn("mt-5 rounded-lg border border-border px-5.5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-ink/5", FOCUS)}
       >
-        {t("notif.settingsLink")}
+        {t("notif.settingsLink", "Notification settings")}
       </Link>
     </div>
   );
@@ -261,10 +261,10 @@ function formatWhen(unixSeconds: string, locale: Locale, t: Translate): string {
   const d = toDate(unixSeconds);
   if (!d) return "";
   const mins = Math.floor((Date.now() - d.getTime()) / 60_000);
-  if (mins < 1) return t("notif.when.now");
-  if (mins < 60) return t("notif.when.minutes", { n: mins });
-  if (mins < 60 * 24) return t("notif.when.hours", { n: Math.floor(mins / 60) });
-  if (mins < 60 * 24 * 7) return t("notif.when.days", { n: Math.floor(mins / (60 * 24)) });
+  if (mins < 1) return t("notif.when.now", "now");
+  if (mins < 60) return t("notif.when.minutes", "{n}m", { n: mins });
+  if (mins < 60 * 24) return t("notif.when.hours", "{n}h", { n: Math.floor(mins / 60) });
+  if (mins < 60 * 24 * 7) return t("notif.when.days", "{n}d", { n: Math.floor(mins / (60 * 24)) });
   // `intlLocale`, not `locale`: bare "en" means en-US to Intl ("Mar 12"), while the
   // operations timeline renders "12 Mar". One English reader, one convention.
   return d.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short" });

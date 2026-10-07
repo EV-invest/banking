@@ -50,14 +50,14 @@ export function SubscribeField({
           each broke mid-phrase instead of the balance dropping to its own line. */}
       <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <span className="flex items-center gap-1.5 text-sm">
-          <FieldLabel htmlFor={id}>{t("invest.amountUsdt")}</FieldLabel>
+          <FieldLabel htmlFor={id}>{t("invest.amountUsdt", "Amount (USDT)")}</FieldLabel>
           <TipAnchor anchor="invest.subscribe.amount" />
         </span>
         {available !== null && (
           <span className="flex items-center gap-2 text-xs text-ink-soft tabular-nums">
-            {t("invest.availableUsdt", { amount: formatUsdt(available, locale) })}
+            {t("invest.availableUsdt", "Available: {amount} USDT", { amount: formatUsdt(available, locale) })}
             <button type="button" className="rounded-sm font-medium text-primary-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onChange(available)}>
-              {t("ui.max")}
+              {t("ui.max", "Max")}
             </button>
           </span>
         )}
@@ -94,18 +94,18 @@ function SubscribeHint({ id, check, nav }: { id: string; check: SubscribeCheck; 
     // The fix for this one is not a smaller number, so the way out sits on the line itself.
     return (
       <FieldError id={id} className="flex flex-wrap items-center gap-x-2 text-xs">
-        {t("invest.insufficientHint")}
+        {t("invest.insufficientHint", "That is more than your available balance.")}
         <Link href="/wallet/deposit" className="rounded-sm font-medium text-primary-ink underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          {t("invest.topUp")}
+          {t("invest.topUp", "Top up")}
         </Link>
       </FieldError>
     );
   }
-  if (issue === "dust") return <FieldError id={id} className="text-xs">{t("invest.dustHint", { nav: formatUsdt(nav?.nav, locale) })}</FieldError>;
-  if (issue === "overCap") return <FieldError id={id} className="text-xs">{t("invest.overCapHint", unitArgs(headroom ?? 0n))}</FieldError>;
+  if (issue === "dust") return <FieldError id={id} className="text-xs">{t("invest.dustHint", "Too small to buy a whole unit at {nav} — increase the amount.", { nav: formatUsdt(nav?.nav, locale) })}</FieldError>;
+  if (issue === "overCap") return <FieldError id={id} className="text-xs">{t("invest.overCapHint", "Only {n, plural, one {{units} unit is} other {{units} units are}} left before this fund reaches its cap — reduce the amount.", unitArgs(headroom ?? 0n))}</FieldError>;
   return (
     <FieldDescription id={id} className="text-xs tabular-nums">
-      {preview !== null ? t("invest.buysUnits", { ...unitArgs(preview), nav: formatUsdt(nav?.nav, locale) }) : t("invest.subscribeIdleHint")}
+      {preview !== null ? t("invest.buysUnits", "Buys {n, plural, one {{units} unit} other {{units} units}} at {nav} USDT per unit.", { ...unitArgs(preview), nav: formatUsdt(nav?.nav, locale) }) : t("invest.subscribeIdleHint", "Units are priced at the current NAV; the unit count is fixed at purchase and does not grow.")}
     </FieldDescription>
   );
 }

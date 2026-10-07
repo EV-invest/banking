@@ -56,21 +56,21 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
     <div className="space-y-2">
       {confirming && verdict.kind === "pinnable" ? (
         <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
-          <p className="text-xs tabular-nums">{t("admin.alloc.pinCap.confirm", { from: compactUnits(verdict.from, locale), to: formatUnits(verdict.to, locale) })}</p>
+          <p className="text-xs tabular-nums">{t("admin.alloc.pinCap.confirm", "Cap {from} → {to}. No further units can be issued until the cap is raised again.", { from: compactUnits(verdict.from, locale), to: formatUnits(verdict.to, locale) })}</p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy} onClick={() => setConfirming(false)}>
-              {t("ui.cancel")}
+              {t("ui.cancel", "Cancel")}
             </Button>
             <Button type="button" size="sm" className={cn("flex-1", TEAL_CTA)} disabled={busy} onClick={pin}>
               {busy ? <Spinner aria-hidden /> : null}
-              {t("admin.alloc.pinCap.submit")}
+              {t("admin.alloc.pinCap.submit", "Pin cap")}
             </Button>
           </div>
         </div>
       ) : (
         <Button type="button" variant="outline" size="sm" className="w-full" disabled={verdict.kind !== "pinnable"} onClick={() => setConfirming(true)}>
           <Pin className="size-3.5" />
-          {t("admin.alloc.pinCap.action")}
+          {t("admin.alloc.pinCap.action", "Pin cap to issued")}
         </Button>
       )}
       {hint && <p className="text-xs text-ink-soft">{hint}</p>}
@@ -87,11 +87,11 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
 function disabledReason(verdict: PinCapVerdict, t: Translate, locale: Locale): string | null {
   switch (verdict.kind) {
     case "queuedPending":
-      return t("admin.alloc.pinCap.queued", { units: formatUnits(verdict.queued, locale) });
+      return t("admin.alloc.pinCap.queued", "{units} units are still queued in the relay — pin the cap once they have landed.", { units: formatUnits(verdict.queued, locale) });
     case "nothingIssued":
-      return t("admin.alloc.pinCap.nothingIssued");
+      return t("admin.alloc.pinCap.nothingIssued", "Nothing has settled yet — a queued mint is not on the ledger until the relay posts it.");
     case "alreadyPinned":
-      return t("admin.alloc.pinCap.alreadyPinned");
+      return t("admin.alloc.pinCap.alreadyPinned", "The cap already equals the issued supply.");
     case "pinnable":
       return null;
   }

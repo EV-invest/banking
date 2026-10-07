@@ -29,8 +29,8 @@ export function ChartPane({ service }: { service: string }) {
   return (
     <TerminalPane area="chart">
       <TerminalPaneHeader className="justify-between">
-        <span>{t("trade.chart.title")}</span>
-        <ToggleGroup type="single" size="sm" value={resolution} onValueChange={(v) => isResolution(v) && setResolution(v)} aria-label={t("trade.chart.resolution")}>
+        <span>{t("trade.chart.title", "Chart")}</span>
+        <ToggleGroup type="single" size="sm" value={resolution} onValueChange={(v) => isResolution(v) && setResolution(v)} aria-label={t("trade.chart.resolution", "Candle size")}>
           {RESOLUTIONS.map((r) => (
             <ToggleGroupItem key={r} value={r} className="px-2 font-mono-tech text-xs">
               {r}
@@ -43,7 +43,7 @@ export function ChartPane({ service }: { service: string }) {
         {state.kind !== "ready" && (
           // Drawn beside the host, never inside it: the engine owns the host's children.
           <p className={cn("pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-xs", state.kind === "failed" ? "text-accent-error" : "text-ink-soft")}>
-            {state.kind === "loading" ? t("ui.loading") : state.kind === "empty" ? t("trade.chart.empty") : errorMessage(state.error, t)}
+            {state.kind === "loading" ? t("ui.loading", "Loading…") : state.kind === "empty" ? t("trade.chart.empty", "No trades yet — the chart draws from the first fill.") : errorMessage(state.error, t)}
           </p>
         )}
       </TerminalPaneBody>

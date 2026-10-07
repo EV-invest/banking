@@ -51,7 +51,7 @@ export function RetireAction({ allocation }: { allocation: Allocation }) {
     // Unreachable through the buttons, which disable on the same rules — unless the row
     // went live under an open form. Then the reason is the gate's, not a silent no-op.
     if (!body) {
-      setError(t("admin.alloc.retire.closeFirst"));
+      setError(t("admin.alloc.retire.closeFirst", "Close the product first — units are retired out of a wound-down product."));
       return;
     }
     setBusy(true);
@@ -84,7 +84,7 @@ export function RetireAction({ allocation }: { allocation: Allocation }) {
         <>
           <Button type="button" variant="outline" size="sm" className="w-full" disabled={!retireAllowed(allocation.state, draft.force)} onClick={() => setStep("editing")}>
             <Flame className="size-3.5" />
-            {t("admin.alloc.retire.action")}
+            {t("admin.alloc.retire.action", "Retire units")}
           </Button>
           {live && <RetireGate force={draft.force} onForce={(force) => setDraft((d) => ({ ...d, force }))} />}
         </>
@@ -92,19 +92,19 @@ export function RetireAction({ allocation }: { allocation: Allocation }) {
       {step === "editing" && <RetireForm draft={draft} onChange={setDraft} onReview={() => setStep("confirming")} onCancel={() => { setStep("closed"); setError(null); }} />}
       {step === "confirming" && draft.holder && (
         <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
-          <p className="text-xs tabular-nums">{t("admin.alloc.retire.confirm", { units: formatUnits(draft.units.trim(), locale), holder: holderLabel })}</p>
+          <p className="text-xs tabular-nums">{t("admin.alloc.retire.confirm", "Retire {units} units from {holder} — the supply shrinks. No cash moves.", { units: formatUnits(draft.units.trim(), locale), holder: holderLabel })}</p>
           {live && (
             <p className="flex items-start gap-2 text-xs text-accent-warn">
-              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.retire.forceConfirm")}
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.retire.forceConfirm", "Forced: the product is not closed.")}
             </p>
           )}
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy} onClick={() => setStep("editing")}>
-              {t("ui.back")}
+              {t("ui.back", "Back")}
             </Button>
             <Button type="button" variant="destructive" size="sm" className="flex-1" disabled={busy} onClick={send}>
               {busy ? <Spinner aria-hidden /> : null}
-              {t("admin.alloc.retire.submit")}
+              {t("admin.alloc.retire.submit", "Retire")}
             </Button>
           </div>
         </div>

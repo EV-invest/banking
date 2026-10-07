@@ -1,5 +1,6 @@
 "use client";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -83,18 +84,18 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
 
   const appBar = (
     <MobileAppBar
-      title={t(pushed ? PUSHED_TITLE[pushed] : "nav.settings")}
+      title={pushed ? pushedTitles(t)[pushed] : t("nav.settings", "Settings")}
       onBack={pushed ? pop : undefined}
       right={
         dirty ? (
           // i18n-max: 11 — a `shrink-0` Button in the app bar, beside the truncated title.
           <Button type="button" size="sm" onClick={save} disabled={saving} className="rounded-full font-semibold">
-            {saving && <Spinner aria-hidden />} {t("ui.save")}
+            {saving && <Spinner aria-hidden />} {t("ui.save", "Save")}
           </Button>
         ) : pushed ? undefined : (
           // The in-cabinet account chip, on mobile: the avatar is the way to the profile
           // here the same way the header chip is on desktop.
-          <Link href="/profile" aria-label={t("ui.profile")} className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Link href="/profile" aria-label={t("ui.profile", "Profile")} className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <InitialsAvatar initials={initialsOfName(name, email)} className="size-8.5 text-sm" />
           </Link>
         )
@@ -108,18 +109,18 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
       {saved && (
         // i18n-max: 11
         <span className="inline-flex items-center gap-1 text-sm font-medium text-positive">
-          <Check className="size-4" /> {t("ui.saved")}
+          <Check className="size-4" /> {t("ui.saved", "Saved")}
         </span>
       )}
       {/* i18n-max: 20 */}
       <Button type="button" onClick={save} disabled={loading || saving || !dirty} className="rounded-lg font-semibold">
-        {saving && <Spinner aria-hidden />} {t("ui.saveChanges")}
+        {saving && <Spinner aria-hidden />} {t("ui.saveChanges", "Save changes")}
       </Button>
     </>
   );
 
   return (
-    <PageFrame title={t("nav.settings")} description={t("settings.subtitle")} actions={headingAction || undefined} appBar={appBar}>
+    <PageFrame title={t("nav.settings", "Settings")} description={t("settings.subtitle", "Manage your account, security and access")} actions={headingAction || undefined} appBar={appBar}>
       {error && (
         <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
           {error}
@@ -129,7 +130,7 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
           arrived, and belongs to the save rather than to the screen. */}
       {saved && (
         <p className="inline-flex items-center gap-1 text-sm font-medium text-positive lg:hidden">
-          <Check className="size-4" /> {t("ui.saved")}
+          <Check className="size-4" /> {t("ui.saved", "Saved")}
         </p>
       )}
 
@@ -139,10 +140,11 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
   );
 }
 
-// App bar titles for the pushed screens. The catalogue keys, not English — resolved at render.
-const PUSHED_TITLE = {
-  personal: "settings.nav.personal",
-  sessions: "ui.sessionsDevices",
-  notifications: "nav.notifications",
-  documents: "settings.nav.documents",
-} as const;
+// App bar titles for the pushed screens, resolved at render against the reader's `t`.
+const pushedTitles = (t: Translate) =>
+  ({
+    personal: t("settings.nav.personal", "Personal details"),
+    sessions: t("ui.sessionsDevices", "Sessions & devices"),
+    notifications: t("nav.notifications", "Notifications"),
+    documents: t("settings.nav.documents", "Documents"),
+  }) as const;

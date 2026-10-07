@@ -6,6 +6,7 @@
 import type { Translate } from "@evinvest/i18n";
 
 import type { AllocationAccessLevel, AllocationGrantLevel } from "@/shared/contracts/admin";
+import { wordFor } from "@/shared/lib/wire-words";
 
 /** Every level, lowest first — what the row's default-access picker offers. */
 export const ACCESS_LEVELS: readonly AllocationAccessLevel[] = ["hidden", "view", "invest"];
@@ -13,14 +14,14 @@ export const ACCESS_LEVELS: readonly AllocationAccessLevel[] = ["hidden", "view"
 /** The levels a grant may carry — what the grant form's level picker offers. */
 export const GRANT_LEVELS: readonly AllocationGrantLevel[] = ["view", "invest"];
 
-const ACCESS_LABEL_KEYS: Record<AllocationAccessLevel, string> = {
-  hidden: "admin.alloc.access.hidden",
-  view: "admin.alloc.access.view",
-  invest: "admin.alloc.access.invest",
-};
+const accessWords = (t: Translate): Record<AllocationAccessLevel, string> => ({
+  hidden: t("admin.alloc.access.hidden", "Hidden"),
+  view: t("admin.alloc.access.view", "View only"),
+  invest: t("admin.alloc.access.invest", "Investable"),
+});
 
 export function accessLabel(level: AllocationAccessLevel, t: Translate): string {
-  return t(ACCESS_LABEL_KEYS[level]);
+  return wordFor(accessWords(t), level) ?? level;
 }
 
 /** Tailwind token classes for an access-level chip — the same three tiers the row's state

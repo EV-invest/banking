@@ -72,13 +72,13 @@ export function BookPanel({ allocation, onClose, className }: { allocation: Allo
 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.book.title")}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.book.title", "Order book")}</p>
             <UnbackedAckBadge acknowledged={read.data?.allow_unbacked_trading === true} />
           </div>
           <Settled loading={!read.data && !read.error} skeleton={<Skeleton className="h-40 w-full" />}>
             {(read.data || read.error) && <BookForm key={read.data?.updated_at ?? "none"} allocation={allocation} policy={read.data ?? null} busy={busy} saved={saved} onSubmit={save} />}
           </Settled>
-          <p className="text-xs text-ink-soft">{t("admin.alloc.book.note")}</p>
+          <p className="text-xs text-ink-soft">{t("admin.alloc.book.note", "The book is the secondary market in this product's units: holders trade with each other at the book's price, not at NAV. Opening it needs no valuation.")}</p>
         </div>
       </CardContent>
     </Card>

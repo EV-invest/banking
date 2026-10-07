@@ -39,13 +39,13 @@ export function AllocationCard({ row, busy, editing, onEdit, onSave, onToggle, o
       </div>
       <dl className="space-y-2 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <dt className="text-xs text-ink-soft">{t("admin.alloc.col.access")}</dt>
+          <dt className="text-xs text-ink-soft">{t("admin.alloc.col.access", "Access")}</dt>
           <dd>
             <AllocationAccessCell access={access} onChange={onSetAccess} />
           </dd>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <dt className="text-xs text-ink-soft">{t("admin.alloc.col.unitCap")}</dt>
+          <dt className="text-xs text-ink-soft">{t("admin.alloc.col.unitCap", "Unit cap")}</dt>
           <dd className="tabular-nums text-ink-soft">{compactUnits(row.unit_cap, locale)}</dd>
         </div>
       </dl>

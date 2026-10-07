@@ -80,12 +80,12 @@ export function OutboxView() {
   return (
     <AdminScreen className="space-y-8">
       <AdminHeader
-        eyebrow={t("admin.eyebrow.administer")}
-        title={t("nav.outbox")}
-        subtitle={t("admin.outbox.subtitle")}
+        eyebrow={t("admin.eyebrow.administer", "Administer")}
+        title={t("nav.outbox", "Outbox")}
+        subtitle={t("admin.outbox.subtitle", "Stuck outbox rows — what the relay couldn't apply, and the action that re-drives them")}
         action={
           <Button type="button" variant="outline" size="sm" disabled={refreshing} onClick={load}>
-            <RefreshCw className={refreshing ? "size-4 animate-spin" : "size-4"} /> {t("ui.refresh")}
+            <RefreshCw className={refreshing ? "size-4 animate-spin" : "size-4"} /> {t("ui.refresh", "Refresh")}
           </Button>
         }
       />
@@ -93,8 +93,8 @@ export function OutboxView() {
       <StaggerItem as={Card}>
         <CardContent className="space-y-4 py-5">
           <div>
-            <h2 className="text-base font-semibold">{t("admin.outbox.parkedEvents")}</h2>
-            <p className="text-xs text-ink-soft">{t("admin.outbox.parkedEventsSub")}</p>
+            <h2 className="text-base font-semibold">{t("admin.outbox.parkedEvents", "Parked events")}</h2>
+            <p className="text-xs text-ink-soft">{t("admin.outbox.parkedEventsSub", "Outbox rows the relay couldn't apply — fix the cause, then unpark to re-drive")}</p>
           </div>
           {unparkError && (
             <p className="flex items-center gap-2 text-xs text-accent-error">
@@ -103,7 +103,7 @@ export function OutboxView() {
           )}
           {refetchError && (
             <p className="flex items-center gap-2 text-xs text-accent-warn">
-              <TriangleAlert className="size-3.5" /> {t("admin.outbox.unparkRefetchFailed", { error: refetchError })}
+              <TriangleAlert className="size-3.5" /> {t("admin.outbox.unparkRefetchFailed", "Unparked, but refreshing the list failed: {error} — press Refresh to resync.", { error: refetchError })}
             </p>
           )}
           {!parked ? (
@@ -116,8 +116,8 @@ export function OutboxView() {
                 <EmptyMedia variant="icon">
                   <Inbox />
                 </EmptyMedia>
-                <EmptyTitle>{t("admin.outbox.noParkedEvents")}</EmptyTitle>
-                <EmptyDescription>{t("admin.outbox.noParkedEventsHint")}</EmptyDescription>
+                <EmptyTitle>{t("admin.outbox.noParkedEvents", "No parked events")}</EmptyTitle>
+                <EmptyDescription>{t("admin.outbox.noParkedEventsHint", "The relay is clean.")}</EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : (
@@ -147,15 +147,15 @@ function ParkedTable({
         {/* i18n-max: 14 per header — auto-layout table; the Reason cell is the one
             that gives width back, and it is already `truncate`d. */}
         <TableRow>
-          <TableHead className={TABLE_HEAD}>{t("admin.outbox.col.seq")}</TableHead>
-          <TableHead className={TABLE_HEAD}>{t("admin.outbox.col.event")}</TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.outbox.col.seq", "Seq")}</TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.outbox.col.event", "Event")}</TableHead>
           <TableHead className={TABLE_HEAD}>
             <span className="flex items-center gap-1.5">
-              {t("admin.outbox.col.reason")}
+              {t("admin.outbox.col.reason", "Reason")}
               <TipAnchor anchor="admin.outbox.parked.reason" />
             </span>
           </TableHead>
-          <TableHead className={TABLE_HEAD}>{t("admin.outbox.col.parked")}</TableHead>
+          <TableHead className={TABLE_HEAD}>{t("admin.outbox.col.parked", "Parked")}</TableHead>
           <TableHead className={TABLE_HEAD} />
         </TableRow>
       </TableHeader>
@@ -202,19 +202,19 @@ function ParkedActions({
       {/* i18n-max: 12 per badge — three chips and a button share this cell. */}
       {event.compensated && (
         <span className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-ink/5 px-2 py-0.5 text-xs font-medium text-ink">
-          {t("admin.outbox.compensated")}
+          {t("admin.outbox.compensated", "compensated")}
           <TipAnchor anchor="admin.outbox.parked.compensated" />
         </span>
       )}
       {unparked && (
-        <span className="whitespace-nowrap rounded-full bg-positive/15 px-2 py-0.5 text-xs font-medium text-positive">{t("admin.outbox.unparked")}</span>
+        <span className="whitespace-nowrap rounded-full bg-positive/15 px-2 py-0.5 text-xs font-medium text-positive">{t("admin.outbox.unparked", "unparked")}</span>
       )}
       {isDeadKeyPark(event.reason) ? (
         // No button at all: unparking a dead-key row re-parks it on the same refusal, and
         // an operator cannot rotate the key — the hint says who can and what they are waiting on.
         <span className="flex max-w-64 items-start gap-1.5 text-left text-xs text-accent-warn">
           <KeyRound className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          {t("admin.outbox.deadKey")}
+          {t("admin.outbox.deadKey", "Signing key unavailable — engineering has been alerted; unparking will fail until the key is rotated")}
         </span>
       ) : (
         <>
@@ -226,7 +226,7 @@ function ParkedActions({
             onClick={onUnpark}
           >
             {unparking === event.seq ? <Spinner aria-hidden /> : null}
-            {t("admin.outbox.unpark")}
+            {t("admin.outbox.unpark", "Unpark")}
           </Button>
           <TipAnchor anchor="admin.outbox.parked.unpark" />
         </>

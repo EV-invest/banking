@@ -9,12 +9,23 @@
 // Returns catalogue keys: this module is pure and has no translator. An unknown state
 // falls back to the wire word, which is legible even when it is new.
 
+import type { Translate } from "@evinvest/i18n";
+
 import type { Order } from "@/shared/contracts/book";
 
 import { isOrderCancelReason } from "../../../entities/book/lib/vocabulary.ts";
 import { toBaseUnits } from "../../../shared/lib/money.ts";
 
-const STATE_KEYS: Record<string, string> = {
+export type OrderStateKey =
+  | "trade.state.open"
+  | "trade.state.partiallyFilled"
+  | "trade.state.filled"
+  | "trade.state.cancelled"
+  | "trade.state.rejected"
+  | "trade.state.partialCancelled"
+  | "trade.state.unfilledCancelled";
+
+const STATE_KEYS: Readonly<Record<string, OrderStateKey>> = {
   open: "trade.state.open",
   partially_filled: "trade.state.partiallyFilled",
   filled: "trade.state.filled",
@@ -25,11 +36,28 @@ const STATE_KEYS: Record<string, string> = {
 type StateFields = Pick<Order, "state" | "filled" | "cancel_reason">;
 
 /** The catalogue key for the order's state, or `null` for a state this build has no word for. */
-export function orderStateKey(order: StateFields): string | null {
+export function orderStateKey(order: StateFields): OrderStateKey | null {
   if (order.state === "cancelled" && isOrderCancelReason(order.cancel_reason) && order.cancel_reason !== "user") {
     return toBaseUnits(order.filled) > 0n ? "trade.state.partialCancelled" : "trade.state.unfilledCancelled";
   }
-  return STATE_KEYS[order.state ?? ""] ?? null;
+  const state = order.state ?? "";
+  return Object.hasOwn(STATE_KEYS, state) ? STATE_KEYS[state] : null;
+}
+
+const stateWords = (t: Translate): Record<OrderStateKey, string> => ({
+  "trade.state.open": t("trade.state.open", "Open"),
+  "trade.state.partiallyFilled": t("trade.state.partiallyFilled", "Partially filled"),
+  "trade.state.filled": t("trade.state.filled", "Filled"),
+  "trade.state.cancelled": t("trade.state.cancelled", "Cancelled"),
+  "trade.state.rejected": t("trade.state.rejected", "Rejected"),
+  "trade.state.partialCancelled": t("trade.state.partialCancelled", "Partially filled, rest cancelled"),
+  "trade.state.unfilledCancelled": t("trade.state.unfilledCancelled", "Not filled, cancelled"),
+});
+
+/** The order's state in words, or `null` for a state this build has no word for. */
+export function orderStateLabel(order: StateFields, t: Translate): string | null {
+  const key = orderStateKey(order);
+  return key ? stateWords(t)[key] : null;
 }
 
 /** Which `trade.form.placed.*` sentence describes a just-placed order's answer. */

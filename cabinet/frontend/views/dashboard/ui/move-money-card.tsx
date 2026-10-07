@@ -18,14 +18,14 @@ export function MoveMoneyCard({ className }: { className?: string }) {
   return (
     <StaggerItem as={Card} className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
-        <CardTitle>{t("dash.moveMoney")}</CardTitle>
+        <CardTitle>{t("dash.moveMoney", "Move money")}</CardTitle>
       </CardHeader>
       <CardContent className={cn("flex gap-2.5", CARD_PAD)}>
         <Button asChild className="flex-1">
-          <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
+          <Link href="/wallet/deposit">{t("ui.deposit", "Deposit")}</Link>
         </Button>
         <Button asChild variant="outline" className="flex-1">
-          <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
+          <Link href="/wallet/withdraw">{t("ui.withdraw", "Withdraw")}</Link>
         </Button>
       </CardContent>
     </StaggerItem>

@@ -92,7 +92,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
   const label = networkLabel(network);
 
   return (
-    <WalletScreen title={t("ui.depositUsdt")} subtitle={t("ui.receiveFunds")} back="/wallet">
+    <WalletScreen title={t("ui.depositUsdt", "Deposit USDT")} subtitle={t("ui.receiveFunds", "Receive funds into your wallet")} back="/wallet">
       {/* One section, not two: the network picker and the address card are handed over
           together by the same `Settled`, so they arrive together too. Staggering them
           would need the stagger to start after the read landed, which is a second
@@ -115,19 +115,19 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
             // No rail picker and no network warning beside it: there is no address on any
             // network yet, so a selector would offer a choice that changes nothing, and a
             // warning about sending to the wrong chain has nothing to be sent to.
-            <VerificationRequired title={t("wallet.depositVerifyTitle")} description={t("wallet.depositVerifyBody")} />
+            <VerificationRequired title={t("wallet.depositVerifyTitle", "Verify your identity to deposit")} description={t("wallet.depositVerifyBody", "Your deposit address opens once your identity is verified. It only needs doing once.")} />
           ) : networks.length === 0 ? (
             <p className="text-sm text-ink-soft">
-              {error ?? t("wallet.noDepositRails")}
+              {error ?? t("wallet.noDepositRails", "No deposit networks are available right now — check back soon.")}
             </p>
           ) : (
             <>
               <div className={cn(WALLET_CARD, "flex flex-col gap-3.5 p-4.5 lg:p-6")}>
                 <FieldLabel>
-                  {t("wallet.selectNetwork")}
+                  {t("wallet.selectNetwork", "SELECT NETWORK")}
                   <TipAnchor anchor="wallet.deposit.network" />
                 </FieldLabel>
-                <NetworkSegments networks={networks} value={network} onChange={selectNetwork} label={t("wallet.depositNetwork")} />
+                <NetworkSegments networks={networks} value={network} onChange={selectNetwork} label={t("wallet.depositNetwork", "Deposit network")} />
               </div>
 
               <div className={cn(WALLET_CARD, "flex flex-col items-center gap-4 p-4.5 lg:gap-4.5 lg:p-6")}>
@@ -137,7 +137,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                       middle of it would fix the chain's position in word order for every
                       locale. */}
                   <NetworkMark network={network} className="size-4 shrink-0" />
-                  {t("wallet.yourDepositAddress", { network: label })}
+                  {t("wallet.yourDepositAddress", "Your {network} deposit address", { network: label })}
                   <TipAnchor anchor="wallet.deposit.address" />
                 </p>
 
@@ -151,25 +151,25 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                 ) : address && shown ? (
                   <>
                     <DepositQr value={shown} />
-                    <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-input px-3 py-2.5 lg:py-2.5 lg:pl-3.5 lg:pr-2">
+                    <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-ink/20 px-3 py-2.5 lg:py-2.5 lg:pl-3.5 lg:pr-2">
                       <code className="min-w-0 flex-1 break-all font-sans text-xs text-ink lg:text-sm">{shown}</code>
                       {/* i18n-max: 11 — a `shrink-0` button beside the address it squeezes. */}
                       <Button type="button" size="sm" onClick={copy} className="hidden shrink-0 lg:inline-flex">
                         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                        {copied ? t("ui.copied") : t("ui.copy")}
+                        {copied ? t("ui.copied", "Copied") : t("ui.copy", "Copy")}
                       </Button>
                     </div>
                     <Button type="button" onClick={copy} className="w-full lg:hidden">
                       {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-                      {copied ? t("ui.copied") : t("wallet.copyAddress")}
+                      {copied ? t("ui.copied", "Copied") : t("wallet.copyAddress", "Copy address")}
                     </Button>
                     <p className="flex items-center justify-center gap-1.5 text-center text-xs text-ink-soft">
-                      {t("wallet.creditedAfterConfirmations", { n: address.min_confirmations ?? 0 })}
+                      {t("wallet.creditedAfterConfirmations", "Credited to your one balance after {n, plural, one {# network confirmation} other {# network confirmations}}.", { n: address.min_confirmations ?? 0 })}
                       <TipAnchor anchor="wallet.deposit.min-confirmations" />
                     </p>
                   </>
                 ) : (
-                  <p className="text-center text-sm text-ink-soft">{t("wallet.depositAddressUnavailable", { network: label })}</p>
+                  <p className="text-center text-sm text-ink-soft">{t("wallet.depositAddressUnavailable", "A {network} deposit address isn't available yet — this network is still being set up. Check back soon.", { network: label })}</p>
                 )}
               </div>
 
@@ -180,7 +180,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                 <div className="flex min-w-0 flex-col gap-1">
                   {/* `wallet.deposit.rail-hazard` is a section-type tip (a descriptor block, not an
                       inline ⓘ) — this card already carries that copy, so it isn't anchored here. */}
-                  <p className="text-sm font-semibold text-ink">{t("wallet.networkWarning")}</p>
+                  <p className="text-sm font-semibold text-ink">{t("wallet.networkWarning", "Network warning")}</p>
                   {/* One sentence per key. The `not` used to be a `<strong>` and the `0x` a
                       `<code>`, which meant the warning was three fragments a translator
                       could not reorder — and German and Russian both put the negation
@@ -188,8 +188,8 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                       alarm (amber border, warning glyph, bold heading), so the sentence is
                       whole and the emphasis lives on the card rather than inside the words. */}
                   <p className="text-xs text-ink-soft">
-                    {t("wallet.railHazard", { network: label })}
-                    {evmSiblings.length > 0 && ` ${t("wallet.evmSiblingHazard", { network: label, siblings: evmSiblings.join(" / "), siblingsOr: orList(evmSiblings, locale) })}`}
+                    {t("wallet.railHazard", "Only send USDT on the {network} network to this address. Funds sent on any other network will be lost permanently.", { network: label })}
+                    {evmSiblings.length > 0 && ` ${t("wallet.evmSiblingHazard", "This {network} address is not your {siblings} address — even though both start with 0x. USDT sent on {siblingsOr} will not be credited.", { network: label, siblings: evmSiblings.join(" / "), siblingsOr: orList(evmSiblings, locale) })}`}
                   </p>
                 </div>
               </div>

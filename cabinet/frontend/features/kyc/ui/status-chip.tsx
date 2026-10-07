@@ -1,11 +1,12 @@
 "use client";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 
 import { Skeleton } from "@evinvest/uikit";
 
 import { profileResource } from "@/entities/user/model/profile-resource";
-import { kycChipState, type KycChipTone } from "@/features/kyc/lib/chip-state";
+import { type KycChip, kycChipState, type KycChipTone } from "@/features/kyc/lib/chip-state";
 import { useKycStatus } from "@/features/kyc/model/use-kyc-status";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
@@ -33,6 +34,13 @@ function useKycChip() {
   return { loading, chip: kycChipState({ level, runningCase, settled: known || profile != null }) };
 }
 
+const chipLabels = (t: Translate): Record<KycChip["labelKey"], string> => ({
+  "kyc.chip.notStarted": t("kyc.chip.notStarted", "Not verified"),
+  "kyc.chip.review": t("kyc.chip.review", "In review"),
+  "kyc.chip.verified": t("kyc.chip.verified", "Verified"),
+  "kyc.chip.attention": t("kyc.chip.attention", "Needs attention"),
+});
+
 const DOT_TONE: Record<KycChipTone, string> = {
   success: "bg-positive",
   pending: "bg-accent-warn",
@@ -54,11 +62,11 @@ export function KycStatusChip({ active = false, className }: { active?: boolean;
   return (
     // i18n-max: 15 — a `shrink-0` pill beside the rail row's `min-w-0` label (248px rail).
     <Pill tone={chip.tone} className={cn("shrink-0", active && "bg-background text-ink", className)}>
-      <span data-state={chip.state}>{t(chip.labelKey)}</span>
+      <span data-state={chip.state}>{chipLabels(t)[chip.labelKey]}</span>
       {/* The only timing wording the owner approved (`kyc.dialog.timeBody`). The pill has
           room for the state alone, so the ETA rides along for assistive tech: the pill is
           not focusable itself — the row it sits in is — so a tooltip had nothing to open on. */}
-      {chip.state === "review" && <span className="sr-only">{t("kyc.chip.reviewEta")}</span>}
+      {chip.state === "review" && <span className="sr-only">{t("kyc.chip.reviewEta", "Most checks are decided within the hour.")}</span>}
     </Pill>
   );
 }
@@ -70,7 +78,7 @@ export function KycStatusDot({ className }: { className?: string }) {
   if (chip === null || chip.state === "verified") return null;
   return (
     <span data-state={chip.state} className={cn("size-2 rounded-full", DOT_TONE[chip.tone], className)}>
-      <span className="sr-only">{t(chip.labelKey)}</span>
+      <span className="sr-only">{chipLabels(t)[chip.labelKey]}</span>
     </span>
   );
 }

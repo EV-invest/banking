@@ -3,12 +3,13 @@
 // SectionDescriptor) stays content-agnostic and never sees any copy until
 // <TipAnchor> resolves a key.
 //
-// The COPY is no longer here. Each entry's heading and explanation live in the message
-// catalogue under `tips.<key>.title` and `tips.<key>.body`, and <TipAnchor> resolves
-// them with `useT()` — a tip is prose a reader reads, so it has to be translatable like
-// every other sentence in the cabinet. What stays in TypeScript is exactly what the copy
-// is not: `type` picks the primitive and `roles` gates the render, and both are decided
-// at compile time. English text is edited in `messages/en/common.json`.
+// The COPY is not here. Each entry's heading and explanation live in `./copy.ts` as
+// `t("tips.<key>.title", …)` / `t("tips.<key>.body", …)`, and <TipAnchor> resolves them
+// with `useT()` — a tip is prose a reader reads, so it has to be translatable like every
+// other sentence in the cabinet. What stays in this file is exactly what the copy is
+// not: `type` picks the primitive and `roles` gates the render, and both are decided at
+// compile time. English text is edited in `./copy.ts`; `copy.ts` is typed by `TipKey`,
+// so a tip added here without its words fails `tsc`.
 //
 // Still authored as a typed `const` (not JSON) so every anchor id is a compile-time
 // literal: a <TipAnchor anchor="…"> referencing a key that does not exist here fails
@@ -20,8 +21,7 @@
 // Investor surfaces are ungated; admin surfaces gate to OPS so operator jargon
 // never renders for investors (cosmetic only — server authz stays authoritative).
 // Money-safety strings are lifted verbatim from the views so a tip can never drift from
-// real behaviour — that pairing now runs between two catalogue entries rather than
-// between a catalogue entry and a literal, so keep the pairs in step by key.
+// real behaviour — keep each pair in step by key.
 
 export type TipType = "input" | "section";
 

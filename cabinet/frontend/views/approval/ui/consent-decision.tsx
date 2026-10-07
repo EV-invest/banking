@@ -47,11 +47,11 @@ export function ConsentDecisionCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">{t("consent.decisionTitle")}</CardTitle>
-        <CardDescription className="text-balance">{t("consent.decisionLead")}</CardDescription>
+        <CardTitle className="text-base">{t("consent.decisionTitle", "Your decision")}</CardTitle>
+        <CardDescription className="text-balance">{t("consent.decisionLead", "Both answers need the code from your email. Enter it once, then choose. Rejecting keeps your money exactly where it is.")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <p className="text-xs text-ink-soft">{t("approval.votingAs", { email })}</p>
+        <p className="text-xs text-ink-soft">{t("approval.votingAs", "You are answering as {email}.", { email })}</p>
 
         <CodeField value={code} onChange={setCode} disabled={pending !== null} attemptsRemaining={rejectedAttempts} />
 
@@ -63,11 +63,11 @@ export function ConsentDecisionCard({
         <div className="flex flex-col gap-2.5 sm:flex-row">
           <Button size="lg" className="font-semibold sm:flex-1" disabled={locked} aria-busy={pending === "approve"} onClick={() => void decide("approve")}>
             {pending === "approve" && <Spinner aria-hidden />}
-            {t("consent.approve")}
+            {t("consent.approve", "Approve — move my money")}
           </Button>
           <Button size="lg" variant="outline" className="sm:shrink-0" disabled={locked} aria-busy={pending === "reject"} onClick={() => void decide("reject")}>
             {pending === "reject" && <Spinner aria-hidden />}
-            {t("consent.reject")}
+            {t("consent.reject", "Reject — keep my money")}
           </Button>
         </div>
       </CardContent>

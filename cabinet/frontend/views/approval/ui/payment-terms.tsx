@@ -55,7 +55,7 @@ export function PaymentTermsBlock({
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <FieldCaption>{t("approval.amount")}</FieldCaption>
+        <FieldCaption>{t("approval.amount", "Amount")}</FieldCaption>
         <p className="text-4xl font-semibold leading-none tabular-nums text-ink">
           {/* The wire string, digit for digit — `payload_hash` covers the exact decimal. */}
           {formatExactUsdt(terms.amount, locale)}
@@ -65,18 +65,18 @@ export function PaymentTermsBlock({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <FieldCaption>{t("approval.payment.from")}</FieldCaption>
+          <FieldCaption>{t("approval.payment.from", "From")}</FieldCaption>
           <PaymentEndSummary end={terms.source} className="text-sm" />
         </div>
         {!external && (
           <div className="flex flex-col gap-1.5">
-            <FieldCaption>{t("approval.payment.to")}</FieldCaption>
+            <FieldCaption>{t("approval.payment.to", "To")}</FieldCaption>
             <PaymentEndSummary end={terms.destination} className="text-sm" />
           </div>
         )}
       </div>
 
-      {external && <FullAddress label={t("approval.payment.to")} address={terms.destination.address} />}
+      {external && <FullAddress label={t("approval.payment.to", "To")} address={terms.destination.address} />}
 
       <div className="flex flex-col gap-1.5">
         <FieldCaption>{reasonLabel}</FieldCaption>
@@ -87,10 +87,10 @@ export function PaymentTermsBlock({
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <DetailRow label={t("approval.payment.tier")} value={tierAs === "hint" ? tierHint(terms.tier, t) : tierLabel(terms.tier, t)} />
-        <DetailRow label={t("approval.payloadHash")} value={hashPrefix(payloadHash)} mono />
+        <DetailRow label={t("approval.payment.tier", "Tier")} value={tierAs === "hint" ? tierHint(terms.tier, t) : tierLabel(terms.tier, t)} />
+        <DetailRow label={t("approval.payloadHash", "Request fingerprint")} value={hashPrefix(payloadHash)} mono />
       </div>
-      <p className="text-xs text-ink-soft">{t("approval.payment.payloadHashHint")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.payment.payloadHashHint", "The fingerprint is taken over the amount, both ends and the reason above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.")}</p>
 
       <Separator />
     </>

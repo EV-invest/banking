@@ -7,6 +7,7 @@
 // the whole block is the desktop card again.
 
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
+import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Badge, Card, CardContent, Skeleton, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
 import { useCallback, useState } from "react";
@@ -22,12 +23,12 @@ import { formatPct, formatUsd, num, valence } from "@/views/dashboard/lib/format
 import { PerfChart } from "@/views/dashboard/ui/perf-chart";
 
 // i18n-max: 4 — four equal columns of a grid segmented control on mobile.
-const RANGE_LABEL_KEYS: Readonly<Record<HistoryRange, string>> = {
-  "1m": "dash.range.1m",
-  "6m": "dash.range.6m",
-  "1y": "dash.range.1y",
-  all: "dash.range.all",
-};
+const rangeLabels = (t: Translate): Readonly<Record<HistoryRange, string>> => ({
+  "1m": t("dash.range.1m", "1M"),
+  "6m": t("dash.range.6m", "6M"),
+  "1y": t("dash.range.1y", "1Y"),
+  all: t("dash.range.all", "All"),
+});
 
 export interface PerfCardProps {
   value: string | undefined;
@@ -60,7 +61,7 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
         <div className="flex min-w-0 flex-col gap-2">
           <SectionLabel tone="accent" className="flex items-center gap-1.5">
-            {t("dash.portfolioValue")}
+            {t("dash.portfolioValue", "Portfolio value")}
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
           </SectionLabel>
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
@@ -68,7 +69,7 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
             {allTimePct !== null && (
               <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", VALENCE_BORDER_CLASS[trend], VALENCE_CLASS[trend])}>
                 {trend === "loss" ? <TrendingDown /> : trend === "gain" ? <TrendingUp /> : <Minus />}
-                {t("dash.allTimeSuffix", { pct: formatPct(allTimePct, locale) })}
+                {t("dash.allTimeSuffix", "{pct} all-time", { pct: formatPct(allTimePct, locale) })}
                 <TipAnchor anchor="dashboard.performance.all-time-return" />
               </Badge>
             )}
@@ -79,7 +80,7 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
             (which the kit reports as "") is ignored: one range is always selected. */}
         <ToggleGroup
           role="group"
-          aria-label={t("dash.rangeLabel")}
+          aria-label={t("dash.rangeLabel", "Chart range")}
           value={span.range}
           onValueChange={(r) => isHistoryRange(r) && setSpan({ range: r, from: rangeFrom(r, Date.now()) })}
           className="grid w-full shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-secondary p-1 lg:flex lg:w-fit"
@@ -90,7 +91,7 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
               value={r}
               className="h-9 rounded-md text-sm text-ink-soft first:rounded-md last:rounded-md hover:bg-transparent hover:text-ink data-[state=on]:bg-primary/15 data-[state=on]:font-semibold data-[state=on]:text-primary-ink lg:h-7 lg:px-3 lg:text-xs"
             >
-              {t(RANGE_LABEL_KEYS[r])}
+              {rangeLabels(t)[r]}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
@@ -98,8 +99,8 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
       <CardContent className="flex flex-col gap-3 px-0 lg:gap-5 lg:px-6 xl:flex-1">
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 lg:order-2">
           {/* Each line reads off its own axis, so the legend names the unit beside the name. */}
-          <Legend dot="bg-chart-3" label={t("dash.fundPerformance")} unit="%" />
-          <Legend dot="bg-chart-2" label={t("dash.yourParticipation")} unit="USDT" />
+          <Legend dot="bg-chart-3" label={t("dash.fundPerformance", "Fund performance")} unit="%" />
+          <Legend dot="bg-chart-2" label={t("dash.yourParticipation", "Your participation")} unit="USDT" />
         </div>
         <PerfChart allocation={allocation} from={span.from} className="lg:order-1 xl:flex-1" />
       </CardContent>

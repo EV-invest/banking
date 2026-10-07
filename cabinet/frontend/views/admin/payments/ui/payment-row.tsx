@@ -47,7 +47,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
         <p>{requirementLabel(payment.requirement, t)}</p>
         {payment.consilium_id ? (
           <Link href="/consilium" className="rounded-md text-primary-ink underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
-            {t("admin.payments.openConsilium")}
+            {t("admin.payments.openConsilium", "Open the consilium")}
           </Link>
         ) : payment.consent ? (
           <p className={cn("flex items-center gap-1", consentTone(payment.consent))}>
@@ -56,7 +56,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
                 only a hovering mouse can read. */}
             {payment.consent.invalidation_reason && (
               <InfoTip>
-                <InfoTipTrigger label={t("tips.a11y.about", { title: consentLabel(payment.consent, t) })} />
+                <InfoTipTrigger label={t("tips.a11y.about", "About: {title}", { title: consentLabel(payment.consent, t) })} />
                 <InfoTipContent className="text-ink-soft">{payment.consent.invalidation_reason}</InfoTipContent>
               </InfoTip>
             )}
@@ -73,7 +73,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
           {open ? (
             <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={onCancel}>
               {busy ? <Spinner aria-hidden /> : null}
-              {t("ui.cancel")}
+              {t("ui.cancel", "Cancel")}
             </Button>
           ) : (
             <span className="text-xs text-ink-soft">—</span>

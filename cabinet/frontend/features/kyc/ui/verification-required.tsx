@@ -48,7 +48,7 @@ export function VerificationRequired({ title, description, className }: { title:
           <ShieldCheck />
         </EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{loading || canStart || runningCase === null ? description : t("profile.kyc.caseReviewSub")}</EmptyDescription>
+        <EmptyDescription>{loading || canStart || runningCase === null ? description : t("profile.kyc.caseReviewSub", "Your documents are with our reviewers — we'll email you the decision")}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         {loading ? (
@@ -59,7 +59,7 @@ export function VerificationRequired({ title, description, className }: { title:
                 (`features/kyc/ui/verify-button`), the tighter of the two frames this key
                 renders in; one string, one budget. */}
             <Button type="button" onClick={() => setOpen(true)}>
-              {t("kyc.verifyNow")}
+              {t("kyc.verifyNow", "Verify now")}
             </Button>
             <VerificationDialog open={open} onOpenChange={setOpen} />
           </>

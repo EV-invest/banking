@@ -26,10 +26,10 @@ export function AboutProduct({ product, policy, nav, liquidity, inKind }: { prod
   return (
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">{t("invest.about.title")}</p>
+        <p className="text-sm font-semibold">{t("invest.about.title", "About this product")}</p>
         {product.summary && <p className="text-sm leading-relaxed text-ink-soft">{product.summary}</p>}
         <dl className="space-y-2.5 border-t border-border pt-4 text-sm">
-          <FactRow label={t("invest.facts.backing")}>{t(inKind ? "invest.facts.backingInKind" : "invest.facts.backingCash")}</FactRow>
+          <FactRow label={t("invest.facts.backing", "Backing")}>{(inKind ? t("invest.facts.backingInKind", "Asset held off-platform") : t("invest.facts.backingCash", "Cash held by the fund"))}</FactRow>
         </dl>
         <ProductFacts policy={policy} nav={nav} liquidity={liquidity} extended className="space-y-2.5 text-sm" />
       </CardContent>
@@ -49,7 +49,7 @@ export function RiskNote() {
       <span className="flex gap-2">
         <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span className="max-w-prose">
-          <span className="font-semibold text-ink">{t("invest.about.riskTitle")}</span> {t("invest.about.risk")}
+          <span className="font-semibold text-ink">{t("invest.about.riskTitle", "Risk.")}</span> {t("invest.about.risk", "Units can fall in value as well as rise. The NAV is set by a posted valuation, not by a market price, and past marks are no guide to future ones. Cash comes back only when a redemption settles or a buyer takes your units on the book. Invest only what you can afford to leave in.")}
         </span>
       </span>
     </Note>

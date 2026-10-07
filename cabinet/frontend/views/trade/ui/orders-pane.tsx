@@ -6,6 +6,7 @@
 
 import { useState, type ReactNode } from "react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { OpenOrdersEmpty, Skeleton, Tabs, TabsList, TabsTrigger, TerminalPane, TerminalPaneBody, TerminalPaneHeader } from "@evinvest/uikit";
 
@@ -18,6 +19,12 @@ import { OrdersTable } from "@/views/trade/ui/orders-table";
 
 type OrdersTab = "open" | "history" | "fills";
 const TABS: readonly OrdersTab[] = ["open", "history", "fills"];
+
+const tabLabels = (t: Translate): Record<OrdersTab, string> => ({
+  open: t("trade.orders.open", "Open orders"),
+  history: t("trade.orders.history", "Order history"),
+  fills: t("trade.orders.fills", "Fills"),
+});
 
 export function OrdersPane({ service }: { service: string }) {
   const t = useT();
@@ -44,7 +51,7 @@ export function OrdersPane({ service }: { service: string }) {
           <TabsList className="h-7">
             {TABS.map((key) => (
               <TabsTrigger key={key} value={key} className="text-xs">
-                {t(`trade.orders.${key}`)}
+                {tabLabels(t)[key]}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -52,9 +59,9 @@ export function OrdersPane({ service }: { service: string }) {
       </TerminalPaneHeader>
       <TerminalPaneBody>
         {actionError !== null && <ResourceError message={errorMessage(actionError, t)} className="px-3 pt-2" />}
-        {tab === "open" && <OrdersRead resource={openOrdersResource} service={service} select={(d) => d.orders} empty={t("trade.orders.emptyOpen")} render={(orders) => <OrdersTable orders={orders} busyId={busy} onCancel={cancel} />} />}
-        {tab === "history" && <OrdersRead resource={orderHistoryResource} service={service} select={(d) => d.orders} empty={t("trade.orders.emptyHistory")} render={(orders) => <OrdersTable orders={orders} />} />}
-        {tab === "fills" && <OrdersRead resource={fillsResource} service={service} select={(d) => d.trades} empty={t("trade.orders.emptyFills")} render={(trades) => <FillsTable trades={trades} />} />}
+        {tab === "open" && <OrdersRead resource={openOrdersResource} service={service} select={(d) => d.orders} empty={t("trade.orders.emptyOpen", "No open orders")} render={(orders) => <OrdersTable orders={orders} busyId={busy} onCancel={cancel} />} />}
+        {tab === "history" && <OrdersRead resource={orderHistoryResource} service={service} select={(d) => d.orders} empty={t("trade.orders.emptyHistory", "No orders yet")} render={(orders) => <OrdersTable orders={orders} />} />}
+        {tab === "fills" && <OrdersRead resource={fillsResource} service={service} select={(d) => d.trades} empty={t("trade.orders.emptyFills", "No fills yet")} render={(trades) => <FillsTable trades={trades} />} />}
       </TerminalPaneBody>
     </TerminalPane>
   );

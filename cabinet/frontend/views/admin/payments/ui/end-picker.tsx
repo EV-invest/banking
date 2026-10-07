@@ -70,12 +70,12 @@ function ProductSelect({ value, onChange }: { value: string; onChange: (id: stri
     return (
       <Empty className="border p-4">
         <EmptyHeader>
-          <EmptyTitle className="text-sm">{t("admin.payments.noProducts")}</EmptyTitle>
-          <EmptyDescription className="text-xs">{t("admin.payments.noProductsHint")}</EmptyDescription>
+          <EmptyTitle className="text-sm">{t("admin.payments.noProducts", "No product is registered yet.")}</EmptyTitle>
+          <EmptyDescription className="text-xs">{t("admin.payments.noProductsHint", "A product appears here once it is registered as an allocation.")}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button asChild size="sm" variant="outline">
-            <Link href="/admin/allocations">{t("nav.allocations")}</Link>
+            <Link href="/admin/allocations">{t("nav.allocations", "Allocations")}</Link>
           </Button>
         </EmptyContent>
       </Empty>
@@ -87,7 +87,7 @@ function ProductSelect({ value, onChange }: { value: string; onChange: (id: stri
       <SelectTrigger className="w-full border-border bg-secondary">
         <span className="flex min-w-0 items-center gap-2">
           {picked && <ProductIcon icon={picked.icon} className="size-4 shrink-0" />}
-          <span className="truncate">{picked ? picked.title : t("admin.payments.pickProduct")}</span>
+          <span className="truncate">{picked ? picked.title : t("admin.payments.pickProduct", "Choose a product")}</span>
         </span>
       </SelectTrigger>
       <SelectContent>

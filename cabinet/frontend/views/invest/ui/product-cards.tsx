@@ -39,17 +39,17 @@ export function SupplyCard({ nav }: { nav: FundNav | null }) {
   return (
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">{t("admin.valuation.unitSupply")}</p>
+        <p className="text-sm font-semibold">{t("admin.valuation.unitSupply", "Unit supply")}</p>
         <SupplyBar issued={nav.units_outstanding} cap={nav.unit_cap} />
         <dl className="space-y-2.5 border-t border-border pt-4 text-sm">
           <Row
-            label={t("invest.remainingCapacity")}
-            value={t("dash.unitsAmount", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity, locale) })}
+            label={t("invest.remainingCapacity", "Remaining capacity")}
+            value={t("dash.unitsAmount", "{n, plural, one {{units} unit} other {{units} units}}", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity, locale) })}
           />
-          <Row label={t("invest.navPerUnit")} value={`${formatUsdt(nav.nav, locale)} USDT`} />
-          <Row label={t("invest.fundAum")} value={nav.aum ? `${formatUsdt(nav.aum, locale)} USDT` : t("invest.notYetValued")} />
+          <Row label={t("invest.navPerUnit", "NAV / unit")} value={`${formatUsdt(nav.nav, locale)} USDT`} />
+          <Row label={t("invest.fundAum", "Fund AUM")} value={nav.aum ? `${formatUsdt(nav.aum, locale)} USDT` : t("invest.notYetValued", "Not yet valued")} />
         </dl>
-        <p className="text-xs text-ink-soft">{t("invest.supplyNote")}</p>
+        <p className="text-xs text-ink-soft">{t("invest.supplyNote", "Subscriptions mint units at the current NAV. Once the cap is reached the fund stops accepting new money; redemptions are unaffected.")}</p>
       </CardContent>
     </Card>
   );
@@ -79,15 +79,15 @@ export function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued
   return (
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">{t("nav.fees")}</p>
+        <p className="text-sm font-semibold">{t("nav.fees", "Fees")}</p>
         <dl className="space-y-2.5 text-sm">
-          <Row label={t("admin.fees.field.management")} value={t("invest.perAnnum", { pct: pct(policy.management_bps) })} />
-          <Row label={t("admin.fees.field.performance")} value={t("invest.ofTheGain", { pct: pct(policy.performance_bps) })} />
-          {policy.hurdle_bps ? <Row label={t("admin.fees.field.hurdle")} value={t("invest.hurdleFirst", { pct: pct(policy.hurdle_bps) })} /> : null}
+          <Row label={t("admin.fees.field.management", "Management")} value={t("invest.perAnnum", "{pct} p.a.", { pct: pct(policy.management_bps) })} />
+          <Row label={t("admin.fees.field.performance", "Performance")} value={t("invest.ofTheGain", "{pct} of the gain", { pct: pct(policy.performance_bps) })} />
+          {policy.hurdle_bps ? <Row label={t("admin.fees.field.hurdle", "Hurdle")} value={t("invest.hurdleFirst", "{pct} p.a. first", { pct: pct(policy.hurdle_bps) })} /> : null}
           {/* An unmapped basis/period falls back to the wire identifier — a value the hub
               added that this build has no word for, shown rather than swallowed. */}
-          <Row label={t("admin.fees.chargedOn")} value={basisLabel(policy.basis, t)} />
-          <Row label={t("invest.lockedIn")} value={crystallizationLabel(policy.crystallization, t)} />
+          <Row label={t("admin.fees.chargedOn", "Charged on")} value={basisLabel(policy.basis, t)} />
+          <Row label={t("invest.lockedIn", "Locked in")} value={crystallizationLabel(policy.crystallization, t)} />
         </dl>
 
         {/* The terms coming are part of deciding whether to stay in, so a holder and a
@@ -99,18 +99,18 @@ export function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued
             {/* Its own heading, so the rows can be labelled `Management` and `Performance`
                 without colliding with the identically-named terms above. Long enough labels
                 to disambiguate inline would wrap onto two lines in this column. */}
-            <SectionLabel>{t("invest.accruedOnHolding")}</SectionLabel>
+            <SectionLabel>{t("invest.accruedOnHolding", "Accrued on your holding")}</SectionLabel>
             <dl className="space-y-2.5 text-sm">
-              <Row label={t("admin.fees.field.management")} value={`${formatUsdt(owed.management, locale)} USDT`} />
-              <Row label={t("admin.fees.field.performance")} value={`${formatUsdt(owed.performance, locale)} USDT`} />
-              {isZero(owed.debt) ? null : <Row label={t("invest.carriedOver")} value={`${formatUsdt(owed.debt, locale)} USDT`} />}
-              <Row label={t("ui.total")} value={`${formatUsdt(owed.total, locale)} USDT`} />
-              <Row label={t("invest.yourMark")} value={`${formatUsdt(owed.high_water_mark, locale)} USDT`} />
+              <Row label={t("admin.fees.field.management", "Management")} value={`${formatUsdt(owed.management, locale)} USDT`} />
+              <Row label={t("admin.fees.field.performance", "Performance")} value={`${formatUsdt(owed.performance, locale)} USDT`} />
+              {isZero(owed.debt) ? null : <Row label={t("invest.carriedOver", "Carried over")} value={`${formatUsdt(owed.debt, locale)} USDT`} />}
+              <Row label={t("ui.total", "Total")} value={`${formatUsdt(owed.total, locale)} USDT`} />
+              <Row label={t("invest.yourMark", "Your mark")} value={`${formatUsdt(owed.high_water_mark, locale)} USDT`} />
             </dl>
           </div>
         )}
 
-        <p className="text-xs text-ink-soft">{t(owed ? "invest.feeNoteHolder" : "invest.feeNoteProspect")}</p>
+        <p className="text-xs text-ink-soft">{(owed ? t("invest.feeNoteHolder", "Fees are taken in units, never in cash — your wallet balance is untouched, and the value shown opposite is before them. The performance fee applies only to gains above your own high-water mark, so a recovery back to it costs nothing.") : t("invest.feeNoteProspect", "Fees are taken in units, never in cash. The performance fee applies only to gains above the price you enter at, measured per investor rather than per fund."))}</p>
       </CardContent>
     </Card>
   );

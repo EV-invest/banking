@@ -51,7 +51,7 @@ export function ProductHeader({ product, nav, held, panel, onPanel }: { product:
         {held && (
           <Button type="button" variant="outline" disabled={stale} onClick={() => onPanel((p) => (p === "redeem" ? null : "redeem"))}>
             <ArrowDownToLine className="size-4" />
-            {panel === "redeem" ? t("ui.close") : t("invest.redeem")}
+            {panel === "redeem" ? t("ui.close", "Close") : t("invest.redeem", "Redeem")}
           </Button>
         )}
       </div>
@@ -75,7 +75,7 @@ function SubscribeControl({ product, blocked, panel, onPanel }: { product: Produ
   return (
     <Button type="button" disabled={blocked || loading} onClick={() => onPanel((p) => (p === "subscribe" ? null : "subscribe"))}>
       <Sparkles className="size-4" />
-      {panel === "subscribe" ? t("ui.close") : t("invest.subscribe")}
+      {panel === "subscribe" ? t("ui.close", "Close") : t("invest.subscribe", "Subscribe")}
     </Button>
   );
 }

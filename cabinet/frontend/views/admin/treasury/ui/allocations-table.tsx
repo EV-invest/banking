@@ -33,13 +33,13 @@ export function TreasuryAllocations({ allocations }: { allocations: AllocationTr
                   <EmptyMedia variant="icon">
                     <Layers />
                   </EmptyMedia>
-                  <EmptyTitle>{t("admin.treasury.allocations.empty")}</EmptyTitle>
-                  <EmptyDescription>{t("admin.treasury.allocations.emptyHint")}</EmptyDescription>
+                  <EmptyTitle>{t("admin.treasury.allocations.empty", "No allocations yet")}</EmptyTitle>
+                  <EmptyDescription>{t("admin.treasury.allocations.emptyHint", "Every allocation the hub knows appears here with its claim, supply and holders — the products, and the hidden fee and fund allocations once they exist.")}</EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
                   {/* The action that produces a row: a product exists once it is registered. */}
                   <Button asChild variant="outline">
-                    <Link href="/admin/allocations">{t("nav.allocations")}</Link>
+                    <Link href="/admin/allocations">{t("nav.allocations", "Allocations")}</Link>
                   </Button>
                 </EmptyContent>
               </Empty>
@@ -51,12 +51,12 @@ export function TreasuryAllocations({ allocations }: { allocations: AllocationTr
                 <thead>
                   {/* i18n-max: 14 per header — a long header widens the scroll, not a cell. */}
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
-                    <th className="px-5 py-3 font-medium">{t("admin.treasury.allocations.col.allocation")}</th>
-                    <th className="px-5 py-3 font-medium">{t("admin.alloc.col.access")}</th>
-                    <th className="px-5 py-3 text-right font-medium">{t("admin.treasury.allocations.col.claim")}</th>
-                    <th className="px-5 py-3 text-right font-medium">{t("admin.alloc.holders.outstanding")}</th>
+                    <th className="px-5 py-3 font-medium">{t("admin.treasury.allocations.col.allocation", "Allocation")}</th>
+                    <th className="px-5 py-3 font-medium">{t("admin.alloc.col.access", "Access")}</th>
+                    <th className="px-5 py-3 text-right font-medium">{t("admin.treasury.allocations.col.claim", "Cash claim")}</th>
+                    <th className="px-5 py-3 text-right font-medium">{t("admin.alloc.holders.outstanding", "Outstanding")}</th>
                     <th className="px-5 py-3 text-right font-medium">NAV</th>
-                    <th className="px-5 py-3 font-medium">{t("admin.alloc.holders.title")}</th>
+                    <th className="px-5 py-3 font-medium">{t("admin.alloc.holders.title", "Holders")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -89,13 +89,13 @@ function AllocationRow({ allocation: a }: { allocation: AllocationTreasury }) {
         <p>{formatUsd(a.claim.available, locale)}</p>
         {/* Posted and reserved beside the spendable figure: an operator judging a payment
             out of the claim needs the reserved part, not only what is left. */}
-        <p className="text-xs text-ink-soft">{t("admin.treasury.allocations.claimDetail", { posted: formatUsd(a.claim.posted, locale), reserved: formatUsd(a.claim.reserved, locale) })}</p>
+        <p className="text-xs text-ink-soft">{t("admin.treasury.allocations.claimDetail", "posted {posted} · reserved {reserved}", { posted: formatUsd(a.claim.posted, locale), reserved: formatUsd(a.claim.reserved, locale) })}</p>
       </td>
       <td className="px-5 py-3 text-right tabular-nums">{formatUnits(a.units_outstanding, locale)}</td>
       <td className="px-5 py-3 text-right tabular-nums">
         <p>{formatNav(a.nav, locale)}</p>
         {/* `"0"` is "never marked" — the hub prices it at seed — not a mark at the epoch. */}
-        <p className="text-xs text-ink-soft">{hasUnixStamp(a.nav_posted_at) ? ago(a.nav_posted_at, t) : t("admin.treasury.allocations.unmarked")}</p>
+        <p className="text-xs text-ink-soft">{hasUnixStamp(a.nav_posted_at) ? ago(a.nav_posted_at, t) : t("admin.treasury.allocations.unmarked", "not yet marked")}</p>
       </td>
       <td className="px-5 py-3">
         <HoldersCell holders={a.holders} />

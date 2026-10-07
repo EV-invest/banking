@@ -66,31 +66,31 @@ export function PersonalCard({ loading, profile, email, className }: { loading: 
   const blanks = PERSONAL.filter((f) => !(profile?.[f.key] ?? "").trim()).length;
   return (
     <TitledCard
-      title={t("settings.nav.personal")}
-      sub={t("settings.personalSub")}
+      title={t("settings.nav.personal", "Personal details")}
+      sub={t("settings.personalSub", "Your identity as the fund records it")}
       className={className}
       action={
         // i18n-max: 10 — a `shrink-0` text link beside the `min-w-0` title column.
         <Link href="/settings?section=personal" className={TEXT_LINK}>
-          {t("profile.edit")}
+          {t("profile.edit", "Edit")}
         </Link>
       }
     >
       {PERSONAL.map((field, i) => (
         <div key={field.key}>
           {i > 0 && <Hairline />}
-          <FactRow label={t(field.labelKey)} value={field.key === "phone" ? formatPhone(profile?.phone ?? "") : profile?.[field.key]} loading={loading} />
+          <FactRow label={field.label(t)} value={field.key === "phone" ? formatPhone(profile?.phone ?? "") : profile?.[field.key]} loading={loading} />
         </div>
       ))}
       <Hairline />
-      <FactRow label={t("ui.emailAddress")} value={email} loading={loading} />
+      <FactRow label={t("ui.emailAddress", "Email address")} value={email} loading={loading} />
       {/* The zero state: a mostly blank record is the one every new account starts with,
           and the sentence says what the blanks cost rather than just that they exist. */}
       {!loading && blanks >= INCOMPLETE_AT && (
         <>
           <Hairline />
           <Link href="/settings?section=personal" className="block rounded-md py-3 text-xs leading-snug text-ink-soft outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
-            {t("profile.completeDetails")}
+            {t("profile.completeDetails", "Complete your details in Settings — verification and compliance checks rely on them.")}
           </Link>
         </>
       )}
@@ -111,14 +111,14 @@ export function ActivityCard({ loading, operations, truncated, error, className 
   return (
     // The hub caps the list it answers with, so over a long history the counts are of the
     // most recent page, not of everything — the caption says which one the reader is seeing.
-    <TitledCard title={t("profile.activity")} sub={truncated ? t("profile.activityCapped", { n: operations.length }) : t("profile.activitySub")} className={className}>
+    <TitledCard title={t("profile.activity", "Activity")} sub={truncated ? t("profile.activityCapped", "Counted over your {n} most recent activity entries", { n: operations.length }) : t("profile.activitySub", "Everything that has moved money on this account")} className={className}>
       {error ? (
         // A failed read is not an empty history: the box says what went wrong, not that
         // nothing has happened yet.
         <div className="py-3">
           <Empty className={EMPTY_BOX}>
             <EmptyHeader>
-              <EmptyTitle>{t("profile.activity")}</EmptyTitle>
+              <EmptyTitle>{t("profile.activity", "Activity")}</EmptyTitle>
               <EmptyDescription>{error}</EmptyDescription>
             </EmptyHeader>
           </Empty>
@@ -137,14 +137,14 @@ export function ActivityCard({ loading, operations, truncated, error, className 
         <div className="py-3">
           <Empty className={EMPTY_BOX}>
             <EmptyHeader>
-              <EmptyTitle>{t("profile.noActivityTitle")}</EmptyTitle>
-              <EmptyDescription>{t("profile.noActivityBody")}</EmptyDescription>
+              <EmptyTitle>{t("profile.noActivityTitle", "No activity yet")}</EmptyTitle>
+              <EmptyDescription>{t("profile.noActivityBody", "Your first deposit will appear here.")}</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               {/* The action that produces the first row. Outline, like Home's — the page's
                   one filled control is not this. */}
               <Button asChild variant="outline" size="sm">
-                <Link href="/wallet/deposit">{t("ui.addFunds")}</Link>
+                <Link href="/wallet/deposit">{t("ui.addFunds", "Add funds")}</Link>
               </Button>
             </EmptyContent>
           </Empty>
@@ -162,12 +162,12 @@ export function ActivityCard({ loading, operations, truncated, error, className 
           ))}
           <Hairline />
           <Row>
-            <span className="text-sm font-medium text-ink">{t("profile.lastActivity")}</span>
+            <span className="text-sm font-medium text-ink">{t("profile.lastActivity", "Last activity")}</span>
             <RowValue className="text-ink">{dayLabel(newest, t, locale)}</RowValue>
           </Row>
           <Hairline />
           <Link href="/operations" className={cn(TEXT_LINK, "block py-3")}>
-            {t("profile.viewAllActivity")}
+            {t("profile.viewAllActivity", "View all activity")}
           </Link>
         </>
       )}
@@ -180,12 +180,12 @@ export function VerificationCard({ loading, profile, email, className }: { loadi
   const t = useT();
   return (
     <ListCard className={cn("lg:px-5.5", className)}>
-      <ListCardTitle sub={t("profile.identityAndStanding")}>{t("profile.identityVerification")}</ListCardTitle>
+      <ListCardTitle sub={t("profile.identityAndStanding", "Identity and account standing")}>{t("profile.identityVerification", "Identity verification")}</ListCardTitle>
       <Hairline />
       <Row>
-        <RowLabel title={t("ui.emailAddress")} sub={loading ? "…" : email || "—"} />
+        <RowLabel title={t("ui.emailAddress", "Email address")} sub={loading ? "…" : email || "—"} />
         {/* i18n-max: 12 — `shrink-0` Pills beside the `min-w-0` row label. */}
-        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill tone="success" icon={BadgeCheck}>{t("ui.verified")}</Pill> : <Pill tone="pending">{t("profile.unverified")}</Pill>}
+        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill tone="success" icon={BadgeCheck}>{t("ui.verified", "Verified")}</Pill> : <Pill tone="pending">{t("profile.unverified", "Unverified")}</Pill>}
       </Row>
       <Hairline />
       <Row>
@@ -193,17 +193,17 @@ export function VerificationCard({ loading, profile, email, className }: { loadi
           title={
             // A bare number is not a meaning: the tip says what each level lets the reader do.
             <span className="inline-flex items-center gap-1.5">
-              {t("ui.kycLevel")}
+              {t("ui.kycLevel", "KYC level")}
               <TipAnchor anchor="profile.kyc-level" />
             </span>
           }
-          sub={t("profile.kycRaisedBy")}
+          sub={t("profile.kycRaisedBy", "Raised by verification and review")}
         />
         {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold tabular-nums text-ink">{profile?.kyc_level ?? "—"}</RowValue>}
       </Row>
       <Hairline />
       <Row>
-        <RowLabel title={t("ui.accountStatus")} sub={t("profile.platformAccess")} />
+        <RowLabel title={t("ui.accountStatus", "Account status")} sub={t("profile.platformAccess", "Platform access")} />
         {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.status ? <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill> : <RowValue>—</RowValue>}
       </Row>
       {/* The same tier line the wallet screens gate on — see `entities/user/lib/kyc`. */}
@@ -217,20 +217,20 @@ export function VerificationCard({ loading, profile, email, className }: { loadi
 export function SecurityCard({ loading, email, sessions, sessionsFailed, className }: { loading: boolean; email: string; sessions: Session[] | undefined; sessionsFailed: boolean; className?: string }) {
   const t = useT();
   // A failed list is a dash, not a skeleton that never resolves.
-  const devices = sessionsFailed ? "—" : sessions === undefined ? "…" : t("settings.devicesSignedIn", { n: sessions.length });
+  const devices = sessionsFailed ? "—" : sessions === undefined ? "…" : t("settings.devicesSignedIn", "{n, plural, one {# device currently signed in} other {# devices currently signed in}}", { n: sessions.length });
   return (
-    <TitledCard title={t("ui.security")} sub={t("settings.securitySub")} className={className}>
+    <TitledCard title={t("ui.security", "Security")} sub={t("settings.securitySub", "How you sign in and where your account is active")} className={className}>
       <Row>
-        <RowLabel title={t("ui.signedInGoogle")} sub={loading ? "…" : email || "—"} />
+        <RowLabel title={t("ui.signedInGoogle", "Signed in with Google")} sub={loading ? "…" : email || "—"} />
         {/* i18n-max: 12 — a `shrink-0` Pill beside the `min-w-0` row label. */}
-        <Pill>{t("settings.connected")}</Pill>
+        <Pill>{t("settings.connected", "Connected")}</Pill>
       </Row>
       <Hairline />
       <Row>
-        <RowLabel title={t("ui.sessionsDevices")} sub={devices} />
+        <RowLabel title={t("ui.sessionsDevices", "Sessions & devices")} sub={devices} />
         {/* i18n-max: 10 — a `shrink-0` text link beside the `min-w-0` row label. */}
         <Link href="/settings?section=sessions" className={TEXT_LINK}>
-          {t("ui.manage")}
+          {t("ui.manage", "Manage")}
         </Link>
       </Row>
     </TitledCard>

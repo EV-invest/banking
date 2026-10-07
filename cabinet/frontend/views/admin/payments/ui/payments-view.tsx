@@ -23,10 +23,10 @@ export function PaymentsView() {
   const t = useT();
   return (
     <AdminScreen className="space-y-8">
-      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.payments")} subtitle={t("admin.payments.subtitle")} />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer", "Administer")} title={t("nav.payments", "Payments")} subtitle={t("admin.payments.subtitle", "Money between two named ends of the platform — inside the fund, into a product, or out to an address — each authorised by whoever the money belongs to")} />
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.payments.open")}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-soft">{t("admin.payments.open", "Open a payment")}</p>
         <Card>
           <CardContent className="py-5">
             <OpenPaymentForm />

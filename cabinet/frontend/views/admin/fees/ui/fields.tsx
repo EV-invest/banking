@@ -4,6 +4,7 @@
 
 import { useId } from "react";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { Field, FieldDescription, FieldLabel, InputGroup, InputGroupAddon, InputGroupInput, InputGroupText, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
 
@@ -30,9 +31,9 @@ export function PercentField({ label, value, onChange, hint, disabled }: { label
   );
 }
 
-/** `value` is the wire enum the money plane stores; `labelKey` is only what a reader sees.
- *  Option lists live at module scope, where no hook can run, so they carry the key and the
- *  items resolve it against the reader's locale. */
+/** `value` is the wire enum the money plane stores; `label` is only what a reader sees.
+ *  Option lists live at module scope, where no hook can run, so they carry the words as a
+ *  function of `t` and the items resolve them against the reader's locale. */
 export function Choice<T extends string>({
   label,
   value,
@@ -43,7 +44,7 @@ export function Choice<T extends string>({
   label: string;
   value: string;
   onChange: (v: T) => void;
-  options: readonly { value: T; labelKey: string }[];
+  options: readonly { value: T; label: (t: Translate) => string }[];
   disabled?: boolean;
 }) {
   const t = useT();
@@ -71,7 +72,7 @@ export function Choice<T extends string>({
           // split the row into equal columns and a longer label ("Every 6 months")
           // spills past its own border. Each option owns exactly the width it reads.
           <ToggleGroupItem key={option.value} value={option.value} disabled={disabled} className="flex-auto px-2 text-xs">
-            {t(option.labelKey)}
+            {option.label(t)}
           </ToggleGroupItem>
         ))}
       </ToggleGroup>

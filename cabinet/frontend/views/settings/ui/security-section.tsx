@@ -28,34 +28,34 @@ export function SecuritySection({
   const count = sessions?.length;
   // One plural message rather than the two hand-written branches this replaced: a locale
   // with more than two plural forms cannot be spelled with an `=== 1` ternary.
-  const summary = count === undefined ? t("settings.sessionsLoading") : t("settings.devicesSignedIn", { n: count });
+  const summary = count === undefined ? t("settings.sessionsLoading", "Loading active sessions…") : t("settings.devicesSignedIn", "{n, plural, one {# device currently signed in} other {# devices currently signed in}}", { n: count });
   return (
     <section className={cn(CARD, "px-6 py-5.5")}>
-      <SectionHeader title={t("ui.security")} sub={t("settings.securitySub")} />
+      <SectionHeader title={t("ui.security", "Security")} sub={t("settings.securitySub", "How you sign in and where your account is active")} />
       <div className="flex items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3.5">
         {/* Google's mark is only licensed on a white plate, so this one square stays off-theme. */}
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white">
           <GoogleMark />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-ink">{t("ui.signedInGoogle")}</p>
+          <p className="text-sm font-medium text-ink">{t("ui.signedInGoogle", "Signed in with Google")}</p>
           {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-xs text-ink-soft">{formatEmail(email) || "—"}</p>}
         </div>
         {/* i18n-max: 12 — a `shrink-0` badge beside the truncated account email. */}
-        <Badge className="border-transparent bg-primary-ink/15 text-primary-ink">{t("settings.connected")}</Badge>
+        <Badge className="border-transparent bg-primary-ink/15 text-primary-ink">{t("settings.connected", "Connected")}</Badge>
       </div>
       {/* The hint under the sign-in control, worded once: the tip catalog carries the same
           sentence under `settings.security.google-signin`, and rendering both would say it
           twice on one card. */}
       <div className="mb-3">
-        <FieldHint>{t("settings.googleManaged")}</FieldHint>
+        <FieldHint>{t("settings.googleManaged", "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.")}</FieldHint>
       </div>
       <Hairline />
       <Row>
-        <RowLabel title={t("ui.sessionsDevices")} sub={summary} />
+        <RowLabel title={t("ui.sessionsDevices", "Sessions & devices")} sub={summary} />
         {/* i18n-max: 11 — a `shrink-0` Button beside the `min-w-0 flex-1` row label. */}
         <Button variant="outline" size="sm" className="border-border" onClick={onManageSessions}>
-          {t("ui.manage")}
+          {t("ui.manage", "Manage")}
         </Button>
       </Row>
     </section>

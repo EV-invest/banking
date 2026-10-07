@@ -72,7 +72,7 @@ export function ScheduleFields({
   return (
     <>
       <Field data-invalid={effectiveFromError !== null || undefined}>
-        <FieldLabel htmlFor={whenId}>{t("admin.fees.effectiveFrom")}</FieldLabel>
+        <FieldLabel htmlFor={whenId}>{t("admin.fees.effectiveFrom", "Takes effect")}</FieldLabel>
         <DateTimePicker
           id={whenId}
           value={draft.effectiveFrom ? new Date(draft.effectiveFrom) : null}
@@ -82,15 +82,15 @@ export function ScheduleFields({
           today={new Date(now * 1000)}
           locale={intlLocale(locale)}
           format={(at) => formatMoment(String(Math.floor(at.getTime() / 1000)), locale)}
-          placeholder={t("admin.fees.dateTime.placeholder")}
+          placeholder={t("admin.fees.dateTime.placeholder", "As soon as the notice allows")}
           labels={{
-            previousMonth: t("ui.dateTime.previousMonth"),
-            nextMonth: t("ui.dateTime.nextMonth"),
-            hours: t("ui.dateTime.hours"),
-            minutes: t("ui.dateTime.minutes"),
-            clear: t("ui.dateTime.clear"),
-            dialog: t("ui.dateTime.dialog"),
-            close: t("ui.close"),
+            previousMonth: t("ui.dateTime.previousMonth", "Previous month"),
+            nextMonth: t("ui.dateTime.nextMonth", "Next month"),
+            hours: t("ui.dateTime.hours", "Hours"),
+            minutes: t("ui.dateTime.minutes", "Minutes"),
+            clear: t("ui.dateTime.clear", "Clear"),
+            dialog: t("ui.dateTime.dialog", "Choose date and time"),
+            close: t("ui.close", "Close"),
           }}
           disabled={disabled}
           className="tabular-nums"
@@ -103,15 +103,15 @@ export function ScheduleFields({
         <FieldDescription id={whenPreviewId} role="status" className="text-xs text-accent-warn">
           {lifted && effectiveFromError === null
             ? consilium
-              ? t("admin.fees.effectiveFromLiftedConsilium")
-              : t("admin.fees.effectiveFromLifted", { floor: formatMoment(String(noticeFloor(now)), locale) })
+              ? t("admin.fees.effectiveFromLiftedConsilium", "Earlier than the notice allows: this binds no earlier than 24 hours after the owners approve.")
+              : t("admin.fees.effectiveFromLifted", "Earlier than the notice allows: while anyone holds units, this binds no earlier than {floor}.", { floor: formatMoment(String(noticeFloor(now)), locale) })
             : null}
         </FieldDescription>
-        <FieldDescription id={whenHintId}>{t("admin.fees.effectiveFromHint")}</FieldDescription>
+        <FieldDescription id={whenHintId}>{t("admin.fees.effectiveFromHint", "Leave empty for the earliest allowed. While anyone holds units, a change binds no earlier than 24 hours after it is scheduled — counted from the owners' approval when they must give it. An earlier moment is lifted to that minimum, never refused.")}</FieldDescription>
       </Field>
 
       <Field data-invalid={reasonError !== null || undefined}>
-        <FieldLabel htmlFor={reasonId}>{consilium ? t("admin.fees.reasonRequiredLabel") : t("admin.fees.reason")}</FieldLabel>
+        <FieldLabel htmlFor={reasonId}>{consilium ? t("admin.fees.reasonRequiredLabel", "Reason (required)") : t("admin.fees.reason", "Reason")}</FieldLabel>
         <Input
           id={reasonId}
           type="text"
@@ -127,7 +127,7 @@ export function ScheduleFields({
           aria-describedby={reasonError !== null ? `${reasonErrorId} ${reasonHintId}` : reasonHintId}
         />
         {reasonError !== null && <FieldError id={reasonErrorId}>{reasonError}</FieldError>}
-        <FieldDescription id={reasonHintId}>{t(consilium ? "admin.fees.reasonRequiredHint" : "admin.fees.reasonHint")}</FieldDescription>
+        <FieldDescription id={reasonHintId}>{(consilium ? t("admin.fees.reasonRequiredHint", "The owners read this in their approval mail, and it is part of what they sign.") : t("admin.fees.reasonHint", "Optional. Kept with this version in the history."))}</FieldDescription>
       </Field>
 
       {/* Who will have to agree, said before the click. Withheld while the rates do not
@@ -135,7 +135,7 @@ export function ScheduleFields({
           name a decision nobody can send. */}
       {requirement && (
         <p className={cn("text-xs", consilium ? "text-accent-warn" : "text-ink-soft")}>
-          {t(consilium ? "admin.fees.requirement.consilium" : "admin.fees.requirement.admin")}
+          {(consilium ? t("admin.fees.requirement.consilium", "Needs the owners' approval: these terms tighten the current ones beyond the house 2 and 20, or lower the hurdle. You must be an owner to open the request.") : t("admin.fees.requirement.admin", "No vote needed: one administrator may make this change. Holders are mailed the notice when it is scheduled."))}
         </p>
       )}
     </>

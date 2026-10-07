@@ -545,7 +545,7 @@ dependencies = [
  "concierge_iam",
  "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26)",
  "dotenvy",
- "ev_lib 0.23.0",
+ "ev_lib",
  "evbanking_contracts",
  "evconcierge_auth",
  "evconcierge_contracts",
@@ -1649,7 +1649,7 @@ dependencies = [
 name = "domain"
 version = "0.1.0"
 dependencies = [
- "ev_lib 0.23.0",
+ "ev_lib",
  "getrandom 0.3.4",
  "serde",
  "serde_json",
@@ -1663,7 +1663,7 @@ version = "0.1.0"
 source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
 dependencies = [
  "concierge_iam",
- "ev_lib 0.24.2",
+ "ev_lib",
  "getrandom 0.4.3",
  "serde",
  "strum",
@@ -1818,9 +1818,9 @@ dependencies = [
 
 [[package]]
 name = "ev_lib"
-version = "0.23.0"
+version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76afd3b6d5ab1663841d4cb87ccf9d777714974a20ac8f66acad75f769ba1adf"
+checksum = "8308234abaf3a3bf588e9b5ba0db5a1e4066ae2dd38c593226501d6a482a06ef"
 dependencies = [
  "async-trait",
  "dioxus",
@@ -1847,31 +1847,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "ev_lib"
-version = "0.24.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8308234abaf3a3bf588e9b5ba0db5a1e4066ae2dd38c593226501d6a482a06ef"
-dependencies = [
- "async-trait",
- "dioxus",
- "jiff",
- "js-sys",
- "reqwest 0.13.4",
- "sentry",
- "serde",
- "serde_json",
- "uuid",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
 name = "evbanking_auth"
 version = "0.1.0"
 dependencies = [
  "color-eyre",
- "ev_lib 0.23.0",
+ "ev_lib",
  "evbanking_contracts",
  "http 1.4.2",
  "jsonwebtoken",
@@ -1902,7 +1882,7 @@ version = "0.1.0"
 source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
 dependencies = [
  "color-eyre",
- "ev_lib 0.24.2",
+ "ev_lib",
  "evconcierge_contracts",
  "http 1.4.2",
  "jsonwebtoken",
@@ -3836,7 +3816,7 @@ dependencies = [
  "domain 0.1.0",
  "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26)",
  "dotenvy",
- "ev_lib 0.23.0",
+ "ev_lib",
  "evbanking_auth",
  "evbanking_contracts",
  "evconcierge_contracts",
@@ -3874,7 +3854,7 @@ dependencies = [
  "domain 0.1.0",
  "dotenvy",
  "ed25519-dalek",
- "ev_lib 0.23.0",
+ "ev_lib",
  "evbanking_auth",
  "evbanking_contracts",
  "getrandom 0.3.4",

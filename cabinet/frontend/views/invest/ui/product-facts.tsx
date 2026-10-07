@@ -9,6 +9,7 @@
 // allocation, never deducted from cash (#245), so the line deliberately promises no
 // deduction — the full terms, basis and crystallization included, live on `FeeCard`.
 
+import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { Skeleton } from "@evinvest/uikit";
@@ -30,16 +31,16 @@ import { compactUnits } from "@/views/invest/lib/format";
 export function FeeHeadline({ policy }: { policy: FeePolicy | null | undefined }) {
   const t = useT();
   if (policy === undefined) return <Skeleton className="inline-block h-3.5 w-32 align-middle" />;
-  if (!policy?.configured) return <>{t("invest.facts.feeUnset")}</>;
+  if (!policy?.configured) return <>{t("invest.facts.feeUnset", "Not published yet")}</>;
   const words = { management: pct(policy.management_bps), performance: pct(policy.performance_bps), hurdle: pct(policy.hurdle_bps) };
-  return <>{t(policy.hurdle_bps ? "invest.facts.feeHeadlineHurdle" : "invest.facts.feeHeadline", words)}</>;
+  return <>{(policy.hurdle_bps ? t("invest.facts.feeHeadlineHurdle", "{management} p.a. + {performance} of the gain above {hurdle} p.a.", words) : t("invest.facts.feeHeadline", "{management} p.a. + {performance} of the gain", words))}</>;
 }
 
-const LIQUIDITY_KEY: Record<Liquidity, string> = {
-  navQueued: "invest.facts.liquidityNav",
-  navOrBook: "invest.facts.liquidityNavOrBook",
-  book: "invest.facts.liquidityBook",
-};
+const liquidityWords = (t: Translate): Record<Liquidity, string> => ({
+  navQueued: t("invest.facts.liquidityNav", "Redeem at NAV, queued"),
+  navOrBook: t("invest.facts.liquidityNavOrBook", "Redeem at NAV (queued) or trade on the book"),
+  book: t("invest.facts.liquidityBook", "Sold on the book"),
+});
 
 /**
  * The date behind the NAV. `posted_at` is 0 until an operator marks the fund, and until
@@ -51,7 +52,7 @@ export function MarkDate({ nav }: { nav: FundNav | null }) {
   const locale = useLocale();
   if (!nav) return <>—</>;
   const stamp = String(nav.posted_at ?? "0");
-  return <>{stamp === "0" ? t("invest.notYetValued") : t("invest.facts.markedOn", { date: formatDay(stamp, locale) })}</>;
+  return <>{stamp === "0" ? t("invest.notYetValued", "Not yet valued") : t("invest.facts.markedOn", "Marked {date}", { date: formatDay(stamp, locale) })}</>;
 }
 
 export function FactRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -73,19 +74,19 @@ export function ProductFacts({ policy, nav, liquidity, extended, className }: { 
   const locale = useLocale();
   return (
     <dl className={className}>
-      <FactRow label={t("invest.facts.fees")}>
+      <FactRow label={t("invest.facts.fees", "Fees")}>
         <FeeHeadline policy={policy} />
       </FactRow>
       {/* Unread until the book policy answers: the line flips between "queued" and "or
           trade on the book" otherwise, and a term that changes on screen reads as a lie. */}
-      <FactRow label={t("invest.facts.liquidity")}>{liquidity === undefined ? <Skeleton className="inline-block h-3.5 w-28 align-middle" /> : t(LIQUIDITY_KEY[liquidity])}</FactRow>
+      <FactRow label={t("invest.facts.liquidity", "Liquidity")}>{liquidity === undefined ? <Skeleton className="inline-block h-3.5 w-28 align-middle" /> : liquidityWords(t)[liquidity]}</FactRow>
       {extended && (
         <>
-          <FactRow label={t("invest.facts.lastValuation")}>
+          <FactRow label={t("invest.facts.lastValuation", "Last valuation")}>
             <MarkDate nav={nav} />
           </FactRow>
-          <FactRow label={t("invest.facts.capacity")}>
-            {nav ? t("dash.unitsAmount", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity, locale) }) : "—"}
+          <FactRow label={t("invest.facts.capacity", "Capacity left")}>
+            {nav ? t("dash.unitsAmount", "{n, plural, one {{units} unit} other {{units} units}}", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity, locale) }) : "—"}
           </FactRow>
         </>
       )}

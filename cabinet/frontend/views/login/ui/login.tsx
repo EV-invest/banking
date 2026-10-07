@@ -1,19 +1,20 @@
-import { translator } from "@evinvest/i18n";
+import { type Translate, translator } from "@evinvest/i18n";
 
 import { loginIntent, loginPageHref } from "@/features/auth/lib/login-intent";
 import { loginHref } from "@/features/auth/lib/return-to";
 import { messagesFor } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
+import { wordFor } from "@/shared/lib/wire-words";
 import { BrandPanel } from "@/views/login/ui/brand-panel";
 import { LoginViewSignal } from "@/views/login/ui/login-view-signal";
 import { SignInPanel } from "@/views/login/ui/sign-in-panel";
 
 // The `?error=` values the shell's auth callback redirects with, mapped to catalogue keys.
-const ERROR_KEYS: Record<string, string> = {
-  denied: "auth.err.denied",
-  invalid: "auth.err.invalid",
-  exchange: "auth.err.exchange",
-};
+const errorWords = (t: Translate): Readonly<Record<string, string>> => ({
+  denied: t("auth.err.denied", "Sign-in was cancelled."),
+  invalid: t("auth.err.invalid", "That sign-in attempt expired. Please try again."),
+  exchange: t("auth.err.exchange", "We couldn't complete sign-in. Please try again."),
+});
 
 export type LoginSearchParams = { error?: string; returnTo?: string; intent?: string };
 
@@ -29,7 +30,7 @@ export async function LoginView({ searchParams }: { searchParams: Promise<LoginS
   const { error, returnTo, intent: rawIntent } = await searchParams;
   const locale = await currentLocale();
   const t = translator(messagesFor(locale), locale);
-  const message = error ? t(ERROR_KEYS[error] ?? "auth.err.generic") : null;
+  const message = error ? (wordFor(errorWords(t), error) ?? t("auth.err.generic", "Sign-in failed. Please try again.")) : null;
   const intent = loginIntent(rawIntent);
   // `returnTo` arrives zone-relative (`/wallet`) and leaves for the shell as a site-root
   // page (`/{locale}/cabinet/wallet`) — the prefix goes on here and nowhere else, see

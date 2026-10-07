@@ -22,15 +22,18 @@
 // keeper picks the same answer up and moves to /login). An unreachable session endpoint
 // is left as an ordinary failure, so a blip never bounces anyone out of the cabinet.
 
+import type { Translate } from "@evinvest/i18n";
+
 import { apiPath } from "@/shared/config/base-path";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { replaying } from "@/shared/lib/replay";
 import { cachedSession, refreshIfStale, refreshSession, sessionGeneration } from "@/shared/lib/session";
+import { wordFor } from "@/shared/lib/wire-words";
 
 /** The session is provably gone — offer sign-in, not a retry. */
 export class SessionExpiredError extends Error {
   readonly status = 401;
-  readonly code = "err.sessionExpired";
+  readonly code = "err.sessionExpired" satisfies ErrorCode;
   constructor() {
     super("Your session has ended. Sign in again to continue.");
     this.name = "SessionExpiredError";
@@ -54,7 +57,7 @@ export class RequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly code: string | null = null,
+    readonly code: ErrorCode | null = null,
     /**
      * The parsed error body, as it arrived. `message` and `code` are derived from `error`
      * alone, so a plane that deliberately sends a machine-readable code ALONGSIDE data the
@@ -76,11 +79,57 @@ export class RequestError extends Error {
  * locale at paint time. Anything that is not one of our errors — a thrown string,
  * a bug — degrades to the generic key rather than leaking a stack trace into the UI.
  */
-export function errorMessage(error: unknown, t: (key: string) => string): string {
-  if (error instanceof SessionExpiredError) return t(error.code);
-  if (error instanceof RequestError) return error.code ? t(error.code) : error.message;
-  return t("err.requestFailed");
+export function errorMessage(error: unknown, t: Translate): string {
+  if (error instanceof SessionExpiredError) return errorWords(t)[error.code];
+  // `wordFor`, not a bare index: `code` is typed, but any caller can cast into the
+  // constructor, and an unknown code must still say its English message, never `undefined`.
+  if (error instanceof RequestError) return (error.code && wordFor(errorWords(t), error.code)) || error.message;
+  return t("err.requestFailed", "Something went wrong on our side. Please try again.");
 }
+
+/**
+ * Every code a {@link RequestError} may carry. Closed, so each one is a literal `t()` the
+ * catalogue extractor can read — a code minted outside this list is a type error, not a
+ * raw key on screen.
+ */
+export type ErrorCode =
+  | "err.authNotConfigured"
+  | "err.csrf"
+  | "err.forbidden"
+  | "err.fundServiceRequired"
+  | "err.kycSelf"
+  | "err.kycStartFailed"
+  | "err.kycThrottled"
+  | "err.kycUnavailable"
+  | "err.network"
+  | "err.notFound"
+  | "err.rateLimited"
+  | "err.requestFailed"
+  | "err.serverUnavailable"
+  | "err.sessionExpired"
+  | "err.unauthenticated"
+  | "err.unparkDeclined"
+  | "err.verificationRequired";
+
+const errorWords = (t: Translate): Record<ErrorCode, string> => ({
+  "err.authNotConfigured": t("err.authNotConfigured", "Sign-in is unavailable right now. Please try again shortly."),
+  "err.csrf": t("err.csrf", "This page went stale. Reload it and try again."),
+  "err.forbidden": t("err.forbidden", "You don't have access to this."),
+  "err.fundServiceRequired": t("err.fundServiceRequired", "Select a fund to continue."),
+  "err.kycSelf": t("err.kycSelf", "You can't set your own verification tier — another holder of KycManage has to."),
+  "err.kycStartFailed": t("err.kycStartFailed", "We couldn't start verification. Please try again."),
+  "err.kycThrottled": t("err.kycThrottled", "You've started verification too many times today. Try again tomorrow."),
+  "err.kycUnavailable": t("err.kycUnavailable", "Verification is unavailable right now. Please contact support."),
+  "err.network": t("err.network", "Can't reach the server. Check your connection and try again."),
+  "err.notFound": t("err.notFound", "Not found."),
+  "err.rateLimited": t("err.rateLimited", "Too many requests — give it a moment and try again."),
+  "err.requestFailed": t("err.requestFailed", "Something went wrong on our side. Please try again."),
+  "err.serverUnavailable": t("err.serverUnavailable", "The service is temporarily unavailable. Please try again."),
+  "err.sessionExpired": t("err.sessionExpired", "Your session has ended. Sign in again to continue."),
+  "err.unauthenticated": t("err.unauthenticated", "We couldn't confirm your session. Reload the page or sign in again."),
+  "err.unparkDeclined": t("err.unparkDeclined", "The hub declined the unpark."),
+  "err.verificationRequired": t("err.verificationRequired", "Verify your identity to continue."),
+});
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
@@ -110,9 +159,9 @@ const STALE_PAGE_MESSAGE = "This page went stale. Reload it and try again.";
 const SERVER_UNAVAILABLE_MESSAGE = "The service is temporarily unavailable. Please try again.";
 
 /** See {@link isVerificationRequired}. Named so the table and the predicate cannot drift. */
-const VERIFICATION_REQUIRED = "err.verificationRequired";
+const VERIFICATION_REQUIRED = "err.verificationRequired" satisfies ErrorCode;
 
-const FRIENDLY: Record<string, { code: string; en: string }> = {
+const FRIENDLY: Record<string, { code: ErrorCode; en: string }> = {
   unauthenticated: {
     code: "err.unauthenticated",
     en: "We couldn't confirm your session. Reload the page or sign in again.",
@@ -171,7 +220,7 @@ export function isVerificationRequired(error: unknown): boolean {
 }
 
 // Fallbacks when the response carries no `{ error }` body at all.
-function statusMessage(status: number): { code: string; en: string } {
+function statusMessage(status: number): { code: ErrorCode; en: string } {
   if (status === 403) return { code: "err.forbidden", en: "You don't have access to this." };
   if (status === 404) return { code: "err.notFound", en: "Not found." };
   if (status === 429)

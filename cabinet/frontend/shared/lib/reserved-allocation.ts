@@ -5,13 +5,13 @@
 
 import type { Translate } from "@evinvest/i18n";
 
-const RESERVED_ALLOCATION_KEYS: Record<string, string> = {
-  fee: "admin.holder.allocation.fee",
-  fund: "admin.holder.allocation.fund",
-};
+import { wordFor } from "./wire-words.ts";
+const reservedAllocationWords = (t: Translate): Readonly<Record<string, string>> => ({
+  fee: t("admin.holder.allocation.fee", "Platform fees"),
+  fund: t("admin.holder.allocation.fund", "Platform capital"),
+});
 
 /** A reserved allocation by name; one the hub reserves later falls back to its slug. */
 export function reservedAllocationLabel(allocation: string, t: Translate): string {
-  const key = RESERVED_ALLOCATION_KEYS[allocation];
-  return key ? t(key) : allocation;
+  return wordFor(reservedAllocationWords(t), allocation) ?? allocation;
 }

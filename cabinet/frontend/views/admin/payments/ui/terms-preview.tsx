@@ -7,13 +7,22 @@
 // because the second one changes WHO reads the reason the operator is typing — every
 // owner, or one investor — and that is worth knowing before the sentence is written.
 
+import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Spinner } from "@evinvest/uikit";
 
-import { requirementLabel, tierLabel } from "@/entities/payment/lib/format";
+import { requirementHint, requirementLabel, tierHint, tierLabel } from "@/entities/payment/lib/format";
+import type { PaymentRequirement } from "@/shared/contracts/payments";
 import { formatExactUsdt } from "@/shared/lib/money";
 import { type EndDraft, previewRequirement, previewTier } from "@/views/admin/payments/lib/terms";
 import { draftWords } from "@/views/admin/payments/lib/words";
+
+// Typed by the closed union rather than looked up by name: the requirement here is the
+// draft's own derivation, never a wire word, so every value has its sentence.
+const reviewNotes = (t: Translate): Record<PaymentRequirement, string> => ({
+  owner_consilium: t("admin.payments.reviewNote.owner_consilium", "The terms are fixed once opened. Every owner is emailed exactly these and they are checked again before any money moves — changing anything means cancelling and starting over, and votes are not carried across."),
+  subject_consent: t("admin.payments.reviewNote.subject_consent", "The terms are fixed once opened. This is the investor's own money: they alone are emailed exactly these and must agree with the code from that message. Changing anything means cancelling and starting over."),
+});
 
 export function TermsPreview({ source, destination }: { source: EndDraft; destination: EndDraft }) {
   const t = useT();
@@ -22,14 +31,14 @@ export function TermsPreview({ source, destination }: { source: EndDraft; destin
   return (
     <dl className="grid gap-3 rounded-lg border border-border bg-secondary p-3 sm:grid-cols-2">
       <div className="min-w-0 space-y-0.5">
-        <dt className="text-xs text-ink-soft">{t("admin.payments.tier")}</dt>
+        <dt className="text-xs text-ink-soft">{t("admin.payments.tier", "Tier")}</dt>
         <dd className="text-sm font-medium text-ink">{tierLabel(tier, t)}</dd>
-        <dd className="text-xs text-ink-soft">{t(`payment.tier.hint.${tier}`)}</dd>
+        <dd className="text-xs text-ink-soft">{tierHint(tier, t)}</dd>
       </div>
       <div className="min-w-0 space-y-0.5">
-        <dt className="text-xs text-ink-soft">{t("admin.payments.requirement")}</dt>
+        <dt className="text-xs text-ink-soft">{t("admin.payments.requirement", "Who must agree")}</dt>
         <dd className="text-sm font-medium text-ink">{requirementLabel(requirement, t)}</dd>
-        <dd className="text-xs text-ink-soft">{t(`payment.requirement.hint.${requirement}`)}</dd>
+        <dd className="text-xs text-ink-soft">{requirementHint(requirement, t)}</dd>
       </div>
     </dl>
   );
@@ -66,7 +75,7 @@ export function ReviewPanel({
           per-language decision. `break-words` because an address is 40-plus unbroken
           characters. The amount is the exact wire decimal — the figure the hash covers. */}
       <p className="text-sm tabular-nums break-words">
-        {t("admin.payments.reviewSentence", {
+        {t("admin.payments.reviewSentence", "Pay {amount} from {source} to {destination}?", {
           amount: `${formatExactUsdt(amount.trim(), locale)} USDT`,
           source: draftWords(source, t),
           destination: draftWords(destination, t),
@@ -74,14 +83,14 @@ export function ReviewPanel({
       </p>
       {/* The operator's own words, set apart: this is what the approvers will read. */}
       <blockquote className="whitespace-pre-line border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed text-ink">{reason.trim()}</blockquote>
-      <p className="text-xs text-ink-soft">{t(`admin.payments.reviewNote.${requirement}`)}</p>
+      <p className="text-xs text-ink-soft">{reviewNotes(t)[requirement]}</p>
       <div className="flex gap-2">
         <Button type="button" size="sm" disabled={busy} aria-busy={busy} onClick={onConfirm}>
           {busy ? <Spinner aria-hidden /> : null}
-          {t("admin.payments.confirmOpen")}
+          {t("admin.payments.confirmOpen", "Open payment")}
         </Button>
         <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onBack}>
-          {t("ui.back")}
+          {t("ui.back", "Back")}
         </Button>
       </div>
     </div>

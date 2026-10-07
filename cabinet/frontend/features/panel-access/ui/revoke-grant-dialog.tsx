@@ -24,12 +24,12 @@ export function RevokeGrantDialog({ holder, onCancel, onConfirm }: { holder: Gra
     <AlertDialog open={holder !== null} onOpenChange={(open) => !open && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("panelAccess.revokeTitle")}</AlertDialogTitle>
-          <AlertDialogDescription>{t("panelAccess.revokeBody", { who, target })}</AlertDialogDescription>
+          <AlertDialogTitle>{t("panelAccess.revokeTitle", "Revoke panel access?")}</AlertDialogTitle>
+          <AlertDialogDescription>{t("panelAccess.revokeBody", "{who} will lose {target}. You can grant it again later.", { who, target })}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("ui.cancel")}</AlertDialogCancel>
-          <AlertDialogAction onClick={() => holder && onConfirm(holder)}>{t("panelAccess.revoke")}</AlertDialogAction>
+          <AlertDialogCancel>{t("ui.cancel", "Cancel")}</AlertDialogCancel>
+          <AlertDialogAction onClick={() => holder && onConfirm(holder)}>{t("panelAccess.revoke", "Revoke")}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 
 import { CircleUserRound, Home, LineChart, ListChecks, Wallet, type LucideIcon } from "lucide-react";
@@ -14,9 +15,8 @@ import { DUR, EASE } from "@/shared/ui/motion";
 
 interface TabItem {
   href: `/${string}`;
-  label: string;
-  /** Catalogue key; `label` is what it resolves to in English. */
-  key: string;
+  /** The tab's name in the reader's language. */
+  text: (t: Translate) => string;
   icon: LucideIcon;
   active: (path: string) => boolean;
 }
@@ -40,11 +40,11 @@ interface TabItem {
 // marker stays on it while the reader is inside any of them.
 const ACCOUNT_ROUTES = ["/settings", "/profile", "/notifications"] as const;
 const TABS: TabItem[] = [
-  { href: "/", label: "Home", key: "nav.home", icon: Home, active: (p) => p === "/" },
-  { href: "/invest", label: "Invest", key: "nav.invest", icon: LineChart, active: (p) => p.startsWith("/invest") },
-  { href: "/wallet", label: "Wallet", key: "nav.wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
-  { href: "/operations", label: "Activity", key: "nav.operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
-  { href: "/settings", label: "Account", key: "nav.account", icon: CircleUserRound, active: (p) => ACCOUNT_ROUTES.some((r) => p.startsWith(r)) },
+  { href: "/", text: (t) => t("nav.home", "Home"), icon: Home, active: (p) => p === "/" },
+  { href: "/invest", text: (t) => t("nav.invest", "Invest"), icon: LineChart, active: (p) => p.startsWith("/invest") },
+  { href: "/wallet", text: (t) => t("nav.wallet", "Wallet"), icon: Wallet, active: (p) => p.startsWith("/wallet") },
+  { href: "/operations", text: (t) => t("nav.operations", "Activity"), icon: ListChecks, active: (p) => p.startsWith("/operations") },
+  { href: "/settings", text: (t) => t("nav.account", "Account"), icon: CircleUserRound, active: (p) => ACCOUNT_ROUTES.some((r) => p.startsWith(r)) },
 ];
 
 /** Horizontal padding of the bar, as a length the marker's width math can use. */
@@ -58,7 +58,7 @@ export function BottomNavbar() {
   const onTab = activeAt >= 0;
 
   return (
-    <nav aria-label={t("nav.a11y.primary")} className="fixed bottom-0 left-0 right-0 z-50 flex h-[var(--cabinet-bottom-nav-h,64px)] items-center border-t border-border bg-secondary px-2 pb-[env(safe-area-inset-bottom,0px)] lg:hidden">
+    <nav aria-label={t("nav.a11y.primary", "Primary")} className="fixed bottom-0 left-0 right-0 z-50 flex h-[var(--cabinet-bottom-nav-h,64px)] items-center border-t border-border bg-secondary px-2 pb-[env(safe-area-inset-bottom,0px)] lg:hidden">
       {/* One marker for the whole bar, mounted once and translated — not a node
           per tab that mounts and unmounts.
 
@@ -90,7 +90,7 @@ export function BottomNavbar() {
         const isActive = tab.active(pathname);
         return (
           <Link
-            key={tab.label}
+            key={tab.href}
             href={tab.href}
             {...prefetchOn(tab.href)}
             aria-current={isActive ? "page" : undefined}
@@ -129,8 +129,8 @@ export function BottomNavbar() {
                 width — not a touch affordance, since neither iOS nor Android surfaces
                 one, and this bar is `lg:hidden`. The label is authored to fit; nothing
                 here depends on the tooltip. */}
-            <span className="w-full truncate text-center text-xs" title={t(tab.key)}>
-              {t(tab.key)}
+            <span className="w-full truncate text-center text-xs" title={tab.text(t)}>
+              {tab.text(t)}
             </span>
           </Link>
         );

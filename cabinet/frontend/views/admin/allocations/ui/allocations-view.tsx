@@ -60,13 +60,13 @@ export function AllocationsView() {
   return (
     <AdminScreen className="space-y-8">
       <AdminHeader
-        eyebrow={t("admin.eyebrow.administer")}
-        title={t("nav.allocations")}
-        subtitle={t("admin.alloc.subtitle")}
+        eyebrow={t("admin.eyebrow.administer", "Administer")}
+        title={t("nav.allocations", "Allocations")}
+        subtitle={t("admin.alloc.subtitle", "The registry of investable products — a fund exists only once it is registered here")}
         action={
           <Button type="button" className={cn(TEAL_CTA)} onClick={() => setAdding((v) => !v)}>
             <Plus className="size-4" />
-            {t("admin.alloc.register")}
+            {t("admin.alloc.register", "Register allocation")}
           </Button>
         }
       />
@@ -78,7 +78,7 @@ export function AllocationsView() {
       <StaggerItem as="section" className="flex gap-6">
         <div className="min-w-0 flex-1 space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
-            {t("admin.alloc.registry")}
+            {t("admin.alloc.registry", "Registry")}
             {rows && <span className="rounded-full bg-primary-ink/15 px-2 py-0.5 text-xs font-semibold text-primary-ink">{rows.length}</span>}
           </p>
           <AllocationsTable
@@ -97,7 +97,7 @@ export function AllocationsView() {
           {/* One key for the whole paragraph, with the state name interpolated: a translator
               has to be able to move `draft` to wherever the sentence puts it in their
               language, which splitting the note around the `<span>` would forbid. */}
-          <p className="max-w-3xl text-xs text-ink-soft">{t("admin.alloc.footnote", { state: t("admin.state.draft") })}</p>
+          <p className="max-w-3xl text-xs text-ink-soft">{t("admin.alloc.footnote", "Registration lands in {state}, which takes no money — opening is a separate decision. Closing stops new subscriptions only: investors can always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.", { state: t("admin.state.draft", "Draft") })}</p>
         </div>
 
         <AllocationSidePanel panel={openPanel} onClose={() => setPanel(null)} />

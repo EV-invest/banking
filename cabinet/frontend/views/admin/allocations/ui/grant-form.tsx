@@ -23,11 +23,11 @@ export function GrantForm({ busy, onSubmit }: { busy: boolean; onSubmit: (userId
     <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       <div className="grid gap-2.5">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-ink-soft">{t("admin.alloc.grants.field.user")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.grants.field.user", "Investor")}</span>
           <UserPicker value={user} onPick={setUser} />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-ink-soft">{t("admin.alloc.grants.field.level")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.grants.field.level", "Level")}</span>
           <Select value={level} onValueChange={(v) => setLevel(GRANT_LEVELS.find((l) => l === v) ?? level)}>
             <SelectTrigger className="w-full border-border bg-secondary">
               <span className="truncate">{accessLabel(level, t)}</span>
@@ -49,7 +49,7 @@ export function GrantForm({ busy, onSubmit }: { busy: boolean; onSubmit: (userId
         onClick={() => user && onSubmit(user.userId, level)}
       >
         {busy ? <Spinner aria-hidden /> : null}
-        {t("admin.alloc.grants.submit")}
+        {t("admin.alloc.grants.submit", "Grant")}
       </Button>
     </div>
   );

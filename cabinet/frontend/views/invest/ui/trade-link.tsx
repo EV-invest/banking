@@ -22,7 +22,7 @@ export function TradeLink({ service }: { service: string }) {
     <Button asChild variant="outline">
       <Link href={`/invest/${encodeURIComponent(service)}/trade`}>
         <ChartCandlestick className="size-4" />
-        {t("invest.trade")}
+        {t("invest.trade", "Trade")}
       </Link>
     </Button>
   );

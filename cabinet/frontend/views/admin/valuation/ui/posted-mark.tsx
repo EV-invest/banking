@@ -19,14 +19,14 @@ export function PostedMark({ mark, onClose }: { mark: FundNav; onClose: () => vo
   return (
     <Alert role="status" className="border-positive/40 bg-positive/10">
       <CheckCircle2 className="size-4 text-positive" />
-      <AlertTitle>{t("admin.valuation.postedTitle")}</AlertTitle>
+      <AlertTitle>{t("admin.valuation.postedTitle", "Marked")}</AlertTitle>
       <AlertDescription className="gap-3 text-ink">
         <p className="leading-relaxed tabular-nums">
-          {t("admin.valuation.postedBody", { nav: formatNav(mark.nav, locale), aum: formatExactUsdt(mark.aum, locale) })}
+          {t("admin.valuation.postedBody", "NAV {nav} at {aum} USDT AUM", { nav: formatNav(mark.nav, locale), aum: formatExactUsdt(mark.aum, locale) })}
         </p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="ghost" onClick={onClose}>
-            {t("ui.close")}
+            {t("ui.close", "Close")}
           </Button>
         </div>
       </AlertDescription>

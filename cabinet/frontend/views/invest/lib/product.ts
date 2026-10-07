@@ -158,7 +158,9 @@ export function cashForUnits(units: string, nav: string | undefined): bigint | n
  * Returns the catalogue key rather than the sentence: this module is pure and has no
  * translator, and the reason flows into exactly one render site, which does have one.
  */
-export function blockedReasonKey(product: Product, nav: FundNav | null): string | null {
+export type BlockedReason = "invest.blocked.closed" | "invest.blocked.locked" | "invest.blocked.staleNav" | "invest.blocked.capReached";
+
+export function blockedReasonKey(product: Product, nav: FundNav | null): BlockedReason | null {
   if (isClosed(product)) return "invest.blocked.closed";
   if (isLocked(product)) return "invest.blocked.locked";
   if (nav?.stale) return "invest.blocked.staleNav";

@@ -29,7 +29,7 @@ export function ChangeHistory({ service }: { service: string }) {
   return (
     <Card>
       <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">{t("admin.fees.history")}</p>
+        <p className="text-sm font-semibold">{t("admin.fees.history", "History of terms")}</p>
         {list.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : !list.data && list.error ? (
@@ -42,19 +42,19 @@ export function ChangeHistory({ service }: { service: string }) {
               <EmptyMedia variant="icon">
                 <History />
               </EmptyMedia>
-              <EmptyTitle>{t("admin.fees.noHistory")}</EmptyTitle>
-              <EmptyDescription>{t("admin.fees.noHistoryHint")}</EmptyDescription>
+              <EmptyTitle>{t("admin.fees.noHistory", "No changes yet")}</EmptyTitle>
+              <EmptyDescription>{t("admin.fees.noHistoryHint", "Every version of this fund's terms will be listed here — what was scheduled, when it bound, and why.")}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.version")}</TableHead>
-                <TableHead className={TABLE_HEAD}>{t("admin.col.state")}</TableHead>
-                <TableHead className={TABLE_HEAD}>{t("admin.fees.terms")}</TableHead>
-                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.effective")}</TableHead>
-                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.reason")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.version", "Version")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.col.state", "State")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.terms", "Terms")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.effective", "Effective")}</TableHead>
+                <TableHead className={TABLE_HEAD}>{t("admin.fees.col.reason", "Reason")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
