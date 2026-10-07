@@ -442,12 +442,26 @@ impl TxRef {
 		if trimmed.len() > 128 {
 			return Err(DomainError::Validation("tx ref too long".into()));
 		}
+		// A seed ref is printed into the owners' approval mail, and concierge refuses a
+		// link there — which would leave that consilium waiting for an invitation that is
+		// never sent. No chain's hash, nor the `hash:recipient` form, contains one.
+		if contains_url(trimmed) {
+			return Err(DomainError::Validation("tx ref must not contain a link".into()));
+		}
 		Ok(Self(trimmed.to_owned()))
 	}
 
 	pub fn as_str(&self) -> &str {
 		&self.0
 	}
+}
+
+/// Whether `value` carries a URL by the needles concierge's governance relay refuses
+/// (`no_url`): a scheme separator or a `www.` host, case-insensitive. Text that ends up in
+/// a payment label has to clear exactly these, or its mail is never sent.
+pub(crate) fn contains_url(value: &str) -> bool {
+	let lower = value.to_ascii_lowercase();
+	lower.contains("://") || lower.contains("www.")
 }
 
 /// Full 256-bit product of two `u128`s as `(hi, lo)`. The NAV math multiplies an
@@ -555,6 +569,21 @@ fn is_ton_raw(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn tx_ref_refuses_a_link_but_keeps_every_chain_form() {
+		for raw in ["https://evil.example", "0xabc HTTP://x", "www.evil.example"] {
+			assert!(TxRef::parse(raw).is_err(), "{raw} must be refused");
+		}
+		for raw in [
+			"0x5c504ed432cb51138bcf09aa5e8a410dd4a1e204ef84bfed1be16dfba1b22060:0",
+			"94f5a2c8e1b0d3f6a7c9e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a3c5e7b9d2f4:TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf",
+			"Qm2a3B+c/d==:EQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2",
+			"itest-6f1d0c7e-8b4a-4c2e-9f3d-2a1b0c9d8e7f",
+		] {
+			assert!(TxRef::parse(raw).is_ok(), "{raw} must be accepted");
+		}
+	}
 
 	#[test]
 	fn onchain_scaling_round_trips_and_rejects_dust() {
