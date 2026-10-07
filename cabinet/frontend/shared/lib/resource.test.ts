@@ -412,6 +412,9 @@ test("a refused profile is not polled — a 403 is a verdict, not a pending case
 // `renderToString` and a stand-in `window`, which is what makes the hook take its browser
 // path (the server path deliberately never touches the shared registry). A re-render with
 // the same seed object is how a router-cache replay (browser Back) looks to the cache.
+//
+// A seed is timed by when this browser first sees it, never by its server `fetchedAt`: the
+// two machines' clocks cannot be ordered against each other.
 
 const NOW = 1_800_000_000_000;
 
@@ -524,30 +527,20 @@ test("a seed read after a tag invalidation is adopted", async () => {
   assert.equal(state.calls, 0);
 });
 
-test("a seed beats an older snapshot persisted by a previous visit", () => {
+test("a seed beats a snapshot persisted by a previous visit and is persisted at its receipt time", () => {
   mock.timers.enable({ apis: ["Date"], now: NOW });
   const store = installSessionStorage({ "ev.cabinet.resource:t.balance()": JSON.stringify({ v: "100.00", t: NOW - 10_000 }) });
   const { fetch } = counted(() => "from-browser");
   const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, persist: true });
 
-  renderSeeded(balance, { data: "70.00", fetchedAt: NOW - 1_000 });
+  // Stamped by the server's clock, which may run anywhere relative to this one.
+  renderSeeded(balance, { data: "70.00", fetchedAt: NOW - 30_000 });
 
   assert.equal(balance.peek(), "70.00");
-  assert.deepEqual(JSON.parse(store.get("ev.cabinet.resource:t.balance()") ?? "null"), { v: "70.00", t: NOW - 1_000 });
+  assert.deepEqual(JSON.parse(store.get("ev.cabinet.resource:t.balance()") ?? "null"), { v: "70.00", t: NOW });
 });
 
-test("a persisted snapshot newer than the seed is kept", () => {
-  mock.timers.enable({ apis: ["Date"], now: NOW });
-  installSessionStorage({ "ev.cabinet.resource:t.balance()": JSON.stringify({ v: "70.00", t: NOW - 1_000 }) });
-  const { fetch } = counted(() => "from-browser");
-  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, persist: true });
-
-  renderSeeded(balance, { data: "100.00", fetchedAt: NOW - 10_000 });
-
-  assert.equal(balance.peek(), "70.00");
-});
-
-test("a seed stamped by a clock running ahead is clamped to now", async () => {
+test("a seed stamped by a server clock running ahead ages from its receipt", async () => {
   mock.timers.enable({ apis: ["Date"], now: NOW });
   const { state, fetch } = counted(() => "from-browser");
   const balance = defineResource({ name: "t.balance", fetch, revalidate: 15 });
@@ -570,4 +563,109 @@ test("clearResources refuses a seed read before the sign-out", async () => {
   renderSeeded(balance, previousAccount);
 
   assert.equal(balance.peek(), undefined, "the previous account's figure must not come back from a replayed render");
+});
+
+test("a seed stamped by a server clock running behind is fresh from its receipt", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { state, fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 15 });
+  renderSeeded(balance, { data: "98765.43", fetchedAt: NOW - 3_600_000 });
+
+  mock.timers.setTime(NOW + 14_999);
+  assert.equal(await balance.read(), "98765.43", "an hour-behind stamp must not make a just-rendered value stale");
+  assert.equal(state.calls, 0);
+});
+
+test("a seed stamped ahead of the browser clock does not overwrite a later browser read on re-render", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { fetch } = counted(() => "70.00");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, tags: ["wallet"] });
+  // The server's clock is 60 s ahead of this browser's — a device clock off by a minute.
+  const serverRead = { data: "100.00", fetchedAt: NOW + 60_000 };
+  renderSeeded(balance, serverRead);
+
+  mock.timers.setTime(NOW + 1_000);
+  revalidateTag("wallet");
+  assert.equal(await balance.read(), "70.00");
+
+  mock.timers.setTime(NOW + 1_001);
+  renderSeeded(balance, serverRead);
+
+  assert.equal(balance.peek(), "70.00", "the pre-withdrawal seed must not come back over the newer read");
+});
+
+test("re-rendering with the same seed object does not overwrite a read made after it", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { state, fetch } = counted(() => "70.00");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 1 });
+  const serverRead = { data: "100.00", fetchedAt: NOW };
+  renderSeeded(balance, serverRead);
+
+  mock.timers.setTime(NOW + 1_000);
+  assert.equal(await balance.read(), "70.00");
+  mock.timers.setTime(NOW + 2_000);
+  renderSeeded(balance, serverRead);
+
+  assert.equal(state.calls, 1);
+  assert.equal(balance.peek(), "70.00");
+});
+
+test("a new seed object received after an invalidation is adopted", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { state, fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, tags: ["wallet"] });
+  renderSeeded(balance, { data: "100.00", fetchedAt: NOW });
+
+  mock.timers.setTime(NOW + 1_000);
+  revalidateTag("wallet");
+  mock.timers.setTime(NOW + 2_000);
+  renderSeeded(balance, { data: "70.00", fetchedAt: NOW + 1_500 });
+
+  assert.equal(await balance.read(), "70.00", "a fresh server render after the withdrawal carries the new balance");
+  assert.equal(state.calls, 0);
+});
+
+test("a seed refused at the invalidation instant stays refused on a later re-render", async () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { state, fetch } = counted(() => "70.00");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, tags: ["wallet"] });
+  renderSeeded(balance, undefined);
+  const raced = { data: "100.00", fetchedAt: NOW };
+
+  revalidateTag("wallet");
+  renderSeeded(balance, raced);
+  mock.timers.setTime(NOW + 1_000);
+  renderSeeded(balance, raced);
+
+  assert.equal(balance.peek(), undefined, "a refused seed must not be adopted just because time has passed");
+  assert.equal(await balance.read(), "70.00");
+  assert.equal(state.calls, 1);
+});
+
+test("a seed refused for a newer held value stays refused once that value is invalidated", () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60, tags: ["wallet"] });
+  balance.publish("70.00");
+  const older = { data: "100.00", fetchedAt: NOW - 5_000 };
+  renderSeeded(balance, older);
+
+  mock.timers.setTime(NOW + 1_000);
+  revalidateTag("wallet");
+  mock.timers.setTime(NOW + 2_000);
+  renderSeeded(balance, older);
+
+  assert.equal(balance.peek(), "70.00", "the stale-while-revalidate value stays; the refused seed does not replace it");
+});
+
+test("sign-out counts as an invalidation — a seed received in the same instant is refused", () => {
+  mock.timers.enable({ apis: ["Date"], now: NOW });
+  const { fetch } = counted(() => "from-browser");
+  const balance = defineResource({ name: "t.balance", fetch, revalidate: 60 });
+  renderSeeded(balance, undefined);
+
+  clearResources();
+  renderSeeded(balance, { data: "100.00", fetchedAt: NOW });
+
+  assert.equal(balance.peek(), undefined);
 });
