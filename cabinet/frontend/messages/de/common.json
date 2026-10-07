@@ -3787,6 +3787,10 @@
     "en": "Sign-in is unavailable right now. Please try again shortly.",
     "t": "Die Anmeldung ist derzeit nicht verfügbar. Bitte versuchen Sie es in Kürze erneut."
   },
+  "err.chunkLoad": {
+    "en": "This part of the page didn't load.",
+    "t": "Dieser Teil der Seite wurde nicht geladen."
+  },
   "err.csrf": {
     "en": "This page went stale. Reload it and try again.",
     "t": "Diese Seite ist veraltet. Laden Sie sie neu und versuchen Sie es erneut."
@@ -6874,6 +6878,10 @@
   "ui.refresh": {
     "en": "Refresh",
     "t": "Aktualisieren"
+  },
+  "ui.reloadPage": {
+    "en": "Reload page",
+    "t": "Seite neu laden"
   },
   "ui.reset": {
     "en": "Reset",

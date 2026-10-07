@@ -12,7 +12,9 @@ import { TerminalChart, TerminalPane, TerminalPaneBody, TerminalPaneHeader, Togg
 import { RESOLUTIONS, isResolution } from "@/entities/book/lib/vocabulary";
 import type { CandleResolution } from "@/shared/contracts/book";
 import { errorMessage } from "@/shared/lib/api-client";
+import { isChunkLoadError } from "@/shared/lib/chunk-error";
 import { cn } from "@/shared/lib/cn";
+import { ReloadNotice } from "@/shared/ui/reload-notice";
 import { restChartFeed } from "@/views/trade/lib/chart-feed";
 import { useCandleChart } from "@/views/trade/lib/use-candle-chart";
 
@@ -40,7 +42,11 @@ export function ChartPane({ service }: { service: string }) {
       </TerminalPaneHeader>
       <TerminalPaneBody className="relative">
         <TerminalChart ref={host} className={cn(state.kind !== "ready" && "opacity-40")} />
-        {state.kind !== "ready" && (
+        {state.kind === "failed" && isChunkLoadError(state.error) ? (
+          // The engine's chunk never arrived, and the bundler will not fetch it again
+          // without a reload — "please try again" would be an instruction nothing obeys.
+          <ReloadNotice className="absolute inset-0" />
+        ) : state.kind !== "ready" && (
           // Drawn beside the host, never inside it: the engine owns the host's children.
           <p className={cn("pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-xs", state.kind === "failed" ? "text-accent-error" : "text-ink-soft")}>
             {state.kind === "loading" ? t("ui.loading", "Loading…") : state.kind === "empty" ? t("trade.chart.empty", "No trades yet — the chart draws from the first fill.") : errorMessage(state.error, t)}

@@ -3787,6 +3787,10 @@
     "en": "Sign-in is unavailable right now. Please try again shortly.",
     "t": "Вход сейчас недоступен. Повторите попытку чуть позже."
   },
+  "err.chunkLoad": {
+    "en": "This part of the page didn't load.",
+    "t": "Эта часть страницы не загрузилась."
+  },
   "err.csrf": {
     "en": "This page went stale. Reload it and try again.",
     "t": "Страница устарела. Обновите её и попробуйте снова."
@@ -6874,6 +6878,10 @@
   "ui.refresh": {
     "en": "Refresh",
     "t": "Обновить"
+  },
+  "ui.reloadPage": {
+    "en": "Reload page",
+    "t": "Обновить страницу"
   },
   "ui.reset": {
     "en": "Reset",
