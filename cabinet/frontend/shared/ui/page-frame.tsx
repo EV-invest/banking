@@ -76,6 +76,12 @@ export interface PageFrameProps extends Omit<PageHeadingProps, "title" | "classN
   /** Layout for the sections — a column by default; the dashboard passes its grid. */
   className?: string;
   style?: CSSProperties;
+  /**
+   * Play the arrival. `false` for a screen whose figures were rendered on the server: the
+   * entrance starts from transparent, so it would hide figures already in the HTML until
+   * hydration and then delay them by its own length — a skeleton earned that, they did not.
+   */
+  entrance?: boolean;
   children: ReactNode;
 }
 
@@ -84,11 +90,11 @@ export interface PageFrameProps extends Omit<PageHeadingProps, "title" | "classN
  * Each child is a `StaggerItem` and arrives in DOM order; anything passed as a bare element
  * still renders, it just arrives with the column rather than in sequence.
  */
-export function PageFrame({ title, description, eyebrow, actions, appBar, headingClassName, width = "full", className, style, children }: PageFrameProps) {
+export function PageFrame({ title, description, eyebrow, actions, appBar, headingClassName, width = "full", className, style, entrance = true, children }: PageFrameProps) {
   return (
     <>
       {appBar}
-      <Stagger delay={appBar ? SECTION_STAGGER : 0} step={SECTION_STAGGER} className={cn("flex flex-col", PAGE_GAP, PAGE_PAD, width === "content" && PAGE_CONTENT_WIDTH, className)} style={style}>
+      <Stagger {...(entrance ? {} : { initial: false })} delay={appBar ? SECTION_STAGGER : 0} step={SECTION_STAGGER} className={cn("flex flex-col", PAGE_GAP, PAGE_PAD, width === "content" && PAGE_CONTENT_WIDTH, className)} style={style}>
         {title !== undefined && <PageHeading title={title} description={description} eyebrow={eyebrow} actions={actions} className={cn(appBar && "hidden lg:flex", headingClassName)} />}
         {children}
       </Stagger>

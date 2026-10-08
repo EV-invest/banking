@@ -5,10 +5,12 @@ import { isLocale, negotiate, type Locale } from "@evinvest/i18n";
 
 import { experiments } from "@/application/experiments";
 import { config as appConfig } from "@/config";
-import { BASE_PATH, isNonPagePath, localeRepairedPath, zonePathname } from "@/shared/config/base-path";
+import { isNonPagePath, localeRepairedPath } from "@/shared/config/base-path";
 import { COOKIES } from "@/shared/config/cookies";
-import { isPublicPath, isTokenApprovalPath, zoneGatePath } from "@/shared/config/public-routes";
+import { isTokenApprovalPath } from "@/shared/config/public-routes";
 import { contentSecurityPolicy, websocketOrigin } from "@/shared/config/security";
+import { isSessionId, needsRenewal, renewAccess, type Renewal } from "@/shared/lib/access-renewal";
+import { decideSession } from "@/shared/lib/session-gate";
 
 const CSP_HEADER = "content-security-policy";
 const REFERRER_HEADER = "referrer-policy";
@@ -36,7 +38,7 @@ function localeOf(pathname: string): Locale | null {
   return isLocale(first) ? first : null;
 }
 
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
   // Assets, the BFF and the MFE bundles are not pages: no locale redirect, no
@@ -48,7 +50,9 @@ export function proxy(req: NextRequest) {
   // asset hot path.
   if (isNonPagePath(pathname)) return NextResponse.next();
 
-  const signedIn = Boolean(req.cookies.get(COOKIES.session)?.value);
+  // A value concierge could not have minted is no session at all — and must never be
+  // written into an outgoing Cookie header (see `shared/lib/access-renewal.ts`).
+  const signedIn = isSessionId(req.cookies.get(COOKIES.session)?.value);
   const locale = localeOf(pathname);
 
   // Per-request nonce: written onto the forwarded request headers so Next applies
@@ -126,26 +130,60 @@ export function proxy(req: NextRequest) {
     }
   }
 
-  if (!isPublicPath(pathname) && !signedIn) {
+  // Renew a lapsing access cookie before anything renders with it — see
+  // `shared/lib/access-renewal.ts`. The renewed token replaces the stale one on the
+  // forwarded request (the A/B proxy forwards `req.headers`, so the CSP header set above
+  // rides along), and the identity plane's Set-Cookie lines go to the browser verbatim.
+  // What follows from the outcome is decided in `shared/lib/session-gate.ts`.
+  const renewal = signedIn ? await renewIfLapsing(req) : null;
+  const decision = decideSession({ pathname, search, locale, hasSession: signedIn, renewal, cookieNames: COOKIES });
+  for (const [name, value] of Object.entries(decision.requestCookies)) req.cookies.set(name, value);
+  for (const name of decision.deleteCookies) req.cookies.delete(name);
+  const finish = (res: NextResponse) => withSetCookies(res, decision.setCookies);
+
+  if (decision.redirect) {
     const url = req.nextUrl.clone();
-    url.pathname = `/${locale ?? "en"}${BASE_PATH}/login`;
+    url.pathname = decision.redirect.pathname;
     url.search = "";
-    // Zone-relative, like `SessionKeeper`'s: the login view puts `/{locale}/cabinet` back
-    // on when it hands returnTo to the shell. Passing the real path here doubled the
-    // prefix and landed every deep link on `/cabinet/{locale}/cabinet/…` (#390).
-    const returnTo = `${zonePathname(pathname)}${search}`;
-    if (returnTo !== "/") url.searchParams.set("returnTo", returnTo);
-    return withCsp(NextResponse.redirect(url), csp);
+    if (decision.redirect.returnTo) url.searchParams.set("returnTo", decision.redirect.returnTo);
+    return finish(withCsp(NextResponse.redirect(url), csp));
   }
 
-  if (signedIn && zoneGatePath(pathname) === "/login") {
-    const url = req.nextUrl.clone();
-    url.pathname = `/${locale ?? "en"}${BASE_PATH}`;
-    url.search = "";
-    return withCsp(NextResponse.redirect(url), csp);
-  }
+  return finish(withReferrerPolicy(withCsp(withLocale(req, ab(req)), csp), pathname));
+}
 
-  return withReferrerPolicy(withCsp(withLocale(req, ab(req)), csp), pathname);
+// Only when the cookie is missing or close to lapsing, so the common request — a fresh
+// token, an asset, a prefetch inside the TTL — never leaves this process. Unset
+// `AUTH_WEB_URL` turns the whole step off.
+//
+// A router prefetch cannot be told apart here: Next strips `next-router-prefetch` (with
+// the other flight headers) from the request before the proxy sees it. None arrive today
+// because `shared/ui/cabinet-link.tsx` turns link prefetching off; turning it back on would
+// let a hovered link slide the session's expiry.
+async function renewIfLapsing(req: NextRequest): Promise<Renewal | null> {
+  const authWebUrl = appConfig.authWebUrl;
+  const session = req.cookies.get(COOKIES.session)?.value;
+  if (!authWebUrl || !isSessionId(session) || !needsRenewal(req.cookies.get(COOKIES.access)?.value, Date.now())) return null;
+  return renewAccess({
+    authWebUrl,
+    sessionCookie: { name: COOKIES.session, value: session },
+    accessCookieName: COOKIES.access,
+    csrfCookieName: COOKIES.csrf,
+    secure: appConfig.authCookieSecure,
+  });
+}
+
+// Appended last, as raw lines: `res.cookies.set` rewrites the Set-Cookie header from its
+// own map, so anything it is asked to do after this would drop them.
+//
+// A response carrying someone's fresh credential must never be stored by a shared cache.
+// Pages are no-store today only because the root layout happens to read `headers()`; this
+// says it where the credential is added.
+function withSetCookies(res: NextResponse, lines: readonly string[]): NextResponse {
+  if (lines.length === 0) return res;
+  for (const line of lines) res.headers.append("set-cookie", line);
+  res.headers.set("cache-control", "private, no-store");
+  return res;
 }
 
 // On the two approval pages the URL *is* the credential, so the cabinet's default
