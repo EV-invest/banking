@@ -8,7 +8,7 @@ import { Button, Select, SelectContent, SelectItem, SelectTrigger, Spinner } fro
 import type { AllocationGrantLevel } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { GRANT_LEVELS, accessLabel } from "@/views/admin/lib/access";
-import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
+import { UserPicker, type PickedUser } from "@/features/user-picker/ui/user-picker";
 
 const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 

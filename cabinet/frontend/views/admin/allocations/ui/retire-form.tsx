@@ -11,7 +11,7 @@ import { useT } from "@evinvest/i18n/react";
 import { Button, Field, FieldDescription, FieldError, FieldLabel, Input } from "@evinvest/uikit";
 
 import { retireDraftProblem, type RetireDraft } from "@/views/admin/allocations/lib/retire";
-import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
+import { UserPicker, type PickedUser } from "@/features/user-picker/ui/user-picker";
 
 export function RetireForm({ draft, onChange, onReview, onCancel }: { draft: RetireDraft; onChange: (next: RetireDraft) => void; onReview: () => void; onCancel: () => void }) {
   const t = useT();

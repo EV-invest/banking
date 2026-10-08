@@ -17,7 +17,7 @@ import type { Consilium } from "@/shared/contracts/governance";
 import { errorMessage } from "@/shared/lib/api-client";
 import { isPositiveWireDecimal } from "@/shared/lib/money";
 import { ConsiliumOpened } from "@/views/admin/ui/consilium-opened";
-import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
+import { UserPicker, type PickedUser } from "@/features/user-picker/ui/user-picker";
 
 export function HolderGrantForm({ allocation }: { allocation: "fee" | "fund" }) {
   const t = useT();

@@ -11,7 +11,7 @@ import { Button, Field, FieldDescription, FieldError, FieldLabel, Input, Spinner
 
 import type { IssueUnitsBody } from "@/entities/admin/api/admin-client";
 import { EMPTY_ISSUE_DRAFT, afterIssued, issueDraftProblem, issueUnitsBody, submissionKeyFor, type IssueDraft, type SubmissionKey } from "@/views/admin/allocations/lib/issuance";
-import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
+import { UserPicker, type PickedUser } from "@/features/user-picker/ui/user-picker";
 
 export function IssueForm({ service, busy, onSubmit }: { service: string; busy: boolean; onSubmit: (body: IssueUnitsBody, holderLabel: string) => Promise<boolean> }) {
   const t = useT();
