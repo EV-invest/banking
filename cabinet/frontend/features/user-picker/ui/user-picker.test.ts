@@ -1,11 +1,11 @@
 // Run with `npm run test` (Node's built-in runner, native type-stripping).
 //
-// The investor picker lists what `/api/admin/users` answered for the operator's search —
-// the hub matches email and user id server-side. These pin that every row the server sent
-// is on screen, including a row found by email whose `value` (the user id) does not contain
-// the query: the kit's own client-side filter hid exactly those (banking#471). Rendered with
-// `react-dom/server` and the picker already open (see `__tests__/open-picker-kit.ts`);
-// keyboard selection needs a browser and is covered by the stand scenario, not here.
+// The investor picker holds the whole directory and leaves the matching to the kit's
+// `Command`, on email and user id together. These pin which rows a typed search keeps
+// (banking#471: rows found by email used to vanish). Rendered with `react-dom/server` and
+// the picker already open (see `__tests__/open-picker-kit.ts`); with no effects run there,
+// `CommandEmpty` cannot tell results from none, so only a search with no rows checks it.
+// Keyboard selection needs a browser and is covered by the stand scenario, not here.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -23,6 +23,7 @@ installModuleHooks({
   "@evinvest/uikit": new URL("./__tests__/open-picker-kit.ts", import.meta.url).href,
   "@/shared/lib/resource": directory,
   "@/entities/admin/model/admin-resource": directory,
+  "@/shared/ui/resource-error": directory,
 });
 
 const { UserPicker } = await import("./user-picker.tsx");
@@ -40,28 +41,30 @@ const renderPicker = () => renderToString(inEnglish(createElement(UserPicker, { 
 /** The visible label of every option row, in order. */
 const optionLabels = (html: string) => [...html.matchAll(/role="option"[^>]*>.*?<span[^>]*>([^<]*)<\/span><\/div>/g)].map((m) => m[1]);
 
-test("an investor the server found by part of the email is listed although the user id does not contain the query", () => {
+test("part of an email keeps that investor alone", () => {
   typeIntoPicker("anna.inv");
-  directoryIs(answered([ANNA]));
+  directoryIs(answered([ANNA, BORIS]));
 
-  const html = renderPicker();
-
-  assert.deepEqual(optionLabels(html), ["anna.investor@example.com"]);
-  assert.doesNotMatch(html, /No investors match/);
+  assert.deepEqual(optionLabels(renderPicker()), ["anna.investor@example.com"]);
 });
 
-test("every investor the server found by part of the user id is listed", () => {
+test("part of a user id keeps everyone whose id has it", () => {
   typeIntoPicker("9f00");
   directoryIs(answered([ANNA, BORIS]));
 
-  const html = renderPicker();
-
-  assert.deepEqual(optionLabels(html), ["anna.investor@example.com", "boris.owner@example.com"]);
+  assert.deepEqual(optionLabels(renderPicker()), ["anna.investor@example.com", "boris.owner@example.com"]);
 });
 
-test("a search the server found nobody for says no investors match", () => {
+test("letters of an email in order, not adjacent, still find it", () => {
+  typeIntoPicker("bowner");
+  directoryIs(answered([ANNA, BORIS]));
+
+  assert.deepEqual(optionLabels(renderPicker()), ["boris.owner@example.com"]);
+});
+
+test("a search that matches nobody says no investors match", () => {
   typeIntoPicker("zzz-nobody");
-  directoryIs(answered([]));
+  directoryIs(answered([ANNA, BORIS]));
 
   const html = renderPicker();
 
