@@ -11,6 +11,8 @@ import { Button } from "@evinvest/uikit";
 
 import { useKycGate } from "@/features/kyc";
 import type { FundNav } from "@/shared/contracts";
+import type { BookPolicy } from "@/shared/contracts/book";
+import type { ResourceSeed } from "@/shared/lib/resource";
 import { cn } from "@/shared/lib/cn";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { StaggerItem } from "@/shared/ui/motion";
@@ -23,7 +25,7 @@ import { TradeLink } from "@/views/invest/ui/trade-link";
 
 export type Panel = "subscribe" | "redeem" | null;
 
-export function ProductHeader({ product, nav, held, panel, onPanel }: { product: Product; nav: FundNav | null; held: boolean; panel: Panel; onPanel: (next: (p: Panel) => Panel) => void }) {
+export function ProductHeader({ product, nav, held, panel, onPanel, bookSeed }: { product: Product; nav: FundNav | null; held: boolean; panel: Panel; onPanel: (next: (p: Panel) => Panel) => void; bookSeed?: ResourceSeed<BookPolicy> }) {
   const t = useT();
   const closed = isClosed(product);
   const stale = nav?.stale ?? false;
@@ -46,7 +48,7 @@ export function ProductHeader({ product, nav, held, panel, onPanel }: { product:
       <div className="flex flex-wrap gap-2">
         {/* The secondary market, beside the primary one: trading units with other holders
             is a different act from subscribing, priced by the book rather than the NAV. */}
-        <TradeLink service={product.service} />
+        <TradeLink service={product.service} seed={bookSeed} />
         {!closed && <SubscribeControl product={product} blocked={blocked !== null} panel={panel} onPanel={onPanel} />}
         {held && (
           <Button type="button" variant="outline" disabled={stale} onClick={() => onPanel((p) => (p === "redeem" ? null : "redeem"))}>
