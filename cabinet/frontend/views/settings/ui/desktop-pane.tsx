@@ -25,6 +25,7 @@ export function DesktopPane({
   sessions,
   sessionList,
   notificationSettings,
+  entrance,
 }: {
   section: Section;
   onSelect: (id: Section) => void;
@@ -32,6 +33,8 @@ export function DesktopPane({
   sessions: ReactNode;
   sessionList: Session[] | undefined;
   notificationSettings: ResourceSeed<NotificationSettings> | undefined;
+  /** `false` for the pane the server rendered with data — see `SettingsView`. */
+  entrance: boolean;
 }) {
   const t = useT();
   return (
@@ -41,7 +44,7 @@ export function DesktopPane({
       {/* Keyed on the section, so choosing one from the rail brings its pane in
           rather than swapping it under the cursor. The rail beside it does not
           remount, which is the point — the marker slides, the pane arrives. */}
-      <Reveal key={section} className="min-w-0 flex-1">
+      <Reveal {...(entrance ? {} : { initial: false })} key={section} className="min-w-0 flex-1">
         {section === "preferences" && <PreferencesSection loading={personal.loading} form={personal.form} onChange={personal.onChange} fieldErrors={personal.fieldErrors} />}
         {section === "notifications" && (
           <div>

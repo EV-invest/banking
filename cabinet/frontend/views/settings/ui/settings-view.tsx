@@ -75,13 +75,20 @@ export function SettingsView({ initialSection, initial }: { initialSection: Sect
   // The mobile stack: the root screen, or the section pushed on top of it. Derived from
   // the one section state, so a deep link opens the same thing at both breakpoints.
   const pushed = pushableOf(section);
+  // The pane the server rendered with data is on screen before any script runs; letting it
+  // play its arrival would start it transparent and hide the form until hydration. Panes
+  // the reader opens afterwards still arrive.
+  const [switched, setSwitched] = useState(false);
+  const paneEntrance = !initial || switched;
   function select(id: Section) {
+    setSwitched(true);
     setSection(id);
     // `replace`, not `push`: the rail is a tab strip, and a history entry per tab would
     // make Back walk through every one the reader glanced at.
     router.replace(`${toHref("/settings")}?section=${id}`, { scroll: false });
   }
   function pop() {
+    setSwitched(true);
     setSection(DEFAULT_SECTION);
     router.replace(toHref("/settings"), { scroll: false });
   }
@@ -148,8 +155,8 @@ export function SettingsView({ initialSection, initial }: { initialSection: Sect
         </p>
       )}
 
-      <MobileStack pushed={pushed} onSelect={select} personal={personal} sessions={sessionsPanel(false)} name={name} sessionList={sessions.sessions} notificationSettings={initial?.notificationSettings} />
-      <DesktopPane section={section} onSelect={select} personal={personal} sessions={sessionsPanel(true)} sessionList={sessions.sessions} notificationSettings={initial?.notificationSettings} />
+      <MobileStack pushed={pushed} onSelect={select} personal={personal} sessions={sessionsPanel(false)} name={name} sessionList={sessions.sessions} notificationSettings={initial?.notificationSettings} entrance={paneEntrance} />
+      <DesktopPane section={section} onSelect={select} personal={personal} sessions={sessionsPanel(true)} sessionList={sessions.sessions} notificationSettings={initial?.notificationSettings} entrance={paneEntrance} />
     </PageFrame>
   );
 }

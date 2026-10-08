@@ -30,6 +30,7 @@ export function MobileStack({
   name,
   sessionList,
   notificationSettings,
+  entrance,
 }: {
   pushed: Pushable | null;
   onSelect: (id: Section) => void;
@@ -38,11 +39,13 @@ export function MobileStack({
   name: string;
   sessionList: Session[] | undefined;
   notificationSettings: ResourceSeed<NotificationSettings> | undefined;
+  /** `false` for the pane the server rendered with data — see `SettingsView`. */
+  entrance: boolean;
 }) {
   const t = useT();
   return (
     <StaggerItem className="lg:hidden">
-      <Reveal key={pushed ?? "root"} className="flex flex-col gap-5">
+      <Reveal {...(entrance ? {} : { initial: false })} key={pushed ?? "root"} className="flex flex-col gap-5">
         {pushed === "personal" ? (
           <PersonalStack {...personal} />
         ) : pushed === "sessions" ? (
