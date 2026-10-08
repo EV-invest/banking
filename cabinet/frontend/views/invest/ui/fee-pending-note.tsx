@@ -14,14 +14,14 @@ import type { FeePolicy } from "@/shared/contracts";
 import { formatMoment } from "@/shared/lib/datetime";
 import { basisLabel, crystallizationLabel } from "@/shared/lib/fee-terms";
 import { pct } from "@/shared/lib/rate";
-import { useHydrated } from "@/shared/lib/use-hydrated";
+import { useTimeZone } from "@/shared/lib/time-zone";
 import { Note } from "@/views/invest/ui/atoms";
 
 export function FeePendingNote({ pending }: { pending: FeePolicy["pending"] }) {
   const t = useT();
   const locale = useLocale();
   // Same reason as `MarkDate`: a policy read on the server is formatted there first.
-  const zone = useHydrated() ? undefined : "UTC";
+  const zone = useTimeZone();
   if (!pending || (pending.state !== "scheduled" && pending.state !== "awaiting_consilium")) return null;
   // proto3 JSON drops a zero, so an absent rate here IS a zero rate, not a missing one.
   const words = {

@@ -17,7 +17,7 @@ import { Skeleton } from "@evinvest/uikit";
 import type { FeePolicy, FundNav } from "@/shared/contracts";
 import { formatDay } from "@/shared/lib/datetime";
 import { pct } from "@/shared/lib/rate";
-import { useHydrated } from "@/shared/lib/use-hydrated";
+import { useTimeZone } from "@/shared/lib/time-zone";
 import { type Liquidity } from "@/views/invest/lib/catalog-card";
 import { compactUnits } from "@/views/invest/lib/format";
 
@@ -51,9 +51,9 @@ const liquidityWords = (t: Translate): Record<Liquidity, string> => ({
 export function MarkDate({ nav }: { nav: FundNav | null }) {
   const t = useT();
   const locale = useLocale();
-  // A NAV read on the server is in the HTML; until hydration is done the day is UTC's, so
-  // the server's render and the hydrating one name the same day.
-  const zone = useHydrated() ? undefined : "UTC";
+  // A NAV read on the server is in the HTML; `useTimeZone` is the zone that render and the
+  // hydrating one share (the reader's, from the `ev_tz` cookie), then the device's.
+  const zone = useTimeZone();
   if (!nav) return <>—</>;
   const stamp = String(nav.posted_at ?? "0");
   return <>{stamp === "0" ? t("invest.notYetValued", "Not yet valued") : t("invest.facts.markedOn", "Marked {date}", { date: formatDay(stamp, locale, zone) })}</>;

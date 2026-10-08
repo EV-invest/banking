@@ -2,8 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 
-// Whether this render may use what only the browser knows — its clock's time zone, a
-// figure's motion. `false` on the server AND in the render that hydrates the server's HTML
+// Whether this render may use what only the browser knows — a figure's motion, a stage
+// kept in localStorage. (Times are not here: `shared/lib/time-zone.tsx` renders them in the
+// reader's zone from the first HTML.) `false` on the server AND in the render that hydrates the server's HTML
 // (React hands that render the server snapshot), so the two agree; `true` from the next
 // render on, and for anything mounted in the browser after hydration.
 //
