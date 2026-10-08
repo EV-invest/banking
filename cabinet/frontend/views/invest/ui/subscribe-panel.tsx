@@ -25,7 +25,7 @@ import { useKycGate, VerificationRequired } from "@/features/kyc";
 import type { FundNav } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
-import { Panel, PanelPresence } from "@/shared/ui/motion";
+import { Panel, PanelPresence } from "@/shared/ui/motion-panel";
 import { recordFirstSubscription } from "@/views/invest/lib/first-subscription";
 import { formatExactUsdt, formatUnits, formatUsdt } from "@/views/invest/lib/format";
 import { canSubmit, checkSubscribe } from "@/views/invest/lib/subscribe-check";
