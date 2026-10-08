@@ -4,6 +4,7 @@ import { I18nScope } from "@evinvest/i18n/react";
 
 import { readAllocations } from "@/entities/fund/api/fund-server";
 import { readOperations } from "@/entities/operation/api/operation-server";
+import { isClientNavigation } from "@/shared/api/server/navigation";
 import { OperationsView } from "@/views/operations/ui/operations-view";
 import { routeMessages } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
@@ -13,6 +14,7 @@ import { currentLocale } from "@/shared/config/locale";
 // at once, and the reads stream in behind it. A failed or timed-out read arrives as no
 // seed and the view makes the browser read it always made. The catalog rides along only
 // to name the funds on that first paint; without it the rows show slugs until it lands.
+// A client-side navigation skips the reads: the browser cache answers those.
 export default async function OperationsPage() {
   const locale = await currentLocale();
   return (
@@ -25,6 +27,7 @@ export default async function OperationsPage() {
 }
 
 async function SeededOperations() {
+  if (await isClientNavigation()) return <OperationsView />;
   const [operations, catalog] = await Promise.all([readOperations(), readAllocations()]);
   return <OperationsView initial={operations ?? undefined} catalog={catalog ?? undefined} />;
 }

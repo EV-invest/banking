@@ -4,6 +4,7 @@ import { I18nScope } from "@evinvest/i18n/react";
 
 import { readNotificationSettings } from "@/entities/notification/api/notification-server";
 import { readProfile } from "@/entities/user/api/profile-server";
+import { isClientNavigation } from "@/shared/api/server/navigation";
 import { type Section, sectionFrom } from "@/views/settings/lib/sections";
 import { type SettingsSeeds, SettingsView } from "@/views/settings/ui/settings-view";
 import { routeMessages } from "@/shared/config/i18n";
@@ -33,6 +34,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 }
 
 async function SeededSettings({ section }: { section: Section }) {
+  // Every rail click is a `router.replace` back to this page; re-reading the profile for
+  // each one would be a BFF request per tab, racing a save made just before it.
+  if (await isClientNavigation()) return <SettingsView initialSection={section} />;
   const [profile, notificationSettings] = await Promise.all([readProfile(), section === "notifications" ? readNotificationSettings() : null]);
   const seeds: SettingsSeeds = {
     ...(profile && { profile }),
