@@ -210,6 +210,12 @@ Rules:
   writes the final figure by whichever comes first: the count completing, the
   page going hidden, or a timer just past `DUR.slow`. Hand-written motion that
   gates a figure on a frame needs the same guarantee.
+- **A figure that arrived in the server's HTML does not count in.** `AnimatedNumber`
+  starts from 0 only for a figure the browser draws; one hydrated from a server read
+  (`useSeededResource`) has been on screen since the HTML landed, and counting it
+  up would take it away from the reader. Same for a screen's entrance: a page that
+  renders server reads passes `entrance={false}` for them, and no arrival plays in a
+  streaming fallback, which is never hydrated (`shared/lib/use-hydrated`).
 - **`Settled` does not animate when no skeleton was shown.** Data already present
   on the first render cuts straight in — fading it would invent a delay the data
   never had. It decides by adjusting state *during render*, not in an effect: an
