@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 
-import * as Sentry from "@sentry/nextjs";
 import { createSentrySink } from "@evinvest/error-monitoring";
 import { ServerError } from "@evinvest/uikit";
 
@@ -19,7 +18,14 @@ import { BASE_PATH } from "@/shared/config/base-path";
 // of it here risks a boundary that itself throws — and a status page that crashes
 // is a blank tab. Plain copy on a plain document is the honest floor. The home
 // link is the unprefixed `/cabinet`, which `proxy.ts` resolves into a locale.
-const { reportError } = createSentrySink(Sentry);
+// Sentry is imported lazily, on the error itself, for the reason `[locale]/cabinet/error.tsx`
+// gives: a static namespace import keeps the whole SDK, replay and feedback included.
+function reportError(error: Error, context?: Record<string, unknown>): void {
+  void import("@sentry/react").then(
+    (Sentry) => createSentrySink(Sentry).reportError(error, context),
+    () => {},
+  );
+}
 
 export default function GlobalError({
   error,
