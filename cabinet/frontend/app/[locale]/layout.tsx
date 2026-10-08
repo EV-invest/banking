@@ -8,7 +8,7 @@ import { Providers } from "@/application/providers";
 import { fontInter } from "@/application/styles/fonts";
 import { isLocale, translator } from "@evinvest/i18n";
 import { notFound } from "next/navigation";
-import { messagesFor } from "@/shared/config/i18n";
+import { messagesFor, shellMessages } from "@/shared/config/i18n";
 import { requestNonce } from "@/shared/config/security";
 
 // The tab title is the first words of the cabinet a reader sees, often before the page has
@@ -59,7 +59,9 @@ export default async function RootLayout({
   return (
     <html lang={locale} className={`dark ${fontInter.variable}`} suppressHydrationWarning>
       <body className="min-h-screen bg-background text-ink antialiased">
-        <I18nProvider locale={locale} messages={messagesFor(locale)}>
+        {/* Only the keys the layouts and boundary files render; each page's
+            `<I18nScope>` adds its own (`shellMessages`, `routeMessages`). */}
+        <I18nProvider locale={locale} messages={shellMessages(locale)}>
           <Providers nonce={nonce}>{children}</Providers>
         </I18nProvider>
       </body>

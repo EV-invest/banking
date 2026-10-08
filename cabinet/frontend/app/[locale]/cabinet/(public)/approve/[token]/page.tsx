@@ -1,4 +1,8 @@
+import { I18nScope } from "@evinvest/i18n/react";
+
 import { PayoutApprovalView } from "@/views/approval/ui/payout-approval-view";
+import { routeMessages } from "@/shared/config/i18n";
+import { currentLocale } from "@/shared/config/locale";
 
 // The payout approval an owner opens from their email.
 //
@@ -14,5 +18,10 @@ export const dynamic = "force-dynamic";
 
 export default async function PayoutApprovalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  return <PayoutApprovalView token={token} />;
+  const locale = await currentLocale();
+  return (
+    <I18nScope messages={routeMessages(locale, "app/[locale]/cabinet/(public)/approve/[token]/page.tsx")}>
+      <PayoutApprovalView token={token} />
+    </I18nScope>
+  );
 }

@@ -1,7 +1,11 @@
 import { Suspense } from "react";
 
+import { I18nScope } from "@evinvest/i18n/react";
+
 import { readWallet } from "@/entities/wallet/api/wallet-server";
 import { WalletOverviewView } from "@/views/wallet/ui/wallet-overview-view";
+import { routeMessages } from "@/shared/config/i18n";
+import { currentLocale } from "@/shared/config/locale";
 
 // The investor wallet surface — one balance and the rails that move money in and out.
 // Deposit, withdraw and activity are their own routes (Figma `cabinet/wallet/*`).
@@ -11,11 +15,14 @@ import { WalletOverviewView } from "@/views/wallet/ui/wallet-overview-view";
 // actions and skeletons — what this route always painted first), flushed at once, and the
 // read streams in behind it. A read that fails or times out arrives as no seed, and the
 // view makes the browser read it always made.
-export default function WalletPage() {
+export default async function WalletPage() {
+  const locale = await currentLocale();
   return (
-    <Suspense fallback={<WalletOverviewView />}>
-      <SeededWalletOverview />
-    </Suspense>
+    <I18nScope messages={routeMessages(locale, "app/[locale]/cabinet/(app)/wallet/page.tsx")}>
+      <Suspense fallback={<WalletOverviewView />}>
+        <SeededWalletOverview />
+      </Suspense>
+    </I18nScope>
   );
 }
 

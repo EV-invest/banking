@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { translator } from "@evinvest/i18n";
+import { I18nScope } from "@evinvest/i18n/react";
 
-import { messagesFor } from "@/shared/config/i18n";
+import { messagesFor, routeMessages } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
 import { RemoteElement } from "@/shared/mfe/RemoteElement";
 import { findMfe } from "@/shared/mfe/registry";
@@ -42,12 +43,14 @@ export default async function MfePage({ params }: { params: Promise<{ service: s
     // The 60vh reserve keeps the page from collapsing while the remote boots. It is
     // viewport maths, not a spacing step — a fixed height would over-reserve on a short
     // viewport and under-reserve on a tall one — so it stays expressed in vh.
-    <RemoteElement
-      tag={entry.tag}
-      scriptUrl={entry.scriptUrl}
-      integrity={entry.integrity}
-      className="block min-h-[60vh]"
-      fallback={<div className="container py-24 text-ink-soft">{t("mfe.loading", "Loading {name}…", { name: entry.name })}</div>}
-    />
+    <I18nScope messages={routeMessages(locale, "app/[locale]/cabinet/(mfe)/[service]/[[...slug]]/page.tsx")}>
+      <RemoteElement
+        tag={entry.tag}
+        scriptUrl={entry.scriptUrl}
+        integrity={entry.integrity}
+        className="block min-h-[60vh]"
+        fallback={<div className="container py-24 text-ink-soft">{t("mfe.loading", "Loading {name}…", { name: entry.name })}</div>}
+      />
+    </I18nScope>
   );
 }
