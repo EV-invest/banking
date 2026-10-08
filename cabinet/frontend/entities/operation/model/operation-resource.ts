@@ -13,8 +13,7 @@ import { fetchOperations } from "@/entities/operation/api/operation-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { defineResource } from "@/shared/lib/resource";
 
-/** How many operations Home's preview card asks the hub for — the cache key its warm-up uses. */
-export const RECENT_OPS = 6;
+export { RECENT_OPS } from "@/entities/operation/lib/recent";
 
 export const operationsResource = defineResource({
   name: "operations",

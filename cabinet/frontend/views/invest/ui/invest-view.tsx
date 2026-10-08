@@ -21,7 +21,9 @@ import { allocationsResource, positionsResource, redemptionsResource } from "@/e
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { useKycGate } from "@/features/kyc/model/use-kyc-gate";
 import { errorMessage } from "@/shared/lib/api-client";
-import { useResource } from "@/shared/lib/resource";
+import { type ResourceSeed, useSeededResource } from "@/shared/lib/resource";
+import { useHydrated } from "@/shared/lib/use-hydrated";
+import type { AllocationList, PositionList, RedemptionList, Wallet } from "@/shared/contracts";
 import { TipAnchor } from "@/shared/tips";
 import { StaggerItem } from "@/shared/ui/motion";
 import { SectionLabel, PageFrame } from "@/shared/ui/page-frame";
@@ -29,14 +31,29 @@ import { ResourceError } from "@/shared/ui/resource-error";
 import { isZero, toBaseUnits } from "@/views/invest/lib/format";
 import { buildProducts, type Product } from "@/views/invest/lib/product";
 import { PortfolioBand } from "@/views/invest/ui/portfolio-band";
-import { ProductCard } from "@/views/invest/ui/product-card";
+import type { ProductCardSeed } from "@/views/invest/ui/product-card";
+import { SeededProductCard } from "@/views/invest/ui/seeded-product-card";
 
-export function InvestView() {
+// `initial` is the server's read of the same lists (see the route) — absent while it streams,
+// and per read: one that failed or timed out is simply missing, and its reader makes the
+// browser read it always made. `cards` lands later than the lists: each card's reads can
+// only start once the lists have named the products.
+export interface InvestSeed {
+  positions?: ResourceSeed<PositionList>;
+  catalog?: ResourceSeed<AllocationList>;
+  redemptions?: ResourceSeed<RedemptionList>;
+  wallet?: ResourceSeed<Wallet>;
+  /** Keyed by service. Never rejects: a card whose reads failed is just absent from it. */
+  cards?: Promise<Readonly<Record<string, ProductCardSeed>>>;
+}
+
+export function InvestView({ initial }: { initial?: InvestSeed }) {
   const t = useT();
-  const positionList = useResource(positionsResource);
-  const catalogList = useResource(allocationsResource);
-  const redemptionList = useResource(redemptionsResource);
-  const wallet = useResource(walletResource);
+  const positionList = useSeededResource(positionsResource, initial?.positions);
+  const catalogList = useSeededResource(allocationsResource, initial?.catalog);
+  const redemptionList = useSeededResource(redemptionsResource, initial?.redemptions);
+  const wallet = useSeededResource(walletResource, initial?.wallet);
+  const hydrated = useHydrated();
   // The tier from `/kyc/status` first, the profile's mirror second, and no verdict from a
   // failed read — the wallet's rule (`features/kyc/lib/money-gate`), reused: a tier-0
   // caller cannot fund a subscription, so the card's CTA sends them to verify instead.
@@ -62,7 +79,9 @@ export function InvestView() {
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <PageFrame title={t("invest.title", "Invest")} width="content">
+    // An arrival only for what the browser draws: over cards already in the HTML it would hide
+    // them until hydration, and the server's fallback is never hydrated, so it would stay hidden.
+    <PageFrame title={t("invest.title", "Invest")} width="content" entrance={hydrated && !(initial?.catalog && initial.positions)}>
       {/* `invest.overview` is a SECTION tip — a descriptor block, not an inline ⓘ — so
           it cannot live inside the heading row: it laid a full-width bordered box across
           the title. It belongs under the header, which is also the one place this
@@ -102,7 +121,7 @@ export function InvestView() {
             ) : (
               <div className="grid gap-4 lg:grid-cols-2">
                 {products.map((product) => (
-                  <ProductCard key={product.service} product={product} gated={gated} />
+                  <SeededProductCard key={product.service} product={product} gated={gated} seeds={initial?.cards} />
                 ))}
               </div>
             )}

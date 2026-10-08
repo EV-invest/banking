@@ -3,6 +3,8 @@
 import { useLayoutEffect, useRef } from "react";
 import { animateValue, useReducedMotion } from "motion/react";
 
+import { useHydrated } from "@/shared/lib/use-hydrated";
+
 import { driveNumber, type NumberDriverDeps } from "./number-driver";
 import { DUR, EASE } from "./tokens";
 
@@ -97,8 +99,12 @@ export function AnimatedNumber({
   const ref = useRef<HTMLSpanElement>(null);
   // What is currently on screen. Starts at 0 so the first appearance counts up
   // from nothing; afterwards it is wherever the last animation finished, so a
-  // refresh travels the actual delta rather than restarting from zero.
-  const shown = useRef(0);
+  // refresh travels the actual delta rather than restarting from zero. A figure
+  // hydrated from server HTML is the exception: it has been on screen since the
+  // HTML arrived, and counting it up from 0 would take a number the reader
+  // already saw away from them for the length of the count.
+  const hydrated = useHydrated();
+  const shown = useRef(hydrated ? 0 : value);
 
   useLayoutEffect(() => {
     const el = ref.current;

@@ -71,9 +71,9 @@ export function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: bo
   );
 }
 
-export function ProductLoading() {
+export function ProductLoading({ entrance }: { entrance?: boolean }) {
   return (
-    <PageFrame width="content">
+    <PageFrame width="content" entrance={entrance}>
       <Skeleton className="h-10 w-64" />
       <Skeleton className="h-40 w-full" />
       <Skeleton className="h-32 w-full" />
