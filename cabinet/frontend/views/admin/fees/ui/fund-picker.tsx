@@ -7,7 +7,6 @@ import { useT } from "@evinvest/i18n/react";
 import { Toggle } from "@evinvest/uikit";
 
 import type { FeePolicy } from "@/shared/contracts/admin";
-import { cn } from "@/shared/lib/cn";
 import { pct } from "@/shared/lib/rate";
 import { StaggerItem } from "@/shared/ui/motion";
 import { isPendingChange } from "@/views/admin/fees/lib/format";
@@ -37,7 +36,10 @@ export function FundPicker({
             pressed={active}
             // Pressing the selected fund again keeps it selected: the screen always shows one.
             onPressedChange={(pressed) => pressed && onSelect(fund.service)}
-            className={cn("h-auto flex-col items-start gap-0 px-3 py-2 text-left text-sm", active && "border-primary-ink bg-primary-ink/5")}
+            // The selected chip keeps a dark surface under its own `data-[state=on]:` colours:
+            // the kit's pressed fill (uikit 0.27, primary) would put the teal "Change pending"
+            // and the rate line on teal. Same variant, so tailwind-merge drops the kit's three.
+            className="h-auto flex-col items-start gap-0 px-3 py-2 text-left text-sm data-[state=on]:border-primary-ink data-[state=on]:bg-hover data-[state=on]:text-ink"
           >
             <span className="block font-medium">{fund.title}</span>
             <span className="block text-xs tabular-nums text-ink-soft">
