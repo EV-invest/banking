@@ -41,10 +41,11 @@ import {
 import { allocationsResource } from "@/entities/fund/model/fund-resource";
 import { operationsResource } from "@/entities/operation/model/operation-resource";
 import { OperationDetail } from "@/views/operations/ui/operation-detail";
-import type { Operation } from "@/shared/contracts";
+import type { AllocationList, Operation, OperationList } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
-import { useResource } from "@/shared/lib/resource";
+import { type ResourceSeed, useSeededResource } from "@/shared/lib/resource";
+import { useTimeZone } from "@/shared/lib/time-zone";
 import { useIsCompact } from "@/shared/lib/use-is-compact";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { SectionLabel, PageFrame } from "@/shared/ui/page-frame";
@@ -110,17 +111,22 @@ const filterEmpty = (t: Translate): Readonly<Record<Filter, string>> => ({
 // the timeline already holds — no second request. The panel still performs no mutation of
 // its own: cancelling a queued withdrawal or redemption belongs to the surfaces that own
 // those aggregates, so the panel links to them rather than growing a third copy.
-export function OperationsView() {
+//
+// `initial` and `catalog` are the server's reads of the same two resources (see the route),
+// absent while those reads stream or when they came back empty — then this is the browser
+// read it always was.
+export function OperationsView({ initial, catalog: catalogSeed }: { initial?: ResourceSeed<OperationList>; catalog?: ResourceSeed<AllocationList> }) {
   const t = useT();
   const locale = useLocale();
+  const timeZone = useTimeZone();
   const [filter, setFilter] = useState<Filter>("all");
 
   // Both reads are cached and both are shared with Home's activity card, so arriving from
   // "View all" shows the timeline already merged rather than re-fetching it.
-  const timeline = useResource(operationsResource, undefined);
+  const timeline = useSeededResource(operationsResource, initial, undefined);
   // Fund slugs are keys, not names. The catalog turns them into the product the investor
   // actually bought; a failed lookup degrades to the slug rather than blanking the row.
-  const catalog = useResource(allocationsResource).data?.allocations;
+  const catalog = useSeededResource(allocationsResource, catalogSeed).data?.allocations;
 
   const titleOf = useMemo(() => {
     const byService = new Map((catalog ?? []).map((a) => [a.service, a.title]));
@@ -140,10 +146,10 @@ export function OperationsView() {
   // the timeline loses no chronology by starting below them.
   const pending = visible.filter(isPending);
   const settled = visible.filter((o) => !isPending(o));
-  const groups = useMemo(() => groupByDay(settled, t, locale), [settled, t, locale]);
+  const groups = useMemo(() => groupByDay(settled, t, locale, timeZone), [settled, t, locale, timeZone]);
 
   return (
-    <PageFrame title={t("ui.operations", "Activity")} description={t("ops.subtitle", "Every deposit, withdrawal, subscription and redemption you have made, and every fee a fund has charged — one timeline.")}>
+    <PageFrame entrance={!initial} title={t("ui.operations", "Activity")} description={t("ops.subtitle", "Every deposit, withdrawal, subscription and redemption you have made, and every fee a fund has charged — one timeline.")}>
       {error && <ResourceError variant="alert" title={t("err.opsLoad", "Couldn't load your activity")} message={error} />}
 
       {/* The timeline is one section — the filter bar and the table it filters arrive
@@ -309,6 +315,7 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
   const locale = useLocale();
   const [open, setOpen] = useState(false);
   const compact = useIsCompact();
+  const timeZone = useTimeZone();
   const meta = kindMeta(operation.kind);
   const StateIcon = STATE_ICONS[operation.state ?? ""];
   const at = seconds(operation.created_at);
@@ -332,7 +339,7 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
           <ItemTitle className="block w-auto truncate font-semibold">{title}</ItemTitle>
           <ItemDescription className="line-clamp-1 text-xs">
             {rowSub(operation, t, locale)}
-            {at > 0 && ` · ${timeLabel(at, locale)}`}
+            {at > 0 && ` · ${timeLabel(at, locale, timeZone)}`}
           </ItemDescription>
         </ItemContent>
         <ItemActions className="shrink-0 flex-col items-end gap-1">
@@ -478,11 +485,11 @@ interface DayGroup {
 
 // The feed arrives newest-first from the hub; this only inserts the day headings, so the
 // runs stay in the order the hub sorted them.
-function groupByDay(operations: Operation[], t: Translate, locale: Locale): DayGroup[] {
+function groupByDay(operations: Operation[], t: Translate, locale: Locale, timeZone: string | undefined): DayGroup[] {
   const now = new Date();
   const groups: DayGroup[] = [];
   for (const operation of operations) {
-    const label = dayLabel(seconds(operation.created_at), t, locale, now);
+    const label = dayLabel(seconds(operation.created_at), t, locale, now, timeZone);
     const last = groups.at(-1);
     if (last?.label === label) last.operations.push(operation);
     else groups.push({ label, operations: [operation] });
