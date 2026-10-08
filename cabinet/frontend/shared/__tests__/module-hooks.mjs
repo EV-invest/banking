@@ -4,7 +4,8 @@
 // - a specifier the test file named in `stubs` resolves to the URL it gave — for a module
 //   whose real body Node cannot load (type stripping refuses parameter properties, which
 //   `shared/lib/api-client.ts` uses) and which the module under test only touches lightly,
-//   or for a stand-in the test controls. The importer's `?case=` is passed on to it;
+//   or for a stand-in the test controls. The importer's `?case=` is passed on to it. Inside
+//   the stub itself the specifier still means the real module;
 // - `@/x` resolves the way tsconfig `paths` does, to `<frontend>/x.ts` or `x.tsx`, so a
 //   module under test can be loaded as written instead of only through relative imports;
 // - `lightweight-charts` resolves to `fake-lightweight-charts.mjs`, under a fresh query on
@@ -39,7 +40,9 @@ const caseOf = (parentURL) => (parentURL ? (new URL(parentURL).searchParams.get(
 
 export async function resolve(specifier, context, next) {
   const stub = stubs[specifier];
-  if (stub) {
+  // A stub importing the very specifier it replaces gets the real module, so a stand-in can
+  // re-export the real thing and override only the parts a test needs to control.
+  if (stub && !(context.parentURL ?? "").startsWith(stub)) {
     const forCase = caseOf(context.parentURL);
     return { url: forCase ? `${stub}?case=${encodeURIComponent(forCase)}` : stub, shortCircuit: true };
   }
