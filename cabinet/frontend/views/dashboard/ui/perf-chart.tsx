@@ -2,8 +2,9 @@
 
 // The hero's plot: one allocation's valuation log over the chosen range, as the two series
 // the legend above it names — the fund's return, and the caller's participation in USDT.
-// This file owns the four states of that surface (loading, empty, failed, drawn); the
-// engine's lifecycle is `../lib/use-perf-chart`.
+// This file owns the states of that surface (loading, empty, failed, drawn); the engine's
+// lifecycle is `../lib/use-perf-chart`. The engine is downloaded on demand, so "loading"
+// lasts until both the history and the engine are here — one skeleton, never an empty frame.
 
 import { LineChart } from "lucide-react";
 import { useLocale, useT } from "@evinvest/i18n/react";
@@ -15,10 +16,12 @@ import { fundNavHistoryResource } from "@/entities/fund/model/fund-history-resou
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
+import { ReloadNotice } from "@/shared/ui/reload-notice";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { EMPTY_BOX } from "@/views/dashboard/lib/chrome";
 import { formatPct, formatUsdt } from "@/views/dashboard/lib/format";
-import { type PerfFormat, usePerfChart } from "@/views/dashboard/lib/use-perf-chart";
+import { perfView } from "@/views/dashboard/lib/perf-view";
+import { type PerfFormat, usePerfChart, usePerfEngine } from "@/views/dashboard/lib/use-perf-chart";
 
 // The plot's own height: tall enough for a curve to have a shape, and from `xl` whatever
 // the hero has left after its header, so the card fills the side column's two rows.
@@ -40,13 +43,18 @@ export function PerfChart({ allocation, from, className }: PerfChartProps) {
   // Bound once per locale: the engine re-reads its formatters on identity. The participation
   // line is the caller's stake in USDT — the ledger unit, not the dashboard's summary "$".
   const format = useMemo<PerfFormat>(() => ({ performance: (pct) => formatPct(pct, locale), participation: (usdt) => formatUsdt(usdt, locale) }), [locale]);
-  const loading = allocation === null || history.isLoading;
+  // Read (and so started) here, on mount, so the engine downloads alongside the history
+  // request rather than after it. Only a plot with something to draw waits for it.
+  const engine = usePerfEngine();
+  const drawable = series.performance.length > 0;
+  const view = perfView({ allocation, historyLoading: history.isLoading, historyFailed: history.data === undefined && history.error !== null, drawable, engine });
+  const loading = view.kind === "skeleton";
 
   return (
     <Settled loading={loading} skeleton={<Skeleton className={PLOT_BOX} />} className={cn("flex flex-col gap-2", className)}>
-      {loading ? null : history.data === undefined && history.error ? (
+      {loading ? null : view.kind === "history-error" ? (
         <ResourceError error={history.error} onRetry={history.refresh} retrying={history.isValidating} />
-      ) : series.performance.length === 0 ? (
+      ) : view.kind === "empty" ? (
         // No marks yet: the plot says so rather than drawing a line that traces back to
         // nothing. Its height is whatever the copy needs — a minimum belongs to a chart.
         <Empty className={EMPTY_BOX}>
@@ -58,6 +66,12 @@ export function PerfChart({ allocation, from, className }: PerfChartProps) {
             <EmptyDescription>{t("dash.noHistoryHint", "The fund curve and your participation appear here once there is activity to plot.")}</EmptyDescription>
           </EmptyHeader>
         </Empty>
+      ) : view.kind === "reload" ? (
+        // A chunk the bundler will not fetch again without a reload gets that action;
+        // anything else the engine threw is reported like any failed read.
+        <ReloadNotice className={cn(PLOT_BOX, "rounded-lg border border-border")} />
+      ) : view.kind === "engine-error" ? (
+        <ResourceError error={view.error} />
       ) : (
         <>
           <PerfPlot series={series} format={format} />

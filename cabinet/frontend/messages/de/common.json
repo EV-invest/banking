@@ -3787,6 +3787,10 @@
     "en": "Sign-in is unavailable right now. Please try again shortly.",
     "t": "Die Anmeldung ist derzeit nicht verfügbar. Bitte versuchen Sie es in Kürze erneut."
   },
+  "err.chunkLoad": {
+    "en": "This part of the page didn't load.",
+    "t": "Dieser Teil der Seite wurde nicht geladen."
+  },
   "err.csrf": {
     "en": "This page went stale. Reload it and try again.",
     "t": "Diese Seite ist veraltet. Laden Sie sie neu und versuchen Sie es erneut."
@@ -6875,6 +6879,10 @@
     "en": "Refresh",
     "t": "Aktualisieren"
   },
+  "ui.reloadPage": {
+    "en": "Reload page",
+    "t": "Seite neu laden"
+  },
   "ui.reset": {
     "en": "Reset",
     "t": "Zurücksetzen"
@@ -7114,6 +7122,10 @@
   "wallet.placeholder.railAddress": {
     "en": "{network} address",
     "t": "{network}-Adresse"
+  },
+  "wallet.qrUnavailable": {
+    "en": "QR code unavailable — use the address below.",
+    "t": "QR-Code nicht verfügbar – nutzen Sie die Adresse unten."
   },
   "wallet.railActionUnavailable": {
     "en": "{action} is not available on this network yet",
