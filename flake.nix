@@ -455,8 +455,17 @@
             contents = [ pkgs.nodejs cabinetApp ];
             workingDir = "${cabinetApp}/cabinet/frontend";
             imageEnv = [ "PORT=50061" "HOSTNAME=0.0.0.0" "NODE_ENV=production" ];
-            # Runtime reads (proxy.ts CSP etc.) — the rewrite itself is baked at build.
-            env.CABINET_BACKEND_URL = "http://ev-banking-cabinet-backend:50062";
+            env = {
+              # Runtime reads (proxy.ts CSP etc.) — the rewrite itself is baked at build.
+              CABINET_BACKEND_URL = "http://ev-banking-cabinet-backend:50062";
+              # concierge's web surface, dialled server-to-server by proxy.ts to renew a
+              # lapsing ev_access before a server render forwards it to the BFF
+              # (shared/lib/access-renewal.ts). Unset, renewal is silently off and the first
+              # server read after a pause meets a dead token. Same value site_conductor's
+              # frontend rewrites /api/auth/* to; the `web` port of the `concierge` Service in
+              # ev-banking, whose ingress policy leaves :55671 open to every source.
+              AUTH_WEB_URL = "http://concierge:55671";
+            };
           };
         };
 
