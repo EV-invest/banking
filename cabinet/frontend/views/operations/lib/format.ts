@@ -194,11 +194,12 @@ const DAY_PARTS = new Map<string, Intl.DateTimeFormat>();
 
 /** The calendar day `date` falls on in `timeZone`, as a day count — comparable by subtraction. */
 function dayNumber(date: Date, timeZone: string | undefined): number {
-  const key = timeZone ?? "";
-  let format = DAY_PARTS.get(key);
+  // No zone means the runtime's current one, which can change between calls — caching it
+  // would let a day heading disagree with the row's own `timeLabel`, so only named zones are kept.
+  let format = timeZone === undefined ? undefined : DAY_PARTS.get(timeZone);
   if (!format) {
     format = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" });
-    DAY_PARTS.set(key, format);
+    if (timeZone !== undefined) DAY_PARTS.set(timeZone, format);
   }
   const parts = format.formatToParts(date);
   const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
