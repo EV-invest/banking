@@ -4,6 +4,8 @@ import { useT } from "@evinvest/i18n/react";
 import type { ReactNode } from "react";
 
 import type { Session } from "@/shared/contracts";
+import type { NotificationSettings } from "@/shared/contracts/notifications";
+import type { ResourceSeed } from "@/shared/lib/resource";
 import { Reveal, StaggerItem } from "@/shared/ui/motion";
 import { SectionLabel } from "@/shared/ui/page-frame";
 import type { Pushable, Section } from "@/views/settings/lib/sections";
@@ -20,7 +22,23 @@ import { type PersonalProps, PersonalStack } from "@/views/settings/ui/personal-
 // did not would collapse the gap between the root cards. On the page's own first paint
 // this reveal is nested inside the entrance above it and fades without travelling — one
 // movement, not two (see shared/ui/motion/entrance).
-export function MobileStack({ pushed, onSelect, personal, sessions, name, sessionList }: { pushed: Pushable | null; onSelect: (id: Section) => void; personal: PersonalProps; sessions: ReactNode; name: string; sessionList: Session[] | undefined }) {
+export function MobileStack({
+  pushed,
+  onSelect,
+  personal,
+  sessions,
+  name,
+  sessionList,
+  notificationSettings,
+}: {
+  pushed: Pushable | null;
+  onSelect: (id: Section) => void;
+  personal: PersonalProps;
+  sessions: ReactNode;
+  name: string;
+  sessionList: Session[] | undefined;
+  notificationSettings: ResourceSeed<NotificationSettings> | undefined;
+}) {
   const t = useT();
   return (
     <StaggerItem className="lg:hidden">
@@ -30,7 +48,7 @@ export function MobileStack({ pushed, onSelect, personal, sessions, name, sessio
         ) : pushed === "sessions" ? (
           sessions
         ) : pushed === "notifications" ? (
-          <NotificationsSection />
+          <NotificationsSection initial={notificationSettings} />
         ) : pushed === "documents" ? (
           <DocumentsSection />
         ) : (

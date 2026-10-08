@@ -8,7 +8,10 @@ import { useState } from "react";
 
 import { Button, Spinner } from "@evinvest/uikit";
 
+import type { UserProfile } from "@/shared/contracts";
+import type { NotificationSettings } from "@/shared/contracts/notifications";
 import { useCabinetHref } from "@/shared/lib/cabinet-route";
+import type { ResourceSeed } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { InitialsAvatar } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
@@ -44,8 +47,18 @@ import { SessionsSection } from "@/views/settings/ui/sessions-section";
 // is the deep link the profile page sends a reader to, and a reload or a shared link
 // re-renders the same section. Leaving a pushed screen on mobile is the app bar's back
 // affordance, not the browser's.
+//
+// `initial` holds the server's reads (see the route): the profile always, the delivery
+// preferences when the Notifications section is the one open. Absent while they stream or
+// when they failed — then each part makes the browser read it always made. The session
+// list is never among them: it is the shell's endpoint, not the BFF's.
 
-export function SettingsView({ initialSection }: { initialSection: Section }) {
+export interface SettingsSeeds {
+  profile?: ResourceSeed<UserProfile>;
+  notificationSettings?: ResourceSeed<NotificationSettings>;
+}
+
+export function SettingsView({ initialSection, initial }: { initialSection: Section; initial?: SettingsSeeds }) {
   const t = useT();
   const router = useRouter();
   const toHref = useCabinetHref();
@@ -73,7 +86,7 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
     router.replace(toHref("/settings"), { scroll: false });
   }
 
-  const { profile, loading, error, form, dirty, saving, saved, fieldErrors, set, save } = useProfileForm();
+  const { profile, loading, error, form, dirty, saving, saved, fieldErrors, set, save } = useProfileForm(initial?.profile);
   const sessions = useSessions();
   const email = profile?.email ?? null;
   const name = truncateName((profile?.legal_name ?? "").trim()) || displayName(email, t);
@@ -84,6 +97,7 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
 
   const appBar = (
     <MobileAppBar
+      entrance={!initial}
       title={pushed ? pushedTitles(t)[pushed] : t("nav.settings", "Settings")}
       onBack={pushed ? pop : undefined}
       right={
@@ -120,7 +134,7 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
   );
 
   return (
-    <PageFrame title={t("nav.settings", "Settings")} description={t("settings.subtitle", "Manage your account, security and access")} actions={headingAction || undefined} appBar={appBar}>
+    <PageFrame entrance={!initial} title={t("nav.settings", "Settings")} description={t("settings.subtitle", "Manage your account, security and access")} actions={headingAction || undefined} appBar={appBar}>
       {error && (
         <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
           {error}
@@ -134,8 +148,8 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
         </p>
       )}
 
-      <MobileStack pushed={pushed} onSelect={select} personal={personal} sessions={sessionsPanel(false)} name={name} sessionList={sessions.sessions} />
-      <DesktopPane section={section} onSelect={select} personal={personal} sessions={sessionsPanel(true)} sessionList={sessions.sessions} />
+      <MobileStack pushed={pushed} onSelect={select} personal={personal} sessions={sessionsPanel(false)} name={name} sessionList={sessions.sessions} notificationSettings={initial?.notificationSettings} />
+      <DesktopPane section={section} onSelect={select} personal={personal} sessions={sessionsPanel(true)} sessionList={sessions.sessions} notificationSettings={initial?.notificationSettings} />
     </PageFrame>
   );
 }

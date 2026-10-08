@@ -16,10 +16,11 @@ import { relocalise } from "@/shared/config/base-path";
 import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { writeLocaleCookie } from "@/shared/lib/locale-cookie";
-import { useResource } from "@/shared/lib/resource";
+import { type ResourceSeed, useSeededResource } from "@/shared/lib/resource";
 import { EDITABLE, type Form, formFrom } from "@/views/settings/lib/form";
 
-export function useProfileForm() {
+/** `initial` is the server's read of the profile, when the route made one (see `SettingsView`). */
+export function useProfileForm(initial?: ResourceSeed<UserProfile>) {
   const t = useT();
   const locale = useLocale();
   const [form, setForm] = useState<Form | null>(null);
@@ -30,7 +31,7 @@ export function useProfileForm() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // The same cached read the account chip and the Profile page use.
-  const { data: profile, error: profileError, isLoading: loading } = useResource(profileResource);
+  const { data: profile, error: profileError, isLoading: loading } = useSeededResource(profileResource, initial);
   const error = saveError ?? (profile || !profileError ? null : errorMessage(profileError, t));
 
   // Seeded during render, not in an effect, so a cached profile fills the form on the frame
