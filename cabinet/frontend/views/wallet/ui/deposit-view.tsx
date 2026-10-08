@@ -4,7 +4,7 @@ import type { Locale } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { Check, Copy, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button, Skeleton } from "@evinvest/uikit";
 
@@ -20,7 +20,7 @@ import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor } from "@/shared/tips";
 import { NetworkMark } from "@/shared/ui/icons/networks";
 import { isEvmRail, networkLabel } from "@/views/wallet/lib/format";
-import { DepositQr } from "@/views/wallet/ui/deposit-qr";
+import { DepositQr, preloadDepositQr } from "@/views/wallet/ui/deposit-qr";
 import { NetworkSegments } from "@/views/wallet/ui/network-segments";
 import { useFirstDepositSignal } from "@/views/wallet/model/use-first-deposit-signal";
 import { FieldLabel, WALLET_CARD, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
@@ -40,6 +40,8 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
   const locale = useLocale();
   const [selected, setSelected] = useState<string | null>(initialNetwork ?? null);
   const [copied, setCopied] = useState(false);
+  // Overlaps the QR encoder's download with the address request instead of following it.
+  useEffect(preloadDepositQr, []);
 
   const { data: wallet, error: walletError, isLoading: walletLoading } = useResource(walletResource);
   // Shared with the sidebar chip and the profile page, and prefetched at boot, so the tier

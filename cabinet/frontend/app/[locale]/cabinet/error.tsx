@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 
-import * as Sentry from "@sentry/nextjs";
 import { createSentrySink } from "@evinvest/error-monitoring";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { StatusScreen, statusCtaClass } from "@evinvest/uikit";
@@ -23,7 +22,15 @@ import { cabinetPath } from "@/shared/config/base-path";
 // The boundary swallows the error, so nothing else reports it: `onRequestError`
 // in instrumentation.ts covers the server side only, and a client-side render
 // crash would otherwise be invisible. No-ops without a DSN.
-const { reportError } = createSentrySink(Sentry);
+// Sentry is imported lazily, on the error itself: this boundary sits in the static graph
+// of every page under it, and a static import put the whole SDK (replay and the feedback
+// widget included, ~170 KB gz) on each of them to report something no normal run hits.
+function reportError(error: Error, context?: Record<string, unknown>): void {
+  void import("@sentry/react").then(
+    (Sentry) => createSentrySink(Sentry).reportError(error, context),
+    () => {},
+  );
+}
 
 export default function Error({
   error,

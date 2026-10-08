@@ -1,20 +1,65 @@
-import QRCode from "react-qr-code";
+"use client";
 
-import { Logo } from "@/shared/ui/logo";
+import { useT } from "@evinvest/i18n/react";
+import { Skeleton } from "@evinvest/uikit";
+import { QrCode } from "lucide-react";
+import { type ComponentType, lazy, Suspense } from "react";
 
-// A branded deposit-address QR (Figma `qr`): high error-correction modules in deep navy on a
-// white rounded plate, with the EV mark inset in the centre (level H tolerates the occlusion).
-// 160px on mobile, 180px on desktop — matching the two frames. `value` is the on-chain address
-// string the wallet renders alongside it.
-export function DepositQr({ value }: { value: string }) {
+import { reportChunkError } from "@/shared/lib/chunk-error";
+
+type QrProps = { value: string };
+
+// The QR encoder is only needed once an address is on screen, so it is fetched on demand
+// rather than shipped with the route.
+//
+// `loaded` is the module cache of an encoder that has already arrived (normally through
+// `preloadDepositQr` while the address was in flight). `lazy` suspends on its first render
+// even when its promise has long settled, and the Suspense reveal is then throttled, so the
+// QR would trail the address by a few hundred milliseconds for no download at all.
+let loaded: ComponentType<QrProps> | null = null;
+const loadPlate = () =>
+  import("@/views/wallet/ui/deposit-qr-plate").then((m) => {
+    loaded = m.DepositQr;
+    return m;
+  });
+
+// A chunk that never arrives must not take the screen down with it: the address and its
+// copy button are the deposit, the QR is a convenience. A failed download resolves to a
+// neutral slot of the same box instead of rejecting into the route's error boundary.
+const LazyPlate = lazy<ComponentType<QrProps>>(() =>
+  loadPlate().then(
+    (m) => ({ default: m.DepositQr }),
+    (error: unknown) => {
+      reportChunkError(error, "wallet: deposit QR encoder");
+      return { default: QrUnavailable };
+    },
+  ),
+);
+
+// The slot keeps the address-loading skeleton's exact box while the encoder arrives, so
+// the hand-off is skeleton → QR with nothing in between.
+export function DepositQr({ value }: QrProps) {
+  const Plate = loaded;
+  if (Plate) return <Plate value={value} />;
   return (
-    <div className="relative flex size-40 shrink-0 items-center justify-center rounded-xl border border-border bg-white p-2.5 lg:size-45 lg:rounded-2xl lg:p-3.5">
-      {/* Fixed hex, not tokens: the module/quiet-zone contrast is a scanner requirement, so it
-          must not follow a palette that can be retuned (or themed light) underneath it. */}
-      <QRCode value={value} level="H" size={256} fgColor="#0c1626" bgColor="#ffffff" className="h-full w-full" />
-      <span className="absolute flex size-7 items-center justify-center rounded-lg bg-white ring-3 ring-white">
-        <Logo className="h-3.5 w-auto text-primary-ink" />
-      </span>
+    <Suspense fallback={<Skeleton className="size-40 shrink-0 rounded-xl lg:size-45 lg:rounded-2xl" />}>
+      <LazyPlate value={value} />
+    </Suspense>
+  );
+}
+
+function QrUnavailable() {
+  const t = useT();
+  return (
+    <div className="flex size-40 shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-border px-4 text-center lg:size-45 lg:rounded-2xl">
+      <QrCode className="size-6 text-ink-soft" aria-hidden />
+      <p className="text-xs text-ink-soft">{t("wallet.qrUnavailable", "QR code unavailable — use the address below.")}</p>
     </div>
   );
+}
+
+/** Starts fetching the encoder while the address is still loading; safe to call repeatedly. */
+export function preloadDepositQr(): void {
+  // Swallowed here only: the lazy component's own load reports a failure.
+  loadPlate().catch(() => undefined);
 }

@@ -3787,6 +3787,10 @@
     "en": "Sign-in is unavailable right now. Please try again shortly.",
     "t": "Hiện chưa thể đăng nhập. Vui lòng thử lại sau ít phút."
   },
+  "err.chunkLoad": {
+    "en": "This part of the page didn't load.",
+    "t": "Phần này của trang chưa tải được."
+  },
   "err.csrf": {
     "en": "This page went stale. Reload it and try again.",
     "t": "Trang này đã cũ. Hãy tải lại và thử lần nữa."
@@ -6875,6 +6879,10 @@
     "en": "Refresh",
     "t": "Làm mới"
   },
+  "ui.reloadPage": {
+    "en": "Reload page",
+    "t": "Tải lại trang"
+  },
   "ui.reset": {
     "en": "Reset",
     "t": "Đặt lại"
@@ -7114,6 +7122,10 @@
   "wallet.placeholder.railAddress": {
     "en": "{network} address",
     "t": "Địa chỉ {network}"
+  },
+  "wallet.qrUnavailable": {
+    "en": "QR code unavailable — use the address below.",
+    "t": "Không hiển thị được mã QR — hãy dùng địa chỉ bên dưới."
   },
   "wallet.railActionUnavailable": {
     "en": "{action} is not available on this network yet",

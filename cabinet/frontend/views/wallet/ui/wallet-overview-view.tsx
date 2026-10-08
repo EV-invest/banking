@@ -10,7 +10,8 @@ import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { useKycGate, VerificationRequired } from "@/features/kyc";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
-import { useResource } from "@/shared/lib/resource";
+import { useSeededResource, type ResourceSeed } from "@/shared/lib/resource";
+import type { Wallet } from "@/shared/contracts";
 import { StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { NetworkMark } from "@/shared/ui/icons/networks";
@@ -22,14 +23,17 @@ import { FieldLabel, WALLET_CARD, WalletScreen } from "@/views/wallet/ui/wallet-
 // up top, then the rails as cards — each rail is only a way in and out of that single balance,
 // never a balance of its own. Deposit/withdraw are their own routes, so a rail card links
 // straight into the right screen with the rail preselected.
-export function WalletOverviewView() {
+//
+// `initial` is the server's read of the same wallet (see the route), absent while that read
+// is still streaming or when it came back empty — then this is the browser read it always was.
+export function WalletOverviewView({ initial }: { initial?: ResourceSeed<Wallet> }) {
   const t = useT();
   useFirstDepositSignal();
   const locale = useLocale();
   // The same cached balance Home, Deposit, Withdraw and Invest read, so arriving here from
   // any of them shows the figure immediately and refreshes it behind the number. A failed
   // refresh reports itself without blanking what is already on screen.
-  const { data: wallet, error: failure, isLoading: loading } = useResource(walletResource);
+  const { data: wallet, error: failure, isLoading: loading } = useSeededResource(walletResource, initial);
   // The tier from `/kyc/status` rather than from the profile's mirror of it, which lands a
   // poll later: a reader coming back from the vendor used to watch the banner and the profile
   // card update while this screen went on hiding rails the hub was already serving. A read
@@ -48,6 +52,7 @@ export function WalletOverviewView() {
 
   return (
     <WalletScreen
+      entrance={!initial}
       title={t("ui.wallet", "Wallet")}
       subtitle={t("wallet.overviewSub", "One USDT balance · networks are how you deposit and withdraw")}
       actions={

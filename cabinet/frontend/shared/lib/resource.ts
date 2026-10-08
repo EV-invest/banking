@@ -18,6 +18,10 @@
 // in seconds, `tags`, and a `revalidateTag()` that mutations call — because the semantics
 // are the same and there is no reason to invent a second dialect for them.
 //
+// Server reads (`shared/api/server`) do not replace this cache, they feed it: a server
+// component reads once for the first HTML and passes the answer down as a seed
+// (`useSeededResource`), and from then on the value lives, ages and is invalidated here.
+//
 // Why not a store library. The repo already answers this: `entities/user/model/
 // profile-store.ts`, `entities/notification/model/notification-store.ts`,
 // `shared/lib/use-session.ts` and `shared/lib/use-platform.ts` are four hand-rolled copies
@@ -33,7 +37,7 @@
 // and reports the error beside it: a money surface must not blank a balance because one
 // poll timed out.
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 /** Seconds a value stays fresh when a resource doesn't name its own window. */
 const DEFAULT_REVALIDATE_S = 15;
@@ -95,6 +99,18 @@ export interface ResourceConfig<T, A extends unknown[]> {
   poll?: PollPolicy<T>;
 }
 
+/**
+ * A value read before this page's JavaScript ran — by a server component, in the same
+ * request — handed to {@link useSeededResource} so the first paint and the hydration agree
+ * on real figures instead of a skeleton. `fetchedAt` is epoch ms of the read by the
+ * SERVER's clock — diagnostic only: the cache times a seed by when this browser first saw
+ * it (see `seed`), because two machines' clocks cannot be ordered against each other.
+ */
+export interface ResourceSeed<T> {
+  data: T;
+  fetchedAt: number;
+}
+
 /** When to keep polling a mounted entry, and how far apart. See {@link ResourceConfig.poll}. */
 export interface PollPolicy<T> {
   while: (data: T | undefined) => boolean;
@@ -152,6 +168,19 @@ interface Entry<T> {
   /** 0 until the first successful read — the "never loaded" marker `isStale` reads. */
   fetchedAt: number;
   /**
+   * Epoch ms of the last tag invalidation or sign-out. A seed received before it predates
+   * the change the invalidation announced, so it is refused — see {@link seed}.
+   */
+  invalidatedAt: number;
+  /**
+   * Seed objects already decided on. A view re-renders with the same seed prop for as long
+   * as it is mounted, and Back replays it from the router cache; deciding each object once
+   * keeps a seed from coming back over a value read after it.
+   */
+  readonly seeds: WeakSet<object>;
+  /** Seeded during a render, which may not notify; the next subscribe tells the others. */
+  unannounced: boolean;
+  /**
    * From `ResourceConfig.poll`, or null for a resource that only refetches on the clock's
    * other triggers.
    *
@@ -178,8 +207,8 @@ const REGISTRY = new Map<string, Entry<unknown>>();
 const NOOP_REFRESH = () => Promise.resolve();
 
 // Server renders share module scope across every request, so nothing is cached there and no
-// entry is created: a client component rendered on the server reports "loading" and picks
-// up the real snapshot when it hydrates. `disabled` is the same shape minus the wait.
+// entry is created: a client component rendered on the server reports "loading" (or its
+// seed, when a server component read one) and picks up the real snapshot when it hydrates. `disabled` is the same shape minus the wait.
 const EMPTY_SNAPSHOT = Object.freeze({ data: undefined, error: null, isLoading: true, isValidating: false, refresh: NOOP_REFRESH });
 const DISABLED_SNAPSHOT = Object.freeze({ data: undefined, error: null, isLoading: false, isValidating: false, refresh: NOOP_REFRESH });
 
@@ -195,15 +224,49 @@ function toError(cause: unknown): Error {
   return cause instanceof Error ? cause : new Error(String(cause));
 }
 
-function publishSnapshot<T>(entry: Entry<T>): void {
-  entry.snapshot = {
+function buildSnapshot<T>(entry: Entry<T>): ResourceSnapshot<T> {
+  return {
     data: entry.data,
     error: entry.error,
     isLoading: entry.data === undefined && entry.error === null,
     isValidating: entry.inflight !== null,
     refresh: entry.refresh,
   };
+}
+
+function publishSnapshot<T>(entry: Entry<T>): void {
+  entry.snapshot = buildSnapshot(entry);
+  entry.unannounced = false;
   for (const listener of entry.listeners) listener();
+}
+
+/**
+ * Adopt a value read elsewhere, unless the entry already knows better.
+ *
+ * Runs during render (it has to: the first `getSnapshot` must already see it), so it
+ * writes the snapshot without notifying — telling another component to update while this
+ * one renders is an error. `unannounced` defers that to the next subscribe.
+ *
+ * Decided once per seed object, at the moment this browser first sees it, and timed by
+ * this browser's clock alone: `value.fetchedAt` is the server's clock, and comparing it
+ * with times taken here lets any skew between the two machines reorder events — a server
+ * running ahead made a pre-withdrawal balance outrank the read that followed the
+ * withdrawal. Refused when received no later than the last invalidation or than the value
+ * the entry already holds.
+ */
+function seed<T>(entry: Entry<T>, value: ResourceSeed<T>): void {
+  if (entry.seeds.has(value)) return;
+  entry.seeds.add(value);
+  const fetchedAt = Date.now();
+  if (fetchedAt <= entry.invalidatedAt) return;
+  if (entry.data !== undefined && entry.fetchedAt >= fetchedAt) return;
+  entry.data = value.data;
+  entry.error = null;
+  entry.denied = false;
+  entry.fetchedAt = fetchedAt;
+  writePersisted(entry);
+  entry.snapshot = buildSnapshot(entry);
+  entry.unannounced = true;
 }
 
 function isStale(entry: Entry<unknown>): boolean {
@@ -309,8 +372,19 @@ function dropPersisted(entry: Entry<unknown>): void {
   }
 }
 
+/**
+ * Tell the readers that rendered before a seed landed. The snapshot object is already the
+ * seeded one, so the component that seeded compares equal and skips this.
+ */
+function announceSeed(entry: Entry<unknown>): void {
+  if (!entry.unannounced) return;
+  entry.unannounced = false;
+  for (const listener of entry.listeners) listener();
+}
+
 function markStale(entry: Entry<unknown>): void {
   entry.fetchedAt = 0;
+  entry.invalidatedAt = Date.now();
   // A named tag is a mutation or the server's own stream saying this changed, which is
   // exactly the kind of event that turns a 403 into a 200 — a seat granted, a role moved.
   // So it lifts the refusal, unlike the clock (see `autoRevalidate`).
@@ -348,6 +422,7 @@ export function clearResources(): void {
     // says nothing about them.
     entry.denied = false;
     entry.fetchedAt = 0;
+    entry.invalidatedAt = Date.now();
     publishSnapshot(entry);
   }
 }
@@ -441,6 +516,9 @@ export function defineResource<T, A extends unknown[] = []>(config: ResourceConf
       error: null,
       denied: false,
       fetchedAt: 0,
+      invalidatedAt: 0,
+      seeds: new WeakSet(),
+      unannounced: false,
       // Sound because the sweep only ever hands it `entry.data`, which is this `T`.
       poll: (config.poll as PollPolicy<unknown> | undefined) ?? null,
       pollDelayMs: config.poll?.startMs ?? 0,
@@ -528,6 +606,19 @@ export function defineResource<T, A extends unknown[] = []>(config: ResourceConf
  * only a genuinely cold read reports `isLoading`.
  */
 export function useResource<T, A extends unknown[]>(resource: Resource<T, A>, ...args: A): ResourceSnapshot<T> {
+  return useSeededResource(resource, undefined, ...args);
+}
+
+/**
+ * {@link useResource}, starting from a value a server component already read.
+ *
+ * The server renders `seed` instead of a skeleton, and hydration reads the same `seed`, so
+ * the two agree. In the browser the seed is written into the shared entry — unless the
+ * entry holds something newer (see {@link seed}) — so every other screen reading this key
+ * starts from it too; revalidation, polling and tag invalidation then run as for any
+ * browser read. Without a seed this is exactly `useResource`.
+ */
+export function useSeededResource<T, A extends unknown[]>(resource: Resource<T, A>, initial: ResourceSeed<T> | undefined, ...args: A): ResourceSnapshot<T> {
   const internals = resource[INTERNALS];
   const key = resource.keyOf(...args);
   const active = internals.enabled(...args);
@@ -537,11 +628,13 @@ export function useResource<T, A extends unknown[]>(resource: Resource<T, A>, ..
   // the difference between painting cached data and painting a skeleton. Skipped on the
   // server, where module scope is shared between users.
   const entry = typeof window === "undefined" || !active ? null : internals.ensure(key, args);
+  if (entry && initial) seed(entry, initial);
 
   const subscribe = useCallback(
     (onChange: () => void) => {
       if (!entry) return () => undefined;
       entry.listeners.add(onChange);
+      announceSeed(entry);
       autoRevalidate(entry);
       return () => {
         entry.listeners.delete(onChange);
@@ -550,8 +643,14 @@ export function useResource<T, A extends unknown[]>(resource: Resource<T, A>, ..
     [entry],
   );
 
-  const fallback = active ? emptySnapshot<T> : disabledSnapshot<T>;
+  // Per seed object, so the server and hydration renders hand React the same snapshot.
+  const seeded = useMemo(() => (initial && active ? seededSnapshot(initial) : null), [initial, active]);
+  const fallback = useCallback((): ResourceSnapshot<T> => seeded ?? (active ? emptySnapshot<T>() : disabledSnapshot<T>()), [seeded, active]);
   return useSyncExternalStore(subscribe, () => entry?.snapshot ?? fallback(), fallback);
+}
+
+function seededSnapshot<T>(initial: ResourceSeed<T>): ResourceSnapshot<T> {
+  return Object.freeze({ data: initial.data, error: null, isLoading: false, isValidating: false, refresh: NOOP_REFRESH });
 }
 
 /** Test seam: forget every cached value AND every entry, so each case starts cold. */
