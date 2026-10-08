@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
 
 import { Sidebar } from "@/application/layout/sidebar";
 import { BottomNavbar } from "@/application/layout/bottom-navbar";
@@ -8,6 +8,7 @@ import { SessionAnalytics } from "@/application/layout/session-analytics";
 import { SessionKeeper } from "@/application/layout/session-keeper";
 import { SystemBanner } from "@/application/layout/system-banner";
 import { TimeZoneSync } from "@/application/layout/time-zone-sync";
+import { readAllocations } from "@/entities/fund/api/fund-server";
 import { renderTimeZone } from "@/shared/config/time-zone";
 import { TimeZoneProvider } from "@/shared/lib/time-zone";
 
@@ -29,6 +30,12 @@ import { TimeZoneProvider } from "@/shared/lib/time-zone";
 // (BottomNavbar). The content column goes full-width with no left offset and
 // reserves room for the bottom nav so no content is occluded.
 //
+// The rail lists the fund catalogue. It is read here, on the server, under its own boundary so
+// a slow BFF never holds the shell: the fallback is the rail told a seed is coming
+// (`catalog={null}`), so it does not make the browser read the seed makes unnecessary — the
+// root hydrates before this boundary does. A failed read is no seed, and the rail reads as
+// it always did.
+//
 // Screens show times in the reader's own zone; the provider tells them which zone the
 // server rendered in, so hydration reproduces it (`shared/lib/time-zone.tsx`).
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -46,7 +53,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <LocaleSync />
       <TimeZoneSync />
       <div className="hidden lg:fixed lg:left-0 lg:top-[var(--ev-shell-offset,0px)] lg:flex lg:h-[calc(100dvh-var(--ev-shell-offset,0px))]">
-        <Sidebar />
+        <Suspense fallback={<Sidebar catalog={null} />}>
+          <SeededSidebar />
+        </Suspense>
       </div>
       <main className="min-w-0 flex-1">
         <SystemBanner />
@@ -55,4 +64,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <BottomNavbar />
     </div>
   );
+}
+
+async function SeededSidebar() {
+  const catalog = await readAllocations();
+  return <Sidebar catalog={catalog ?? undefined} />;
 }

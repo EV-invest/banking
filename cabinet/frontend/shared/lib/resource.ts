@@ -617,8 +617,14 @@ export function useResource<T, A extends unknown[]>(resource: Resource<T, A>, ..
  * entry holds something newer (see {@link seed}) — so every other screen reading this key
  * starts from it too; revalidation, polling and tag invalidation then run as for any
  * browser read. Without a seed this is exactly `useResource`.
+ *
+ * `null` means a seed is on its way (a server component is still reading it, under a
+ * boundary that has not hydrated): the reader renders what the cache holds but does not
+ * start the read the seed is about to make unnecessary. Whoever passes `null` owns the
+ * follow-up — the boundary that resolves renders the same reader with the seed, or with
+ * `undefined` when the server read failed, and that one reads as usual.
  */
-export function useSeededResource<T, A extends unknown[]>(resource: Resource<T, A>, initial: ResourceSeed<T> | undefined, ...args: A): ResourceSnapshot<T> {
+export function useSeededResource<T, A extends unknown[]>(resource: Resource<T, A>, initial: ResourceSeed<T> | undefined | null, ...args: A): ResourceSnapshot<T> {
   const internals = resource[INTERNALS];
   const key = resource.keyOf(...args);
   const active = internals.enabled(...args);
@@ -628,6 +634,7 @@ export function useSeededResource<T, A extends unknown[]>(resource: Resource<T, 
   // the difference between painting cached data and painting a skeleton. Skipped on the
   // server, where module scope is shared between users.
   const entry = typeof window === "undefined" || !active ? null : internals.ensure(key, args);
+  const awaiting = initial === null;
   if (entry && initial) seed(entry, initial);
 
   const subscribe = useCallback(
@@ -635,12 +642,12 @@ export function useSeededResource<T, A extends unknown[]>(resource: Resource<T, 
       if (!entry) return () => undefined;
       entry.listeners.add(onChange);
       announceSeed(entry);
-      autoRevalidate(entry);
+      if (!awaiting) autoRevalidate(entry);
       return () => {
         entry.listeners.delete(onChange);
       };
     },
-    [entry],
+    [entry, awaiting],
   );
 
   // Per seed object, so the server and hydration renders hand React the same snapshot.
