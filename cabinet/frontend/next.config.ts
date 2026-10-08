@@ -42,11 +42,9 @@ const nextConfig: NextConfig = {
   // conductor's beforeFiles rewrite is untouched) while letting the route tree
   // own the whole public path. Measured both ways in docs/i18n-cabinet-routing-spike.md.
   experimental: {
-    // Lets a Server Component read the root layout's `[locale]` segment. Load-bearing:
-    // `currentLocale()` is called from components Next hands no props, and threading
-    // `params` through nineteen routes to reach them is the cost the old locale cookie
-    // existed to avoid.
-    rootParams: true,
+    // No `rootParams` flag: since Next 16.4 `next/root-params` is on by default and
+    // the option is gone from the config type. `currentLocale()` still depends on
+    // it — it reads the root layout's `[locale]` from components Next hands no props.
     // The `forbidden.tsx` / `unauthorized.tsx` file conventions. Required, not
     // cosmetic: without it next-app-loader never resolves either file, so
     // `forbidden.tsx` sat in the tree doing nothing and a `forbidden()` /
