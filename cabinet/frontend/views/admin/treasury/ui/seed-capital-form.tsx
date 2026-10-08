@@ -22,7 +22,7 @@ import { revalidateTag } from "@/shared/lib/resource";
 import { StaggerItem } from "@/shared/ui/motion";
 import { RailSelect, watchedRails } from "@/views/admin/treasury/ui/rail-select";
 import { ConsiliumOpened } from "@/views/admin/ui/consilium-opened";
-import { UserPicker, type PickedUser } from "@/views/admin/ui/user-picker";
+import { UserPicker, type PickedUser } from "@/features/user-picker/ui/user-picker";
 
 export function SeedCapitalForm({ rails }: { rails: RailLiquidity[] | undefined }) {
   const t = useT();

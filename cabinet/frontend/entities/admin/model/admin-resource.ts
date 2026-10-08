@@ -34,6 +34,7 @@ import {
   fetchWithdrawalQueue,
   type UserFilters,
 } from "@/entities/admin/api/admin-client";
+import type { AdminUserSummary } from "@/shared/contracts/admin";
 import { TAG } from "@/shared/lib/cache-tags";
 import { isPendingChange } from "@/shared/lib/fee-terms";
 import { defineResource } from "@/shared/lib/resource";
@@ -191,6 +192,22 @@ export const usersResource = defineResource({
   name: "admin.users",
   fetch: fetchUsers,
   key: (filters: UserFilters = {}) => JSON.stringify([filters.query ?? "", filters.role ?? "", filters.status ?? "", filters.limit ?? 0, filters.offset ?? 0]),
+  revalidate: OPERATIONAL,
+  tags: [TAG.adminUsers],
+});
+
+// Every account at once, for pickers that fuzzy-match client-side: the hub's query only
+// narrows by substring. Pages at the plane's 200-row ceiling.
+export const userDirectoryResource = defineResource({
+  name: "admin.userDirectory",
+  fetch: async () => {
+    const users: AdminUserSummary[] = [];
+    for (;;) {
+      const page = await fetchUsers({ limit: 200, offset: users.length });
+      users.push(...page.users);
+      if (page.users.length === 0 || users.length >= Number(page.total)) return users;
+    }
+  },
   revalidate: OPERATIONAL,
   tags: [TAG.adminUsers],
 });

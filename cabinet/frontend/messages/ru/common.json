@@ -1271,10 +1271,6 @@
     "en": "Opening a payment moves no money. Fund-owned money is proposed to the owners' consilium; an investor's own money is put to that investor by email. Only once they agree does anything move.",
     "t": "Открытие платежа не перемещает деньги. Деньги фонда выносятся на консилиум владельцев; собственные деньги инвестора — на согласие самого инвестора по почте. Средства двигаются только после их согласия."
   },
-  "admin.payments.investor": {
-    "en": "Investor",
-    "t": "Инвестор"
-  },
   "admin.payments.kind.external": {
     "en": "An external address",
     "t": "Внешний адрес"
@@ -1306,14 +1302,6 @@
   "admin.payments.noRailHint": {
     "en": "Rails are configured on the treasury; a payment ships only on a chain with a running watcher.",
     "t": "Рельсы настраиваются в казначействе; платёж уходит только по сети с работающим наблюдателем."
-  },
-  "admin.payments.noUsers": {
-    "en": "No investor matches.",
-    "t": "Инвесторов не найдено."
-  },
-  "admin.payments.noUsersHint": {
-    "en": "Try another part of the email address.",
-    "t": "Попробуйте другую часть адреса почты."
   },
   "admin.payments.none": {
     "en": "No payments yet",
@@ -1362,10 +1350,6 @@
   "admin.payments.placeholder.reason": {
     "en": "Why this money moves — the approvers read exactly this",
     "t": "Зачем этот перевод — согласующие прочитают ровно этот текст"
-  },
-  "admin.payments.placeholder.userSearch": {
-    "en": "Search investors by email",
-    "t": "Поиск инвестора по email"
   },
   "admin.payments.reason": {
     "en": "Reason",
