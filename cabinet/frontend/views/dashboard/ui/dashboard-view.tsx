@@ -8,6 +8,7 @@ import { Button, Card } from "@evinvest/uikit";
 import { allocationsResource, positionsResource } from "@/entities/fund/model/fund-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
+import type { ChecklistShape } from "@/features/onboarding";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
@@ -29,7 +30,8 @@ import { WhatIOwnCard } from "@/views/dashboard/ui/what-i-own-card";
 // data; a surface with nothing behind it yet is an honest empty state rather than a
 // fabricated number. This file only composes: the figures are `lib/holdings`, the rows
 // `lib/recent-ops`, and each card its own file.
-export function DashboardView() {
+/** `checklistHint` — the onboarding block's last shape in this browser, read by the route. */
+export function DashboardView({ checklistHint }: { checklistHint?: ChecklistShape }) {
   const t = useT();
   const locale = useLocale();
   // Bound once per locale, not inline: AnimatedNumber restarts its count whenever the
@@ -83,7 +85,7 @@ export function DashboardView() {
           the whole desktop composition for one temporary state. Above is also the point: for
           an account with a step still to do, the path takes the top slot and the hero — a
           zero over an empty plot — reads second. Once the path is done it is one quiet line. */}
-      <GetStartedSection className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
+      <GetStartedSection hint={checklistHint} className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
       <PageFrame
         title={t("dash.portfolio", "Portfolio")}
         description={t("dash.portfolioSub", "All-time performance and your participation")}
@@ -123,7 +125,7 @@ export function DashboardView() {
             sequence for the single-column band between `lg` and `xl`. */}
         <WhatIOwnCard allocations={toAllocations(pos, titleOf)} loading={posLoading} className="lg:order-3 xl:col-start-2 xl:row-start-3" />
         <MoveMoneyCard className="lg:order-2 xl:col-start-2 xl:row-start-2" />
-        <RecentOperationsCard ops={ops} className="lg:order-5 xl:col-span-2 xl:col-start-1 xl:row-start-5" />
+        <RecentOperationsCard ops={ops} loading={operations.isLoading} className="lg:order-5 xl:col-span-2 xl:col-start-1 xl:row-start-5" />
         {/* Last, below everything: it is a door out of the cabinet for the few who hold a
             Service-Arb scope, and it appears only once the profile has answered — anywhere
             higher, its arrival would push the portfolio down for them, and most readers
