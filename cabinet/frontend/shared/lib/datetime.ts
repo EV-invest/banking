@@ -28,8 +28,13 @@ import type { Locale, Translate } from "@evinvest/i18n";
 import { intlLocale } from "./intl-locale.ts";
 import { hasUnixStamp, unixStampToDate } from "./unix-stamp.ts";
 
-/** A unix-seconds stamp as an absolute local moment: "12 Mar 2026, 14:03". */
-export function formatMoment(stamp: string | null | undefined, locale: Locale): string {
+/**
+ * A unix-seconds stamp as an absolute local moment: "12 Mar 2026, 14:03".
+ *
+ * `timeZone` (from `useTimeZone`) only matters on a screen the server renders; omitted, it
+ * is the runtime's own zone.
+ */
+export function formatMoment(stamp: string | null | undefined, locale: Locale, timeZone?: string): string {
   const at = toDate(stamp);
   if (!at) return "—";
   return at.toLocaleString(intlLocale(locale), {
@@ -38,14 +43,15 @@ export function formatMoment(stamp: string | null | undefined, locale: Locale): 
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone,
   });
 }
 
-/** A unix-seconds stamp as a date alone: "12 Mar 2026". */
-export function formatDay(stamp: string | null | undefined, locale: Locale): string {
+/** A unix-seconds stamp as a date alone: "12 Mar 2026". `timeZone` as for {@link formatMoment}. */
+export function formatDay(stamp: string | null | undefined, locale: Locale, timeZone?: string): string {
   const at = toDate(stamp);
   if (!at) return "—";
-  return at.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric" });
+  return at.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric", timeZone });
 }
 
 /**

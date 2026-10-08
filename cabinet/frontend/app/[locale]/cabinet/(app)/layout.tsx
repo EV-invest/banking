@@ -7,6 +7,9 @@ import { LocaleSync } from "@/application/layout/locale-sync";
 import { SessionAnalytics } from "@/application/layout/session-analytics";
 import { SessionKeeper } from "@/application/layout/session-keeper";
 import { SystemBanner } from "@/application/layout/system-banner";
+import { TimeZoneSync } from "@/application/layout/time-zone-sync";
+import { renderTimeZone } from "@/shared/config/time-zone";
+import { TimeZoneProvider } from "@/shared/lib/time-zone";
 
 // The authenticated app shell: a fixed left rail beside a scrollable content
 // column. Chromeless by design — the brand header is conductor-owned and
@@ -25,7 +28,11 @@ import { SystemBanner } from "@/application/layout/system-banner";
 // Responsive: below 1024px the sidebar is replaced by a fixed bottom nav bar
 // (BottomNavbar). The content column goes full-width with no left offset and
 // reserves room for the bottom nav so no content is occluded.
-export default function AppLayout({ children }: { children: ReactNode }) {
+//
+// Screens show times in the reader's own zone; the provider tells them which zone the
+// server rendered in, so hydration reproduces it (`shared/lib/time-zone.tsx`).
+export default async function AppLayout({ children }: { children: ReactNode }) {
+  const timeZone = await renderTimeZone();
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] bg-background pb-[var(--cabinet-bottom-nav-h,64px)] lg:pl-[var(--cabinet-rail-w)] lg:pb-0">
       <SessionKeeper />
@@ -37,12 +44,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           adopting the stored one when the proxy had to guess, and recording the
           reader's actual locale when it did not. Renders nothing. */}
       <LocaleSync />
+      <TimeZoneSync />
       <div className="hidden lg:fixed lg:left-0 lg:top-[var(--ev-shell-offset,0px)] lg:flex lg:h-[calc(100dvh-var(--ev-shell-offset,0px))]">
         <Sidebar />
       </div>
       <main className="min-w-0 flex-1">
         <SystemBanner />
-        {children}
+        <TimeZoneProvider value={timeZone}>{children}</TimeZoneProvider>
       </main>
       <BottomNavbar />
     </div>

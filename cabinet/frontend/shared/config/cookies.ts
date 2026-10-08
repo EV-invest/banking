@@ -29,4 +29,8 @@ export const COOKIES = {
   // `LocaleSync`, which uses it to decide whether the stored profile language
   // should override the URL. Session-scoped and carries no authority.
   localeGuessed: `${PREFIX}ev_locale_guessed`,
+  // Minted by the browser too: the device's time zone, so a server render formats times
+  // the way the browser will hydrate them. Carries no authority — see
+  // `shared/lib/time-zone-name.ts`.
+  timeZone: `${PREFIX}ev_tz`,
 } as const;

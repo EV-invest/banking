@@ -182,30 +182,44 @@ export function seconds(value: string | number | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Grouping and time labels are computed against the viewer's own clock. The view fetches
-// in an effect, so the first paint is the skeleton and there is no server/client
-// timezone mismatch to hydrate around.
+// Grouping and time labels are computed in the viewer's own zone. The timeline is now
+// rendered on the server too, so every helper takes the zone explicitly (`useTimeZone`):
+// the server and the hydrating browser must agree on which day a row belongs to, or the
+// rows would regroup under different headings. Omitted, it is the runtime's own zone.
 const DAY_MS = 86_400_000;
 
-function startOfDay(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+// One formatter per zone: `daysAgo` runs twice per row, and building an
+// `Intl.DateTimeFormat` is the expensive part of it.
+const DAY_PARTS = new Map<string, Intl.DateTimeFormat>();
+
+/** The calendar day `date` falls on in `timeZone`, as a day count — comparable by subtraction. */
+function dayNumber(date: Date, timeZone: string | undefined): number {
+  const key = timeZone ?? "";
+  let format = DAY_PARTS.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" });
+    DAY_PARTS.set(key, format);
+  }
+  const parts = format.formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
+  return Date.UTC(part("year"), part("month") - 1, part("day")) / DAY_MS;
 }
 
-function daysAgo(unixSeconds: number, now: Date): number {
-  return Math.round((startOfDay(now) - startOfDay(new Date(unixSeconds * 1000))) / DAY_MS);
+function daysAgo(unixSeconds: number, now: Date, timeZone: string | undefined): number {
+  return dayNumber(now, timeZone) - dayNumber(new Date(unixSeconds * 1000), timeZone);
 }
 
-function calendarDate(unixSeconds: number, locale: Locale): string {
-  return new Date(unixSeconds * 1000).toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric" });
+function calendarDate(unixSeconds: number, locale: Locale, timeZone: string | undefined): string {
+  return new Date(unixSeconds * 1000).toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric", timeZone });
 }
 
 /** The date heading a run of rows sits under: `Today`, `Yesterday`, or `12 Mar 2026`. */
-export function dayLabel(unixSeconds: number, t: Translate, locale: Locale, now: Date = new Date()): string {
+export function dayLabel(unixSeconds: number, t: Translate, locale: Locale, now: Date = new Date(), timeZone?: string): string {
   if (!unixSeconds) return t("ops.day.undated", "Undated");
-  const days = daysAgo(unixSeconds, now);
+  const days = daysAgo(unixSeconds, now, timeZone);
   if (days === 0) return t("ops.day.today", "Today");
   if (days === 1) return t("ops.day.yesterday", "Yesterday");
-  return calendarDate(unixSeconds, locale);
+  return calendarDate(unixSeconds, locale, timeZone);
 }
 
 /** The same day, worded to sit mid-sentence after a rail name: "TON · today 14:32".
@@ -214,16 +228,16 @@ export function dayLabel(unixSeconds: number, t: Translate, locale: Locale, now:
  *  word is wrong in German, where a noun is capitalised in every position, and it also
  *  mangled the dated case into "12 mar 2026" — a calendar date is not a word, so it is
  *  left exactly as the locale formatted it. */
-export function dayLabelInline(unixSeconds: number, t: Translate, locale: Locale, now: Date = new Date()): string {
+export function dayLabelInline(unixSeconds: number, t: Translate, locale: Locale, now: Date = new Date(), timeZone?: string): string {
   if (!unixSeconds) return t("ops.day.undated", "Undated");
-  const days = daysAgo(unixSeconds, now);
+  const days = daysAgo(unixSeconds, now, timeZone);
   if (days === 0) return t("ops.day.todayInline", "today");
   if (days === 1) return t("ops.day.yesterdayInline", "yesterday");
-  return calendarDate(unixSeconds, locale);
+  return calendarDate(unixSeconds, locale, timeZone);
 }
 
 /** The clock time on a row — the day is already carried by its group heading. */
-export function timeLabel(unixSeconds: number, locale: Locale): string {
+export function timeLabel(unixSeconds: number, locale: Locale, timeZone?: string): string {
   if (!unixSeconds) return "—";
-  return new Date(unixSeconds * 1000).toLocaleTimeString(intlLocale(locale), { hour: "2-digit", minute: "2-digit" });
+  return new Date(unixSeconds * 1000).toLocaleTimeString(intlLocale(locale), { hour: "2-digit", minute: "2-digit", timeZone });
 }
