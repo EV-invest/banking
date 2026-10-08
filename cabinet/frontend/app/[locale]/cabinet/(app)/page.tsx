@@ -7,10 +7,11 @@ import { readAllocations, readPositions } from "@/entities/fund/api/fund-server"
 import { readOperations } from "@/entities/operation/api/operation-server";
 import { RECENT_OPS } from "@/entities/operation/lib/recent";
 import { readWallet } from "@/entities/wallet/api/wallet-server";
-import { type ChecklistShape, isChecklistShape, SHAPE_COOKIE } from "@/features/onboarding";
+import { type ChecklistShape, isChecklistShape, SHAPE_COOKIE, StageMirror } from "@/features/onboarding";
 import { DashboardView } from "@/views/dashboard/ui/dashboard-view";
 import { routeMessages } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
+import { requestNonce } from "@/shared/config/security";
 
 // The cabinet home — the investor's portfolio dashboard (Figma `cabinet/home`).
 //
@@ -25,8 +26,11 @@ export default async function Page() {
   const locale = await currentLocale();
   const shape = (await cookies()).get(SHAPE_COOKIE)?.value;
   const hint: ChecklistShape | undefined = isChecklistShape(shape) ? shape : undefined;
+  const nonce = (await requestNonce()) ?? undefined;
   return (
     <I18nScope messages={routeMessages(locale, "app/[locale]/cabinet/(app)/page.tsx")}>
+      {/* Without a hint, the placeholder's shape comes from the stage in localStorage. */}
+      {hint === undefined && <StageMirror nonce={nonce} />}
       <Suspense fallback={<DashboardView checklistHint={hint} />}>
         <SeededDashboard hint={hint} />
       </Suspense>

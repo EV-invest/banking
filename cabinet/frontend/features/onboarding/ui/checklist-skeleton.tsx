@@ -34,18 +34,42 @@ function Ghost({ children }: { children: ReactNode }) {
 /**
  * `hint` is the shape this browser last settled on, as the server read it from the cookie.
  * The server and the hydrating render go by it — neither can see the stage in
- * `localStorage` — and so does any render before the money reads answer. After that what
- * the reads and the stage say wins; on a fresh browser with no hint it is the card.
+ * `localStorage`. With no hint they render every shape the stage could pick and let CSS keep
+ * the one `StageMirror` chose before the first paint (`globals.css`, "Onboarding stage").
+ * Once hydrated, what the reads and the stage say wins; with neither the money reads nor a
+ * stage that says the path was finished here, it is the card.
  */
 export function ChecklistSkeleton({ expect, hint, className }: { expect: ChecklistExpect; hint?: ChecklistShape; className?: string }) {
   const stage = useSyncExternalStore(subscribeStage, stageSnapshot, stageServerSnapshot);
   const hydrated = useHydrated();
+  if (!hydrated && hint === undefined && expect !== "path") return <StageCandidates expect={expect} className={className} />;
   const known: ChecklistShape | null = expect === "unknown" ? null : expect === "path" ? "path" : (completionView(stage) ?? "none");
-  const shape = hydrated ? (known ?? hint ?? "path") : (hint ?? known ?? "path");
+  const guess: ChecklistShape = stage === "acknowledged" ? "line" : "path";
+  const shape = hydrated ? (known ?? hint ?? guess) : (hint ?? known ?? "path");
   if (shape === "path") return <PathSkeleton className={className} />;
   if (shape === "all-set") return <AllSetSkeleton className={className} />;
   if (shape === "line") return <LineSkeleton className={className} />;
   return null;
+}
+
+// The same elements the single shape renders, one class each — no wrapper, so the one CSS
+// keeps lays out exactly as it will once hydration swaps the set for it. "Unknown" is a path
+// still to walk unless this browser finished it; "complete" collapses by the stage.
+function StageCandidates({ expect, className }: { expect: "unknown" | "complete"; className?: string }) {
+  if (expect === "unknown") {
+    return (
+      <>
+        <PathSkeleton className={cn(className, "ev-stage-unless-acknowledged")} />
+        <LineSkeleton className={cn(className, "ev-stage-if-acknowledged")} />
+      </>
+    );
+  }
+  return (
+    <>
+      <AllSetSkeleton className={cn(className, "ev-stage-if-open")} />
+      <LineSkeleton className={cn(className, "ev-stage-if-acknowledged")} />
+    </>
+  );
 }
 
 function PathSkeleton({ className }: { className?: string }) {
