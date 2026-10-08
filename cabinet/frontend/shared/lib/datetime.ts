@@ -28,8 +28,14 @@ import type { Locale, Translate } from "@evinvest/i18n";
 import { intlLocale } from "./intl-locale.ts";
 import { hasUnixStamp, unixStampToDate } from "./unix-stamp.ts";
 
-/** A unix-seconds stamp as an absolute local moment: "12 Mar 2026, 14:03". */
-export function formatMoment(stamp: string | null | undefined, locale: Locale): string {
+/**
+ * A unix-seconds stamp as an absolute local moment: "12 Mar 2026, 14:03".
+ *
+ * `timeZone` is for HTML rendered on the server: the process's zone is not the reader's, so
+ * a stamp formatted there and again while hydrating would disagree. Such a render pins one
+ * zone (see `shared/lib/use-hydrated`) and the reader's own takes over on the next render.
+ */
+export function formatMoment(stamp: string | null | undefined, locale: Locale, timeZone?: string): string {
   const at = toDate(stamp);
   if (!at) return "—";
   return at.toLocaleString(intlLocale(locale), {
@@ -38,14 +44,15 @@ export function formatMoment(stamp: string | null | undefined, locale: Locale): 
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone,
   });
 }
 
-/** A unix-seconds stamp as a date alone: "12 Mar 2026". */
-export function formatDay(stamp: string | null | undefined, locale: Locale): string {
+/** A unix-seconds stamp as a date alone: "12 Mar 2026". `timeZone` as for {@link formatMoment}. */
+export function formatDay(stamp: string | null | undefined, locale: Locale, timeZone?: string): string {
   const at = toDate(stamp);
   if (!at) return "—";
-  return at.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric" });
+  return at.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric", timeZone });
 }
 
 /**

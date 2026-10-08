@@ -19,7 +19,9 @@ import { bookPolicyResource } from "@/entities/book/model/book-resource";
 import { feePolicyResource, fundNavResource } from "@/entities/fund/model/fund-resource";
 import { cn } from "@/shared/lib/cn";
 import { type Valence, VALENCE_CLASS } from "@/shared/lib/money";
-import { useResource } from "@/shared/lib/resource";
+import { type ResourceSeed, useSeededResource } from "@/shared/lib/resource";
+import type { FeePolicy, FundNav } from "@/shared/contracts";
+import type { BookPolicy } from "@/shared/contracts/book";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { cardCta, liquidity } from "@/views/invest/lib/catalog-card";
 import { formatSignedUsdt, formatUnits, formatUsdt, isZero, valence } from "@/views/invest/lib/format";
@@ -29,17 +31,43 @@ import { BackingBadge } from "@/views/invest/ui/backing-badge";
 import { ProductCta } from "@/views/invest/ui/product-cta";
 import { MarkDate, ProductFacts } from "@/views/invest/ui/product-facts";
 
-export function ProductCard({ product, gated }: { product: Product; gated: boolean }) {
+/** This card's three reads as the server made them; any one may be missing. */
+export interface ProductCardSeed {
+  nav?: ResourceSeed<FundNav>;
+  fee?: ResourceSeed<FeePolicy>;
+  book?: ResourceSeed<BookPolicy>;
+}
+
+export function ProductCard({ product, gated, seed }: { product: Product; gated: boolean; seed?: ProductCardSeed }) {
+  const navRead = useSeededResource(fundNavResource, seed?.nav, product.service);
+  const feeRead = useSeededResource(feePolicyResource, seed?.fee, product.service);
+  const bookRead = useSeededResource(bookPolicyResource, seed?.book, product.service);
+  return (
+    <ProductCardBody
+      product={product}
+      gated={gated}
+      nav={navRead.data ?? null}
+      navFailed={navRead.error !== null && !navRead.data}
+      // `undefined` while the read is in flight, `null` once it has answered — with nothing,
+      // or with an error, which the facts rows show as an absence rather than as a claim.
+      policy={feeRead.isLoading ? undefined : (feeRead.data ?? null)}
+      bookOpen={bookRead.isLoading ? undefined : (bookRead.data?.book_open ?? false)}
+    />
+  );
+}
+
+interface ProductCardBodyProps {
+  product: Product;
+  gated: boolean;
+  nav: FundNav | null;
+  navFailed: boolean;
+  policy: FeePolicy | null | undefined;
+  bookOpen: boolean | undefined;
+}
+
+export function ProductCardBody({ product, gated, nav, navFailed, policy, bookOpen }: ProductCardBodyProps) {
   const t = useT();
   const locale = useLocale();
-  const navRead = useResource(fundNavResource, product.service);
-  const feeRead = useResource(feePolicyResource, product.service);
-  const bookRead = useResource(bookPolicyResource, product.service);
-  const nav = navRead.data ?? null;
-  // `undefined` while the read is in flight, `null` once it has answered — with nothing, or
-  // with an error, which the facts rows show as an absence rather than as a claim.
-  const policy = feeRead.isLoading ? undefined : (feeRead.data ?? null);
-  const bookOpen = bookRead.isLoading ? undefined : (bookRead.data?.book_open ?? false);
 
   const held = product.position && !isZero(product.position.units) ? product.position : null;
   const closed = isClosed(product);
@@ -79,7 +107,7 @@ export function ProductCard({ product, gated }: { product: Product; gated: boole
 
         <div className="flex flex-wrap gap-x-6 gap-y-3 border-y border-border py-3.5">
           <CardStat label={t("invest.navPerUnit", "NAV / unit")} value={nav ? formatUsdt(nav.nav, locale) : "—"} large>
-            {navRead.error && !nav ? t("err.fundRefresh", "Couldn't refresh this fund") : <MarkDate nav={nav} />}
+            {navFailed ? t("err.fundRefresh", "Couldn't refresh this fund") : <MarkDate nav={nav} />}
           </CardStat>
           {held ? (
             <>
