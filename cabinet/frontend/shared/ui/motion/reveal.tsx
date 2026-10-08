@@ -15,6 +15,7 @@ import { useReducedMotion, type HTMLMotionProps } from "motion/react";
 
 import { asMotion } from "./element";
 import { EntranceContext, useEntranceLive } from "./entrance";
+import { MotionFeatures } from "./features";
 import { DUR, EASE, RISE, STAGGER } from "./tokens";
 
 /**
@@ -92,18 +93,20 @@ export function Reveal({ delay = 0, as = "div", children, onAnimationComplete, .
   const [live, settle] = useEntranceFlag();
   const Comp = asMotion(as);
   return (
-    <Comp
-      initial={{ opacity: 0, y: rise }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: DUR.base, ease: EASE.out, delay }}
-      {...props}
-      onAnimationComplete={(definition) => {
-        settle();
-        onAnimationComplete?.(definition);
-      }}
-    >
-      <EntranceContext.Provider value={live}>{children}</EntranceContext.Provider>
-    </Comp>
+    <MotionFeatures>
+      <Comp
+        initial={{ opacity: 0, y: rise }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: DUR.base, ease: EASE.out, delay }}
+        {...props}
+        onAnimationComplete={(definition) => {
+          settle();
+          onAnimationComplete?.(definition);
+        }}
+      >
+        <EntranceContext.Provider value={live}>{children}</EntranceContext.Provider>
+      </Comp>
+    </MotionFeatures>
   );
 }
 
@@ -133,17 +136,19 @@ export interface StaggerProps extends Omit<HTMLMotionProps<"div">, "ref"> {
 export function Stagger({ delay = 0, step = STAGGER, as = "div", children, ...props }: StaggerProps) {
   const Comp = asMotion(as);
   return (
-    <Comp
-      initial="hidden"
-      animate="shown"
-      variants={{
-        hidden: {},
-        shown: { transition: { staggerChildren: step, delayChildren: delay } },
-      }}
-      {...props}
-    >
-      {children}
-    </Comp>
+    <MotionFeatures>
+      <Comp
+        initial="hidden"
+        animate="shown"
+        variants={{
+          hidden: {},
+          shown: { transition: { staggerChildren: step, delayChildren: delay } },
+        }}
+        {...props}
+      >
+        {children}
+      </Comp>
+    </MotionFeatures>
   );
 }
 
@@ -166,22 +171,24 @@ export function StaggerItem({ as = "div", children, onAnimationComplete, ...prop
   const [live, settle] = useEntranceFlag();
   const Comp = asMotion(as);
   return (
-    <Comp
-      variants={{
-        hidden: { opacity: 0, y: rise },
-        shown: {
-          opacity: 1,
-          y: 0,
-          transition: { duration: DUR.base, ease: EASE.out },
-        },
-      }}
-      {...props}
-      onAnimationComplete={(definition) => {
-        settle();
-        onAnimationComplete?.(definition);
-      }}
-    >
-      <EntranceContext.Provider value={live}>{children}</EntranceContext.Provider>
-    </Comp>
+    <MotionFeatures>
+      <Comp
+        variants={{
+          hidden: { opacity: 0, y: rise },
+          shown: {
+            opacity: 1,
+            y: 0,
+            transition: { duration: DUR.base, ease: EASE.out },
+          },
+        }}
+        {...props}
+        onAnimationComplete={(definition) => {
+          settle();
+          onAnimationComplete?.(definition);
+        }}
+      >
+        <EntranceContext.Provider value={live}>{children}</EntranceContext.Provider>
+      </Comp>
+    </MotionFeatures>
   );
 }

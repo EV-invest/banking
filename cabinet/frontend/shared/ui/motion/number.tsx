@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
-import { animate, useReducedMotion } from "motion/react";
+import { animateValue, useReducedMotion } from "motion/react";
 
 import { driveNumber, type NumberDriverDeps } from "./number-driver";
 import { DUR, EASE } from "./tokens";
@@ -22,9 +22,22 @@ export interface AnimatedNumberProps {
 // count's own duration by a margin wide enough that a long task during
 // hydration cannot let the timer beat the finishing frame: in the normal case
 // the animation completes first and the timer is cancelled without firing.
+//
+// `animateValue`, not `animate(from, to, …)`. For a bare number `animate` ends in
+// exactly this object — a `JSAnimation` on the same frame loop, started at the
+// same instant — but reaches it through the element/sequence machinery, which is
+// ~2.6 KB gz on every page holding a figure. Going straight to the engine keeps
+// the curve and the frames and drops the wrapper. Its units are the engine's,
+// milliseconds, where `animate` takes seconds.
 const DOM_DEPS: NumberDriverDeps = {
   animate: (from, to, { onUpdate, onComplete }) =>
-    animate(from, to, { duration: DUR.slow, ease: EASE.out, onUpdate, onComplete }),
+    animateValue({
+      keyframes: [from, to],
+      duration: DUR.slow * 1000,
+      ease: EASE.out,
+      onUpdate,
+      onComplete,
+    }),
   isHidden: () => document.visibilityState === "hidden",
   onHidden: (cb) => {
     const listener = () => {
@@ -49,7 +62,7 @@ const DOM_DEPS: NumberDriverDeps = {
  *
  * Three deliberate implementation choices:
  *
- * - **The DOM is written directly, not through React.** `animate()` drives a
+ * - **The DOM is written directly, not through React.** `animateValue()` drives a
  *   plain number and `onUpdate` writes the text. A 60fps count that went
  *   through `setState` would re-render this component ~40 times per second and,
  *   through it, everything the parent re-renders with it. Nothing here needs to

@@ -3,7 +3,7 @@
 import { type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
-import { DUR, EASE } from "./tokens";
+import { DUR, EASE } from "@/shared/ui/motion";
 
 /**
  * Presence boundary for a panel that mounts and unmounts — the admin user

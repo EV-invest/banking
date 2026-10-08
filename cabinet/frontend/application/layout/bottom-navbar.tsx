@@ -4,14 +4,15 @@ import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 
 import { CircleUserRound, Home, LineChart, ListChecks, Wallet, type LucideIcon } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import { Link } from "@/shared/ui/cabinet-link";
 
 import { AccountTabBadge } from "@/application/layout/account-tab-badge";
 import { prefetchOn } from "@/application/prefetch";
 import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
-import { DUR, EASE } from "@/shared/ui/motion";
+import { DUR, EASE, MotionFeatures } from "@/shared/ui/motion";
 
 interface TabItem {
   href: `/${string}`;
@@ -74,16 +75,18 @@ export function BottomNavbar() {
           `index × 100%` of its own width, and its own width is exactly one tab,
           so the two can never drift. An unclaimed route just fades it out where
           it stands, and returning fades it back in already in the right place. */}
-      <motion.span
-        aria-hidden
-        className="pointer-events-none absolute top-0 flex justify-center"
-        style={{ left: BAR_PX, width: `calc((100% - 2 * ${BAR_PX}) / ${TABS.length})` }}
-        initial={false}
-        animate={{ x: `${Math.max(activeAt, 0) * 100}%`, opacity: onTab ? 1 : 0 }}
-        transition={reduce ? { duration: 0 } : { duration: DUR.base, ease: EASE.out }}
-      >
-        <span className="h-0.5 w-10 rounded-full bg-primary-ink" />
-      </motion.span>
+      <MotionFeatures>
+        <m.span
+          aria-hidden
+          className="pointer-events-none absolute top-0 flex justify-center"
+          style={{ left: BAR_PX, width: `calc((100% - 2 * ${BAR_PX}) / ${TABS.length})` }}
+          initial={false}
+          animate={{ x: `${Math.max(activeAt, 0) * 100}%`, opacity: onTab ? 1 : 0 }}
+          transition={reduce ? { duration: 0 } : { duration: DUR.base, ease: EASE.out }}
+        >
+          <span className="h-0.5 w-10 rounded-full bg-primary-ink" />
+        </m.span>
+      </MotionFeatures>
 
       {TABS.map((tab) => {
         const Icon = tab.icon;
