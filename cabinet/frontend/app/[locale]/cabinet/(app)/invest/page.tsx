@@ -9,6 +9,7 @@ import type { ServerRead } from "@/shared/api/server/bff";
 import type { AllocationList, PositionList } from "@/shared/contracts";
 import { InvestView } from "@/views/invest/ui/invest-view";
 import type { ProductCardSeed } from "@/views/invest/ui/product-card";
+import { isClientNavigation } from "@/shared/api/server/navigation";
 import { routeMessages } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
 
@@ -36,6 +37,8 @@ export default async function InvestPage() {
 }
 
 async function SeededInvest() {
+  // A client-side navigation skips the reads: the browser cache answers those (see navigation.ts).
+  if (await isClientNavigation()) return <InvestView />;
   const catalogRead = readAllocations();
   const positionsRead = readPositions();
   // Handed over unresolved: it streams to the cards after the lists, not ahead of them.
