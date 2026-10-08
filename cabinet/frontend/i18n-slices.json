@@ -1750,6 +1750,7 @@
     ],
     "app/[locale]/cabinet/(app)/invest/[service]/trade/page.tsx": [
       "dash.unitsAmount",
+      "err.chunkLoad",
       "invest.badge.locked",
       "invest.badge.redeemOnly",
       "invest.badge.staleNav",
@@ -1852,7 +1853,8 @@
       "trade.unbackedNotice",
       "ui.cancel",
       "ui.loading",
-      "ui.max"
+      "ui.max",
+      "ui.reloadPage"
     ],
     "app/[locale]/cabinet/(app)/invest/page.tsx": [
       "admin.valuation.queuedCount",
@@ -2080,6 +2082,7 @@
       "dash.unitsAmount",
       "dash.unrealizedPnl",
       "dash.yourParticipation",
+      "err.chunkLoad",
       "onboarding.allSet.body",
       "onboarding.allSet.dismiss",
       "onboarding.allSet.title",
@@ -2155,6 +2158,7 @@
       "ui.cancel",
       "ui.deposit",
       "ui.noOperations",
+      "ui.reloadPage",
       "ui.viewAll",
       "ui.withdraw",
       "wallet.chain.bep20",
@@ -2487,6 +2491,7 @@
       "wallet.evmSiblingHazard",
       "wallet.networkWarning",
       "wallet.noDepositRails",
+      "wallet.qrUnavailable",
       "wallet.railHazard",
       "wallet.selectNetwork",
       "wallet.yourDepositAddress"

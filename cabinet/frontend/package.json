@@ -16,8 +16,8 @@
     "predev": "npm run build:mfe",
     "prebuild": "npm run build:mfe",
     "i18n:extract": "evinvest-i18n-extract --root . --exclude public,messages",
-    "i18n:slices": "evinvest-i18n-slices --root . --exclude public,messages --config i18n-slices.config.json --out i18n-slices.json",
-    "i18n:check": "evinvest-i18n-check --root . --exclude public,messages && evinvest-i18n-slices --root . --exclude public,messages --config i18n-slices.config.json --out i18n-slices.json --check && tsx scripts/i18n-scope-check.mts && tsx scripts/i18n-check.mts"
+    "i18n:slices": "evinvest-i18n-slices --root . --exclude public,messages,use-perf-chart.test.ts,use-candle-chart.test.ts,deposit-qr.test.ts --config i18n-slices.config.json --out i18n-slices.json",
+    "i18n:check": "evinvest-i18n-check --root . --exclude public,messages && evinvest-i18n-slices --root . --exclude public,messages,use-perf-chart.test.ts,use-candle-chart.test.ts,deposit-qr.test.ts --config i18n-slices.config.json --out i18n-slices.json --check && tsx scripts/i18n-scope-check.mts && tsx scripts/i18n-check.mts"
   },
   "dependencies": {
     "@evinvest/analytics": "^0.4.0",
