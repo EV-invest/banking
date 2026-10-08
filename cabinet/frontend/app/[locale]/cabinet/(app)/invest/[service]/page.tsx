@@ -5,6 +5,7 @@ import { I18nScope } from "@evinvest/i18n/react";
 import { readBookPolicy } from "@/entities/book/api/book-server";
 import { readAccruedFees, readAllocation, readFeePolicy, readFundNav, readPositions, readRedemptions } from "@/entities/fund/api/fund-server";
 import { ProductView } from "@/views/invest/ui/product-view";
+import { isClientNavigation } from "@/shared/api/server/navigation";
 import { routeMessages } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
 
@@ -32,6 +33,8 @@ export default async function ProductPage({ params }: { params: Promise<{ servic
 }
 
 async function SeededProduct({ service }: { service: string }) {
+  // A client-side navigation skips the reads: the browser cache answers those (see navigation.ts).
+  if (await isClientNavigation()) return <ProductView service={service} />;
   const [detail, positions, nav, redemptions, fee, accrued, book] = await Promise.all([
     readAllocation(service),
     readPositions(),

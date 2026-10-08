@@ -9,9 +9,10 @@ import { useCallback, useSyncExternalStore } from "react";
 //
 // The server snapshot is `false` (the wide presentation), so a page arriving from the
 // server paints wide once and corrects on hydration. That is safe for the surfaces using
-// it because their first paint is a loading skeleton — no row, and therefore no trigger,
-// exists until the query has settled — and a client-side navigation reads the real value
-// on its first render, with no flash at all.
+// it because the switch changes what a row OPENS, not how it looks: a server-rendered
+// timeline row is the same button under a Popover or a Drawer trigger, and nothing can be
+// opened before hydration anyway. A client-side navigation reads the real value on its
+// first render, with no flash at all.
 const QUERIES = {
   /** Below Tailwind's `md` — a phone. */
   md: "(max-width: 767px)",

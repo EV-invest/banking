@@ -9,6 +9,7 @@ import { RECENT_OPS } from "@/entities/operation/lib/recent";
 import { readWallet } from "@/entities/wallet/api/wallet-server";
 import { type ChecklistShape, isChecklistShape, SHAPE_COOKIE, StageMirror } from "@/features/onboarding";
 import { DashboardView } from "@/views/dashboard/ui/dashboard-view";
+import { isClientNavigation } from "@/shared/api/server/navigation";
 import { routeMessages } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
 import { requestNonce } from "@/shared/config/security";
@@ -39,6 +40,8 @@ export default async function Page() {
 }
 
 async function SeededDashboard({ hint }: { hint: ChecklistShape | undefined }) {
+  // A client-side navigation skips the reads: the browser cache answers those (see navigation.ts).
+  if (await isClientNavigation()) return <DashboardView checklistHint={hint} />;
   const [wallet, positions, operations, catalog] = await Promise.all([readWallet(), readPositions(), readOperations(RECENT_OPS), readAllocations()]);
   return <DashboardView checklistHint={hint} initial={{ wallet: wallet ?? undefined, positions: positions ?? undefined, operations: operations ?? undefined, catalog: catalog ?? undefined }} />;
 }

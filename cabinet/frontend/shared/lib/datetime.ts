@@ -31,9 +31,8 @@ import { hasUnixStamp, unixStampToDate } from "./unix-stamp.ts";
 /**
  * A unix-seconds stamp as an absolute local moment: "12 Mar 2026, 14:03".
  *
- * `timeZone` is for HTML rendered on the server: the process's zone is not the reader's, so
- * a stamp formatted there and again while hydrating would disagree. Such a render pins one
- * zone (see `shared/lib/use-hydrated`) and the reader's own takes over on the next render.
+ * `timeZone` (from `useTimeZone`, `shared/lib/time-zone.tsx`) is for HTML rendered on the
+ * server: it is the zone that render and hydration agree on. Omitted, it is the runtime's own.
  */
 export function formatMoment(stamp: string | null | undefined, locale: Locale, timeZone?: string): string {
   const at = toDate(stamp);

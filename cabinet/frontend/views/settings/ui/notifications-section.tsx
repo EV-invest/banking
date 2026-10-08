@@ -17,7 +17,7 @@ import {
 import { refreshUnreadCount } from "@/entities/notification/model/notification-store";
 import type { NotificationSettings } from "@/shared/contracts/notifications";
 import { errorMessage } from "@/shared/lib/api-client";
-import { useResource } from "@/shared/lib/resource";
+import { type ResourceSeed, useSeededResource } from "@/shared/lib/resource";
 import { Hairline, ListCard, ListCardTitle, Row, RowLabel } from "@/shared/ui/list-card";
 import { SectionLabel } from "@/shared/ui/page-frame";
 
@@ -29,14 +29,14 @@ import { SectionLabel } from "@/shared/ui/page-frame";
  * rather than patched locally; that keeps the per-topic email toggles honest when
  * the master email switch turns them all moot.
  */
-export function NotificationsSection() {
+export function NotificationsSection({ initial }: { initial?: ResourceSeed<NotificationSettings> }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
 
   // Every write answers with the whole new matrix and publishes it into the cache, so the
   // toggles below stay in step without this section holding a second copy of the state.
-  const read = useResource(notificationSettingsResource);
+  const read = useSeededResource(notificationSettingsResource, initial);
   const settings = read.data ?? null;
   // Only a read that has actually failed reports — while it is still in flight there is
   // nothing wrong, and the skeleton switches below are the right thing to show.

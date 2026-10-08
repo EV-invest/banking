@@ -14,11 +14,12 @@ import { useEffect, useState } from "react";
 import { fetchNotifications } from "@/entities/notification/api/notification-client";
 import { markRead, notificationsResource } from "@/entities/notification/model/notification-resource";
 import { publishUnreadCount } from "@/entities/notification/model/notification-store";
-import type { Notification } from "@/shared/contracts/notifications";
+import type { Notification, NotificationList } from "@/shared/contracts/notifications";
 import { isUnread, toDate } from "@/shared/contracts/notifications";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
-import { useResource } from "@/shared/lib/resource";
+import { type ResourceSeed, useSeededResource } from "@/shared/lib/resource";
+import { useTimeZone } from "@/shared/lib/time-zone";
 import { StaggerItem } from "@/shared/ui/motion";
 import { PageFrame } from "@/shared/ui/page-frame";
 
@@ -43,10 +44,14 @@ type Filter = "all" | "unread";
  * or "you switched the in-app channel off", and those want different copy. The
  * settings link in the empty state covers the second case without us having to fetch
  * settings here just to tell them apart.
+ *
+ * `initial` is the server's read of the unfiltered first page (see the route), absent while
+ * it streams or when it failed — then this is the browser read it always was.
  */
-export function NotificationsView() {
+export function NotificationsView({ initial }: { initial?: ResourceSeed<NotificationList> }) {
   const t = useT();
   const locale = useLocale();
+  const timeZone = useTimeZone();
   const [filter, setFilter] = useState<Filter>("all");
   const [busy, setBusy] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -54,7 +59,7 @@ export function NotificationsView() {
   // The first page per filter is cached, so returning to the inbox shows the rows it last
   // showed instead of three skeleton bars. Later cursor pages are appended here and are not
   // cached: a page is only meaningful after the pages before it.
-  const first = useResource(notificationsResource, filter);
+  const first = useSeededResource(notificationsResource, filter === "all" ? initial : undefined, filter);
   const page = first.data;
   const [older, setOlder] = useState<Notification[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -131,6 +136,7 @@ export function NotificationsView() {
 
   return (
     <PageFrame
+      entrance={!initial}
       title={t("nav.notifications", "Notifications")}
       description={t("notif.subtitle", "Everything you follow — and how you hear about it")}
       width="content"
@@ -186,7 +192,7 @@ export function NotificationsView() {
         ) : (
           <ul>
             {items.map((n, i) => (
-              <Row key={n.id} n={n} first={i === 0} onOpen={() => void open(n)} locale={locale} t={t} />
+              <Row key={n.id} n={n} first={i === 0} onOpen={() => void open(n)} locale={locale} timeZone={timeZone} t={t} />
             ))}
           </ul>
         )}
@@ -203,7 +209,7 @@ export function NotificationsView() {
   );
 }
 
-function Row({ n, first, onOpen, locale, t }: { n: Notification; first: boolean; onOpen: () => void; locale: Locale; t: Translate }) {
+function Row({ n, first, onOpen, locale, timeZone, t }: { n: Notification; first: boolean; onOpen: () => void; locale: Locale; timeZone: string | undefined; t: Translate }) {
   const unread = isUnread(n);
   const body = (
     <div className={cn("flex items-center gap-3.5 text-left", ROW_PAD, unread && "bg-ink/5")}>
@@ -214,8 +220,12 @@ function Row({ n, first, onOpen, locale, t }: { n: Notification; first: boolean;
         <p className={cn("truncate text-sm", unread ? "font-semibold text-ink" : "text-ink-soft")}>{n.title}</p>
         {n.body && <p className="mt-0.5 line-clamp-2 text-xs text-ink-soft">{n.body}</p>}
       </div>
-      <time className="shrink-0 text-xs tabular-nums text-ink-soft" dateTime={toDate(n.created_at)?.toISOString()}>
-        {formatWhen(n.created_at, locale, t)}
+      {/* The relative label is computed against "now", which moves between the server
+          render and hydration: a row crossing a minute in between would read "4m" in the
+          HTML and "5m" here. The zone is already the server's (`useTimeZone`); the clock
+          cannot be, so this one text node is allowed to differ. */}
+      <time className="shrink-0 text-xs tabular-nums text-ink-soft" dateTime={toDate(n.created_at)?.toISOString()} suppressHydrationWarning>
+        {formatWhen(n.created_at, locale, timeZone, t)}
       </time>
     </div>
   );
@@ -257,7 +267,7 @@ function EmptyState({ filter, t }: { filter: Filter; t: Translate }) {
  *  The date is formatted for the active locale, not the browser's: the cabinet's language
  *  comes from the URL, and someone reading in Russian on an English machine was getting
  *  "3 Sep" beside Russian copy. */
-function formatWhen(unixSeconds: string, locale: Locale, t: Translate): string {
+function formatWhen(unixSeconds: string, locale: Locale, timeZone: string | undefined, t: Translate): string {
   const d = toDate(unixSeconds);
   if (!d) return "";
   const mins = Math.floor((Date.now() - d.getTime()) / 60_000);
@@ -267,5 +277,5 @@ function formatWhen(unixSeconds: string, locale: Locale, t: Translate): string {
   if (mins < 60 * 24 * 7) return t("notif.when.days", "{n}d", { n: Math.floor(mins / (60 * 24)) });
   // `intlLocale`, not `locale`: bare "en" means en-US to Intl ("Mar 12"), while the
   // operations timeline renders "12 Mar". One English reader, one convention.
-  return d.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short" });
+  return d.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", timeZone });
 }

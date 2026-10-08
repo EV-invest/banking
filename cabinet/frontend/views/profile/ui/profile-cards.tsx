@@ -15,6 +15,7 @@ import { StartVerificationRow } from "@/features/kyc";
 import { isUnverified } from "@/entities/user/lib/kyc";
 import type { Operation, Session, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { useTimeZone } from "@/shared/lib/time-zone";
 import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
 import { Hairline, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
@@ -107,6 +108,7 @@ const COUNTED = ["deposit", "withdrawal", "subscription", "redemption"] as const
 export function ActivityCard({ loading, operations, truncated, error, className }: { loading: boolean; operations: Operation[]; truncated: boolean; error: string | null; className?: string }) {
   const t = useT();
   const locale = useLocale();
+  const timeZone = useTimeZone();
   const newest = operations.reduce((max, op) => Math.max(max, seconds(op.created_at)), 0);
   return (
     // The hub caps the list it answers with, so over a long history the counts are of the
@@ -163,7 +165,7 @@ export function ActivityCard({ loading, operations, truncated, error, className 
           <Hairline />
           <Row>
             <span className="text-sm font-medium text-ink">{t("profile.lastActivity", "Last activity")}</span>
-            <RowValue className="text-ink">{dayLabel(newest, t, locale)}</RowValue>
+            <RowValue className="text-ink">{dayLabel(newest, t, locale, undefined, timeZone)}</RowValue>
           </Row>
           <Hairline />
           <Link href="/operations" className={cn(TEXT_LINK, "block py-3")}>

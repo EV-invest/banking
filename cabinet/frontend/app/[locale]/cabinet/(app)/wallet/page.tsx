@@ -4,6 +4,7 @@ import { I18nScope } from "@evinvest/i18n/react";
 
 import { readWallet } from "@/entities/wallet/api/wallet-server";
 import { WalletOverviewView } from "@/views/wallet/ui/wallet-overview-view";
+import { isClientNavigation } from "@/shared/api/server/navigation";
 import { routeMessages } from "@/shared/config/i18n";
 import { currentLocale } from "@/shared/config/locale";
 
@@ -27,6 +28,8 @@ export default async function WalletPage() {
 }
 
 async function SeededWalletOverview() {
+  // A client-side navigation skips the reads: the browser cache answers those (see navigation.ts).
+  if (await isClientNavigation()) return <WalletOverviewView />;
   const initial = (await readWallet()) ?? undefined;
   return <WalletOverviewView initial={initial} />;
 }

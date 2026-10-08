@@ -8,7 +8,10 @@ import { useState } from "react";
 
 import { Button, Spinner } from "@evinvest/uikit";
 
+import type { UserProfile } from "@/shared/contracts";
+import type { NotificationSettings } from "@/shared/contracts/notifications";
 import { useCabinetHref } from "@/shared/lib/cabinet-route";
+import type { ResourceSeed } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { InitialsAvatar } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
@@ -44,8 +47,18 @@ import { SessionsSection } from "@/views/settings/ui/sessions-section";
 // is the deep link the profile page sends a reader to, and a reload or a shared link
 // re-renders the same section. Leaving a pushed screen on mobile is the app bar's back
 // affordance, not the browser's.
+//
+// `initial` holds the server's reads (see the route): the profile always, the delivery
+// preferences when the Notifications section is the one open. Absent while they stream or
+// when they failed — then each part makes the browser read it always made. The session
+// list is never among them: it is the shell's endpoint, not the BFF's.
 
-export function SettingsView({ initialSection }: { initialSection: Section }) {
+export interface SettingsSeeds {
+  profile?: ResourceSeed<UserProfile>;
+  notificationSettings?: ResourceSeed<NotificationSettings>;
+}
+
+export function SettingsView({ initialSection, initial }: { initialSection: Section; initial?: SettingsSeeds }) {
   const t = useT();
   const router = useRouter();
   const toHref = useCabinetHref();
@@ -62,18 +75,25 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
   // The mobile stack: the root screen, or the section pushed on top of it. Derived from
   // the one section state, so a deep link opens the same thing at both breakpoints.
   const pushed = pushableOf(section);
+  // The pane the server rendered with data is on screen before any script runs; letting it
+  // play its arrival would start it transparent and hide the form until hydration. Panes
+  // the reader opens afterwards still arrive.
+  const [switched, setSwitched] = useState(false);
+  const paneEntrance = !initial || switched;
   function select(id: Section) {
+    setSwitched(true);
     setSection(id);
     // `replace`, not `push`: the rail is a tab strip, and a history entry per tab would
     // make Back walk through every one the reader glanced at.
     router.replace(`${toHref("/settings")}?section=${id}`, { scroll: false });
   }
   function pop() {
+    setSwitched(true);
     setSection(DEFAULT_SECTION);
     router.replace(toHref("/settings"), { scroll: false });
   }
 
-  const { profile, loading, error, form, dirty, saving, saved, fieldErrors, set, save } = useProfileForm();
+  const { profile, loading, error, form, dirty, saving, saved, fieldErrors, set, save } = useProfileForm(initial?.profile);
   const sessions = useSessions();
   const email = profile?.email ?? null;
   const name = truncateName((profile?.legal_name ?? "").trim()) || displayName(email, t);
@@ -84,6 +104,7 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
 
   const appBar = (
     <MobileAppBar
+      entrance={!initial}
       title={pushed ? pushedTitles(t)[pushed] : t("nav.settings", "Settings")}
       onBack={pushed ? pop : undefined}
       right={
@@ -120,7 +141,7 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
   );
 
   return (
-    <PageFrame title={t("nav.settings", "Settings")} description={t("settings.subtitle", "Manage your account, security and access")} actions={headingAction || undefined} appBar={appBar}>
+    <PageFrame entrance={!initial} title={t("nav.settings", "Settings")} description={t("settings.subtitle", "Manage your account, security and access")} actions={headingAction || undefined} appBar={appBar}>
       {error && (
         <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
           {error}
@@ -134,8 +155,8 @@ export function SettingsView({ initialSection }: { initialSection: Section }) {
         </p>
       )}
 
-      <MobileStack pushed={pushed} onSelect={select} personal={personal} sessions={sessionsPanel(false)} name={name} sessionList={sessions.sessions} />
-      <DesktopPane section={section} onSelect={select} personal={personal} sessions={sessionsPanel(true)} sessionList={sessions.sessions} />
+      <MobileStack pushed={pushed} onSelect={select} personal={personal} sessions={sessionsPanel(false)} name={name} sessionList={sessions.sessions} notificationSettings={initial?.notificationSettings} entrance={paneEntrance} />
+      <DesktopPane section={section} onSelect={select} personal={personal} sessions={sessionsPanel(true)} sessionList={sessions.sessions} notificationSettings={initial?.notificationSettings} entrance={paneEntrance} />
     </PageFrame>
   );
 }

@@ -16,7 +16,9 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { formatDay } from "@/shared/lib/datetime";
 import { formatSignedUsd, formatUsd, num, valence } from "@/shared/lib/money";
-import { useResource } from "@/shared/lib/resource";
+import { type ResourceSeed, useResource, useSeededResource } from "@/shared/lib/resource";
+import { useTimeZone } from "@/shared/lib/time-zone";
+import type { OperationList, PositionList, UserProfile, Wallet } from "@/shared/contracts";
 import { Link } from "@/shared/ui/cabinet-link";
 import { CARD, InitialsAvatar, Pill } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
@@ -41,9 +43,20 @@ import { ActivityCard, PersonalCard, SecurityCard, VerificationCard } from "@/vi
 // rows have no document store behind them, so this states the KYC level the hub actually
 // holds instead of inventing four.
 
-export function ProfileView() {
+/** What the route read on the server, per resource; a read that failed is simply absent. */
+export interface ProfileSeeds {
+  profile?: ResourceSeed<UserProfile>;
+  positions?: ResourceSeed<PositionList>;
+  wallet?: ResourceSeed<Wallet>;
+  operations?: ResourceSeed<OperationList>;
+}
+
+// `initial` is absent while the server's reads stream (the route renders this as its own
+// fallback) and when every one of them failed — then this is the browser read it always was.
+export function ProfileView({ initial }: { initial?: ProfileSeeds }) {
   const t = useT();
   const locale = useLocale();
+  const timeZone = useTimeZone();
   // Bound once per locale, as on the dashboard: AnimatedNumber restarts its count whenever
   // the identity of `format` changes.
   const usd = useCallback((n: number) => formatUsd(n, locale), [locale]);
@@ -53,10 +66,12 @@ export function ProfileView() {
   // chip and Settings, the rest with Home, Operations and Settings — and all five are
   // warmed on intent (application/prefetch.ts), so arriving here fills the page on the
   // first frame.
-  const { data: profile, error: readError, isLoading: loading } = useResource(profileResource);
-  const positions = useResource(positionsResource);
-  const wallet = useResource(walletResource);
-  const operations = useResource(operationsResource, undefined);
+  // Sessions are the one read the server cannot make: the list is the shell's
+  // (`/api/auth/sessions`), not the BFF's, so the Security card still fills in after hydration.
+  const { data: profile, error: readError, isLoading: loading } = useSeededResource(profileResource, initial?.profile);
+  const positions = useSeededResource(positionsResource, initial?.positions);
+  const wallet = useSeededResource(walletResource, initial?.wallet);
+  const operations = useSeededResource(operationsResource, initial?.operations, undefined);
   const sessionList = useResource(sessionsResource);
   // One banner, the first read that failed. A failed figure is a dash in its tile, not a
   // zero — see the strip below.
@@ -100,7 +115,13 @@ export function ProfileView() {
   const security = <SecurityCard loading={loading} email={email} sessions={sessionList.data} sessionsFailed={!sessionList.data && !!sessionList.error} />;
 
   return (
-    <PageFrame title={t("ui.profile", "Profile")} description={t("profile.subtitle", "Who you are on the platform and how your account stands")} actions={edit("shrink-0")} appBar={<MobileAppBar title={t("ui.profile", "Profile")} backHref="/settings" />}>
+    <PageFrame
+      entrance={!initial}
+      title={t("ui.profile", "Profile")}
+      description={t("profile.subtitle", "Who you are on the platform and how your account stands")}
+      actions={edit("shrink-0")}
+      appBar={<MobileAppBar title={t("ui.profile", "Profile")} backHref="/settings" entrance={!initial} />}
+    >
       {error && (
         <StaggerItem as="p" className="rounded-md border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
           {error}
@@ -124,7 +145,7 @@ export function ProfileView() {
               {profile?.role && <Pill tone="neutral">{enumLabel("admin.role", profile.role, t)}</Pill>}
             </div>
           )}
-          {oldest > 0 && <p className="mt-1 text-xs text-ink-soft">{t("profile.activeSince", "Active since {date}", { date: formatDay(String(oldest), locale) })}</p>}
+          {oldest > 0 && <p className="mt-1 text-xs text-ink-soft">{t("profile.activeSince", "Active since {date}", { date: formatDay(String(oldest), locale, timeZone) })}</p>}
         </div>
         {/* Mobile puts the action in the hero; desktop has it in the page heading. */}
         {edit("w-full lg:hidden")}

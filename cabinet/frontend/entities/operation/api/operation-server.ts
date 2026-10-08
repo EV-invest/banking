@@ -11,6 +11,7 @@ function isOperationList(body: unknown): body is OperationList {
   return hasOptionalLists(body, ["operations"]);
 }
 
-export function readOperations(limit: number): Promise<ServerRead<OperationList> | null> {
-  return bffRead(`/api/operations?limit=${limit}`, isOperationList);
+/** `limit` as `fetchOperations` takes it: Home's preview passes one; Operations and Profile read the full list. */
+export function readOperations(limit?: number): Promise<ServerRead<OperationList> | null> {
+  return bffRead(limit ? `/api/operations?limit=${limit}` : "/api/operations", isOperationList);
 }

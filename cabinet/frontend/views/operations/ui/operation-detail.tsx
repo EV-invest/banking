@@ -8,6 +8,7 @@ import { Badge, Button, Separator } from "@evinvest/uikit";
 
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { useTimeZone } from "@/shared/lib/time-zone";
 import { amountTone, dayLabel, dayLabelInline, formatUnits, formatUsdt, kindBadge, kindMeta, networkLabel, seconds, STATE_ICONS, stateLabel, stateTone, timeLabel } from "@/views/operations/lib/format";
 import { NetworkMark } from "@/shared/ui/icons/networks";
 import { SectionLabel } from "@/shared/ui/page-frame";
@@ -27,10 +28,11 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 export function OperationDetail({ operation, title, onManage }: { operation: Operation; title: string; onManage?: `/${string}` | null }) {
   const t = useT();
   const locale = useLocale();
+  const timeZone = useTimeZone();
   const meta = kindMeta(operation.kind);
   const StateIcon = STATE_ICONS[operation.state ?? ""];
   const at = seconds(operation.created_at);
-  const steps = progressFor(operation, t, locale);
+  const steps = progressFor(operation, t, locale, timeZone);
   const sub = subheadline(operation, t, locale);
 
   return (
@@ -48,7 +50,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
             {stateLabel(operation.state, t)}
           </Badge>
         </div>
-        <p className="text-xs text-ink-soft">{context(operation, at, t, locale)}</p>
+        <p className="text-xs text-ink-soft">{context(operation, at, t, locale, timeZone)}</p>
         <p className={cn("pt-1 text-2xl font-semibold tabular-nums", amountTone(meta.direction))}>{headline(operation, t, locale)}</p>
         {sub && <p className="text-xs text-ink-soft">{sub}</p>}
       </header>
@@ -115,10 +117,10 @@ interface Step {
 // A deposit row exists only once the watcher confirmed it, and a subscription is an
 // immutable mint — neither has a lifecycle to draw, which is also why their panel is a
 // third the height of a withdrawal's.
-function progressFor(operation: Operation, t: Translate, locale: Locale): Step[] {
+function progressFor(operation: Operation, t: Translate, locale: Locale, timeZone: string | undefined): Step[] {
   const state = operation.state ?? "";
   const at = seconds(operation.created_at);
-  const requested: Step = { label: t("ops.step.requested", "Requested"), meta: at > 0 ? `${dayLabel(at, t, locale)} ${timeLabel(at, locale)}` : "—", state: "done" };
+  const requested: Step = { label: t("ops.step.requested", "Requested"), meta: at > 0 ? `${dayLabel(at, t, locale, undefined, timeZone)} ${timeLabel(at, locale, timeZone)}` : "—", state: "done" };
 
   if (operation.kind === "withdrawal") {
     if (state === "cancelled" || state === "failed") {
@@ -153,9 +155,9 @@ function progressFor(operation: Operation, t: Translate, locale: Locale): Step[]
   return [];
 }
 
-function context(operation: Operation, at: number, t: Translate, locale: Locale): string {
+function context(operation: Operation, at: number, t: Translate, locale: Locale, timeZone: string | undefined): string {
   // `dayLabelInline` rather than `dayLabel(...).toLowerCase()` — see the note on it.
-  const when = at > 0 ? `${dayLabelInline(at, t, locale)} ${timeLabel(at, locale)}` : "—";
+  const when = at > 0 ? `${dayLabelInline(at, t, locale, undefined, timeZone)} ${timeLabel(at, locale, timeZone)}` : "—";
   if (operation.kind === "deposit" || operation.kind === "withdrawal") return t("ops.context.network", "{network} · {when}", { network: networkLabel(operation.network), when });
   return t("ops.context.fund", "Fund · {when}", { when });
 }
