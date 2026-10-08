@@ -2,7 +2,7 @@
 
 // One end of the order: a kind, and — for the two kinds that name one of many — which one.
 //
-// Self-contained on purpose: the product list and the user search are read here rather
+// Self-contained on purpose: the product list and the user picker are read here rather
 // than threaded through the form, so the form composes two of these with three props each
 // instead of forwarding two resources it never looks at itself.
 
@@ -10,6 +10,7 @@ import { useT } from "@evinvest/i18n/react";
 import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle, FieldLegend, FieldSet, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { adminAllocationsResource } from "@/entities/admin/model/admin-resource";
+import { UserPicker } from "@/features/user-picker/ui/user-picker";
 import { useResource } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { ProductIcon } from "@/shared/ui/icons/products";
@@ -17,7 +18,6 @@ import { ResourceError } from "@/shared/ui/resource-error";
 import { type EndDraft, type EndKind, END_KINDS } from "@/views/admin/payments/lib/terms";
 import { endKindLabel } from "@/views/admin/payments/lib/words";
 import { ExternalFields } from "@/views/admin/payments/ui/external-fields";
-import { UserSearch } from "@/views/admin/payments/ui/user-search";
 
 export function EndPicker({
   label,
@@ -52,7 +52,7 @@ export function EndPicker({
         </SelectContent>
       </Select>
       {value.kind === "service" && <ProductSelect value={value.id} onChange={(id, name) => set({ id, name })} />}
-      {value.kind === "user" && <UserSearch value={value.id} onChange={(id, name) => set({ id, name })} />}
+      {value.kind === "user" && <UserPicker value={value.id ? { userId: value.id, email: value.name } : null} onPick={(u) => set({ id: u.userId, name: u.email })} />}
       {value.kind === "external" && <ExternalFields network={value.network} address={value.address} onChange={set} />}
     </FieldSet>
   );

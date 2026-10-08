@@ -1271,10 +1271,6 @@
     "en": "Opening a payment moves no money. Fund-owned money is proposed to the owners' consilium; an investor's own money is put to that investor by email. Only once they agree does anything move.",
     "t": "Mở một khoản thanh toán không chuyển tiền. Tiền của quỹ được đề xuất lên hội đồng chủ sở hữu; tiền riêng của nhà đầu tư được gửi tới chính nhà đầu tư đó qua email. Chỉ khi họ đồng ý thì tiền mới được chuyển."
   },
-  "admin.payments.investor": {
-    "en": "Investor",
-    "t": "Nhà đầu tư"
-  },
   "admin.payments.kind.external": {
     "en": "An external address",
     "t": "Một địa chỉ bên ngoài"
@@ -1306,14 +1302,6 @@
   "admin.payments.noRailHint": {
     "en": "Rails are configured on the treasury; a payment ships only on a chain with a running watcher.",
     "t": "Rail được cấu hình ở kho bạc; thanh toán chỉ được gửi trên chuỗi có watcher đang chạy."
-  },
-  "admin.payments.noUsers": {
-    "en": "No investor matches.",
-    "t": "Không có nhà đầu tư nào khớp."
-  },
-  "admin.payments.noUsersHint": {
-    "en": "Try another part of the email address.",
-    "t": "Hãy thử một phần khác của địa chỉ email."
   },
   "admin.payments.none": {
     "en": "No payments yet",
@@ -1362,10 +1350,6 @@
   "admin.payments.placeholder.reason": {
     "en": "Why this money moves — the approvers read exactly this",
     "t": "Vì sao chuyển khoản này — người phê duyệt đọc chính xác nội dung này"
-  },
-  "admin.payments.placeholder.userSearch": {
-    "en": "Search investors by email",
-    "t": "Tìm nhà đầu tư theo email"
   },
   "admin.payments.reason": {
     "en": "Reason",
