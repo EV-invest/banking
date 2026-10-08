@@ -23,7 +23,10 @@ import { Alert, AlertDescription, AlertTitle } from "@evinvest/uikit";
 import { bookPolicyResource } from "@/entities/book/model/book-resource";
 import { accruedFeesResource, allocationDetailResource, allocationsResource, feePolicyResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
 import { errorMessage, RequestError } from "@/shared/lib/api-client";
-import { useResource } from "@/shared/lib/resource";
+import type { AccruedFees, Allocation, FeePolicy, FundNav, PositionList, RedemptionList } from "@/shared/contracts";
+import type { BookPolicy } from "@/shared/contracts/book";
+import { type ResourceSeed, useResource, useSeededResource } from "@/shared/lib/resource";
+import { useHydrated } from "@/shared/lib/use-hydrated";
 import { StaggerItem } from "@/shared/ui/motion";
 import { PageFrame } from "@/shared/ui/page-frame";
 import { SupportLink } from "@/shared/ui/support-link";
@@ -47,26 +50,40 @@ const blockedWords = (t: Translate): Record<BlockedReason, string> => ({
   "invest.blocked.capReached": t("invest.blocked.capReached", "This fund has issued its full authorised supply, so it is not minting new units. Redemptions are unaffected."),
 });
 
-export function ProductView({ service }: { service: string }) {
+// `initial` is the server's read of this product (see the route) — absent while it streams,
+// and per read: one that failed or timed out is simply missing, and its reader makes the
+// browser read it always made. The catalog is not among them: the detail answers for it.
+export interface ProductSeed {
+  detail?: ResourceSeed<Allocation>;
+  positions?: ResourceSeed<PositionList>;
+  nav?: ResourceSeed<FundNav>;
+  redemptions?: ResourceSeed<RedemptionList>;
+  fee?: ResourceSeed<FeePolicy>;
+  accrued?: ResourceSeed<AccruedFees>;
+  book?: ResourceSeed<BookPolicy>;
+}
+
+export function ProductView({ service, initial }: { service: string; initial?: ProductSeed }) {
   const t = useT();
   const [panel, setPanel] = useState<Panel>(null);
+  const hydrated = useHydrated();
 
   // The detail and the positions decide what this product *is* to this caller:
   // open-and-unheld, open-and-held, closed-but-still-held, or hidden-but-granted. The
   // catalog and the positions were already read by the list this page is usually entered
   // from, so the product paints on the first frame while the detail confirms it.
-  const detailRead = useResource(allocationDetailResource, service);
+  const detailRead = useSeededResource(allocationDetailResource, initial?.detail, service);
   const catalogList = useResource(allocationsResource);
-  const positionList = useResource(positionsResource);
-  const navRead = useResource(fundNavResource, service);
-  const redemptionList = useResource(redemptionsResource);
+  const positionList = useSeededResource(positionsResource, initial?.positions);
+  const navRead = useSeededResource(fundNavResource, initial?.nav, service);
+  const redemptionList = useSeededResource(redemptionsResource, initial?.redemptions);
   // Two separate reads on purpose: the terms are the fund's and cache for minutes, while
   // the accrued figure is the caller's own and moves every second the clock runs.
-  const feeRead = useResource(feePolicyResource, service);
-  const accruedRead = useResource(accruedFeesResource, service);
+  const feeRead = useSeededResource(feePolicyResource, initial?.fee, service);
+  const accruedRead = useSeededResource(accruedFeesResource, initial?.accrued, service);
   // Read here as well as in `TradeLink`: the liquidity line in "About" says whether the
   // book is a way out, and the same cached read answers both.
-  const bookRead = useResource(bookPolicyResource, service);
+  const bookRead = useSeededResource(bookPolicyResource, initial?.book, service);
   const bookOpen = bookRead.isLoading ? undefined : (bookRead.data?.book_open ?? false);
 
   // A 404 is an answer ("not registered", or not for this caller), not a failed read —
@@ -87,7 +104,10 @@ export function ProductView({ service }: { service: string }) {
   const accruedFees = accruedRead.data ?? null;
   const redemptions = (redemptionList.data?.redemptions ?? []).filter((r) => r.service === service);
 
-  if (product === undefined) return <ProductLoading />;
+  // An arrival only for what the browser draws: over a product already in the HTML it would
+  // hide it until hydration, and the server's fallback is never hydrated, so it would stay hidden.
+  const entrance = hydrated && !(initial?.detail && initial.positions);
+  if (product === undefined) return <ProductLoading entrance={entrance} />;
   if (product === null) return <ProductMissing service={service} error={error} />;
 
   const held = product.position && !isZero(product.position.units) ? product.position : null;
@@ -100,12 +120,12 @@ export function ProductView({ service }: { service: string }) {
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <PageFrame width="content">
+    <PageFrame width="content" entrance={entrance}>
       <StaggerItem>
         <BackLink />
       </StaggerItem>
 
-      <ProductHeader product={product} nav={nav} held={held !== null} panel={panel} onPanel={setPanel} />
+      <ProductHeader product={product} nav={nav} held={held !== null} panel={panel} onPanel={setPanel} bookSeed={initial?.book} />
 
       {error && (
         <StaggerItem>

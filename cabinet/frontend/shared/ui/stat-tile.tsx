@@ -72,6 +72,9 @@ export function StatTile(props: StatTileProps & Figure) {
   const hintClass = tone === "gain" ? "text-positive/80" : tone === "loss" ? "text-accent-error/80" : "text-ink-soft";
   // The strip's figures are all the same size; the box marks the one that matters.
   const figureClass = variant === "strip" ? "text-xl font-semibold lg:text-2xl" : emphasis ? "text-xl font-semibold" : "text-base";
+  // The skeleton is the figure's line box (28px for `text-xl`, 32px for `text-2xl`, 24px for
+  // `text-base`), so the tile keeps its height when the figure lands in its place.
+  const skeletonClass = variant === "strip" ? "h-7 w-20 lg:h-8" : emphasis ? "h-7 w-20" : "h-6 w-20";
   return (
     <Card className={VARIANT[variant]}>
       <div className="flex items-center gap-1.5">
@@ -81,7 +84,7 @@ export function StatTile(props: StatTileProps & Figure) {
       {unavailable ? (
         <p className={cn("tabular-nums text-ink-soft", figureClass)}>—</p>
       ) : loading ? (
-        <Skeleton className="h-6 w-20" />
+        <Skeleton className={skeletonClass} />
       ) : (
         <p className={cn("truncate tabular-nums", figureClass, valueClass)}>
           {/* Inline rather than a flex row, so a long figure still truncates as text. */}

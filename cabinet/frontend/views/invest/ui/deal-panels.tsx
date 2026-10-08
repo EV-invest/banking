@@ -21,7 +21,7 @@ import type { FundNav, Position, Redemption } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
-import { Panel, PanelPresence } from "@/shared/ui/motion";
+import { Panel, PanelPresence } from "@/shared/ui/motion-panel";
 import { SectionLabel } from "@/shared/ui/page-frame";
 import { formatUnits, formatUsdt, fromBaseUnits, toBaseUnits } from "@/views/invest/lib/format";
 import { cashForUnits } from "@/views/invest/lib/product";

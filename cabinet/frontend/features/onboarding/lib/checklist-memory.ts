@@ -51,6 +51,21 @@ export function acknowledge(): void {
 /** What a finished path shows in this browser — see the note on the key above. */
 export type CompletionView = "all-set" | "line" | null;
 
+/** The attribute `stageMirrorScript` sets on `<html>`; `globals.css` keys the skeleton on it. */
+export const STAGE_ATTRIBUTE = "data-ev-onboarding-stage";
+
+/**
+ * Inline, before the first paint of Home: copy this browser's stage onto `<html>`, so the
+ * server's placeholder can take the shape the stage implies (CSS picks between the shapes it
+ * rendered — `ui/checklist-skeleton`) before a single read has answered. The server cannot
+ * see `localStorage`, and the placeholder of a server stream is never hydrated, so this is
+ * the only point at which the stage can reach it. Plain ES5, nothing but the two values the
+ * store itself accepts.
+ */
+export function stageMirrorScript(): string {
+  return `try{var s=localStorage.getItem(${JSON.stringify(KEY)});if(s==="open"||s==="acknowledged")document.documentElement.setAttribute(${JSON.stringify(STAGE_ATTRIBUTE)},s)}catch(e){}`;
+}
+
 export function completionView(stage: ChecklistStage | null): CompletionView {
   if (stage === "open") return "all-set";
   if (stage === "acknowledged") return "line";

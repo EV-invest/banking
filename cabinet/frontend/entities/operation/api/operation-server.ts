@@ -1,19 +1,17 @@
 import "server-only";
 
 import { bffRead, type ServerRead } from "@/shared/api/server/bff";
+import { hasOptionalLists } from "@/shared/api/server/shape";
 import type { OperationList } from "@/shared/contracts";
 
-// The activity timeline for server components — the same endpoint `operation-client.ts`
-// reads from the browser, so its answer seeds `operationsResource` under the same key.
+// The timeline read for server components — the path `operation-client.ts` asks from the
+// browser, so its answer seeds `operationsResource` under the same key.
 
-/** Refuses only what would break the screens: a non-object, or `operations` that is not a list. */
 function isOperationList(body: unknown): body is OperationList {
-  if (typeof body !== "object" || body === null) return false;
-  const { operations } = body as Record<string, unknown>;
-  return operations === undefined || Array.isArray(operations);
+  return hasOptionalLists(body, ["operations"]);
 }
 
-/** `limit` as `fetchOperations` takes it: omitted for the full list Operations and Profile show. */
+/** `limit` as `fetchOperations` takes it: Home's preview passes one; Operations and Profile read the full list. */
 export function readOperations(limit?: number): Promise<ServerRead<OperationList> | null> {
   return bffRead(limit ? `/api/operations?limit=${limit}` : "/api/operations", isOperationList);
 }

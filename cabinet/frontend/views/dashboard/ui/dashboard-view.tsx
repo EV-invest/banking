@@ -9,7 +9,10 @@ import { allocationsResource, positionsResource } from "@/entities/fund/model/fu
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { cn } from "@/shared/lib/cn";
-import { useResource } from "@/shared/lib/resource";
+import { useHydrated } from "@/shared/lib/use-hydrated";
+import { type ResourceSeed, useSeededResource } from "@/shared/lib/resource";
+import type { AllocationList, OperationList, PositionList, Wallet } from "@/shared/contracts";
+import type { ChecklistShape } from "@/features/onboarding";
 import { Link } from "@/shared/ui/cabinet-link";
 import { StaggerItem } from "@/shared/ui/motion";
 import { PAGE_INSET_TOP, PAGE_INSET_X, PageFrame } from "@/shared/ui/page-frame";
@@ -29,7 +32,19 @@ import { WhatIOwnCard } from "@/views/dashboard/ui/what-i-own-card";
 // data; a surface with nothing behind it yet is an honest empty state rather than a
 // fabricated number. This file only composes: the figures are `lib/holdings`, the rows
 // `lib/recent-ops`, and each card its own file.
-export function DashboardView() {
+//
+// `initial` is the server's read of the same four (see the route) — absent while it streams,
+// and per read: one that failed or timed out is simply missing, and that card makes the
+// browser read it always made.
+export interface DashboardSeed {
+  wallet?: ResourceSeed<Wallet>;
+  positions?: ResourceSeed<PositionList>;
+  operations?: ResourceSeed<OperationList>;
+  catalog?: ResourceSeed<AllocationList>;
+}
+
+/** `checklistHint` — the onboarding block's last shape in this browser, read by the route. */
+export function DashboardView({ initial, checklistHint }: { initial?: DashboardSeed; checklistHint?: ChecklistShape }) {
   const t = useT();
   const locale = useLocale();
   // Bound once per locale, not inline: AnimatedNumber restarts its count whenever the
@@ -44,10 +59,15 @@ export function DashboardView() {
   // count is asked of the hub rather than sliced client-side, so the six shown are the six
   // most recent across all four kinds — it lives with the resource because the shell's
   // warm-up has to ask for the same one.
-  const wallet = useResource(walletResource);
-  const positions = useResource(positionsResource);
-  const operations = useResource(operationsResource, RECENT_OPS);
-  const catalogRead = useResource(allocationsResource);
+  const wallet = useSeededResource(walletResource, initial?.wallet);
+  const positions = useSeededResource(positionsResource, initial?.positions);
+  const operations = useSeededResource(operationsResource, initial?.operations, RECENT_OPS);
+  const catalogRead = useSeededResource(allocationsResource, initial?.catalog);
+  // The arrival is for a screen the browser draws. Not for figures already in the HTML — it
+  // would hide them until hydration and then hold them back for its length — and not for the
+  // server's loading fallback, which is never hydrated, so an arrival there never plays and
+  // the skeletons it starts transparent stay transparent until the data streams in.
+  const entrance = useHydrated() && !(initial?.wallet || initial?.positions);
   const catalog = catalogRead.data?.allocations ?? [];
 
   const balance = wallet.data?.balance;
@@ -83,8 +103,9 @@ export function DashboardView() {
           the whole desktop composition for one temporary state. Above is also the point: for
           an account with a step still to do, the path takes the top slot and the hero — a
           zero over an empty plot — reads second. Once the path is done it is one quiet line. */}
-      <GetStartedSection className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
+      <GetStartedSection hint={checklistHint} className={cn(PAGE_INSET_X, PAGE_INSET_TOP)} />
       <PageFrame
+        entrance={entrance}
         title={t("dash.portfolio", "Portfolio")}
         description={t("dash.portfolioSub", "All-time performance and your participation")}
         // Shortcuts to the same two actions the Move money card offers, so they stay
@@ -123,7 +144,7 @@ export function DashboardView() {
             sequence for the single-column band between `lg` and `xl`. */}
         <WhatIOwnCard allocations={toAllocations(pos, titleOf)} loading={posLoading} className="lg:order-3 xl:col-start-2 xl:row-start-3" />
         <MoveMoneyCard className="lg:order-2 xl:col-start-2 xl:row-start-2" />
-        <RecentOperationsCard ops={ops} className="lg:order-5 xl:col-span-2 xl:col-start-1 xl:row-start-5" />
+        <RecentOperationsCard ops={ops} loading={operations.isLoading} className="lg:order-5 xl:col-span-2 xl:col-start-1 xl:row-start-5" />
         {/* Last, below everything: it is a door out of the cabinet for the few who hold a
             Service-Arb scope, and it appears only once the profile has answered — anywhere
             higher, its arrival would push the portfolio down for them, and most readers

@@ -24,7 +24,8 @@ export function WhatIOwnCard({ allocations, loading, className }: { allocations:
           {t("dash.investedWhatIOwn", "Invested · what I own")}
           <TipAnchor anchor="dashboard.invested.allocation" />
         </CardTitle>
-        <CardAction className="text-xs font-medium tabular-nums text-ink-soft">{t("dash.strategyCount", "{n, plural, one {# strategy} other {# strategies}}", { n: allocations.length })}</CardAction>
+        {/* A count read before the positions are is "0 strategies" said to someone who has some. */}
+        <CardAction className="text-xs font-medium tabular-nums text-ink-soft">{loading ? <Skeleton className="h-4 w-16" /> : t("dash.strategyCount", "{n, plural, one {# strategy} other {# strategies}}", { n: allocations.length })}</CardAction>
       </CardHeader>
       <CardContent className={CARD_PAD}>
         <Settled loading={loading} skeleton={<Skeleton className="h-24 w-full" />}>

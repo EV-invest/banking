@@ -65,7 +65,8 @@ export function PerfCard({ value, loading, allTimePct, allocation, className }: 
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
           </SectionLabel>
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
-            {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={usd} /></p>}
+            {/* The figure's own line box — `leading-none` at 36px, 48px from `lg` — so it lands without a nudge. */}
+            {loading ? <Skeleton className="h-9 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={usd} /></p>}
             {allTimePct !== null && (
               <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", VALENCE_BORDER_CLASS[trend], VALENCE_CLASS[trend])}>
                 {trend === "loss" ? <TrendingDown /> : trend === "gain" ? <TrendingUp /> : <Minus />}

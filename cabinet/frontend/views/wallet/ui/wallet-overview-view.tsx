@@ -11,6 +11,7 @@ import { useKycGate, VerificationRequired } from "@/features/kyc";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useSeededResource, type ResourceSeed } from "@/shared/lib/resource";
+import { useHydrated } from "@/shared/lib/use-hydrated";
 import type { Wallet } from "@/shared/contracts";
 import { StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
@@ -40,6 +41,10 @@ export function WalletOverviewView({ initial }: { initial?: ResourceSeed<Wallet>
   // that FAILED still gates nothing — see `features/kyc/lib/money-gate`, where that rule now
   // lives as a predicate with tests instead of as this expression's third copy.
   const { gated, loading: tierLoading } = useKycGate();
+  // The arrival is for a screen the browser draws. Not over a balance already in the HTML,
+  // and not in the route's streaming fallback: that is never hydrated, so an arrival there
+  // never plays and the skeletons it starts transparent stay transparent until data lands.
+  const entrance = useHydrated() && !initial;
   const error = wallet ? null : failure ? errorMessage(failure, t) : null;
 
   const balance = wallet?.balance;
@@ -52,7 +57,7 @@ export function WalletOverviewView({ initial }: { initial?: ResourceSeed<Wallet>
 
   return (
     <WalletScreen
-      entrance={!initial}
+      entrance={entrance}
       title={t("ui.wallet", "Wallet")}
       subtitle={t("wallet.overviewSub", "One USDT balance · networks are how you deposit and withdraw")}
       actions={

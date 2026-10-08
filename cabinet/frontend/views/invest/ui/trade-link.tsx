@@ -11,12 +11,15 @@ import { useT } from "@evinvest/i18n/react";
 import { Button } from "@evinvest/uikit";
 
 import { bookPolicyResource } from "@/entities/book/model/book-resource";
-import { useResource } from "@/shared/lib/resource";
+import type { BookPolicy } from "@/shared/contracts/book";
+import { type ResourceSeed, useSeededResource } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 
-export function TradeLink({ service }: { service: string }) {
+// `seed` is the product page's server read of the same policy: without it the server and the
+// hydrating render have no policy, and the control would appear only after hydration.
+export function TradeLink({ service, seed }: { service: string; seed?: ResourceSeed<BookPolicy> }) {
   const t = useT();
-  const policy = useResource(bookPolicyResource, service);
+  const policy = useSeededResource(bookPolicyResource, seed, service);
   if (!policy.data?.book_open) return null;
   return (
     <Button asChild variant="outline">

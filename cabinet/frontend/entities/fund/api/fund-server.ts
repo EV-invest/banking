@@ -1,26 +1,62 @@
 import "server-only";
 
 import { bffRead, type ServerRead } from "@/shared/api/server/bff";
-import type { AllocationList, PositionList } from "@/shared/contracts";
+import { hasOptionalLists, isJsonObject } from "@/shared/api/server/shape";
+import type { AccruedFees, Allocation, AllocationList, FeePolicy, FundNav, PositionList, RedemptionList } from "@/shared/contracts";
 
-// Fund reads for server components — the same endpoints `fund-client.ts` reads from the
-// browser, so each answer seeds its resource directly. Every proto3 JSON field is
-// optional; the guards refuse only a body the screens would break on.
+// The fund reads for server components — the same paths `fund-client.ts` asks from the
+// browser, so each answer can seed its resource directly. A blank service is no read at
+// all, as there: the BFF would only answer it with a 400.
 
-function hasListOrNone(body: unknown, field: string): boolean {
-  if (typeof body !== "object" || body === null) return false;
-  const value = (body as Record<string, unknown>)[field];
-  return value === undefined || Array.isArray(value);
+function isAllocationList(body: unknown): body is AllocationList {
+  // The BFF writes this list by hand and always includes it; a body without it is not one.
+  return isJsonObject(body) && Array.isArray(body.allocations);
 }
 
-const isPositionList = (body: unknown): body is PositionList => hasListOrNone(body, "positions");
-const isAllocationList = (body: unknown): body is AllocationList => hasListOrNone(body, "allocations");
+function isPositionList(body: unknown): body is PositionList {
+  return hasOptionalLists(body, ["positions"]);
+}
+
+function isRedemptionList(body: unknown): body is RedemptionList {
+  return hasOptionalLists(body, ["redemptions"]);
+}
+
+function isAllocation(body: unknown): body is Allocation {
+  return isJsonObject(body) && typeof body.service === "string";
+}
+
+// Scalar-only DTOs: nothing on them is indexed or mapped, so an object is the whole check.
+const isFundNav = (body: unknown): body is FundNav => isJsonObject(body);
+const isFeePolicy = (body: unknown): body is FeePolicy => isJsonObject(body);
+const isAccruedFees = (body: unknown): body is AccruedFees => isJsonObject(body);
+
+const query = (service: string) => `service=${encodeURIComponent(service)}`;
+const named = (service: string) => service.trim().length > 0;
+
+export function readAllocations(): Promise<ServerRead<AllocationList> | null> {
+  return bffRead("/api/allocations", isAllocationList);
+}
 
 export function readPositions(): Promise<ServerRead<PositionList> | null> {
   return bffRead("/api/funds/positions", isPositionList);
 }
 
-/** The investor catalog — on the server only to turn fund slugs into names on first paint. */
-export function readAllocations(): Promise<ServerRead<AllocationList> | null> {
-  return bffRead("/api/allocations", isAllocationList);
+export function readRedemptions(): Promise<ServerRead<RedemptionList> | null> {
+  return bffRead("/api/funds/redemptions", isRedemptionList);
+}
+
+export async function readAllocation(service: string): Promise<ServerRead<Allocation> | null> {
+  return named(service) ? bffRead(`/api/allocations/detail?${query(service)}`, isAllocation) : null;
+}
+
+export async function readFundNav(service: string): Promise<ServerRead<FundNav> | null> {
+  return named(service) ? bffRead(`/api/funds/nav?${query(service)}`, isFundNav) : null;
+}
+
+export async function readFeePolicy(service: string): Promise<ServerRead<FeePolicy> | null> {
+  return named(service) ? bffRead(`/api/funds/fee-policy?${query(service)}`, isFeePolicy) : null;
+}
+
+export async function readAccruedFees(service: string): Promise<ServerRead<AccruedFees> | null> {
+  return named(service) ? bffRead(`/api/funds/accrued-fees?${query(service)}`, isAccruedFees) : null;
 }

@@ -2,7 +2,7 @@
 // figure is written, so that it lands within a bounded time even if the count
 // never gets an animation frame.
 //
-// Why this exists. The count is driven by `animate()` from motion, which advances
+// Why this exists. The count is driven by `animateValue()` from motion, which advances
 // on `requestAnimationFrame`. A hidden tab (a background window, a test harness
 // with `document.visibilityState === "hidden"`) gets no frames, so the count never
 // ticks past its starting figure and the tile reads "$0.00" for as long as the

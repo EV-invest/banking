@@ -54,6 +54,29 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // `motion.*` carries motion's whole feature set — layout projection and drag
+    // included — and a single use anywhere pulls it into the shared chunk of every
+    // route (~15 KB gz). Everything outside the panel animates opacity and
+    // transform only, which `m` under `MotionFeatures` covers with `domAnimation`.
+    // `Panel` animates its own size and needs projection, so its slice is the one
+    // place `motion` is allowed. See shared/ui/motion/features.tsx.
+    files: ["**/*.ts", "**/*.tsx"],
+    ignores: ["shared/ui/motion-panel/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ["motion/react", "framer-motion"].map((name) => ({
+            name,
+            importNames: ["motion"],
+            message:
+              "`motion` loads layout projection and drag on every route (~15 KB gz). Use `m` from `motion/react-m` under `MotionFeatures` (@/shared/ui/motion), or `Panel` (@/shared/ui/motion-panel) for a size-animating panel.",
+          })),
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

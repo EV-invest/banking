@@ -14,7 +14,7 @@ import { Drawer, DrawerContent, DrawerTitle } from "@evinvest/uikit";
 import { tenantOf } from "@/entities/grant/lib/access";
 import { PanelAccessCard } from "@/features/panel-access";
 import { useIsCompact } from "@/shared/lib/use-is-compact";
-import { Panel, PanelPresence, PanelSwap } from "@/shared/ui/motion";
+import { Panel, PanelPresence, PanelSwap } from "@/shared/ui/motion-panel";
 import type { OpenAllocationPanel } from "@/views/admin/allocations/lib/panel";
 import { BookPanel } from "@/views/admin/allocations/ui/book-panel";
 import { GrantsPanel } from "@/views/admin/allocations/ui/grants-panel";

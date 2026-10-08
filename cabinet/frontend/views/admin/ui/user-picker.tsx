@@ -41,7 +41,10 @@ export function UserPicker({ value, onPick, labelledBy }: { value: PickedUser | 
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">
-        <Command search={query} onSearchChange={setQuery}>
+        {/* `shouldFilter={false}`: the rows already are the server's answer to `query`. The
+            kit's own filter matched the query against each row's `value` (the user id), so
+            every email hit was hidden and, rows being mounted, not even the empty state showed. */}
+        <Command search={query} onSearchChange={setQuery} shouldFilter={false}>
           <CommandInput placeholder={t("admin.users.searchPlaceholder", "Search email or user id…")} />
           <CommandList>
             {list.isLoading ? null : users.length === 0 ? (
