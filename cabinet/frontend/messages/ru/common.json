@@ -2671,6 +2671,14 @@
     "en": "Sign out",
     "t": "Выйти"
   },
+  "auth.manageAccount": {
+    "en": "Manage account",
+    "t": "Управление аккаунтом"
+  },
+  "auth.switchAccount": {
+    "en": "Switch account",
+    "t": "Сменить аккаунт"
+  },
   "auth.signedOut": {
     "en": "Signed out",
     "t": "Вы вышли"
@@ -6906,6 +6914,10 @@
   "ui.verified": {
     "en": "Verified",
     "t": "Проверен"
+  },
+  "ui.services": {
+    "en": "Services",
+    "t": "Сервисы"
   },
   "ui.walletHistory": {
     "en": "History",

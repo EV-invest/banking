@@ -13,7 +13,12 @@ await build({
   jsx: "automatic",
   outfile: "public/mfe/account-chip.js",
   // React reads process.env.NODE_ENV; there is no `process` in the browser, so inline it.
-  define: { "process.env.NODE_ENV": '"production"' },
+  define: {
+    "process.env.NODE_ENV": '"production"',
+    // The menu's Service-Arb entry; unset, it is left out.
+    "process.env.NEXT_PUBLIC_SA_PANEL_URL":
+      process.env.NEXT_PUBLIC_SA_PANEL_URL === undefined ? "undefined" : JSON.stringify(process.env.NEXT_PUBLIC_SA_PANEL_URL),
+  },
   // Resolve the `@/*` path alias from the app tsconfig.
   tsconfig: "tsconfig.json",
   logLevel: "info",

@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { CHIP_KEYS, chipMessages } from "./chip-messages.ts";
 
-// `chip-messages.ts` duplicates four strings out of the main catalogues so the
+// `chip-messages.ts` duplicates its strings out of the main catalogues so the
 // chip bundle does not have to carry all five of them (see the note in that
 // file). Duplication is only acceptable while something checks it, which is this.
 

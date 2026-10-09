@@ -148,6 +148,7 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Performance",
     "Rail",
     "Service",
+    "Services",
     "Source",
     "Total",
     "Trading",

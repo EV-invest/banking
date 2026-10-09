@@ -2854,6 +2854,7 @@
     "auth.err.exchange",
     "auth.err.generic",
     "auth.err.invalid",
+    "auth.manageAccount",
     "auth.signInAgain",
     "auth.signInSub",
     "auth.signedOut",
@@ -2873,6 +2874,7 @@
     "auth.switch.newHere",
     "auth.switch.openAccount",
     "auth.switch.signIn",
+    "auth.switchAccount",
     "auth.welcomeBack",
     "meta.description",
     "meta.title",
@@ -2922,6 +2924,7 @@
     "tips.wallet.withdraw.queueing.body",
     "tips.wallet.withdraw.queueing.title",
     "tips.wallet.withdraw.review.body",
-    "tips.wallet.withdraw.review.title"
+    "tips.wallet.withdraw.review.title",
+    "ui.services"
   ]
 }

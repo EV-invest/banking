@@ -2671,6 +2671,14 @@
     "en": "Sign out",
     "t": "Đăng xuất"
   },
+  "auth.manageAccount": {
+    "en": "Manage account",
+    "t": "Quản lý tài khoản"
+  },
+  "auth.switchAccount": {
+    "en": "Switch account",
+    "t": "Chuyển tài khoản"
+  },
   "auth.signedOut": {
     "en": "Signed out",
     "t": "Đã đăng xuất"
@@ -6906,6 +6914,10 @@
   "ui.verified": {
     "en": "Verified",
     "t": "Đã xác minh"
+  },
+  "ui.services": {
+    "en": "Services",
+    "t": "Dịch vụ"
   },
   "ui.walletHistory": {
     "en": "History",
