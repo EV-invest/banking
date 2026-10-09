@@ -20,17 +20,10 @@ const REFERRER_HEADER = "referrer-policy";
 // visit. A no-op while `experiments` is empty.
 const ab = createAbMiddleware(experiments);
 
-// Which pages are reachable without a session — and the prefix-matching that lets a
-// token-addressed approval page (`/approve/<token>`, a different path per visitor) be one
-// of them — now live in `shared/config/public-routes.ts`, where the test runner can reach
-// them. This module imports `next/server` and so cannot be unit-tested at all; the gate is
-// the last thing in it that should have been untestable.
-//
-// Everything not named there requires the opaque session cookie: unauthenticated requests
-// bounce to /login (carrying returnTo), and signed-in requests are kept off the auth pages.
-// The cookie is only a cheap gate — the BFF still verifies the session server-side on every
-// API call and page data fetch, including on the public approval routes, where the token
-// and the secret code are the credential instead.
+// Every page renders for a guest; what it shows them is the route gate's
+// (`application/layout/route-gate.tsx`), and the BFF still verifies the session on every
+// API call. This module imports `next/server` and so cannot be unit-tested at all — what it
+// decides about the session lives in `shared/lib/session-gate.ts`.
 
 /** The locale segment of `/{locale}/cabinet/…`, or null when there is none. */
 function localeOf(pathname: string): Locale | null {
@@ -144,8 +137,7 @@ export async function proxy(req: NextRequest) {
   if (decision.redirect) {
     const url = req.nextUrl.clone();
     url.pathname = decision.redirect.pathname;
-    url.search = "";
-    if (decision.redirect.returnTo) url.searchParams.set("returnTo", decision.redirect.returnTo);
+    url.search = decision.redirect.search;
     return finish(withCsp(NextResponse.redirect(url), csp));
   }
 

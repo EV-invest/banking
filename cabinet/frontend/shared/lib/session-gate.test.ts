@@ -2,8 +2,8 @@
 //
 // Pins the proxy's session decision (`proxy.ts` itself imports `next/server` and cannot be
 // loaded here): a renewed token rides on the forwarded request, a session the identity plane
-// calls gone is bounced to /login with the plane's clearing cookies, a verdict-less renewal
-// changes nothing, and returnTo stays zone-relative.
+// calls gone has its cookies cleared, a verdict-less renewal changes nothing, no page keeps a
+// guest out, and /login is the page to return to — with the sign-in dialog open over it.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -44,21 +44,10 @@ test("an alive renewal without a re-set token leaves the request alone but still
   });
 });
 
-test("a gone session on a gated page bounces to /login carrying the clearing cookies", () => {
+test("a gone session renders the page as a guest's, carrying the clearing cookies", () => {
   const renewal: Renewal = { kind: "gone", setCookies: CLEARING };
 
   assert.deepEqual(decideSession(input({ renewal })), {
-    redirect: { pathname: "/en/cabinet/login", returnTo: "/wallet" },
-    requestCookies: {},
-    deleteCookies: ["ev_session", "ev_access"],
-    setCookies: CLEARING,
-  });
-});
-
-test("a gone session on /login renders the login page and still clears the cookies", () => {
-  const renewal: Renewal = { kind: "gone", setCookies: CLEARING };
-
-  assert.deepEqual(decideSession(input({ pathname: "/en/cabinet/login", renewal })), {
     redirect: null,
     requestCookies: {},
     deleteCookies: ["ev_session", "ev_access"],
@@ -75,41 +64,38 @@ test("a renewal with no verdict changes nothing and lets a signed-in request ren
   });
 });
 
-test("no session on a public page renders it without a redirect", () => {
-  const decision = decideSession(input({ pathname: "/en/cabinet/approve/tok-123", hasSession: false }));
-
-  assert.equal(decision.redirect, null);
+test("no page keeps a guest out", () => {
+  for (const pathname of ["/en/cabinet", "/en/cabinet/wallet", "/en/cabinet/admin/users", "/en/cabinet/approve/tok-123"]) {
+    assert.equal(decideSession(input({ pathname, hasSession: false })).redirect, null, pathname);
+  }
 });
 
-test("no session on a gated page bounces to /login without asking anyone", () => {
-  assert.deepEqual(decideSession(input({ hasSession: false })), {
-    redirect: { pathname: "/en/cabinet/login", returnTo: "/wallet" },
-    requestCookies: {},
-    deleteCookies: [],
-    setCookies: [],
-  });
+test("/login opens the sign-in dialog over the page to return to", () => {
+  const decision = decideSession(input({ pathname: "/de/cabinet/login", search: "?returnTo=%2Fwallet%2Fwithdraw%3Fnetwork%3Dtron", locale: "de", hasSession: false }));
+
+  assert.deepEqual(decision.redirect, { pathname: "/de/cabinet/wallet/withdraw", search: "?network=tron&login=" });
 });
 
-test("a signed-in visitor on /login is sent to the zone root", () => {
-  assert.deepEqual(decideSession(input({ pathname: "/de/cabinet/login", locale: "de" })).redirect, { pathname: "/de/cabinet", returnTo: null });
+test("/login with no returnTo opens the dialog over the zone root", () => {
+  assert.deepEqual(decideSession(input({ pathname: "/en/cabinet/login", hasSession: false })).redirect, { pathname: "/en/cabinet", search: "?login=" });
 });
 
-test("returnTo keeps the query and stays zone-relative", () => {
-  const decision = decideSession(input({ pathname: "/de/cabinet/wallet/withdraw", search: "?network=tron", locale: "de", hasSession: false }));
-
-  assert.deepEqual(decision.redirect, { pathname: "/de/cabinet/login", returnTo: "/wallet/withdraw?network=tron" });
+test("a signed-in visitor on /login is sent where it would have returned, with no dialog", () => {
+  assert.deepEqual(decideSession(input({ pathname: "/de/cabinet/login", search: "?returnTo=%2Fsettings", locale: "de" })).redirect, { pathname: "/de/cabinet/settings", search: "" });
+  assert.deepEqual(decideSession(input({ pathname: "/de/cabinet/login", locale: "de" })).redirect, { pathname: "/de/cabinet", search: "" });
 });
 
-test("returnTo is null for the zone root", () => {
-  const decision = decideSession(input({ pathname: "/en/cabinet", hasSession: false }));
+test("returnTo is zone-relative and same-origin, or it is the zone root", () => {
+  const to = (returnTo: string) => decideSession(input({ pathname: "/en/cabinet/login", search: `?returnTo=${encodeURIComponent(returnTo)}`, hasSession: false })).redirect;
 
-  assert.deepEqual(decision.redirect, { pathname: "/en/cabinet/login", returnTo: null });
+  assert.deepEqual(to("/en/cabinet/wallet"), { pathname: "/en/cabinet/wallet", search: "?login=" }, "a prefixed path is not prefixed twice");
+  for (const hostile of ["//evil.example", "https://evil.example", "/\\evil.example", "/login"]) {
+    assert.deepEqual(to(hostile), { pathname: "/en/cabinet", search: "?login=" }, hostile);
+  }
 });
 
-test("a path without a locale is bounced to the English login", () => {
-  const decision = decideSession(input({ pathname: "/cabinet/wallet", locale: null, hasSession: false }));
-
-  assert.deepEqual(decision.redirect, { pathname: "/en/cabinet/login", returnTo: "/wallet" });
+test("a path without a locale lands on the English page", () => {
+  assert.deepEqual(decideSession(input({ pathname: "/cabinet/login", locale: null, hasSession: false })).redirect, { pathname: "/en/cabinet", search: "?login=" });
 });
 
 test("__Host- cookie names are used as given for the renewed and the deleted cookies", () => {

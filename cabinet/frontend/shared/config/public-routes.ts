@@ -1,33 +1,8 @@
-// Which cabinet pages a signed-OUT visitor may reach, as a rule rather than a list
-// comprehension inlined in the proxy.
-//
-// It moved out of `proxy.ts` when the approval pages arrived, because they changed the
-// shape of the question. `/login` and `/loggedout` are whole paths; an approval page is
-// `/approve/<token>` — a path whose interesting part is different for every visitor, and
-// which no equality test can name. The prefix rule that answers both is small enough to
-// look obviously correct and consequential enough to be worth pinning down in tests, and
-// `proxy.ts` itself is not reachable from the test runner (it imports `next/server`).
-//
-// The failure directions are not symmetric, which is why the matching is deliberately
-// narrow. Too tight and a signed-out owner following a link from their mailbox is bounced
-// to /login — the approval is lost, because they have no account to sign in to on that
-// device and the token is single-use. Too loose and a private page is served to anyone.
-// So: a public entry matches its own path exactly, or a path that continues with `/`.
-// `/approvals` is a different route and stays gated; `/approve/<token>` is public;
-// `/approve` itself is public and simply 404s, which is the honest answer for a link that
-// arrived without its token.
-
-/**
- * Zone-relative paths reachable without a session. Each also covers its `/…` descendants
- * — that is what makes the token routes expressible at all.
- *
- * The approval entries are the pages a reader reaches from an email, on a device that may
- * never have been signed in — the two owner approvals, and `/consent`, where an investor
- * answers for their own money. They are safe to expose because the token alone can only
- * *read* a redacted summary: casting the vote needs the secret code from the message body,
- * and the token is single-use with a 72h TTL (docs/CONSILIUM.md, policy 5–6).
- */
-export const PUBLIC_PATHS = ["/login", "/loggedout", "/approve", "/owner-removal", "/consent"] as const;
+// The token-addressed approval pages, as a rule rather than a list comprehension: an
+// approval page is `/approve/<token>` — a path whose interesting part is different for every
+// visitor, and which no equality test can name. A page matches its own path exactly, or a
+// path that continues with `/`: `/approvals` is a different route, `/approve/<token>` is
+// one of these.
 
 /**
  * The token-addressed approval pages specifically.
@@ -55,11 +30,6 @@ export function zoneGatePath(pathname: string): string {
 
 function matches(path: string, entries: readonly string[]): boolean {
   return entries.some((entry) => path === entry || path.startsWith(`${entry}/`));
-}
-
-/** Whether a full request path is a page a signed-out visitor may be served. */
-export function isPublicPath(pathname: string): boolean {
-  return matches(zoneGatePath(pathname), PUBLIC_PATHS);
 }
 
 /** Whether a full request path is one of the token-addressed approval pages. */

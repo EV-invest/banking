@@ -523,17 +523,17 @@ test("an access value that is not JWT-shaped is not rendered with, but its line 
 
 const GATE = { search: "", locale: "en", renewal: null, cookieNames: { session: "ev_session", access: "ev_access" } };
 
-test("a session cookie of the wrong shape on a gated page bounces to /login with no renewal", () => {
+test("a session cookie of the wrong shape renders the page as a guest's, with no renewal", () => {
   const forged = "x; ev_access=forged";
 
   assert.deepEqual(decideSession({ ...GATE, pathname: "/en/cabinet/wallet", hasSession: isSessionId(forged) }), {
-    redirect: { pathname: "/en/cabinet/login", returnTo: "/wallet" },
+    redirect: null,
     requestCookies: {},
     deleteCookies: [],
     setCookies: [],
   });
 });
 
-test("a session cookie of the wrong shape on /login is not sent into the cabinet", () => {
-  assert.equal(decideSession({ ...GATE, pathname: "/en/cabinet/login", hasSession: isSessionId("short") }).redirect, null);
+test("a session cookie of the wrong shape on /login gets the sign-in dialog, not the cabinet", () => {
+  assert.deepEqual(decideSession({ ...GATE, pathname: "/en/cabinet/login", hasSession: isSessionId("short") }).redirect, { pathname: "/en/cabinet", search: "?login=" });
 });
