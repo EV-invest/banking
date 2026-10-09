@@ -7422,5 +7422,45 @@
   "profile.kyc.verifyEmailTitle": {
     "en": "Verify your email first",
     "t": "Vérifiez d’abord votre e-mail"
+  },
+  "auth.err.passkeyCancelled": {
+    "en": "Passkey sign in was cancelled.",
+    "t": "La connexion par clé d’accès a été annulée."
+  },
+  "auth.err.passkeyExpired": {
+    "en": "That took too long. Try the passkey again.",
+    "t": "Cela a pris trop de temps. Réessayez la clé d’accès."
+  },
+  "auth.err.passkeyRegistered": {
+    "en": "This passkey is registered already.",
+    "t": "Cette clé d’accès est déjà enregistrée."
+  },
+  "auth.err.passkeyRejected": {
+    "en": "That passkey is not registered here. Sign in with a code instead.",
+    "t": "Cette clé d’accès n’est pas enregistrée ici. Connectez-vous plutôt avec un code."
+  },
+  "auth.passkeys.add": {
+    "en": "Add a passkey",
+    "t": "Ajouter une clé d’accès"
+  },
+  "auth.passkeys.default": {
+    "en": "Passkey",
+    "t": "Clé d’accès"
+  },
+  "auth.passkeys.remove": {
+    "en": "Remove",
+    "t": "Supprimer"
+  },
+  "auth.passkeys.sub": {
+    "en": "Sign in with your fingerprint, face or screen lock — no code, no password",
+    "t": "Connectez-vous avec votre empreinte, votre visage ou le verrouillage d’écran — sans code ni mot de passe"
+  },
+  "auth.passkeys.title": {
+    "en": "Passkeys",
+    "t": "Clés d’accès"
+  },
+  "auth.usePasskey": {
+    "en": "Use a passkey",
+    "t": "Utiliser une clé d’accès"
   }
 }

@@ -21,7 +21,8 @@ import {
   Spinner,
 } from "@evinvest/uikit";
 
-import { type AuthError, PROVIDERS, type Provider, confirmVerification, passwordSignIn, passwordSignUp, requestCode, verifyCode } from "@/features/auth/api/auth-client";
+import { type AuthError, PROVIDERS, type Provider, confirmVerification, passkeySignIn, passwordSignIn, passwordSignUp, requestCode, verifyCode } from "@/features/auth/api/auth-client";
+import { passkeysSupported } from "@/features/auth/lib/webauthn";
 import { loginHref } from "@/features/auth/lib/return-to";
 import { useSignInDialog } from "@/features/auth/model/use-sign-in-dialog";
 import { GithubMark, GoogleMark } from "@/features/auth/ui/provider-marks";
@@ -62,6 +63,12 @@ function errorText(t: T, error: AuthError | "captcha_load"): string {
       return t("auth.err.passwordLocked", "Too many wrong passwords. Sign in with a code instead.");
     case "disabled":
       return t("auth.err.disabled", "This account is suspended.");
+    case "passkey_cancelled":
+      return t("auth.err.passkeyCancelled", "Passkey sign in was cancelled.");
+    case "passkey_rejected":
+      return t("auth.err.passkeyRejected", "That passkey is not registered here. Sign in with a code instead.");
+    case "passkey_expired":
+      return t("auth.err.passkeyExpired", "That took too long. Try the passkey again.");
     default:
       return t("auth.err.generic", "Sign-in failed. Please try again.");
   }
@@ -153,7 +160,16 @@ export function SignInDialog() {
             }
             onPassword={() => go({ kind: "password" })}
           >
-            <Providers hrefFor={(provider) => loginHref(locale, dialog.returnTo, provider)} />
+            <Providers
+              hrefFor={(provider) => loginHref(locale, dialog.returnTo, provider)}
+              onPasskey={() =>
+                run(async () => {
+                  const answer = await passkeySignIn();
+                  if (answer.ok) dialog.reload();
+                  else setError(errorText(t, answer.error));
+                })
+              }
+            />
           </CodeScreen>
         )}
         {screen.kind === "codeSent" && (
@@ -290,7 +306,7 @@ function CodeScreen({ busy, human, onSubmit, onPassword, children }: { busy: boo
   );
 }
 
-function Providers({ hrefFor }: { hrefFor: (provider: Provider) => string }) {
+function Providers({ hrefFor, onPasskey }: { hrefFor: (provider: Provider) => string; onPasskey: () => void }) {
   const t = useT();
   const label: Record<Provider, string> = { google: "Google", github: "GitHub" };
   const mark: Record<Provider, ReactNode> = { google: <GoogleMark />, github: <GithubMark /> };
@@ -301,6 +317,11 @@ function Providers({ hrefFor }: { hrefFor: (provider: Provider) => string }) {
         {t("auth.orContinueWith", "Or continue with")}
         <Separator className="flex-1" />
       </div>
+      {passkeysSupported() && (
+        <Button type="button" variant="outline" onClick={onPasskey}>
+          {t("auth.usePasskey", "Use a passkey")}
+        </Button>
+      )}
       <div className="grid grid-cols-2 gap-2">
         {PROVIDERS.map((provider) => (
           // A full navigation: the provider's consent screen is another origin.

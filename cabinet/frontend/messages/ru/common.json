@@ -7422,5 +7422,45 @@
   "profile.kyc.verifyEmailTitle": {
     "en": "Verify your email first",
     "t": "Сначала подтвердите почту"
+  },
+  "auth.err.passkeyCancelled": {
+    "en": "Passkey sign in was cancelled.",
+    "t": "Вход с ключом доступа отменён."
+  },
+  "auth.err.passkeyExpired": {
+    "en": "That took too long. Try the passkey again.",
+    "t": "Слишком долго. Попробуйте ключ доступа ещё раз."
+  },
+  "auth.err.passkeyRegistered": {
+    "en": "This passkey is registered already.",
+    "t": "Этот ключ доступа уже зарегистрирован."
+  },
+  "auth.err.passkeyRejected": {
+    "en": "That passkey is not registered here. Sign in with a code instead.",
+    "t": "Этот ключ доступа здесь не зарегистрирован. Войдите с кодом."
+  },
+  "auth.passkeys.add": {
+    "en": "Add a passkey",
+    "t": "Добавить ключ доступа"
+  },
+  "auth.passkeys.default": {
+    "en": "Passkey",
+    "t": "Ключ доступа"
+  },
+  "auth.passkeys.remove": {
+    "en": "Remove",
+    "t": "Удалить"
+  },
+  "auth.passkeys.sub": {
+    "en": "Sign in with your fingerprint, face or screen lock — no code, no password",
+    "t": "Вход по отпечатку, лицу или блокировке экрана — без кода и пароля"
+  },
+  "auth.passkeys.title": {
+    "en": "Passkeys",
+    "t": "Ключи доступа"
+  },
+  "auth.usePasskey": {
+    "en": "Use a passkey",
+    "t": "Войти с ключом доступа"
   }
 }

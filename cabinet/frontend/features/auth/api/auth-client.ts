@@ -3,6 +3,7 @@
 // credential. Every answer is `{"ok":true,…}` or `{"error":"<code>"}` from one closed
 // vocabulary; the dialog words the code.
 
+import { assertionJson, creationOptions, registrationJson, requestOptions } from "@/features/auth/lib/webauthn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 
 export type AuthError =
@@ -23,6 +24,10 @@ export type AuthError =
   | "csrf"
   | "invalid_username"
   | "username_taken"
+  | "passkey_expired"
+  | "passkey_rejected"
+  | "passkey_registered"
+  | "passkey_cancelled"
   | "internal";
 
 export type AuthAnswer<T = Record<string, unknown>> = { ok: true; body: T } | { ok: false; error: AuthError };
@@ -62,13 +67,53 @@ export const setPassword = (password: string, code: string) => post("/password/s
 
 export const setUsername = (username: string) => post<{ username: string }>("/username", { username }, true);
 
+export interface PasskeySummary {
+  id: string;
+  name: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
 export interface SignInMethods {
   email: string;
   emailVerified: boolean;
   username: string | null;
   password: boolean;
   providers: string[];
+  passkeys: PasskeySummary[];
 }
+
+type Ceremony = { ceremony: string; options: { publicKey: Record<string, unknown> } };
+
+/** The browser's prompt, or `null` when the reader dismissed it. */
+async function prompt<T>(ask: () => Promise<Credential | null>, done: (credential: PublicKeyCredential) => T): Promise<T | null> {
+  try {
+    const credential = await ask();
+    return credential ? done(credential as PublicKeyCredential) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Register a passkey for the signed-in account under `name`. */
+export async function addPasskey(name: string): Promise<AuthAnswer> {
+  const begun = await post<Ceremony>("/passkey/register/options", {}, true);
+  if (!begun.ok) return begun;
+  const credential = await prompt(() => navigator.credentials.create(creationOptions(begun.body.options)), registrationJson);
+  if (!credential) return { ok: false, error: "passkey_cancelled" };
+  return post("/passkey/register/verify", { ceremony: begun.body.ceremony, credential, name }, true);
+}
+
+/** Sign in with whichever passkey the reader picks; it names the account. */
+export async function passkeySignIn(): Promise<AuthAnswer> {
+  const begun = await post<Ceremony>("/passkey/signin/options", {});
+  if (!begun.ok) return begun;
+  const credential = await prompt(() => navigator.credentials.get(requestOptions(begun.body.options)), assertionJson);
+  if (!credential) return { ok: false, error: "passkey_cancelled" };
+  return post("/passkey/signin/verify", { ceremony: begun.body.ceremony, credential });
+}
+
+export const removePasskey = (credentialId: string) => post("/passkey/remove", { credentialId }, true);
 
 export async function readMethods(): Promise<SignInMethods | null> {
   const res = await fetch("/api/auth/methods", { headers: { accept: "application/json" }, cache: "no-store" }).catch(() => null);

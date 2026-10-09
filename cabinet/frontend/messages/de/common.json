@@ -7422,5 +7422,45 @@
   "profile.kyc.verifyEmailTitle": {
     "en": "Verify your email first",
     "t": "Bestätige zuerst deine E-Mail"
+  },
+  "auth.err.passkeyCancelled": {
+    "en": "Passkey sign in was cancelled.",
+    "t": "Die Passkey-Anmeldung wurde abgebrochen."
+  },
+  "auth.err.passkeyExpired": {
+    "en": "That took too long. Try the passkey again.",
+    "t": "Das hat zu lange gedauert. Versuche es mit dem Passkey erneut."
+  },
+  "auth.err.passkeyRegistered": {
+    "en": "This passkey is registered already.",
+    "t": "Dieser Passkey ist bereits registriert."
+  },
+  "auth.err.passkeyRejected": {
+    "en": "That passkey is not registered here. Sign in with a code instead.",
+    "t": "Dieser Passkey ist hier nicht registriert. Melde dich stattdessen mit einem Code an."
+  },
+  "auth.passkeys.add": {
+    "en": "Add a passkey",
+    "t": "Passkey hinzufügen"
+  },
+  "auth.passkeys.default": {
+    "en": "Passkey",
+    "t": "Passkey"
+  },
+  "auth.passkeys.remove": {
+    "en": "Remove",
+    "t": "Entfernen"
+  },
+  "auth.passkeys.sub": {
+    "en": "Sign in with your fingerprint, face or screen lock — no code, no password",
+    "t": "Melde dich mit Fingerabdruck, Gesicht oder Bildschirmsperre an — ohne Code, ohne Passwort"
+  },
+  "auth.passkeys.title": {
+    "en": "Passkeys",
+    "t": "Passkeys"
+  },
+  "auth.usePasskey": {
+    "en": "Use a passkey",
+    "t": "Mit Passkey anmelden"
   }
 }

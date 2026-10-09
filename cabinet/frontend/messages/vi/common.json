@@ -7422,5 +7422,45 @@
   "profile.kyc.verifyEmailTitle": {
     "en": "Verify your email first",
     "t": "Hãy xác minh email trước"
+  },
+  "auth.err.passkeyCancelled": {
+    "en": "Passkey sign in was cancelled.",
+    "t": "Đăng nhập bằng khóa truy cập đã bị hủy."
+  },
+  "auth.err.passkeyExpired": {
+    "en": "That took too long. Try the passkey again.",
+    "t": "Quá thời gian. Hãy thử lại khóa truy cập."
+  },
+  "auth.err.passkeyRegistered": {
+    "en": "This passkey is registered already.",
+    "t": "Khóa truy cập này đã được đăng ký."
+  },
+  "auth.err.passkeyRejected": {
+    "en": "That passkey is not registered here. Sign in with a code instead.",
+    "t": "Khóa truy cập này chưa được đăng ký ở đây. Hãy đăng nhập bằng mã."
+  },
+  "auth.passkeys.add": {
+    "en": "Add a passkey",
+    "t": "Thêm khóa truy cập"
+  },
+  "auth.passkeys.default": {
+    "en": "Passkey",
+    "t": "Khóa truy cập"
+  },
+  "auth.passkeys.remove": {
+    "en": "Remove",
+    "t": "Xóa"
+  },
+  "auth.passkeys.sub": {
+    "en": "Sign in with your fingerprint, face or screen lock — no code, no password",
+    "t": "Đăng nhập bằng vân tay, khuôn mặt hoặc khóa màn hình — không cần mã hay mật khẩu"
+  },
+  "auth.passkeys.title": {
+    "en": "Passkeys",
+    "t": "Khóa truy cập"
+  },
+  "auth.usePasskey": {
+    "en": "Use a passkey",
+    "t": "Dùng khóa truy cập"
   }
 }

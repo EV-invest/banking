@@ -6,7 +6,8 @@ import { type FormEvent, useEffect, useState } from "react";
 
 import { Button, Input, Skeleton } from "@evinvest/uikit";
 
-import { type AuthError, type SignInMethods, confirmVerification, readMethods, requestVerification, setPassword, setUsername } from "@/features/auth/api/auth-client";
+import { type AuthError, type SignInMethods, addPasskey, confirmVerification, readMethods, removePasskey, requestVerification, setPassword, setUsername } from "@/features/auth/api/auth-client";
+import { passkeysSupported } from "@/features/auth/lib/webauthn";
 import { refreshSession } from "@/shared/lib/session";
 import { Hairline, Pill, Row, RowLabel } from "@/shared/ui/list-card";
 
@@ -30,6 +31,10 @@ function refusal(t: T, error: AuthError): string {
       return t("auth.err.invalidUsername", "3–32 characters: letters, digits, '_', '.' or '-'.");
     case "username_taken":
       return t("auth.err.usernameTaken", "That username is taken.");
+    case "passkey_cancelled":
+      return t("auth.err.passkeyCancelled", "Passkey sign in was cancelled.");
+    case "passkey_registered":
+      return t("auth.err.passkeyRegistered", "This passkey is registered already.");
     default:
       return t("auth.err.generic", "Sign-in failed. Please try again.");
   }
@@ -93,6 +98,8 @@ export function SignInMethodRows() {
         </Button>
       </Row>
       {editing === "password" && <CodeForm t={t} withPassword action={t("auth.password.save", "Save password")} submit={(code, password) => setPassword(password ?? "", code)} onDone={done} />}
+      <Hairline />
+      <Passkeys t={t} methods={methods} onChanged={done} />
     </>
   );
 }
@@ -178,5 +185,41 @@ function UsernameForm({ t, current, onDone }: { t: T; current: string; onDone: (
       </Button>
       {error && <p className="text-xs text-accent-error">{error}</p>}
     </form>
+  );
+}
+
+function Passkeys({ t, methods, onChanged }: { t: T; methods: SignInMethods; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function act(action: () => Promise<{ ok: true } | { ok: false; error: AuthError }>) {
+    setBusy(true);
+    setError(null);
+    const answer = await action();
+    setBusy(false);
+    if (answer.ok) onChanged();
+    else setError(refusal(t, answer.error));
+  }
+
+  return (
+    <>
+      <Row>
+        <RowLabel title={t("auth.passkeys.title", "Passkeys")} sub={t("auth.passkeys.sub", "Sign in with your fingerprint, face or screen lock — no code, no password")} />
+        {passkeysSupported() && (
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => act(() => addPasskey(`${t("auth.passkeys.default", "Passkey")} · ${new Date().toLocaleDateString()}`))}>
+            {t("auth.passkeys.add", "Add a passkey")}
+          </Button>
+        )}
+      </Row>
+      {methods.passkeys.map((passkey) => (
+        <Row key={passkey.id} className="pt-0">
+          <RowLabel title={passkey.name} />
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => act(() => removePasskey(passkey.id))}>
+            {t("auth.passkeys.remove", "Remove")}
+          </Button>
+        </Row>
+      ))}
+      {error && <p className="pb-3.5 text-xs text-accent-error">{error}</p>}
+    </>
   );
 }
