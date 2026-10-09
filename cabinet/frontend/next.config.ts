@@ -56,6 +56,15 @@ const nextConfig: NextConfig = {
     // segment, a path outside the zone) has no layout to render a nested
     // `not-found.tsx` inside, and Next serves its built-in black 404 instead.
     globalNotFound: true,
+    // Off because the conductor already runs this check for every `/{locale}/cabinet/*`
+    // request, and the two checks cannot agree. The `_rsc` hash the router appends
+    // covers `Next-Url`; the conductor validates it with that header present, then
+    // drops the header before its zone proxy forwards the request (site_conductor#229),
+    // so a second validation here expects a different hash — each side 307s to the
+    // other's value until the browser gives up and reloads the document (banking#491).
+    // The check guards CDN caches that ignore `Vary`; every cabinet page is private,
+    // no-store and never cached, so nothing is lost by leaving it to the conductor.
+    validateRSCRequestHeaders: false,
   },
   assetPrefix: BASE_PATH,
   async rewrites() {
