@@ -11,8 +11,8 @@ jobs:
     needs: pre_ci
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
+    - uses: actions/checkout@v5
       with:
         path: my_gh_stuff
         repository: valeratrades/v_flakes
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Installation
       uses: taiki-e/install-action@v2
       with:
