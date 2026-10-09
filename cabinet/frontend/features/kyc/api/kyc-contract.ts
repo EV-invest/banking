@@ -33,7 +33,7 @@ import { readBoolean, readField, readNumber, readString } from "../lib/read-fiel
  * `kyc_unavailable` is the only one carrying a second field (`contact`), and the only one
  * whose meaning is a designed state rather than a fault.
  */
-export const KYC_ERROR_CODES = ["unauthenticated", "csrf", "throttled", "internal", "kyc_unavailable"] as const;
+export const KYC_ERROR_CODES = ["unauthenticated", "csrf", "throttled", "internal", "kyc_unavailable", "email_unverified"] as const;
 
 export type KycErrorCode = (typeof KYC_ERROR_CODES)[number];
 

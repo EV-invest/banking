@@ -1,16 +1,14 @@
 // Run with `npm run test` (Node's built-in runner, native type-stripping).
 //
-// The session gate used to be an equality test against two whole paths. The approval pages
-// are `/approve/<token>` — a different path for every visitor — so the rule had to widen,
-// and widening a security gate is exactly the change worth pinning from both sides: the
-// token routes must be reachable signed-out, and nothing else may have become reachable
-// with them.
+// The approval pages are `/approve/<token>` — a different path for every visitor — so they
+// are matched by prefix, and a prefix rule is worth pinning from both sides: the token
+// routes are caught, and nothing that merely starts with their names is.
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import { LOCALES } from "@evinvest/i18n";
 
-import { isPublicPath, isTokenApprovalPath, mayObserve, zoneGatePath } from "./public-routes.ts";
+import { isTokenApprovalPath, mayObserve, zoneGatePath } from "./public-routes.ts";
 
 test("the locale and zone prefix come off before the gate compares anything", () => {
   assert.equal(zoneGatePath("/en/cabinet/approve/abc"), "/approve/abc");
@@ -25,52 +23,17 @@ test("a path outside the zone is left alone rather than mangled", () => {
   assert.equal(zoneGatePath("/"), "/");
 });
 
-test("an approval link from an email is public in every locale", () => {
-  // The whole feature depends on this: the reader may never have signed in on this device,
-  // and the token is single-use, so a bounce to /login loses the approval outright.
+test("an approval link is a token page in every locale", () => {
   for (const locale of LOCALES) {
-    assert.equal(isPublicPath(`/${locale}/cabinet/approve/01J8XYZTOKEN`), true, locale);
-    assert.equal(isPublicPath(`/${locale}/cabinet/owner-removal/01J8XYZTOKEN`), true, locale);
-    assert.equal(isPublicPath(`/${locale}/cabinet/consent/01J8XYZTOKEN`), true, locale);
+    assert.equal(isTokenApprovalPath(`/${locale}/cabinet/approve/01J8XYZTOKEN`), true, locale);
+    assert.equal(isTokenApprovalPath(`/${locale}/cabinet/owner-removal/01J8XYZTOKEN`), true, locale);
+    assert.equal(isTokenApprovalPath(`/${locale}/cabinet/consent/01J8XYZTOKEN`), true, locale);
   }
 });
 
-test("the sign-in pages stay public", () => {
-  assert.equal(isPublicPath("/en/cabinet/login"), true);
-  assert.equal(isPublicPath("/en/cabinet/loggedout"), true);
-});
-
-test("a token route with no token is public and merely 404s", () => {
-  // Better than a redirect to /login: a link that arrived without its token is broken, and
-  // saying so is more use than asking for credentials that would not fix it.
-  assert.equal(isPublicPath("/en/cabinet/approve"), true);
-  assert.equal(isPublicPath("/en/cabinet/owner-removal"), true);
-  assert.equal(isPublicPath("/en/cabinet/consent"), true);
-});
-
-test("a private page that merely starts with a public name is still private", () => {
-  // The prefix rule is why this test exists: a bare `startsWith` would have ungated every
-  // one of these, and the last two are (or could become) real authenticated surfaces.
-  for (const path of [
-    "/en/cabinet/approvals",
-    "/en/cabinet/approve-all",
-    "/en/cabinet/owner-removals",
-    "/en/cabinet/consents",
-    "/en/cabinet/logins",
-  ]) {
-    assert.equal(isPublicPath(path), false, path);
-  }
-});
-
-test("the rest of the cabinet is gated", () => {
-  for (const path of [
-    "/",
-    "/en/cabinet",
-    "/en/cabinet/consilium",
-    "/ru/cabinet/wallet/withdraw",
-    "/de/cabinet/admin/revenue",
-  ]) {
-    assert.equal(isPublicPath(path), false, path);
+test("a page that merely starts with a token page's name is not one", () => {
+  for (const path of ["/en/cabinet/approvals", "/en/cabinet/approve-all", "/en/cabinet/owner-removals", "/en/cabinet/consents"]) {
+    assert.equal(isTokenApprovalPath(path), false, path);
   }
 });
 

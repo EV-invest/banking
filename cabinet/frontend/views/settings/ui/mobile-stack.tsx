@@ -63,7 +63,7 @@ export function MobileStack({
             <MobileGroup label={t("ui.profile", "Profile")}>
               <ProfileSummaryCard loading={personal.loading} name={name} email={personal.email} verified={personal.verified} />
               <PersonalDetailsCard onOpen={() => onSelect("personal")} />
-              <MobileSecurityCard loading={personal.loading} email={personal.email} sessions={sessionList} onOpenSessions={() => onSelect("sessions")} />
+              <MobileSecurityCard sessions={sessionList} onOpenSessions={() => onSelect("sessions")} />
             </MobileGroup>
             <MobileGroup label={t("settings.group.help", "Help")}>
               <MobileHelpCard onOpen={() => onSelect("documents")} />

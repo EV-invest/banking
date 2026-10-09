@@ -9,6 +9,7 @@ import * as m from "motion/react-m";
 import { Link } from "@/shared/ui/cabinet-link";
 
 import { AccountTabBadge } from "@/application/layout/account-tab-badge";
+import { useSession } from "@/shared/lib/use-session";
 import { prefetchOn } from "@/application/prefetch";
 import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
@@ -57,6 +58,7 @@ export function BottomNavbar() {
   const reduce = useReducedMotion();
   const activeAt = TABS.findIndex((tab) => tab.active(pathname));
   const onTab = activeAt >= 0;
+  const authenticated = useSession()?.authenticated ?? false;
 
   return (
     <nav aria-label={t("nav.a11y.primary", "Primary")} className="fixed bottom-0 left-0 right-0 z-50 flex h-[var(--cabinet-bottom-nav-h,64px)] items-center border-t border-border bg-secondary px-2 pb-[env(safe-area-inset-bottom,0px)] lg:hidden">
@@ -117,7 +119,7 @@ export function BottomNavbar() {
                 unread count and the verification state (#395); the badge picks. */}
             <span className="relative shrink-0">
               <Icon className="size-5" />
-              {tab.href === "/settings" && <AccountTabBadge />}
+              {tab.href === "/settings" && authenticated && <AccountTabBadge />}
             </span>
             {/* `truncate` is the net, not the plan. Five tabs on a 390px phone give each
                 label a 75px box, measured; every `nav.*` value is authored to fit it.

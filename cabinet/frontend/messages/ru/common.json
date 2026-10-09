@@ -2623,21 +2623,9 @@
     "en": "You are answering as {email}.",
     "t": "Вы отвечаете как {email}."
   },
-  "auth.brandBlurb": {
-    "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
-    "t": "Доступ институционального уровня к проверенным фондам прибрежной недвижимости и инфраструктуры — под управлением на всех этапах."
-  },
-  "auth.brandHeadline": {
-    "en": "Private capital for Vietnam's coastal economy.",
-    "t": "Частный капитал для прибрежной экономики Вьетнама."
-  },
   "auth.cabinet": {
     "en": "Cabinet",
     "t": "Кабинет"
-  },
-  "auth.continueWithGoogle": {
-    "en": "Continue with Google",
-    "t": "Продолжить с Google"
   },
   "auth.err.denied": {
     "en": "Sign-in was cancelled.",
@@ -2663,10 +2651,6 @@
     "en": "Sign in again",
     "t": "Войти снова"
   },
-  "auth.signInSub": {
-    "en": "Sign in to manage your investments.",
-    "t": "Войдите, чтобы управлять своими инвестициями."
-  },
   "auth.signOut": {
     "en": "Sign out",
     "t": "Выйти"
@@ -2679,73 +2663,9 @@
     "en": "You've been signed out of your cabinet.",
     "t": "Вы вышли из своего кабинета."
   },
-  "auth.signup.next": {
-    "en": "What happens next",
-    "t": "Что будет дальше"
-  },
-  "auth.signup.step.fund.body": {
-    "en": "Fund your wallet — a deposit is credited once the network confirms it — and subscribe to an allocation.",
-    "t": "Пополните кошелёк — депозит зачисляется, как только его подтвердит сеть, — и подпишитесь на аллокацию."
-  },
-  "auth.signup.step.fund.title": {
-    "en": "Deposit and subscribe",
-    "t": "Внесите средства и подпишитесь"
-  },
-  "auth.signup.step.signIn.body": {
-    "en": "Your cabinet is created on the first sign-in.",
-    "t": "Кабинет создаётся при первом входе."
-  },
-  "auth.signup.step.signIn.title": {
-    "en": "Sign in with Google",
-    "t": "Войдите через Google"
-  },
-  "auth.signup.step.verify.title": {
-    "en": "Verify your identity",
-    "t": "Подтвердите личность"
-  },
-  "auth.signup.sub": {
-    "en": "One Google sign-in sets up your cabinet — no forms, no password.",
-    "t": "Один вход через Google создаёт ваш кабинет — без анкет и пароля."
-  },
-  "auth.signup.title": {
-    "en": "Open your investor account",
-    "t": "Откройте инвесторский счёт"
-  },
-  "auth.stat.asOf": {
-    "en": "As of {date}",
-    "t": "По состоянию на {date}"
-  },
-  "auth.stat.closingTarget": {
-    "en": "Closing target",
-    "t": "Целевой объём закрытия"
-  },
   "auth.stat.risk": {
     "en": "Capital at risk. A target is not a forecast, and returns are not guaranteed.",
     "t": "Капитал под риском. Цель — не прогноз, доходность не гарантирована."
-  },
-  "auth.stat.targetIrr": {
-    "en": "Target IRR",
-    "t": "Целевой IRR"
-  },
-  "auth.switch.haveAccount": {
-    "en": "Already have an account?",
-    "t": "Уже есть аккаунт?"
-  },
-  "auth.switch.newHere": {
-    "en": "New to EV Invest?",
-    "t": "Впервые в EV Invest?"
-  },
-  "auth.switch.openAccount": {
-    "en": "Open an account",
-    "t": "Открыть счёт"
-  },
-  "auth.switch.signIn": {
-    "en": "Sign in",
-    "t": "Войти"
-  },
-  "auth.welcomeBack": {
-    "en": "Welcome back",
-    "t": "С возвращением"
   },
   "consent.approve": {
     "en": "Approve — move my money",
@@ -5279,10 +5199,6 @@
     "en": "Base currency",
     "t": "Базовая валюта"
   },
-  "settings.connected": {
-    "en": "Connected",
-    "t": "Подключено"
-  },
   "settings.currency.eur": {
     "en": "EUR (€)",
     "t": "EUR (€)"
@@ -5366,14 +5282,6 @@
   "settings.fixHighlighted": {
     "en": "Please fix the highlighted fields",
     "t": "Исправьте выделенные поля"
-  },
-  "settings.googleManaged": {
-    "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
-    "t": "Вход и пароль управляются Google. Двухфакторная аутентификация и восстановление настраиваются в вашем аккаунте Google."
-  },
-  "settings.googleManagedShort": {
-    "en": "Your password, two-factor authentication and recovery are configured in your Google Account.",
-    "t": "Пароль, двухфакторная аутентификация и восстановление настраиваются в вашем аккаунте Google."
   },
   "settings.group.cabinet": {
     "en": "Cabinet",
@@ -6891,10 +6799,6 @@
     "en": "Sessions & devices",
     "t": "Сеансы и устройства"
   },
-  "ui.signedInGoogle": {
-    "en": "Signed in with Google",
-    "t": "Вход через Google"
-  },
   "ui.total": {
     "en": "Total",
     "t": "Всего"
@@ -7266,5 +7170,297 @@
   "onboarding.verify.title": {
     "en": "Verify your identity",
     "t": "Подтвердите личность"
+  },
+  "auth.code.back": {
+    "en": "Use a different email",
+    "t": "Другой адрес"
+  },
+  "auth.code.checkSpam": {
+    "en": "It can take a minute. Check your spam folder too.",
+    "t": "Это может занять минуту. Проверьте и папку «Спам»."
+  },
+  "auth.code.desc": {
+    "en": "We sent a 6 digit sign in code to {email}",
+    "t": "Мы отправили 6-значный код входа на {email}"
+  },
+  "auth.code.label": {
+    "en": "Code",
+    "t": "Код"
+  },
+  "auth.code.mailMe": {
+    "en": "Email me a code",
+    "t": "Прислать код на почту"
+  },
+  "auth.code.resend": {
+    "en": "Send a new code",
+    "t": "Отправить новый код"
+  },
+  "auth.code.resendIn": {
+    "en": "Send a new code in {seconds}s",
+    "t": "Новый код через {seconds} с"
+  },
+  "auth.code.title": {
+    "en": "Check your email",
+    "t": "Проверьте почту"
+  },
+  "auth.createAccount": {
+    "en": "Create an account",
+    "t": "Создать аккаунт"
+  },
+  "auth.dialog.heading": {
+    "en": "Sign in or create an account",
+    "t": "Войти или создать аккаунт"
+  },
+  "auth.email.confirm": {
+    "en": "Confirm",
+    "t": "Подтвердить"
+  },
+  "auth.email.unverifiedSub": {
+    "en": "Not verified — identity checks need a verified email",
+    "t": "Не подтверждён — для проверки личности нужен подтверждённый адрес"
+  },
+  "auth.email.verified": {
+    "en": "Verified",
+    "t": "Подтверждён"
+  },
+  "auth.email.verify": {
+    "en": "Verify",
+    "t": "Подтвердить"
+  },
+  "auth.err.attemptsExceeded": {
+    "en": "Too many tries. Send yourself a new code.",
+    "t": "Слишком много попыток. Запросите новый код."
+  },
+  "auth.err.captcha": {
+    "en": "Captcha verification failed. Please try again.",
+    "t": "Проверка капчи не пройдена. Попробуйте ещё раз."
+  },
+  "auth.err.captchaLoad": {
+    "en": "Captcha failed to load. Please refresh the page.",
+    "t": "Капча не загрузилась. Обновите страницу."
+  },
+  "auth.err.codeExpired": {
+    "en": "That code has expired. Send yourself a new code.",
+    "t": "Срок действия кода истёк. Запросите новый."
+  },
+  "auth.err.disabled": {
+    "en": "This account is suspended.",
+    "t": "Этот аккаунт заблокирован."
+  },
+  "auth.err.emailTaken": {
+    "en": "An account already exists for that address. Sign in instead — with a code if you forgot the password.",
+    "t": "Для этого адреса уже есть аккаунт. Войдите — с кодом, если забыли пароль."
+  },
+  "auth.err.emailVerifiedElsewhere": {
+    "en": "This address is verified on another account.",
+    "t": "Этот адрес уже подтверждён в другом аккаунте."
+  },
+  "auth.err.invalidCode": {
+    "en": "That code is not right. Try again.",
+    "t": "Неверный код. Попробуйте ещё раз."
+  },
+  "auth.err.invalidCredentials": {
+    "en": "Wrong email, username or password.",
+    "t": "Неверный email, имя пользователя или пароль."
+  },
+  "auth.err.invalidEmail": {
+    "en": "Enter a valid email address.",
+    "t": "Введите корректный адрес почты."
+  },
+  "auth.err.invalidUsername": {
+    "en": "3–32 characters: letters, digits, '_', '.' or '-'.",
+    "t": "3–32 символа: латинские буквы, цифры, '_', '.' или '-'."
+  },
+  "auth.err.passwordLocked": {
+    "en": "Too many wrong passwords. Sign in with a code instead.",
+    "t": "Слишком много неверных паролей. Войдите с кодом."
+  },
+  "auth.err.throttled": {
+    "en": "Too many codes went to this address. Try again in a few minutes.",
+    "t": "На этот адрес отправлено слишком много кодов. Попробуйте через несколько минут."
+  },
+  "auth.err.usernameTaken": {
+    "en": "That username is taken.",
+    "t": "Это имя пользователя занято."
+  },
+  "auth.err.weakPassword": {
+    "en": "Use at least 8 characters.",
+    "t": "Минимум 8 символов."
+  },
+  "auth.field.email": {
+    "en": "Email",
+    "t": "Эл. почта"
+  },
+  "auth.field.identifier": {
+    "en": "Email or username",
+    "t": "Email или имя пользователя"
+  },
+  "auth.field.newPassword": {
+    "en": "New password",
+    "t": "Новый пароль"
+  },
+  "auth.field.password": {
+    "en": "Password",
+    "t": "Пароль"
+  },
+  "auth.method.code": {
+    "en": "Email code",
+    "t": "Код на почту"
+  },
+  "auth.method.password": {
+    "en": "Password",
+    "t": "Пароль"
+  },
+  "auth.methods.title": {
+    "en": "Sign-in methods",
+    "t": "Способы входа"
+  },
+  "auth.orContinueWith": {
+    "en": "Or continue with",
+    "t": "Или продолжить через"
+  },
+  "auth.password.change": {
+    "en": "Change password",
+    "t": "Сменить пароль"
+  },
+  "auth.password.save": {
+    "en": "Save password",
+    "t": "Сохранить пароль"
+  },
+  "auth.password.set": {
+    "en": "Set password",
+    "t": "Задать пароль"
+  },
+  "auth.signIn": {
+    "en": "Sign in",
+    "t": "Войти"
+  },
+  "auth.signup.create": {
+    "en": "Create account",
+    "t": "Создать аккаунт"
+  },
+  "auth.signup.desc": {
+    "en": "Your account works right away. A KYC check later needs a verified email.",
+    "t": "Аккаунт работает сразу. Для проверки KYC позже понадобится подтверждённая почта."
+  },
+  "auth.signup.haveAccount": {
+    "en": "Already have an account? Sign in",
+    "t": "Уже есть аккаунт? Войти"
+  },
+  "auth.signup.heading": {
+    "en": "Create an account",
+    "t": "Создать аккаунт"
+  },
+  "auth.signup.verifyNow": {
+    "en": "Verify my email now",
+    "t": "Подтвердить почту сейчас"
+  },
+  "auth.useCodeInstead": {
+    "en": "Sign in with a code instead",
+    "t": "Войти с кодом"
+  },
+  "auth.useLoginCode": {
+    "en": "Email me a code",
+    "t": "Прислать код на почту"
+  },
+  "auth.usePasswordInstead": {
+    "en": "Sign in with a password instead",
+    "t": "Войти с паролем"
+  },
+  "auth.username.change": {
+    "en": "Change",
+    "t": "Изменить"
+  },
+  "auth.username.none": {
+    "en": "None yet — once set, it signs you in like your email",
+    "t": "Пока нет — когда зададите, с ним можно входить, как с почтой"
+  },
+  "auth.username.save": {
+    "en": "Save",
+    "t": "Сохранить"
+  },
+  "auth.username.title": {
+    "en": "Username",
+    "t": "Имя пользователя"
+  },
+  "auth.verify.desc": {
+    "en": "Your account is ready. Enter the 6 digit code we sent to {email} to verify it, or skip and verify later in Settings.",
+    "t": "Аккаунт готов. Введите 6-значный код, отправленный на {email}, или подтвердите позже в Настройках."
+  },
+  "auth.verify.later": {
+    "en": "Verify later",
+    "t": "Подтвердить позже"
+  },
+  "auth.verify.title": {
+    "en": "Confirm your email",
+    "t": "Подтвердите почту"
+  },
+  "auth.wall.action": {
+    "en": "Sign in",
+    "t": "Войти"
+  },
+  "auth.wall.desc": {
+    "en": "This part of the cabinet belongs to your account. Sign in or create one — it takes a minute.",
+    "t": "Этот раздел кабинета относится к вашему аккаунту. Войдите или создайте его — это займёт минуту."
+  },
+  "auth.wall.title": {
+    "en": "Sign in to see this",
+    "t": "Войдите, чтобы увидеть это"
+  },
+  "nav.guestMode": {
+    "en": "Guest Mode",
+    "t": "Гостевой режим"
+  },
+  "profile.kyc.emailUnverified": {
+    "en": "Verify your email first — Settings → Security.",
+    "t": "Сначала подтвердите почту — Настройки → Безопасность."
+  },
+  "profile.kyc.verifyEmailSub": {
+    "en": "Identity checks open once your address is confirmed",
+    "t": "Проверка личности откроется, когда адрес будет подтверждён"
+  },
+  "profile.kyc.verifyEmailTitle": {
+    "en": "Verify your email first",
+    "t": "Сначала подтвердите почту"
+  },
+  "auth.err.passkeyCancelled": {
+    "en": "Passkey sign in was cancelled.",
+    "t": "Вход с ключом доступа отменён."
+  },
+  "auth.err.passkeyExpired": {
+    "en": "That took too long. Try the passkey again.",
+    "t": "Слишком долго. Попробуйте ключ доступа ещё раз."
+  },
+  "auth.err.passkeyRegistered": {
+    "en": "This passkey is registered already.",
+    "t": "Этот ключ доступа уже зарегистрирован."
+  },
+  "auth.err.passkeyRejected": {
+    "en": "That passkey is not registered here. Sign in with a code instead.",
+    "t": "Этот ключ доступа здесь не зарегистрирован. Войдите с кодом."
+  },
+  "auth.passkeys.add": {
+    "en": "Add a passkey",
+    "t": "Добавить ключ доступа"
+  },
+  "auth.passkeys.default": {
+    "en": "Passkey",
+    "t": "Ключ доступа"
+  },
+  "auth.passkeys.remove": {
+    "en": "Remove",
+    "t": "Удалить"
+  },
+  "auth.passkeys.sub": {
+    "en": "Sign in with your fingerprint, face or screen lock — no code, no password",
+    "t": "Вход по отпечатку, лицу или блокировке экрана — без кода и пароля"
+  },
+  "auth.passkeys.title": {
+    "en": "Passkeys",
+    "t": "Ключи доступа"
+  },
+  "auth.usePasskey": {
+    "en": "Use a passkey",
+    "t": "Войти с ключом доступа"
   }
 }
