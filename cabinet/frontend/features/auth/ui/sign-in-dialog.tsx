@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 
 import {
   Button,
@@ -98,6 +98,13 @@ export function SignInDialog() {
   const [token, setToken] = useState<string | null>(null);
   const [tokenGeneration, setTokenGeneration] = useState(0);
   const [captchaBroken, setCaptchaBroken] = useState(false);
+  // The dialog renders through a portal the server does not draw: opening it before
+  // hydration would make the two disagree.
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   function go(next: Screen) {
     setError(null);
@@ -131,7 +138,7 @@ export function SignInDialog() {
   const human = token !== null && !captchaBroken;
 
   return (
-    <Dialog open={dialog.open} onOpenChange={close}>
+    <Dialog open={hydrated && dialog.open} onOpenChange={close}>
       <DialogContent>
         {screen.kind === "code" && (
           <CodeScreen
