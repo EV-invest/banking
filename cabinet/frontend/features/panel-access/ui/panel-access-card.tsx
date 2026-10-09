@@ -10,7 +10,7 @@ import { Alert, AlertDescription, Button, Card, CardContent, Skeleton } from "@e
 import { grantPermission, revokePermission } from "@/entities/grant/api/grant-client";
 import { type GrantAction, grantErrorKey, type GrantErrorKey } from "@/entities/grant/lib/errors";
 import { grantHoldersResource } from "@/entities/grant/model/grant-resource";
-import { GrantForm } from "@/features/panel-access/ui/grant-form";
+import { GrantForm, type GrantPrefill } from "@/features/panel-access/ui/grant-form";
 import { GrantHoldersTable } from "@/features/panel-access/ui/grant-holders-table";
 import { RevokeGrantDialog } from "@/features/panel-access/ui/revoke-grant-dialog";
 import type { GrantHolder } from "@/shared/contracts";
@@ -30,7 +30,7 @@ const grantErrorWords = (t: Translate): Record<GrantErrorKey, string> => ({
 
 // What people hold in the tenant's namespace — the grants its panel gates on. Not the money
 // grants beside it in the registry: nothing here moves or shows funds.
-export function PanelAccessCard({ namespace, header, className }: { namespace: string; header?: ReactNode; className?: string }) {
+export function PanelAccessCard({ namespace, prefill, header, className }: { namespace: string; prefill?: GrantPrefill; header?: ReactNode; className?: string }) {
   const t = useT();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -81,7 +81,7 @@ export function PanelAccessCard({ namespace, header, className }: { namespace: s
           </Alert>
         )}
 
-        <GrantForm namespace={namespace} known={known} busy={busy === "grant"} onSubmit={grant} />
+        <GrantForm namespace={namespace} prefill={prefill} known={known} busy={busy === "grant"} onSubmit={grant} />
 
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("panelAccess.roster", "Who has access")}</p>
