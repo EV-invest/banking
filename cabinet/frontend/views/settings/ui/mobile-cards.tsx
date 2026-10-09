@@ -14,12 +14,13 @@ import { type ReactNode, useState } from "react";
 
 import { Skeleton, Spinner } from "@evinvest/uikit";
 
+import { SignInMethodRows } from "@/features/auth/ui/sign-in-methods";
 import { useUnreadCount } from "@/entities/notification/model/notification-store";
 import { cabinetPath } from "@/shared/config/base-path";
 import type { Session } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
-import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, ROW_INTERACTIVE, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
+import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, ROW_INTERACTIVE, RowLabel, RowValue } from "@/shared/ui/list-card";
 import { formatEmail } from "@/views/settings/lib/contact";
 import { CURRENCIES, type Form, labelOf, LANGUAGES, optionsOf, TIMEZONES } from "@/views/settings/lib/form";
 import { initialsOfName } from "@/views/settings/lib/format";
@@ -145,28 +146,14 @@ function ExpandableRow({
   );
 }
 
-/** `card-Security`, restated for the real auth model: Google-managed sign-in + live sessions. */
-export function MobileSecurityCard({
-  loading,
-  email,
-  sessions,
-  onOpenSessions,
-}: {
-  loading: boolean;
-  email: string | null;
-  sessions: Session[] | undefined;
-  onOpenSessions: () => void;
-}) {
+/** `card-Security`: how the account signs in, and its live sessions. */
+export function MobileSecurityCard({ sessions, onOpenSessions }: { sessions: Session[] | undefined; onOpenSessions: () => void }) {
   const t = useT();
   return (
     <ListCard>
       <ListCardTitle>{t("ui.security", "Security")}</ListCardTitle>
       <Hairline />
-      <Row>
-        <RowLabel title={t("ui.signedInGoogle", "Signed in with Google")} sub={loading ? "…" : formatEmail(email) || "—"} />
-        {/* i18n-max: 12 — a `shrink-0` Pill beside the `min-w-0` row label. */}
-        <Pill>{t("settings.connected", "Connected")}</Pill>
-      </Row>
+      <SignInMethodRows />
       <Hairline />
       <button
         type="button"
@@ -179,8 +166,6 @@ export function MobileSecurityCard({
           <Chevron />
         </span>
       </button>
-      <Hairline />
-      <p className="py-3 text-xs leading-relaxed text-ink-soft">{t("settings.googleManagedShort", "Your password, two-factor authentication and recovery are configured in your Google Account.")}</p>
     </ListCard>
   );
 }

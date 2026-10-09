@@ -61,17 +61,8 @@ test("an open redirect is refused and falls back to the cabinet home", () => {
   }
 });
 
-test("the sign-in href points at the shell's login with the page URL-encoded", () => {
-  assert.equal(loginHref("ru", "/wallet"), "/api/auth/login?returnTo=%2Fru%2Fcabinet%2Fwallet");
-  assert.equal(loginHref("en", undefined), "/api/auth/login?returnTo=%2Fen%2Fcabinet");
-  assert.equal(loginHref("en", "/invest/x?y=1"), "/api/auth/login?returnTo=%2Fen%2Fcabinet%2Finvest%2Fx%3Fy%3D1");
-});
-
-test("an `intent` on the login page never reaches the shell and never bends the target", () => {
-  // `?intent=signup` (#391) is the page's own state: the button's href is built from
-  // `returnTo` alone, so a newcomer and a returning reader with the same target get the
-  // same href — and a target that happens to carry its own `intent` keeps it verbatim.
-  assert.equal(loginHref("en", "/wallet"), "/api/auth/login?returnTo=%2Fen%2Fcabinet%2Fwallet");
-  assert.equal(loginHref("en", "/invest/x?intent=signup"), "/api/auth/login?returnTo=%2Fen%2Fcabinet%2Finvest%2Fx%3Fintent%3Dsignup");
-  assert.equal(loginReturnTo("en", "/en/cabinet/login?intent=signup"), "/en/cabinet/login?intent=signup");
+test("the provider href points at the shell's login, naming the provider, with the page URL-encoded", () => {
+  assert.equal(loginHref("ru", "/wallet", "google"), "/api/auth/login?provider=google&returnTo=%2Fru%2Fcabinet%2Fwallet");
+  assert.equal(loginHref("en", undefined, "github"), "/api/auth/login?provider=github&returnTo=%2Fen%2Fcabinet");
+  assert.equal(loginHref("en", "/invest/x?y=1", "google"), "/api/auth/login?provider=google&returnTo=%2Fen%2Fcabinet%2Finvest%2Fx%3Fy%3D1");
 });

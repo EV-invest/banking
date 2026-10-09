@@ -60,6 +60,7 @@ function Outcome({ state, className }: { state: StartState; className?: string }
     );
   }
   // Not the user's doing and not ours to fix in this session — stated calmly, like the 503.
+  if (state.kind === "emailUnverified") return <Note className={className}>{t("profile.kyc.emailUnverified", "Verify your email first — Settings → Security.")}</Note>;
   if (state.kind === "throttled") return <Note className={className}>{t("profile.kyc.tooManyAttempts", "You've already started verification several times today. Please try again tomorrow.")}</Note>;
   if (state.kind === "stale") return <Note className={className} tone="destructive">{t("err.csrf", "This page went stale. Reload it and try again.")}</Note>;
   if (state.kind === "failed") return <Note className={className} tone="destructive">{errorMessage(state.error, t)}</Note>;

@@ -45,10 +45,16 @@ test("a production runtime still demands the Sentry DSN", () => {
 test("a set DSN is read back in both phases", () => {
   const dsn = "https://public@o0.ingest.sentry.io/0";
   for (const phase of ["phase-production-build", undefined]) {
-    withEnv({ NODE_ENV: "production", NEXT_PHASE: phase, NEXT_PUBLIC_SENTRY_DSN: dsn }, () => {
+    withEnv({ NODE_ENV: "production", NEXT_PHASE: phase, NEXT_PUBLIC_SENTRY_DSN: dsn, NEXT_PUBLIC_TURNSTILE_SITE_KEY: "site-key" }, () => {
       assert.equal(config.public.sentryDsn, dsn);
     });
   }
+});
+
+test("a production runtime demands the Turnstile site key", () => {
+  withEnv({ NODE_ENV: "production", NEXT_PHASE: undefined, NEXT_PUBLIC_SENTRY_DSN: "https://public@o0.ingest.sentry.io/0", NEXT_PUBLIC_TURNSTILE_SITE_KEY: undefined }, () => {
+    assert.throws(() => void config.public.turnstileSiteKey, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
+  });
 });
 
 test("development is unaffected — the DSN stays optional", () => {

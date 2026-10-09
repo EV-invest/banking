@@ -105,6 +105,9 @@ export function websocketOrigin(host: string | null | undefined, forwardedProto?
   }
 }
 
+/** Cloudflare Turnstile's script and frame, which the credential forms carry. */
+const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
+
 /**
  * The Content-Security-Policy for the host document, bound to a per-request nonce.
  *
@@ -113,7 +116,7 @@ export function websocketOrigin(host: string | null | undefined, forwardedProto?
  * complete policy — one that is stricter, never looser.
  */
 export function contentSecurityPolicy(nonce: string, socketOrigin?: string | null): string {
-  const script = ["'self'", `'nonce-${nonce}'`, ...mfeOrigins()];
+  const script = ["'self'", `'nonce-${nonce}'`, TURNSTILE_ORIGIN, ...mfeOrigins()];
   if (IN_DEVELOPMENT) script.push("'unsafe-eval'");
   // The consilium's revision stream is same-origin (`/cabinet/api/owners/consilium/ws`,
   // rewritten to the BFF), so this adds a scheme, not a new host to trust.
@@ -125,6 +128,8 @@ export function contentSecurityPolicy(nonce: string, socketOrigin?: string | nul
     `frame-ancestors 'none'`,
     `form-action 'self'`,
     `script-src ${script.join(" ")}`,
+    // The sign-in dialog's challenge renders in Cloudflare's frame.
+    `frame-src ${TURNSTILE_ORIGIN}`,
     // styled-components / Tailwind inject runtime <style>; 'unsafe-inline' here is
     // style-only and does not weaken the XSS-relevant script-src.
     `style-src 'self' 'unsafe-inline'`,

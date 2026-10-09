@@ -19,7 +19,7 @@ import type { SessionInfo } from "@/shared/contracts/admin";
 
 /// A fetch/parse failure — same shape as a server-resolved "not signed in", but
 /// identity-distinguishable so consumers don't force a re-login on a network blip.
-export const SESSION_UNAVAILABLE: SessionInfo = Object.freeze({ authenticated: false });
+export const SESSION_UNAVAILABLE: SessionInfo = Object.freeze({ authenticated: false, permissions: [] });
 
 const ENDPOINT = "/api/auth/session";
 

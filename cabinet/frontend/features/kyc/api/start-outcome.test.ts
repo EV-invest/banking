@@ -18,6 +18,7 @@ test("the plane's published codes decide, whatever the status says", () => {
   assert.deepEqual(classifyRefusal(500, { error: "kyc_unavailable" }), { kind: "unavailable", contact: null });
   assert.deepEqual(classifyRefusal(429, { error: "throttled" }), { kind: "throttled" });
   assert.deepEqual(classifyRefusal(403, { error: "csrf" }), { kind: "stale" });
+  assert.deepEqual(classifyRefusal(403, { error: "email_unverified" }), { kind: "emailUnverified" });
 });
 
 test("a contact that is not an address degrades to null rather than into a mailto:", () => {

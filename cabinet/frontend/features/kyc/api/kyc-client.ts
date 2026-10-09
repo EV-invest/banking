@@ -31,6 +31,7 @@ export type KycStart =
   | { kind: "unavailable"; contact: string | null }
   | { kind: "stale" }
   | { kind: "throttled" }
+  | { kind: "emailUnverified" }
   | { kind: "failed"; error: unknown };
 
 export async function startVerification(): Promise<KycStart> {
