@@ -1,6 +1,6 @@
 import type { Locale, Messages } from "@evinvest/i18n";
 
-// The four strings the account chip renders, and nothing else.
+// The strings the account chip renders, and nothing else.
 //
 // The chip is not a cabinet screen. It is bundled as a custom element and injected
 // by the conductor into **every page of the public site**, where there is no
@@ -12,42 +12,52 @@ import type { Locale, Messages } from "@evinvest/i18n";
 // was downloading the German translation of the admin treasury invariant note to
 // render the word "Verified".
 //
-// Four keys times five locales is small enough to inline, so it is inlined. The
+// A handful of keys times five locales is small enough to inline, so it is inlined. The
 // values here are copies, which is a real duplication — `chip-messages.test.ts`
 // exists to make it a checked one: it fails if any of these drifts from
 // `messages/<locale>/common.json`.
-export const CHIP_KEYS = ["auth.cabinet", "auth.signOut", "ui.account", "ui.verified"] as const;
+export const CHIP_KEYS = ["auth.cabinet", "auth.manageAccount", "auth.signOut", "auth.switchAccount", "ui.account", "ui.services"] as const;
 
 const CHIP_MESSAGES: Record<Locale, Messages> = {
   en: {
     "auth.cabinet": "Cabinet",
+    "auth.manageAccount": "Manage account",
     "auth.signOut": "Sign out",
+    "auth.switchAccount": "Switch account",
     "ui.account": "Account",
-    "ui.verified": "Verified"
+    "ui.services": "Services"
   },
   ru: {
     "auth.cabinet": "Кабинет",
+    "auth.manageAccount": "Управление аккаунтом",
     "auth.signOut": "Выйти",
+    "auth.switchAccount": "Сменить аккаунт",
     "ui.account": "Аккаунт",
-    "ui.verified": "Проверен"
+    "ui.services": "Сервисы"
   },
   vi: {
     "auth.cabinet": "Cabinet",
+    "auth.manageAccount": "Quản lý tài khoản",
     "auth.signOut": "Đăng xuất",
+    "auth.switchAccount": "Chuyển tài khoản",
     "ui.account": "Tài khoản",
-    "ui.verified": "Đã xác minh"
+    "ui.services": "Dịch vụ"
   },
   fr: {
     "auth.cabinet": "Mon espace",
+    "auth.manageAccount": "Gérer le compte",
     "auth.signOut": "Se déconnecter",
+    "auth.switchAccount": "Changer de compte",
     "ui.account": "Compte",
-    "ui.verified": "Vérifié"
+    "ui.services": "Services"
   },
   de: {
     "auth.cabinet": "Cabinet",
+    "auth.manageAccount": "Konto verwalten",
     "auth.signOut": "Abmelden",
+    "auth.switchAccount": "Konto wechseln",
     "ui.account": "Konto",
-    "ui.verified": "Bestätigt"
+    "ui.services": "Dienste"
   }
 };
 

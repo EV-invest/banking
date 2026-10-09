@@ -2918,9 +2918,11 @@
   },
   "serverOnly": [
     "auth.cabinet",
+    "auth.manageAccount",
     "auth.signInAgain",
     "auth.signedOut",
     "auth.signedOutSub",
+    "auth.switchAccount",
     "meta.description",
     "meta.title",
     "mfe.loading",
@@ -2969,6 +2971,7 @@
     "tips.wallet.withdraw.queueing.body",
     "tips.wallet.withdraw.queueing.title",
     "tips.wallet.withdraw.review.body",
-    "tips.wallet.withdraw.review.title"
+    "tips.wallet.withdraw.review.title",
+    "ui.services"
   ]
 }
