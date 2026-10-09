@@ -8,8 +8,8 @@ import { currentLocale } from "@/shared/config/locale";
 
 // One allocation's panel access, on a page of its own so a delegate — who holds no console
 // role and cannot read the registry — has somewhere to manage it. Authorized by the
-// identity plane on every call.
-export default async function AllocationPanelAccessPage({ params }: { params: Promise<{ service: string }> }) {
+// identity plane on every call. `?email=&target=` prefill the grant form: the panel's access-request ping links here.
+export default async function AllocationPanelAccessPage({ params, searchParams }: { params: Promise<{ service: string }>; searchParams: Promise<{ email?: string; target?: string }> }) {
   // Not decoded: a valid id has nothing to decode, and one that needs it is not valid.
   const { service } = await params;
   const namespace = isServiceId(service) ? tenantOf(service) : null;
@@ -17,7 +17,7 @@ export default async function AllocationPanelAccessPage({ params }: { params: Pr
   const locale = await currentLocale();
   return (
     <I18nScope messages={routeMessages(locale, "app/[locale]/cabinet/(app)/admin/allocations/[service]/page.tsx")}>
-      <PanelAccessView service={service} namespace={namespace} />
+      <PanelAccessView service={service} namespace={namespace} prefill={await searchParams} />
     </I18nScope>
   );
 }
