@@ -21,6 +21,7 @@
     "auth.err.attemptsExceeded",
     "auth.err.captcha",
     "auth.err.captchaLoad",
+    "auth.err.captchaUnavailable",
     "auth.err.codeExpired",
     "auth.err.denied",
     "auth.err.disabled",

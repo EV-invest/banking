@@ -2,37 +2,32 @@
 
 import { useT } from "@evinvest/i18n/react";
 
+import { KeyRound } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 
-import {
-  Button,
-  Checkbox,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  Input,
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-  Label,
-  Separator,
-  Spinner,
-} from "@evinvest/uikit";
+import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, InputOTP, InputOTPGroup, InputOTPSlot, Spinner } from "@evinvest/uikit";
 
-import { type AuthError, PROVIDERS, type Provider, confirmVerification, passkeySignIn, passwordSignIn, passwordSignUp, requestCode, verifyCode } from "@/features/auth/api/auth-client";
+import { type AuthAnswer, type AuthError, PROVIDERS, type Provider, confirmVerification, passkeySignIn, passwordSignIn, passwordSignUp, requestCode, verifyCode } from "@/features/auth/api/auth-client";
 import { passkeysSupported } from "@/features/auth/lib/webauthn";
 import { loginHref } from "@/features/auth/lib/return-to";
 import { useSignInDialog } from "@/features/auth/model/use-sign-in-dialog";
 import { GithubMark, GoogleMark } from "@/features/auth/ui/provider-marks";
 import { Turnstile } from "@/features/auth/ui/turnstile";
 import { useLocale } from "@/shared/lib/cabinet-route";
+import { Logo } from "@/shared/ui/logo";
 
 type Screen = { kind: "code" } | { kind: "codeSent"; email: string } | { kind: "password" } | { kind: "signup" } | { kind: "verifyNow"; email: string };
 
 const CODE_LENGTH = 6;
 const RESEND_SECS = 60;
+
+// Proportions are openmarket's sign-in form (concierge `tmp/research/openmarket`), on our tokens.
+const FIELD =
+  "h-12 rounded-(--sign-in-radius) border-ink/10 bg-ink/2 px-3.5 text-(length:--sign-in-text-body) shadow-none transition-[background-color,border-color] hover:border-ink/14 focus-visible:border-ink/18 focus-visible:bg-ink/4 focus-visible:ring-0 md:text-(length:--sign-in-text-body)";
+const PRIMARY =
+  "h-11.5 w-full rounded-(--sign-in-radius) bg-ink text-sm font-bold tracking-[-0.01em] text-background hover:bg-ink/90 disabled:bg-ink/4 disabled:text-ink-soft disabled:opacity-100";
+const SECONDARY =
+  "inline-flex h-11.5 w-full cursor-pointer items-center justify-center gap-2.5 rounded-(--sign-in-radius) border border-transparent bg-ink/4 px-3.5 text-(length:--sign-in-text-body) font-semibold tracking-[-0.01em] text-ink transition-colors hover:border-ink/14 hover:bg-ink/6 disabled:cursor-default disabled:hover:border-transparent";
 
 type T = ReturnType<typeof useT>;
 
@@ -49,6 +44,7 @@ function errorText(t: T, error: AuthError | "captcha_load"): string {
     case "captcha":
       return t("auth.err.captcha", "Captcha verification failed. Please try again.");
     case "captcha_unavailable":
+      return t("auth.err.captchaUnavailable", "We could not check the captcha just now. Please try again.");
     case "captcha_load":
       return t("auth.err.captchaLoad", "Captcha failed to load. Please refresh the page.");
     case "invalid_email":
@@ -118,11 +114,18 @@ export function SignInDialog() {
     setScreen(next);
   }
 
-  /** Spend the challenge token on one request; the widget re-arms for the next. */
-  function spend(): string {
-    const spent = token ?? "";
-    setTokenGeneration((g) => g + 1);
-    return spent;
+  /**
+   * Send the challenge token with one request. The identity plane refuses `origin` and
+   * `captcha_unavailable` before Cloudflare consumed it, so those leave it for the retry;
+   * anything else spent it and the widget re-arms.
+   */
+  async function spending<B>(request: (token: string) => Promise<AuthAnswer<B>>): Promise<AuthAnswer<B>> {
+    const answer = await request(token ?? "");
+    if (answer.ok || (answer.error !== "captcha_unavailable" && answer.error !== "origin")) {
+      setToken(null);
+      setTokenGeneration((g) => g + 1);
+    }
+    return answer;
   }
 
   async function run(action: () => Promise<void>) {
@@ -141,19 +144,31 @@ export function SignInDialog() {
     dialog.hide();
   }
 
-  const needsChallenge = screen.kind === "code" || screen.kind === "codeSent" || screen.kind === "password" || screen.kind === "signup";
   const human = token !== null && !captchaBroken;
+  const challenge = (
+    <Turnstile
+      generation={tokenGeneration}
+      onToken={setToken}
+      onUnavailable={() => {
+        setCaptchaBroken(true);
+        setError(errorText(t, "captcha_load"));
+      }}
+    />
+  );
+  const shown = error ?? (screen.kind === "code" && dialog.oauthError ? oauthErrorText(t, dialog.oauthError) : null);
 
   return (
     <Dialog open={hydrated && dialog.open} onOpenChange={close}>
-      <DialogContent>
+      <DialogContent className="gap-6 max-w-[min(25rem,calc(100%-2rem))] rounded-2xl px-7 pt-8 pb-7 sm:max-w-100">
+        <Logo className="mx-auto h-7 w-auto text-ink" />
         {screen.kind === "code" && (
           <CodeScreen
             busy={busy}
             human={human}
+            challenge={challenge}
             onSubmit={(email) =>
               run(async () => {
-                const answer = await requestCode(email, spend());
+                const answer = await spending((tk) => requestCode(email, tk));
                 if (answer.ok) go({ kind: "codeSent", email });
                 else setError(errorText(t, answer.error));
               })
@@ -178,6 +193,7 @@ export function SignInDialog() {
             description={t("auth.code.desc", "We sent a 6 digit sign in code to {email}", { email: screen.email })}
             busy={busy}
             human={human}
+            challenge={challenge}
             onCode={(code) =>
               run(async () => {
                 const answer = await verifyCode(screen.email, code);
@@ -187,7 +203,7 @@ export function SignInDialog() {
             }
             onResend={() =>
               run(async () => {
-                const answer = await requestCode(screen.email, spend());
+                const answer = await spending((tk) => requestCode(screen.email, tk));
                 if (!answer.ok) setError(errorText(t, answer.error));
               })
             }
@@ -198,9 +214,10 @@ export function SignInDialog() {
           <PasswordScreen
             busy={busy}
             human={human}
+            challenge={challenge}
             onSubmit={(identifier, password) =>
               run(async () => {
-                const answer = await passwordSignIn(identifier, password, spend());
+                const answer = await spending((tk) => passwordSignIn(identifier, password, tk));
                 if (answer.ok) dialog.reload();
                 else setError(errorText(t, answer.error));
               })
@@ -213,9 +230,10 @@ export function SignInDialog() {
           <SignUpScreen
             busy={busy}
             human={human}
+            challenge={challenge}
             onSubmit={(email, password, verify) =>
               run(async () => {
-                const answer = await passwordSignUp(email, password, verify, spend());
+                const answer = await spending((tk) => passwordSignUp(email, password, verify, tk));
                 if (!answer.ok) return setError(errorText(t, answer.error));
                 if (answer.body.verification === "sent") go({ kind: "verifyNow", email });
                 else dialog.reload();
@@ -241,19 +259,11 @@ export function SignInDialog() {
             backLabel={t("auth.verify.later", "Verify later")}
           />
         )}
-        {needsChallenge && (
-          <Turnstile
-            generation={tokenGeneration}
-            onToken={setToken}
-            onUnavailable={() => {
-              setCaptchaBroken(true);
-              setError(errorText(t, "captcha_load"));
-            }}
-          />
+        {shown && (
+          <p role="status" className="-mt-3 text-center text-xs leading-snug text-accent-error">
+            {shown}
+          </p>
         )}
-        <p role="status" className="min-h-4 text-xs leading-snug text-accent-error">
-          {error ?? (screen.kind === "code" && dialog.oauthError ? oauthErrorText(t, dialog.oauthError) : null)}
-        </p>
       </DialogContent>
     </Dialog>
   );
@@ -261,16 +271,16 @@ export function SignInDialog() {
 
 function Heading({ title, description }: { title: string; description?: string }) {
   return (
-    <DialogHeader>
-      <DialogTitle>{title}</DialogTitle>
-      {description && <DialogDescription>{description}</DialogDescription>}
+    <DialogHeader className="gap-1.5 text-center sm:text-center">
+      <DialogTitle className="text-(length:--sign-in-text-title) leading-normal tracking-[-0.01em]">{title}</DialogTitle>
+      {description && <DialogDescription className="text-(length:--sign-in-text-body) leading-snug">{description}</DialogDescription>}
     </DialogHeader>
   );
 }
 
 function Switch({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className="text-sm font-medium text-primary-ink underline-offset-4 hover:underline">
+    <button type="button" onClick={onClick} className="cursor-pointer text-xs font-medium text-ink-soft transition-colors hover:text-ink">
       {children}
     </button>
   );
@@ -287,20 +297,46 @@ function submitWith(handler: () => void) {
   };
 }
 
-function CodeScreen({ busy, human, onSubmit, onPassword, children }: { busy: boolean; human: boolean; onSubmit: (email: string) => void; onPassword: () => void; children: ReactNode }) {
+function CodeScreen({
+  busy,
+  human,
+  challenge,
+  onSubmit,
+  onPassword,
+  children,
+}: {
+  busy: boolean;
+  human: boolean;
+  challenge: ReactNode;
+  onSubmit: (email: string) => void;
+  onPassword: () => void;
+  children: ReactNode;
+}) {
   const t = useT();
   const [email, setEmail] = useState("");
   return (
     <>
       <Heading title={t("auth.dialog.heading", "Sign in or create an account")} />
-      <form className="flex flex-col gap-3" onSubmit={submitWith(() => onSubmit(email.trim()))}>
-        <Label htmlFor="sign-in-email">{t("auth.field.email", "Email")}</Label>
-        <Input id="sign-in-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Button type="submit" disabled={busy || !human || !looksLikeEmail(email)}>
+      <form className="flex flex-col gap-6" onSubmit={submitWith(() => onSubmit(email.trim()))}>
+        <div className="flex flex-col">
+          <Input
+            type="email"
+            autoComplete="email"
+            placeholder={t("auth.field.email", "Email")}
+            aria-label={t("auth.field.email", "Email")}
+            className={FIELD}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          {challenge}
+        </div>
+        <Button type="submit" className={PRIMARY} disabled={busy || !human || !looksLikeEmail(email)}>
           {busy ? <Spinner /> : t("auth.useLoginCode", "Email me a code")}
         </Button>
       </form>
-      <Switch onClick={onPassword}>{t("auth.usePasswordInstead", "Sign in with a password instead")}</Switch>
+      <div className="-mt-3 flex justify-center">
+        <Switch onClick={onPassword}>{t("auth.usePasswordInstead", "Sign in with a password instead")}</Switch>
+      </div>
       {children}
     </>
   );
@@ -311,27 +347,28 @@ function Providers({ hrefFor, onPasskey }: { hrefFor: (provider: Provider) => st
   const label: Record<Provider, string> = { google: "Google", github: "GitHub" };
   const mark: Record<Provider, ReactNode> = { google: <GoogleMark />, github: <GithubMark /> };
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3 text-xs text-ink-soft">
-        <Separator className="flex-1" />
+    <>
+      <div className="flex items-center gap-3.5 text-(length:--sign-in-text-fine) font-medium text-ink-soft">
+        <span className="h-px flex-1 bg-ink/6" />
         {t("auth.orContinueWith", "Or continue with")}
-        <Separator className="flex-1" />
+        <span className="h-px flex-1 bg-ink/6" />
       </div>
-      {passkeysSupported() && (
-        <Button type="button" variant="outline" onClick={onPasskey}>
-          {t("auth.usePasskey", "Use a passkey")}
-        </Button>
-      )}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="flex flex-col gap-2">
+        {passkeysSupported() && (
+          <button type="button" className={SECONDARY} onClick={onPasskey}>
+            <KeyRound className="size-4" aria-hidden />
+            {t("auth.usePasskey", "Use a passkey")}
+          </button>
+        )}
         {PROVIDERS.map((provider) => (
           // A full navigation: the provider's consent screen is another origin.
-          <a key={provider} href={hrefFor(provider)} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border text-sm font-medium hover:bg-ink/5">
+          <a key={provider} href={hrefFor(provider)} className={SECONDARY}>
             {mark[provider]}
             {label[provider]}
           </a>
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -340,6 +377,7 @@ function CodeEntry({
   description,
   busy,
   human,
+  challenge,
   onCode,
   onResend,
   onBack,
@@ -349,6 +387,7 @@ function CodeEntry({
   description: string;
   busy: boolean;
   human: boolean;
+  challenge?: ReactNode;
   onCode: (code: string) => void;
   onResend?: () => void;
   onBack: () => void;
@@ -373,19 +412,22 @@ function CodeEntry({
   return (
     <>
       <Heading title={title} description={description} />
-      <InputOTP maxLength={CODE_LENGTH} value={code} onChange={change} disabled={busy} aria-label={t("auth.code.label", "Code")} autoFocus>
-        <InputOTPGroup>
-          {Array.from({ length: CODE_LENGTH }, (_, i) => (
-            <InputOTPSlot key={i} index={i} />
-          ))}
-        </InputOTPGroup>
-      </InputOTP>
-      <p className="text-xs text-ink-soft">{t("auth.code.checkSpam", "It can take a minute. Check your spam folder too.")}</p>
+      <div className="flex flex-col items-center gap-3">
+        <InputOTP maxLength={CODE_LENGTH} value={code} onChange={change} disabled={busy} aria-label={t("auth.code.label", "Code")} autoFocus>
+          <InputOTPGroup>
+            {Array.from({ length: CODE_LENGTH }, (_, i) => (
+              <InputOTPSlot key={i} index={i} className="h-12 w-11 text-base" />
+            ))}
+          </InputOTPGroup>
+        </InputOTP>
+        <p className="text-center text-(length:--sign-in-text-fine) text-ink-soft">{t("auth.code.checkSpam", "It can take a minute. Check your spam folder too.")}</p>
+      </div>
+      {onResend && wait <= 0 && challenge}
       <div className="flex items-center justify-between gap-3">
         <Switch onClick={onBack}>{backLabel ?? t("auth.code.back", "Use a different email")}</Switch>
         {onResend &&
           (wait > 0 ? (
-            <span className="text-sm text-ink-soft">{t("auth.code.resendIn", "Send a new code in {seconds}s", { seconds: wait })}</span>
+            <span className="text-xs font-medium text-ink-soft">{t("auth.code.resendIn", "Send a new code in {seconds}s", { seconds: wait })}</span>
           ) : (
             <Switch
               onClick={() => {
@@ -406,12 +448,14 @@ function CodeEntry({
 function PasswordScreen({
   busy,
   human,
+  challenge,
   onSubmit,
   onCode,
   onSignUp,
 }: {
   busy: boolean;
   human: boolean;
+  challenge: ReactNode;
   onSubmit: (identifier: string, password: string) => void;
   onCode: () => void;
   onSignUp: () => void;
@@ -422,16 +466,34 @@ function PasswordScreen({
   return (
     <>
       <Heading title={t("auth.dialog.heading", "Sign in or create an account")} />
-      <form className="flex flex-col gap-3" onSubmit={submitWith(() => onSubmit(identifier.trim(), password))}>
-        <Label htmlFor="sign-in-identifier">{t("auth.field.identifier", "Email or username")}</Label>
-        <Input id="sign-in-identifier" autoComplete="username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
-        <Label htmlFor="sign-in-password">{t("auth.field.password", "Password")}</Label>
-        <Input id="sign-in-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        <Button type="submit" disabled={busy || !human || !identifier.trim() || !password}>
+      <form className="flex flex-col gap-6" onSubmit={submitWith(() => onSubmit(identifier.trim(), password))}>
+        <div className="flex flex-col gap-5">
+          <Input
+            autoComplete="username"
+            placeholder={t("auth.field.identifier", "Email or username")}
+            aria-label={t("auth.field.identifier", "Email or username")}
+            className={FIELD}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+          />
+          <div className="flex flex-col">
+            <Input
+              type="password"
+              autoComplete="current-password"
+              placeholder={t("auth.field.password", "Password")}
+              aria-label={t("auth.field.password", "Password")}
+              className={FIELD}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {challenge}
+          </div>
+        </div>
+        <Button type="submit" className={PRIMARY} disabled={busy || !human || !identifier.trim() || !password}>
           {busy ? <Spinner /> : t("auth.signIn", "Sign in")}
         </Button>
       </form>
-      <div className="flex items-center justify-between gap-3">
+      <div className="-mt-3 flex items-center justify-between gap-3">
         <Switch onClick={onCode}>{t("auth.useCodeInstead", "Sign in with a code instead")}</Switch>
         <Switch onClick={onSignUp}>{t("auth.createAccount", "Create an account")}</Switch>
       </div>
@@ -439,7 +501,19 @@ function PasswordScreen({
   );
 }
 
-function SignUpScreen({ busy, human, onSubmit, onSignIn }: { busy: boolean; human: boolean; onSubmit: (email: string, password: string, verify: boolean) => void; onSignIn: () => void }) {
+function SignUpScreen({
+  busy,
+  human,
+  challenge,
+  onSubmit,
+  onSignIn,
+}: {
+  busy: boolean;
+  human: boolean;
+  challenge: ReactNode;
+  onSubmit: (email: string, password: string, verify: boolean) => void;
+  onSignIn: () => void;
+}) {
   const t = useT();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -447,20 +521,41 @@ function SignUpScreen({ busy, human, onSubmit, onSignIn }: { busy: boolean; huma
   return (
     <>
       <Heading title={t("auth.signup.heading", "Create an account")} description={t("auth.signup.desc", "Your account works right away. A KYC check later needs a verified email.")} />
-      <form className="flex flex-col gap-3" onSubmit={submitWith(() => onSubmit(email.trim(), password, verify))}>
-        <Label htmlFor="sign-up-email">{t("auth.field.email", "Email")}</Label>
-        <Input id="sign-up-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Label htmlFor="sign-up-password">{t("auth.field.password", "Password")}</Label>
-        <Input id="sign-up-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={verify} onCheckedChange={setVerify} />
-          {t("auth.signup.verifyNow", "Verify my email now")}
-        </label>
-        <Button type="submit" disabled={busy || !human || !looksLikeEmail(email) || password.length < 8}>
+      <form className="flex flex-col gap-6" onSubmit={submitWith(() => onSubmit(email.trim(), password, verify))}>
+        <div className="flex flex-col gap-5">
+          <Input
+            type="email"
+            autoComplete="email"
+            placeholder={t("auth.field.email", "Email")}
+            aria-label={t("auth.field.email", "Email")}
+            className={FIELD}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <Input
+            type="password"
+            autoComplete="new-password"
+            placeholder={t("auth.field.password", "Password")}
+            aria-label={t("auth.field.password", "Password")}
+            className={FIELD}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <div className="flex flex-col">
+            <label className="flex items-center gap-2 text-(length:--sign-in-text-body) text-ink-soft">
+              <Checkbox checked={verify} onCheckedChange={setVerify} />
+              {t("auth.signup.verifyNow", "Verify my email now")}
+            </label>
+            {challenge}
+          </div>
+        </div>
+        <Button type="submit" className={PRIMARY} disabled={busy || !human || !looksLikeEmail(email) || password.length < 8}>
           {busy ? <Spinner /> : t("auth.signup.create", "Create account")}
         </Button>
       </form>
-      <Switch onClick={onSignIn}>{t("auth.signup.haveAccount", "Already have an account? Sign in")}</Switch>
+      <div className="-mt-3 flex justify-center">
+        <Switch onClick={onSignIn}>{t("auth.signup.haveAccount", "Already have an account? Sign in")}</Switch>
+      </div>
     </>
   );
 }

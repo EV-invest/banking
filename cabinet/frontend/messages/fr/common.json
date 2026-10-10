@@ -7251,6 +7251,10 @@
     "en": "Captcha failed to load. Please refresh the page.",
     "t": "Le captcha n’a pas pu se charger. Actualisez la page."
   },
+  "auth.err.captchaUnavailable": {
+    "en": "We could not check the captcha just now. Please try again.",
+    "t": "Impossible de vérifier le captcha pour le moment. Veuillez réessayer."
+  },
   "auth.err.codeExpired": {
     "en": "That code has expired. Send yourself a new code.",
     "t": "Ce code a expiré. Demandez-en un nouveau."

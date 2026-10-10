@@ -68,7 +68,9 @@ export function Turnstile({ onToken, generation, onUnavailable }: { onToken: (to
           callback: (token: string) => callbacks.current.onToken(token),
           "expired-callback": () => callbacks.current.onToken(null),
           "error-callback": () => callbacks.current.onToken(null),
-          appearance: "interaction-only",
+          theme: "dark",
+          size: "flexible",
+          appearance: "always",
         });
       },
       () => !cancelled && callbacks.current.onUnavailable(),
@@ -86,5 +88,5 @@ export function Turnstile({ onToken, generation, onUnavailable }: { onToken: (to
     window.turnstile?.reset(widget.current);
   }, [generation]);
 
-  return <div ref={host} />;
+  return <div ref={host} className="mx-0.5 mt-3 min-h-16.25 [&_iframe]:block" />;
 }
