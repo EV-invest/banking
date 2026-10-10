@@ -101,6 +101,8 @@ message UserProfile {
   string suspended_by = 19;
   // Unix SECONDS an "admin_hold" lapses; 0 when nothing lapses. Parity only, as above.
   int64 hold_expires_at = 20;
+  // Parity with concierge.v1.UserProfile.username, like the two above.
+  string username = 23;
 }
 
 // The caller's editable profile, full-replace. Same 10 fields as the editable part of

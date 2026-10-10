@@ -543,7 +543,7 @@ dependencies = [
  "axum-extra",
  "color-eyre",
  "concierge_iam",
- "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26)",
+ "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=f55329e1a711bd927f54e333e966e82e2db63f59)",
  "dotenvy",
  "ev_lib",
  "evbanking_contracts",
@@ -759,7 +759,7 @@ dependencies = [
 [[package]]
 name = "concierge_iam"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
+source = "git+https://github.com/EV-invest/concierge.git?rev=f55329e1a711bd927f54e333e966e82e2db63f59#f55329e1a711bd927f54e333e966e82e2db63f59"
 dependencies = [
  "concierge_iam_derive",
  "serde",
@@ -768,7 +768,7 @@ dependencies = [
 [[package]]
 name = "concierge_iam_derive"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
+source = "git+https://github.com/EV-invest/concierge.git?rev=f55329e1a711bd927f54e333e966e82e2db63f59#f55329e1a711bd927f54e333e966e82e2db63f59"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -1660,7 +1660,7 @@ dependencies = [
 [[package]]
 name = "domain"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
+source = "git+https://github.com/EV-invest/concierge.git?rev=f55329e1a711bd927f54e333e966e82e2db63f59#f55329e1a711bd927f54e333e966e82e2db63f59"
 dependencies = [
  "concierge_iam",
  "ev_lib",
@@ -1879,11 +1879,12 @@ dependencies = [
 [[package]]
 name = "evconcierge_auth"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
+source = "git+https://github.com/EV-invest/concierge.git?rev=f55329e1a711bd927f54e333e966e82e2db63f59#f55329e1a711bd927f54e333e966e82e2db63f59"
 dependencies = [
  "color-eyre",
  "ev_lib",
  "evconcierge_contracts",
+ "form_urlencoded",
  "http 1.4.2",
  "jsonwebtoken",
  "redis 1.4.1",
@@ -1901,7 +1902,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_contracts"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26#cf481dc6cb33f5138247815f3becf694a868db26"
+source = "git+https://github.com/EV-invest/concierge.git?rev=f55329e1a711bd927f54e333e966e82e2db63f59#f55329e1a711bd927f54e333e966e82e2db63f59"
 dependencies = [
  "prost 0.14.4",
  "tonic 0.14.6",
@@ -3814,7 +3815,7 @@ dependencies = [
  "color-eyre",
  "concierge_iam",
  "domain 0.1.0",
- "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=cf481dc6cb33f5138247815f3becf694a868db26)",
+ "domain 0.1.0 (git+https://github.com/EV-invest/concierge.git?rev=f55329e1a711bd927f54e333e966e82e2db63f59)",
  "dotenvy",
  "ev_lib",
  "evbanking_auth",

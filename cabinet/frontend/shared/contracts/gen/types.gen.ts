@@ -4943,6 +4943,12 @@ export type BankingV1UserProfile = {
      * Unix SECONDS an "admin_hold" lapses; 0 when nothing lapses. Parity only, as above.
      */
     hold_expires_at?: number | string;
+    /**
+     * username
+     *
+     * Parity with concierge.v1.UserProfile.username, like the two above.
+     */
+    username?: string;
 };
 
 /**
@@ -4985,6 +4991,16 @@ export type BankingV1UserSummary = {
      * serve it, but the field number must not be reused.
      */
     role_is_break_glass?: boolean;
+    /**
+     * email_verified
+     *
+     * Parity with concierge.v1.UserSummary, like `role` above.
+     */
+    email_verified?: boolean;
+    /**
+     * username
+     */
+    username?: string;
 };
 
 /**
@@ -5254,6 +5270,12 @@ export type ConciergeV1AdminUserSummary = {
      * Unix SECONDS an "admin_hold" lapses. 0 when nothing lapses.
      */
     hold_expires_at?: number | string;
+    /**
+     * username
+     *
+     * See UserProfile.username. ListUsers' query matches it as it matches the email.
+     */
+    username?: string;
 };
 
 /**
@@ -5418,47 +5440,6 @@ export type ConciergeV1ExchangeCodeRequest = {
      * The PKCE verifier whose S256 challenge was sent to authorize.
      */
     code_verifier?: string;
-};
-
-/**
- * ExchangeRequest
- */
-export type ConciergeV1ExchangeRequest = {
-    /**
-     * auth_code
-     *
-     * The Google authorization code from the OAuth redirect.
-     */
-    auth_code?: string;
-    /**
-     * code_verifier
-     *
-     * The PKCE code verifier the BFF generated for this transaction (S256).
-     */
-    code_verifier?: string;
-    /**
-     * redirect_uri
-     *
-     * The exact redirect_uri used in the authorize request (Google requires a match).
-     */
-    redirect_uri?: string;
-    /**
-     * nonce
-     *
-     * The nonce the BFF put in the authorize request; matched against Google's id_token.
-     */
-    nonce?: string;
-    /**
-     * user_agent
-     *
-     * Device metadata captured by the BFF at sign-in, stored on the refresh-token family
-     * for the "sessions & devices" surface. Best-effort, free-form.
-     */
-    user_agent?: string;
-    /**
-     * ip
-     */
-    ip?: string;
 };
 
 /**
@@ -5748,6 +5729,12 @@ export type ConciergeV1GrantHolder = {
      * preferred_name
      */
     preferred_name?: string;
+    /**
+     * username
+     *
+     * The holder's handle; empty when they have none. A delegate sees it as it sees the email.
+     */
+    username?: string;
 };
 
 /**
@@ -5766,9 +5753,11 @@ export type ConciergeV1GrantPermissionRequest = {
     reason?: string;
 } & ({
     /**
-     * email
+     * account
+     *
+     * An email or a username: one handle, resolved the way a password sign-in resolves it.
      */
-    email: string;
+    account: string;
 } | {
     /**
      * user_id
@@ -6986,9 +6975,11 @@ export type ConciergeV1RevokePermissionRequest = {
     reason?: string;
 } & ({
     /**
-     * email
+     * account
+     *
+     * An email or a username, as in GrantPermissionRequest.
      */
-    email: string;
+    account: string;
 } | {
     /**
      * user_id
@@ -7508,6 +7499,13 @@ export type ConciergeV1UserProfile = {
      * seat's permissions plus every tenant's. A relying party gates on this alone.
      */
     permissions?: Array<string>;
+    /**
+     * username
+     *
+     * A handle beside the email, interchangeable with it wherever an account is named.
+     * Empty when the account has none.
+     */
+    username?: string;
 };
 
 /**
@@ -7698,6 +7696,16 @@ export type ConciergeV1UserSummary = {
      * seats nobody. A client MUST render it as a warning, never as ownership.
      */
     role_is_break_glass?: boolean;
+    /**
+     * email_verified
+     */
+    email_verified?: boolean;
+    /**
+     * username
+     *
+     * Empty when the account has no handle.
+     */
+    username?: string;
 };
 
 /**
@@ -10577,35 +10585,6 @@ export type BankingV1WalletServiceRequestWithdrawalResponses = {
 };
 
 export type BankingV1WalletServiceRequestWithdrawalResponse = BankingV1WalletServiceRequestWithdrawalResponses[keyof BankingV1WalletServiceRequestWithdrawalResponses];
-
-export type ConciergeV1AuthServiceExchangeData = {
-    body: ConciergeV1ExchangeRequest;
-    headers: {
-        'Connect-Protocol-Version': ConnectProtocolVersion;
-        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
-    };
-    path?: never;
-    query?: never;
-    url: '/concierge.v1.AuthService/Exchange';
-};
-
-export type ConciergeV1AuthServiceExchangeErrors = {
-    /**
-     * Error
-     */
-    default: ConnectError;
-};
-
-export type ConciergeV1AuthServiceExchangeError = ConciergeV1AuthServiceExchangeErrors[keyof ConciergeV1AuthServiceExchangeErrors];
-
-export type ConciergeV1AuthServiceExchangeResponses = {
-    /**
-     * Success
-     */
-    200: ConciergeV1TokenResponse;
-};
-
-export type ConciergeV1AuthServiceExchangeResponse = ConciergeV1AuthServiceExchangeResponses[keyof ConciergeV1AuthServiceExchangeResponses];
 
 export type ConciergeV1AuthServiceExchangeCodeData = {
     body: ConciergeV1ExchangeCodeRequest;
