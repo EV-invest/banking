@@ -151,5 +151,6 @@ fn user_to_proto(user: &User) -> pb::UserProfile {
 		// the default as a claim that the account is active.
 		suspended_by: String::new(),
 		hold_expires_at: 0,
+		username: String::new(), // parity; the handle lives in concierge
 	}
 }

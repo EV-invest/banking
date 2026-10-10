@@ -28,7 +28,7 @@ use tonic::Status;
 use crate::{
 	dto,
 	error::ApiError,
-	routes::{editable, parse_body, require_permission, require_identity, require_money_token, require_token, required, required_u32, verify_csrf},
+	routes::{editable, parse_body, require_identity, require_money_token, require_permission, require_token, required, required_u32, verify_csrf},
 	state::AppState,
 };
 
@@ -1537,6 +1537,7 @@ mod admin_route_tests {
 						email: KNOWN_INVESTOR_EMAIL.into(),
 						legal_name: String::new(),
 						preferred_name: "Seven".into(),
+						username: String::new(),
 					},
 					// A row without its grant names nobody the tab could act on.
 					cc::GrantHolder {
@@ -2083,10 +2084,7 @@ mod admin_route_tests {
 			// bodies are complete so nothing short-circuits on validation before it.
 			let (status, response) = send(&app, signed(method, uri, body, true)).await;
 			assert_eq!(status, StatusCode::FORBIDDEN, "{method} {uri} must refuse an operator");
-			assert_eq!(
-				response["error"], "requires bank:allocation:manage",
-				"{method} {uri} must name the permission that gets through"
-			);
+			assert_eq!(response["error"], "requires bank:allocation:manage", "{method} {uri} must name the permission that gets through");
 		}
 
 		let seen = seen.lock().unwrap();
@@ -3279,7 +3277,7 @@ mod admin_route_tests {
 		let seen = seen.lock().unwrap();
 		assert_eq!(seen.list_grants.as_deref(), Some("sa"));
 		let grant = seen.grant_permission.as_ref().expect("the grant reached the directory");
-		assert_eq!(grant.subject, Some(cc::grant_permission_request::Subject::Email("investor7@example.test".into())));
+		assert_eq!(grant.subject, Some(cc::grant_permission_request::Subject::Account("investor7@example.test".into())));
 		assert_eq!(grant.target, "sa:operator");
 		assert_eq!(grant.reason, "runs the calls");
 		let revoke = seen.revoke_permission.as_ref().expect("the revocation reached the directory");

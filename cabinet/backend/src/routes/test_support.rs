@@ -60,10 +60,6 @@ impl AuthService for ConciergeJwks {
 		}))
 	}
 
-	async fn exchange(&self, _: Request<cc::ExchangeRequest>) -> Result<Response<cc::TokenResponse>, Status> {
-		not_reached()
-	}
-
 	async fn exchange_code(&self, _: Request<cc::ExchangeCodeRequest>) -> Result<Response<cc::ClientTokenResponse>, Status> {
 		not_reached()
 	}

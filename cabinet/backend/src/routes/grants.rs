@@ -78,7 +78,7 @@ pub async fn grant(State(st): State<AppState>, jar: CookieJar, headers: HeaderMa
 	let req = cc::GrantPermissionRequest {
 		subject: Some(match subject(&v)? {
 			Subject::UserId(id) => cc::grant_permission_request::Subject::UserId(id),
-			Subject::Email(email) => cc::grant_permission_request::Subject::Email(email),
+			Subject::Email(email) => cc::grant_permission_request::Subject::Account(email),
 		}),
 		target: target(&v, &ns)?,
 		reason: editable(&v, "reason"),
@@ -99,7 +99,7 @@ pub async fn revoke(State(st): State<AppState>, jar: CookieJar, headers: HeaderM
 	let req = cc::RevokePermissionRequest {
 		subject: Some(match subject(&v)? {
 			Subject::UserId(id) => cc::revoke_permission_request::Subject::UserId(id),
-			Subject::Email(email) => cc::revoke_permission_request::Subject::Email(email),
+			Subject::Email(email) => cc::revoke_permission_request::Subject::Account(email),
 		}),
 		target: target(&v, &ns)?,
 		reason: editable(&v, "reason"),

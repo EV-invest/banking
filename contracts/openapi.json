@@ -5724,65 +5724,6 @@
         }
       }
     },
-    "/concierge.v1.AuthService/Exchange": {
-      "post": {
-        "tags": [
-          "concierge.v1.AuthService"
-        ],
-        "summary": "Exchange",
-        "description": "Exchange a Google authorization code (with its PKCE verifier) for concierge's\n OWN tokens. Called by the cabinet BFF on the OAuth callback. Provisions the\n user on first sign-in in the directory module.",
-        "operationId": "concierge.v1.AuthService.Exchange",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/concierge.v1.ExchangeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/concierge.v1.TokenResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/concierge.v1.AuthService/ExchangeCode": {
       "post": {
         "tags": [
@@ -7732,7 +7673,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "Grant a user a target inside a tenant's namespace: an alias (`sa:operator`), a\n permission (`sa:work:leads:read`) or a `*` pattern (`sa:work:*`). Nothing grants\n anything in the `iam`, `concierge`, `bank` or `seat` namespaces (INVALID_ARGUMENT),\n and nobody grants to their own account (PERMISSION_DENIED). A target the tenant's\n catalog does not define grants nothing and is INVALID_ARGUMENT. Re-granting what is\n held is a no-op.",
-        "description": "Who may: a seat holding `iam:tenants:grant` — any target. The holder of an alias the\n catalog lets delegate (`delegations`) — exactly the aliases it delegates, naming the\n user by `email` only (a `user_id` is PERMISSION_DENIED: ids are visible in the\n roster, and granting one would reveal its owner's address). Anyone else, or a target\n outside the delegation: PERMISSION_DENIED, before the user is looked up.\n\n To a seat: an unknown user or address is NOT_FOUND; an address held by several\n accounts, or a disabled/held account, is FAILED_PRECONDITION with the reason. To a\n delegate all three are the SAME FAILED_PRECONDITION (\"this address cannot be granted\n access\"), so a grant never tells them whether, or how, an address is known. A\n delegate gets a budget of GrantPermission + RevokePermission calls per hour\n (refusals included); past it, RESOURCE_EXHAUSTED.",
+        "description": "Who may: a seat holding `iam:tenants:grant` — any target. The holder of an alias the\n catalog lets delegate (`delegations`) — exactly the aliases it delegates, naming the\n user by `account` (an email or a username) only (a `user_id` is PERMISSION_DENIED:\n ids are visible in the roster, and granting one would reveal its owner's address).\n Anyone else, or a target outside the delegation: PERMISSION_DENIED, before the user\n is looked up. An email names the accounts it is verified on or backs a password of;\n only when it names none is the handle read as a username.\n\n To a seat: an unknown user or handle is NOT_FOUND; a handle naming several\n accounts, or a disabled/held account, is FAILED_PRECONDITION with the reason. To a\n delegate all three are the SAME FAILED_PRECONDITION (\"this address cannot be granted\n access\"), so a grant never tells them whether, or how, a handle is known. A\n delegate gets a budget of GrantPermission + RevokePermission calls per hour\n (refusals included); past it, RESOURCE_EXHAUSTED.",
         "operationId": "concierge.v1.UserDirectory.GrantPermission",
         "parameters": [
           {
@@ -7850,7 +7791,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "ListGrants",
-        "description": "The active grants inside one tenant namespace, with each holder's identity. A seat\n holding `iam:tenants:grant`, or a delegate of that namespace — who gets `legal_name`\n AND `preferred_name` empty: the team sees each other's email and grant, and nothing\n that says who an address belongs to.",
+        "description": "The active grants inside one tenant namespace, with each holder's identity. A seat\n holding `iam:tenants:grant`, or a delegate of that namespace — who gets `legal_name`\n AND `preferred_name` empty: the team sees each other's email, username and grant, and\n nothing that says who an address belongs to.",
         "operationId": "concierge.v1.UserDirectory.ListGrants",
         "parameters": [
           {
@@ -8027,7 +7968,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "RevokePermission",
-        "description": "Take a grant away. Same authority as GrantPermission, either addressing form for a\n delegate too: the answer depends only on a grant they can already list. NOT_FOUND when\n the user holds no active grant of that target — including an address nobody, or\n several accounts, hold. Shares GrantPermission's budget.",
+        "description": "Take a grant away. Same authority as GrantPermission, either addressing form for a\n delegate too: the answer depends only on a grant they can already list. NOT_FOUND when\n the user holds no active grant of that target — including a handle naming nobody, or\n several accounts. Shares GrantPermission's budget.",
         "operationId": "concierge.v1.UserDirectory.RevokePermission",
         "parameters": [
           {
@@ -13017,6 +12958,11 @@
             "title": "hold_expires_at",
             "format": "int64",
             "description": "Unix SECONDS an \"admin_hold\" lapses; 0 when nothing lapses. Parity only, as above."
+          },
+          "username": {
+            "type": "string",
+            "title": "username",
+            "description": "Parity with concierge.v1.UserProfile.username, like the two above."
           }
         },
         "title": "UserProfile",
@@ -13055,6 +13001,15 @@
             "type": "boolean",
             "title": "role_is_break_glass",
             "description": "Parity with concierge.v1.UserSummary.role_is_break_glass — the money plane does not\n serve it, but the field number must not be reused."
+          },
+          "email_verified": {
+            "type": "boolean",
+            "title": "email_verified",
+            "description": "Parity with concierge.v1.UserSummary, like `role` above."
+          },
+          "username": {
+            "type": "string",
+            "title": "username"
           }
         },
         "title": "UserSummary",
@@ -13324,6 +13279,11 @@
             "title": "hold_expires_at",
             "format": "int64",
             "description": "Unix SECONDS an \"admin_hold\" lapses. 0 when nothing lapses."
+          },
+          "username": {
+            "type": "string",
+            "title": "username",
+            "description": "See UserProfile.username. ListUsers' query matches it as it matches the email."
           }
         },
         "title": "AdminUserSummary",
@@ -13509,42 +13469,6 @@
           }
         },
         "title": "ExchangeCodeRequest",
-        "additionalProperties": false
-      },
-      "concierge.v1.ExchangeRequest": {
-        "type": "object",
-        "properties": {
-          "auth_code": {
-            "type": "string",
-            "title": "auth_code",
-            "description": "The Google authorization code from the OAuth redirect."
-          },
-          "code_verifier": {
-            "type": "string",
-            "title": "code_verifier",
-            "description": "The PKCE code verifier the BFF generated for this transaction (S256)."
-          },
-          "redirect_uri": {
-            "type": "string",
-            "title": "redirect_uri",
-            "description": "The exact redirect_uri used in the authorize request (Google requires a match)."
-          },
-          "nonce": {
-            "type": "string",
-            "title": "nonce",
-            "description": "The nonce the BFF put in the authorize request; matched against Google's id_token."
-          },
-          "user_agent": {
-            "type": "string",
-            "title": "user_agent",
-            "description": "Device metadata captured by the BFF at sign-in, stored on the refresh-token family\n for the \"sessions \u0026 devices\" surface. Best-effort, free-form."
-          },
-          "ip": {
-            "type": "string",
-            "title": "ip"
-          }
-        },
-        "title": "ExchangeRequest",
         "additionalProperties": false
       },
       "concierge.v1.FeePolicyApprovalMail": {
@@ -13812,6 +13736,11 @@
           "preferred_name": {
             "type": "string",
             "title": "preferred_name"
+          },
+          "username": {
+            "type": "string",
+            "title": "username",
+            "description": "The holder's handle; empty when they have none. A delegate sees it as it sees the email."
           }
         },
         "title": "GrantHolder",
@@ -13838,14 +13767,15 @@
               {
                 "type": "object",
                 "properties": {
-                  "email": {
+                  "account": {
                     "type": "string",
-                    "title": "email"
+                    "title": "account",
+                    "description": "An email or a username: one handle, resolved the way a password sign-in resolves it."
                   }
                 },
-                "title": "email",
+                "title": "account",
                 "required": [
-                  "email"
+                  "account"
                 ]
               },
               {
@@ -15093,14 +15023,15 @@
               {
                 "type": "object",
                 "properties": {
-                  "email": {
+                  "account": {
                     "type": "string",
-                    "title": "email"
+                    "title": "account",
+                    "description": "An email or a username, as in GrantPermissionRequest."
                   }
                 },
-                "title": "email",
+                "title": "account",
                 "required": [
-                  "email"
+                  "account"
                 ]
               },
               {
@@ -15624,6 +15555,11 @@
             },
             "title": "permissions",
             "description": "What the caller may do, concrete: no alias, no wildcard. Filled by GetMe only. To a\n relying party, its tenant's namespace and nothing else; to a first-party session, the\n seat's permissions plus every tenant's. A relying party gates on this alone."
+          },
+          "username": {
+            "type": "string",
+            "title": "username",
+            "description": "A handle beside the email, interchangeable with it wherever an account is named.\n Empty when the account has none."
           }
         },
         "title": "UserProfile",
@@ -15824,6 +15760,15 @@
             "type": "boolean",
             "title": "role_is_break_glass",
             "description": "True when `role` above came from the OWNER_SUBJECTS emergency allowlist rather than\n from `users.role`. It is real authority, but it is the environment's and not the\n register's: it disappears the moment the fund has its first persisted owner, and it\n seats nobody. A client MUST render it as a warning, never as ownership."
+          },
+          "email_verified": {
+            "type": "boolean",
+            "title": "email_verified"
+          },
+          "username": {
+            "type": "string",
+            "title": "username",
+            "description": "Empty when the account has no handle."
           }
         },
         "title": "UserSummary",
@@ -15990,7 +15935,7 @@
     },
     {
       "name": "concierge.v1.AuthService",
-      "description": "AuthService — the concierge plane's token issuance and authorization surface.\n\n Issues first-party asymmetric JWTs (EdDSA/Ed25519) after Google OAuth2 sign-in,\n rotates refresh tokens, and publishes verification keys. Services do NOT call\n this per request to authorize: they verify access tokens locally against the\n cached JWKS via the shared `evconcierge_auth` flow (no round trip, no\n per-service token storage). They DO call `Jwks` periodically to refresh that\n cache, since concierge speaks only gRPC (no HTTP `.well-known` endpoint).\n\n The cabinet BFF is the OAuth confidential client. It runs the browser-facing\n authorize redirect (PKCE + state + nonce) and then calls `Exchange`\n server-to-server with the Google authorization code; the auth module performs\n the confidential code→token exchange with Google, validates Google's id_token,\n and discards it — Google's token is never forwarded inward."
+      "description": "AuthService — the concierge plane's token issuance and authorization surface.\n\n Issues first-party asymmetric JWTs (EdDSA/Ed25519), rotates refresh tokens, and\n publishes verification keys. Services do NOT call this per request to authorize:\n they verify access tokens locally against the cached JWKS via the shared\n `evconcierge_auth` flow (no round trip, no per-service token storage). They DO call\n `Jwks` periodically to refresh that cache, since concierge speaks only gRPC (no HTTP\n `.well-known` endpoint).\n\n Sign-in itself (Google, GitHub, emailed code, password) is the plane's own HTTP\n surface (`/auth/*`, reached as `evinvest.ltd/api/auth/*`), which opens the session\n in process; no RPC signs anybody in."
     },
     {
       "name": "concierge.v1.GovernanceService",

@@ -134,6 +134,9 @@ message UserSummary {
   // Parity with concierge.v1.UserSummary.role_is_break_glass — the money plane does not
   // serve it, but the field number must not be reused.
   bool role_is_break_glass = 6;
+  // Parity with concierge.v1.UserSummary, like `role` above.
+  bool email_verified = 7;
+  string username = 8;
 }
 
 message JwksRequest {}

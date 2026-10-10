@@ -197,6 +197,9 @@ fn token_response(access_token: String, access_exp: u64, refresh: IssuedRefresh,
 			role: String::new(),
 			// Same reason: the money plane has no emergency allowlist to report on.
 			role_is_break_glass: false,
+			// Parity only, like `role`.
+			email_verified: false,
+			username: String::new(),
 		}),
 	}
 }

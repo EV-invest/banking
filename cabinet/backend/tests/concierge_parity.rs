@@ -45,6 +45,7 @@ fn user_profile_is_wire_identical_across_planes() {
 		// fills it on GetMe only, and the cabinet reads it from there. The money plane's
 		// copy serves its admin/operator path, where it never travels.
 		permissions: Vec::new(),
+		username: "ada".into(),
 	};
 
 	let bk_profile = bk::UserProfile::decode(cc_profile.encode_to_vec().as_slice()).expect("concierge UserProfile decodes as banking UserProfile");
@@ -69,6 +70,7 @@ fn user_profile_is_wire_identical_across_planes() {
 	assert_eq!(bk_profile.role_is_break_glass, cc_profile.role_is_break_glass);
 	assert_eq!(bk_profile.suspended_by, cc_profile.suspended_by);
 	assert_eq!(bk_profile.hold_expires_at, cc_profile.hold_expires_at);
+	assert_eq!(bk_profile.username, cc_profile.username);
 
 	// Re-encoding from banking must reproduce concierge's exact bytes — no field added on
 	// one side that the other silently drops.
@@ -107,6 +109,8 @@ fn user_summary_is_wire_identical_across_planes() {
 		role: "operator".into(),
 		// TRUE for the same reason as above — `false` would hide a dropped field.
 		role_is_break_glass: true,
+		email_verified: true,
+		username: "ada".into(),
 	};
 
 	let bk_summary = bk::UserSummary::decode(cc_summary.encode_to_vec().as_slice()).expect("concierge UserSummary decodes as banking UserSummary");
@@ -117,5 +121,7 @@ fn user_summary_is_wire_identical_across_planes() {
 	assert_eq!(bk_summary.token_version, cc_summary.token_version);
 	assert_eq!(bk_summary.role, cc_summary.role);
 	assert_eq!(bk_summary.role_is_break_glass, cc_summary.role_is_break_glass);
+	assert_eq!(bk_summary.email_verified, cc_summary.email_verified);
+	assert_eq!(bk_summary.username, cc_summary.username);
 	assert_eq!(bk_summary.encode_to_vec(), cc_summary.encode_to_vec());
 }
