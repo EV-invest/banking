@@ -223,9 +223,11 @@ export function SecurityCard({ loading, email, sessions, sessionsFailed, classNa
   return (
     <TitledCard title={t("ui.security", "Security")} sub={t("settings.securitySub", "How you sign in and where your account is active")} className={className}>
       <Row>
-        <RowLabel title={t("ui.signedInGoogle", "Signed in with Google")} sub={loading ? "…" : email || "—"} />
-        {/* i18n-max: 12 — a `shrink-0` Pill beside the `min-w-0` row label. */}
-        <Pill>{t("settings.connected", "Connected")}</Pill>
+        <RowLabel title={t("auth.methods.title", "Sign-in methods")} sub={loading ? "…" : email || "—"} />
+        {/* i18n-max: 10 — a `shrink-0` text link beside the `min-w-0` row label. */}
+        <Link href="/settings?section=security" className={TEXT_LINK}>
+          {t("ui.manage", "Manage")}
+        </Link>
       </Row>
       <Hairline />
       <Row>

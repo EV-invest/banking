@@ -6,10 +6,13 @@ import { useState } from "react";
 
 import { Button, Skeleton } from "@evinvest/uikit";
 
+import { Link } from "@/shared/ui/cabinet-link";
+
 import { useKycStatus } from "@/features/kyc/model/use-kyc-status";
 import { VerificationDialog } from "@/features/kyc/ui/verification-dialog";
 import { Hairline, Pill, RowLabel } from "@/shared/ui/list-card";
 import { Settled } from "@/shared/ui/motion";
+import { useSession } from "@/shared/lib/use-session";
 import { SupportLink } from "@/shared/ui/support-link";
 
 // Where a user begins — or picks up — identity verification from their profile. It sits inside
@@ -39,10 +42,27 @@ export function StartVerificationRow() {
   const t = useT();
   const { level, runningCase, canStart, loading } = useKycStatus();
   const [open, setOpen] = useState(false);
+  const unverified = useSession()?.user?.emailVerified === false;
 
   // The plane can know the tier has moved before the profile's mirror of it does; when it
   // does, this row is already history and must not offer to spend another vendor session.
   if (level > 0) return null;
+
+  // A level above 0 needs a verified email, so the check would be paid for nothing: the
+  // reader proves the address first.
+  if (unverified) {
+    return (
+      <>
+        <Hairline />
+        <div className="flex min-w-0 items-center justify-between gap-3 py-3.5">
+          <RowLabel title={t("profile.kyc.verifyEmailTitle", "Verify your email first")} sub={t("profile.kyc.verifyEmailSub", "Identity checks open once your address is confirmed")} />
+          <Link href="/settings?section=security" className="shrink-0 text-sm font-semibold text-primary-ink">
+            {t("auth.email.verify", "Verify")}
+          </Link>
+        </div>
+      </>
+    );
+  }
 
   const running = runningCase !== null;
   // Alive, holding the start gate, and with no vendor session left to re-enter.

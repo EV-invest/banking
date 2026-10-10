@@ -2623,21 +2623,9 @@
     "en": "You are answering as {email}.",
     "t": "Bạn đang trả lời với tư cách {email}."
   },
-  "auth.brandBlurb": {
-    "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
-    "t": "Tiếp cận theo chuẩn tổ chức tới các quỹ bất động sản ven biển và hạ tầng đã được thẩm định — quản lý trọn vẹn từ đầu đến cuối."
-  },
-  "auth.brandHeadline": {
-    "en": "Private capital for Vietnam's coastal economy.",
-    "t": "Vốn tư nhân cho kinh tế biển Việt Nam."
-  },
   "auth.cabinet": {
     "en": "Cabinet",
     "t": "Cabinet"
-  },
-  "auth.continueWithGoogle": {
-    "en": "Continue with Google",
-    "t": "Tiếp tục với Google"
   },
   "auth.err.denied": {
     "en": "Sign-in was cancelled.",
@@ -2663,10 +2651,6 @@
     "en": "Sign in again",
     "t": "Đăng nhập lại"
   },
-  "auth.signInSub": {
-    "en": "Sign in to manage your investments.",
-    "t": "Đăng nhập để quản lý các khoản đầu tư của bạn."
-  },
   "auth.signOut": {
     "en": "Sign out",
     "t": "Đăng xuất"
@@ -2687,73 +2671,9 @@
     "en": "You've been signed out of your cabinet.",
     "t": "Bạn đã đăng xuất khỏi tài khoản của mình."
   },
-  "auth.signup.next": {
-    "en": "What happens next",
-    "t": "Các bước tiếp theo"
-  },
-  "auth.signup.step.fund.body": {
-    "en": "Fund your wallet — a deposit is credited once the network confirms it — and subscribe to an allocation.",
-    "t": "Nạp tiền vào ví — khoản nạp được ghi có ngay khi mạng lưới xác nhận — rồi đăng ký một phân bổ."
-  },
-  "auth.signup.step.fund.title": {
-    "en": "Deposit and subscribe",
-    "t": "Nạp tiền và đăng ký"
-  },
-  "auth.signup.step.signIn.body": {
-    "en": "Your cabinet is created on the first sign-in.",
-    "t": "Cabinet của bạn được tạo ngay ở lần đăng nhập đầu tiên."
-  },
-  "auth.signup.step.signIn.title": {
-    "en": "Sign in with Google",
-    "t": "Đăng nhập bằng Google"
-  },
-  "auth.signup.step.verify.title": {
-    "en": "Verify your identity",
-    "t": "Xác minh danh tính"
-  },
-  "auth.signup.sub": {
-    "en": "One Google sign-in sets up your cabinet — no forms, no password.",
-    "t": "Một lần đăng nhập Google là đủ để tạo cabinet của bạn — không biểu mẫu, không mật khẩu."
-  },
-  "auth.signup.title": {
-    "en": "Open your investor account",
-    "t": "Mở tài khoản nhà đầu tư"
-  },
-  "auth.stat.asOf": {
-    "en": "As of {date}",
-    "t": "Tính đến {date}"
-  },
-  "auth.stat.closingTarget": {
-    "en": "Closing target",
-    "t": "Mục tiêu đóng quỹ"
-  },
   "auth.stat.risk": {
     "en": "Capital at risk. A target is not a forecast, and returns are not guaranteed.",
     "t": "Vốn có rủi ro. Mục tiêu không phải dự báo, và lợi nhuận không được đảm bảo."
-  },
-  "auth.stat.targetIrr": {
-    "en": "Target IRR",
-    "t": "IRR mục tiêu"
-  },
-  "auth.switch.haveAccount": {
-    "en": "Already have an account?",
-    "t": "Đã có tài khoản?"
-  },
-  "auth.switch.newHere": {
-    "en": "New to EV Invest?",
-    "t": "Mới đến EV Invest?"
-  },
-  "auth.switch.openAccount": {
-    "en": "Open an account",
-    "t": "Mở tài khoản"
-  },
-  "auth.switch.signIn": {
-    "en": "Sign in",
-    "t": "Đăng nhập"
-  },
-  "auth.welcomeBack": {
-    "en": "Welcome back",
-    "t": "Chào mừng trở lại"
   },
   "consent.approve": {
     "en": "Approve — move my money",
@@ -5287,10 +5207,6 @@
     "en": "Base currency",
     "t": "Tiền tệ cơ sở"
   },
-  "settings.connected": {
-    "en": "Connected",
-    "t": "Đã kết nối"
-  },
   "settings.currency.eur": {
     "en": "EUR (€)",
     "t": "EUR (€)"
@@ -5374,14 +5290,6 @@
   "settings.fixHighlighted": {
     "en": "Please fix the highlighted fields",
     "t": "Vui lòng sửa các trường được đánh dấu"
-  },
-  "settings.googleManaged": {
-    "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
-    "t": "Việc đăng nhập và mật khẩu của bạn do Google quản lý. Xác thực hai yếu tố và khôi phục được thiết lập trong Tài khoản Google của bạn."
-  },
-  "settings.googleManagedShort": {
-    "en": "Your password, two-factor authentication and recovery are configured in your Google Account.",
-    "t": "Mật khẩu, xác thực hai yếu tố và khôi phục của bạn được thiết lập trong Tài khoản Google."
   },
   "settings.group.cabinet": {
     "en": "Cabinet",
@@ -6899,10 +6807,6 @@
     "en": "Sessions & devices",
     "t": "Phiên & thiết bị"
   },
-  "ui.signedInGoogle": {
-    "en": "Signed in with Google",
-    "t": "Đăng nhập bằng Google"
-  },
   "ui.total": {
     "en": "Total",
     "t": "Tổng"
@@ -7278,5 +7182,297 @@
   "onboarding.verify.title": {
     "en": "Verify your identity",
     "t": "Xác minh danh tính"
+  },
+  "auth.code.back": {
+    "en": "Use a different email",
+    "t": "Dùng email khác"
+  },
+  "auth.code.checkSpam": {
+    "en": "It can take a minute. Check your spam folder too.",
+    "t": "Có thể mất một phút. Hãy kiểm tra cả thư mục spam."
+  },
+  "auth.code.desc": {
+    "en": "We sent a 6 digit sign in code to {email}",
+    "t": "Chúng tôi đã gửi mã đăng nhập 6 chữ số tới {email}"
+  },
+  "auth.code.label": {
+    "en": "Code",
+    "t": "Mã"
+  },
+  "auth.code.mailMe": {
+    "en": "Email me a code",
+    "t": "Gửi mã qua email"
+  },
+  "auth.code.resend": {
+    "en": "Send a new code",
+    "t": "Gửi mã mới"
+  },
+  "auth.code.resendIn": {
+    "en": "Send a new code in {seconds}s",
+    "t": "Gửi mã mới sau {seconds} giây"
+  },
+  "auth.code.title": {
+    "en": "Check your email",
+    "t": "Kiểm tra email của bạn"
+  },
+  "auth.createAccount": {
+    "en": "Create an account",
+    "t": "Tạo tài khoản"
+  },
+  "auth.dialog.heading": {
+    "en": "Sign in or create an account",
+    "t": "Đăng nhập hoặc tạo tài khoản"
+  },
+  "auth.email.confirm": {
+    "en": "Confirm",
+    "t": "Xác nhận"
+  },
+  "auth.email.unverifiedSub": {
+    "en": "Not verified — identity checks need a verified email",
+    "t": "Chưa xác minh — kiểm tra danh tính cần email đã xác minh"
+  },
+  "auth.email.verified": {
+    "en": "Verified",
+    "t": "Đã xác minh"
+  },
+  "auth.email.verify": {
+    "en": "Verify",
+    "t": "Xác minh"
+  },
+  "auth.err.attemptsExceeded": {
+    "en": "Too many tries. Send yourself a new code.",
+    "t": "Quá nhiều lần thử. Hãy yêu cầu mã mới."
+  },
+  "auth.err.captcha": {
+    "en": "Captcha verification failed. Please try again.",
+    "t": "Xác minh captcha thất bại. Vui lòng thử lại."
+  },
+  "auth.err.captchaLoad": {
+    "en": "Captcha failed to load. Please refresh the page.",
+    "t": "Không tải được captcha. Vui lòng tải lại trang."
+  },
+  "auth.err.codeExpired": {
+    "en": "That code has expired. Send yourself a new code.",
+    "t": "Mã đã hết hạn. Hãy yêu cầu mã mới."
+  },
+  "auth.err.disabled": {
+    "en": "This account is suspended.",
+    "t": "Tài khoản này đã bị tạm khóa."
+  },
+  "auth.err.emailTaken": {
+    "en": "An account already exists for that address. Sign in instead — with a code if you forgot the password.",
+    "t": "Địa chỉ này đã có tài khoản. Hãy đăng nhập — bằng mã nếu bạn quên mật khẩu."
+  },
+  "auth.err.emailVerifiedElsewhere": {
+    "en": "This address is verified on another account.",
+    "t": "Địa chỉ này đã được xác minh ở tài khoản khác."
+  },
+  "auth.err.invalidCode": {
+    "en": "That code is not right. Try again.",
+    "t": "Mã không đúng. Hãy thử lại."
+  },
+  "auth.err.invalidCredentials": {
+    "en": "Wrong email, username or password.",
+    "t": "Sai email, tên người dùng hoặc mật khẩu."
+  },
+  "auth.err.invalidEmail": {
+    "en": "Enter a valid email address.",
+    "t": "Nhập một địa chỉ email hợp lệ."
+  },
+  "auth.err.invalidUsername": {
+    "en": "3–32 characters: letters, digits, '_', '.' or '-'.",
+    "t": "3–32 ký tự: chữ cái, chữ số, '_', '.' hoặc '-'."
+  },
+  "auth.err.passwordLocked": {
+    "en": "Too many wrong passwords. Sign in with a code instead.",
+    "t": "Sai mật khẩu quá nhiều lần. Hãy đăng nhập bằng mã."
+  },
+  "auth.err.throttled": {
+    "en": "Too many codes went to this address. Try again in a few minutes.",
+    "t": "Đã gửi quá nhiều mã tới địa chỉ này. Hãy thử lại sau vài phút."
+  },
+  "auth.err.usernameTaken": {
+    "en": "That username is taken.",
+    "t": "Tên người dùng này đã có người dùng."
+  },
+  "auth.err.weakPassword": {
+    "en": "Use at least 8 characters.",
+    "t": "Dùng ít nhất 8 ký tự."
+  },
+  "auth.field.email": {
+    "en": "Email",
+    "t": "Email"
+  },
+  "auth.field.identifier": {
+    "en": "Email or username",
+    "t": "Email hoặc tên người dùng"
+  },
+  "auth.field.newPassword": {
+    "en": "New password",
+    "t": "Mật khẩu mới"
+  },
+  "auth.field.password": {
+    "en": "Password",
+    "t": "Mật khẩu"
+  },
+  "auth.method.code": {
+    "en": "Email code",
+    "t": "Mã qua email"
+  },
+  "auth.method.password": {
+    "en": "Password",
+    "t": "Mật khẩu"
+  },
+  "auth.methods.title": {
+    "en": "Sign-in methods",
+    "t": "Phương thức đăng nhập"
+  },
+  "auth.orContinueWith": {
+    "en": "Or continue with",
+    "t": "Hoặc tiếp tục với"
+  },
+  "auth.password.change": {
+    "en": "Change password",
+    "t": "Đổi mật khẩu"
+  },
+  "auth.password.save": {
+    "en": "Save password",
+    "t": "Lưu mật khẩu"
+  },
+  "auth.password.set": {
+    "en": "Set password",
+    "t": "Đặt mật khẩu"
+  },
+  "auth.signIn": {
+    "en": "Sign in",
+    "t": "Đăng nhập"
+  },
+  "auth.signup.create": {
+    "en": "Create account",
+    "t": "Tạo tài khoản"
+  },
+  "auth.signup.desc": {
+    "en": "Your account works right away. A KYC check later needs a verified email.",
+    "t": "Tài khoản dùng được ngay. Kiểm tra KYC sau này cần email đã xác minh."
+  },
+  "auth.signup.haveAccount": {
+    "en": "Already have an account? Sign in",
+    "t": "Đã có tài khoản? Đăng nhập"
+  },
+  "auth.signup.heading": {
+    "en": "Create an account",
+    "t": "Tạo tài khoản"
+  },
+  "auth.signup.verifyNow": {
+    "en": "Verify my email now",
+    "t": "Xác minh email ngay"
+  },
+  "auth.useCodeInstead": {
+    "en": "Sign in with a code instead",
+    "t": "Đăng nhập bằng mã"
+  },
+  "auth.useLoginCode": {
+    "en": "Email me a code",
+    "t": "Gửi mã qua email"
+  },
+  "auth.usePasswordInstead": {
+    "en": "Sign in with a password instead",
+    "t": "Đăng nhập bằng mật khẩu"
+  },
+  "auth.username.change": {
+    "en": "Change",
+    "t": "Đổi"
+  },
+  "auth.username.none": {
+    "en": "None yet — once set, it signs you in like your email",
+    "t": "Chưa có — khi đặt, bạn có thể đăng nhập bằng nó như email"
+  },
+  "auth.username.save": {
+    "en": "Save",
+    "t": "Lưu"
+  },
+  "auth.username.title": {
+    "en": "Username",
+    "t": "Tên người dùng"
+  },
+  "auth.verify.desc": {
+    "en": "Your account is ready. Enter the 6 digit code we sent to {email} to verify it, or skip and verify later in Settings.",
+    "t": "Tài khoản đã sẵn sàng. Nhập mã 6 chữ số đã gửi tới {email} để xác minh, hoặc xác minh sau trong Cài đặt."
+  },
+  "auth.verify.later": {
+    "en": "Verify later",
+    "t": "Xác minh sau"
+  },
+  "auth.verify.title": {
+    "en": "Confirm your email",
+    "t": "Xác nhận email"
+  },
+  "auth.wall.action": {
+    "en": "Sign in",
+    "t": "Đăng nhập"
+  },
+  "auth.wall.desc": {
+    "en": "This part of the cabinet belongs to your account. Sign in or create one — it takes a minute.",
+    "t": "Phần này của cabinet thuộc về tài khoản của bạn. Hãy đăng nhập hoặc tạo tài khoản — chỉ mất một phút."
+  },
+  "auth.wall.title": {
+    "en": "Sign in to see this",
+    "t": "Đăng nhập để xem nội dung này"
+  },
+  "nav.guestMode": {
+    "en": "Guest Mode",
+    "t": "Chế độ khách"
+  },
+  "profile.kyc.emailUnverified": {
+    "en": "Verify your email first — Settings → Security.",
+    "t": "Hãy xác minh email trước — Cài đặt → Bảo mật."
+  },
+  "profile.kyc.verifyEmailSub": {
+    "en": "Identity checks open once your address is confirmed",
+    "t": "Kiểm tra danh tính sẽ mở khi địa chỉ của bạn được xác nhận"
+  },
+  "profile.kyc.verifyEmailTitle": {
+    "en": "Verify your email first",
+    "t": "Hãy xác minh email trước"
+  },
+  "auth.err.passkeyCancelled": {
+    "en": "Passkey sign in was cancelled.",
+    "t": "Đăng nhập bằng khóa truy cập đã bị hủy."
+  },
+  "auth.err.passkeyExpired": {
+    "en": "That took too long. Try the passkey again.",
+    "t": "Quá thời gian. Hãy thử lại khóa truy cập."
+  },
+  "auth.err.passkeyRegistered": {
+    "en": "This passkey is registered already.",
+    "t": "Khóa truy cập này đã được đăng ký."
+  },
+  "auth.err.passkeyRejected": {
+    "en": "That passkey is not registered here. Sign in with a code instead.",
+    "t": "Khóa truy cập này chưa được đăng ký ở đây. Hãy đăng nhập bằng mã."
+  },
+  "auth.passkeys.add": {
+    "en": "Add a passkey",
+    "t": "Thêm khóa truy cập"
+  },
+  "auth.passkeys.default": {
+    "en": "Passkey",
+    "t": "Khóa truy cập"
+  },
+  "auth.passkeys.remove": {
+    "en": "Remove",
+    "t": "Xóa"
+  },
+  "auth.passkeys.sub": {
+    "en": "Sign in with your fingerprint, face or screen lock — no code, no password",
+    "t": "Đăng nhập bằng vân tay, khuôn mặt hoặc khóa màn hình — không cần mã hay mật khẩu"
+  },
+  "auth.passkeys.title": {
+    "en": "Passkeys",
+    "t": "Khóa truy cập"
+  },
+  "auth.usePasskey": {
+    "en": "Use a passkey",
+    "t": "Dùng khóa truy cập"
   }
 }

@@ -10,6 +10,7 @@ import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } fr
 import { prefetchOn } from "@/application/prefetch";
 import { allocationsResource } from "@/entities/fund/model/fund-resource";
 import { useUnreadCount, useUnreadCountPolling } from "@/entities/notification/model/notification-store";
+import { useSignInDialog } from "@/features/auth/model/use-sign-in-dialog";
 import { KycStatusChip } from "@/features/kyc";
 import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
@@ -131,11 +132,13 @@ export function Sidebar() {
   const pathname = useCabinetPathname();
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
+  const guest = session !== null && !session.authenticated;
+  const dialog = useSignInDialog();
   const role = session?.user?.role;
   const admin = ADMIN.filter((item) => visibleFor(item.roles, role));
   // The rail is mounted on every signed-in screen, so it is the one place the unread
   // count is polled from — every other consumer reads the shared store.
-  useUnreadCountPolling();
+  useUnreadCountPolling(!guest);
   const unread = useUnreadCount();
   // The catalog is cached and mirrored to sessionStorage, so the rail lists its products on
   // the first frame of a return visit rather than growing a Products group a beat later. A
@@ -215,10 +218,20 @@ export function Sidebar() {
             // The two rows about the account carry its two live facts: the verification
             // state on Profile, where the row that changes it lives (#395), and the unread
             // count on Notifications.
-            const trailing = item.href === "/profile" ? <KycStatusChip active={active} /> : item.href === "/notifications" && unread ? <UnreadPill count={unread} active={active} /> : undefined;
+            const trailing = guest ? undefined : item.href === "/profile" ? <KycStatusChip active={active} /> : item.href === "/notifications" && unread ? <UnreadPill count={unread} active={active} /> : undefined;
             return <NavLink key={item.href} item={item} active={active} onClick={onRailClick(item.href, mark)} trailing={trailing} />;
           })}
           <SupportLink />
+          {guest && (
+            // A guest's way in, wherever they are: the same dialog every wall opens.
+            <button
+              type="button"
+              onClick={dialog.show}
+              className={cn("mt-2 inline-flex items-center justify-center rounded-full border border-primary-ink px-3 py-1.5 font-mono text-xs uppercase tracking-wider text-primary-ink hover:bg-primary hover:text-on-primary", NAV_FOCUS)}
+            >
+              {t("nav.guestMode", "Guest Mode")}
+            </button>
+          )}
         </Section>
       </nav>
     </aside>

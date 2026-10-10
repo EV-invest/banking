@@ -53,6 +53,10 @@ function getSettings() {
       // The Service-Arb panel Home links to. Unset ⇒ no card: a link to nowhere is worse
       // than no link. Public; a build-time literal in flake.nix like the PostHog key.
       NEXT_PUBLIC_SA_PANEL_URL: opt(url()),
+      // Cloudflare Turnstile site key for the sign-in dialog; locally Cloudflare's
+      // always-pass test key `1x00000000000000000000AA`. Unset, the dialog's credential
+      // forms stay disabled — the identity plane refuses them without a token anyway.
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: requiredIn(opt(str()), "production"),
     },
     // `requiredIn` matches against this. NODE_ENV is what Next.js already sets
     // and what every other check here reads, so it stays the single name for
@@ -77,6 +81,7 @@ function getSettings() {
       NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
       NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
       NEXT_PUBLIC_SA_PANEL_URL: process.env.NEXT_PUBLIC_SA_PANEL_URL,
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     },
   });
 }
@@ -120,6 +125,7 @@ export const config = ((): Readonly<{
     posthogHost: string | undefined;
     sentryDsn: string | undefined;
     saPanelUrl: string | undefined;
+    turnstileSiteKey: string | undefined;
   }>;
 }> => {
   return Object.freeze({
@@ -160,6 +166,9 @@ export const config = ((): Readonly<{
       get saPanelUrl(): string | undefined {
         return getSettings().NEXT_PUBLIC_SA_PANEL_URL;
       },
+      get turnstileSiteKey(): string | undefined {
+        return getSettings().NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+      },
     }),
   });
 })();
@@ -187,6 +196,7 @@ export function assertConfig(): void {
   void config.public.posthogHost;
   void config.public.sentryDsn;
   void config.public.saPanelUrl;
+  void config.public.turnstileSiteKey;
 }
 
 // Keep the old helpers for any remaining callers outside this module.
