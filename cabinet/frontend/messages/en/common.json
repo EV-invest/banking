@@ -673,6 +673,7 @@
   "auth.err.attemptsExceeded": "Too many tries. Send yourself a new code.",
   "auth.err.captcha": "Captcha verification failed. Please try again.",
   "auth.err.captchaLoad": "Captcha failed to load. Please refresh the page.",
+  "auth.err.captchaUnavailable": "We could not check the captcha just now. Please try again.",
   "auth.err.codeExpired": "That code has expired. Send yourself a new code.",
   "auth.err.denied": "Sign-in was cancelled.",
   "auth.err.disabled": "This account is suspended.",

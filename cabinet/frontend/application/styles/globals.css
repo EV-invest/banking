@@ -58,6 +58,11 @@
      The `(app)` layout reserves matching padding-bottom below `lg` so content is
      never occluded by the fixed bar. */
   --cabinet-bottom-nav-h: 64px;
+  /* The sign-in dialog's off-scale steps (features/auth/ui/sign-in-dialog.tsx). */
+  --sign-in-radius: 10px;
+  --sign-in-text-title: 0.9375rem;
+  --sign-in-text-body: 0.8125rem;
+  --sign-in-text-fine: 0.6875rem;
   /* The brand mark uikit's `Logo` masks (it sits inside `StatusScreen`, so the
      403/404/500 pages draw it too). The kit ships no artwork since 0.15: undeclared,
      `mask-image` is invalid at computed-value time and the mark paints as a solid
