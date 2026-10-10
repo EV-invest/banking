@@ -7,6 +7,10 @@
 export interface SessionUser {
   userId: string;
   email: string;
+  /** Whether the mailbox is proven. A KYC level above 0 needs it. */
+  emailVerified: boolean;
+  /** A handle beside the email; absent when the account has none. */
+  username?: string;
   status: string;
   role: string;
   isAdmin: boolean;
@@ -30,6 +34,12 @@ export interface SessionUser {
 export interface SessionInfo {
   authenticated: boolean;
   user?: SessionUser;
+  /**
+   * What the caller's seat holds, concrete — a guest's set when nobody is signed in. What a
+   * page shows is decided from this (`shared/config/route-permissions.ts`); the BFF still
+   * decides what runs.
+   */
+  permissions: string[];
 }
 
 // ── users ─────────────────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ export type StartRefusal =
   | { kind: "unavailable"; contact: string | null }
   | { kind: "stale" }
   | { kind: "throttled" }
+  | { kind: "emailUnverified" }
   | { kind: "plain" };
 
 export function classifyRefusal(status: number, body: unknown): StartRefusal {
@@ -33,6 +34,8 @@ export function classifyRefusal(status: number, body: unknown): StartRefusal {
       return { kind: "unavailable", contact: refusal.contact };
     case "throttled":
       return { kind: "throttled" };
+    case "email_unverified":
+      return { kind: "emailUnverified" };
     case "csrf":
       return { kind: "stale" };
     // `internal` and `unauthenticated` are both worded by `shared/lib/api-client`'s own

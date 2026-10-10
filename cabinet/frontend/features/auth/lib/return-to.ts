@@ -49,6 +49,6 @@ export function loginReturnTo(locale: Locale, raw: string | null | undefined): s
  * The `href` of the sign-in button: a full navigation to the SHELL-owned login
  * (site-root `/api/auth`, not the zone's BFF — the cabinet runs no OAuth).
  */
-export function loginHref(locale: Locale, returnTo: string | null | undefined): string {
-  return `/api/auth/login?returnTo=${encodeURIComponent(loginReturnTo(locale, returnTo))}`;
+export function loginHref(locale: Locale, returnTo: string | null | undefined, provider: "google" | "github"): string {
+  return `/api/auth/login?provider=${provider}&returnTo=${encodeURIComponent(loginReturnTo(locale, returnTo))}`;
 }

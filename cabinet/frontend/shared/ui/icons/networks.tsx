@@ -3,7 +3,7 @@
 // Inline rather than an asset import: SVGR is not configured in this app, so
 // `import Bnb from "./bnb.svg"` does not resolve. The uikit exports no icon primitive
 // either — `Avatar`/`EmptyMedia` are containers, not marks — so the precedent this
-// follows is the inline Google logo in `views/login/ui/login.tsx`.
+// follows is the inline Google logo in `features/auth/ui/provider-marks.tsx`.
 //
 // This is deliberately its own module and gets no `shared/ui/icons/index.ts` barrel: the
 // paths below are ~4KB of markup that only the surfaces naming a chain should carry, and

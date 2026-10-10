@@ -1,7 +1,12 @@
-import type { ReactNode } from "react";
+import { cookies } from "next/headers";
+import { type ReactNode, Suspense } from "react";
 
 import { Sidebar } from "@/application/layout/sidebar";
 import { BottomNavbar } from "@/application/layout/bottom-navbar";
+import { RouteGate } from "@/application/layout/route-gate";
+import { SignInDialog } from "@/features/auth/ui/sign-in-dialog";
+import { COOKIES } from "@/shared/config/cookies";
+import { isSessionId } from "@/shared/lib/access-renewal";
 import { CacheWarmer } from "@/application/layout/cache-warmer";
 import { LocaleSync } from "@/application/layout/locale-sync";
 import { SessionAnalytics } from "@/application/layout/session-analytics";
@@ -33,26 +38,34 @@ import { TimeZoneProvider } from "@/shared/lib/time-zone";
 // server rendered in, so hydration reproduces it (`shared/lib/time-zone.tsx`).
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const timeZone = await renderTimeZone();
+  const signedIn = isSessionId((await cookies()).get(COOKIES.session)?.value);
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] bg-background pb-[var(--cabinet-bottom-nav-h,64px)] lg:pl-[var(--cabinet-rail-w)] lg:pb-0">
       <SessionKeeper />
       {/* Identifies the PostHog person by user id and records `session_created`, once
           per tab; sits under the same providers as everything else in the shell. */}
       <SessionAnalytics />
-      <CacheWarmer />
+      {signedIn && <CacheWarmer />}
       {/* Reconciles the URL's locale with the language stored on the account —
           adopting the stored one when the proxy had to guess, and recording the
           reader's actual locale when it did not. Renders nothing. */}
-      <LocaleSync />
+      {signedIn && <LocaleSync />}
       <TimeZoneSync />
       <div className="hidden lg:fixed lg:left-0 lg:top-[var(--ev-shell-offset,0px)] lg:flex lg:h-[calc(100dvh-var(--ev-shell-offset,0px))]">
         <Sidebar />
       </div>
       <main className="min-w-0 flex-1">
         <SystemBanner />
-        <TimeZoneProvider value={timeZone}>{children}</TimeZoneProvider>
+        <TimeZoneProvider value={timeZone}>
+          <Suspense>
+            <RouteGate signedIn={signedIn}>{children}</RouteGate>
+          </Suspense>
+        </TimeZoneProvider>
       </main>
       <BottomNavbar />
+      <Suspense>
+        <SignInDialog />
+      </Suspense>
     </div>
   );
 }

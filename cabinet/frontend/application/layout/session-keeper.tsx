@@ -10,22 +10,14 @@
 // back to the user (a hidden tab's timers are throttled or frozen, so returning to it is
 // exactly when the cookie is most likely lapsed).
 //
-// It also owns the ONE navigation this concern needs: when the shell answers that the
-// session is genuinely gone, move to /login with a returnTo instead of leaving the user
-// on a shell whose every panel reads "sign in again". An unknown answer (offline, 5xx, no
-// shell mounted in dev) is never treated as a sign-out.
+// A session the shell calls gone navigates nowhere: the reader stays on the page as a
+// guest, and the route gate walls off what their seat no longer holds.
 
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import { useCabinetHref, useCabinetPathname } from "@/shared/lib/cabinet-route";
-import { STALE_MS, onSessionChange, refreshIfStale } from "@/shared/lib/session";
+import { STALE_MS, refreshIfStale } from "@/shared/lib/session";
 
 export function SessionKeeper() {
-  const router = useRouter();
-  const pathname = useCabinetPathname();
-  const href = useCabinetHref();
-
   useEffect(() => {
     const rotate = () => {
       if (document.visibilityState === "visible") void refreshIfStale();
@@ -42,20 +34,6 @@ export function SessionKeeper() {
       window.removeEventListener("online", rotate);
     };
   }, []);
-
-  useEffect(
-    () =>
-      onSessionChange((session) => {
-        if (session.authenticated) return;
-        // returnTo is zone-relative by convention (`features/auth/lib/return-to.ts`): the
-        // login view puts `/{locale}/cabinet` on once, and the proxy's signed-out bounce
-        // writes the same shape. `useCabinetPathname` is what keeps this true now that
-        // `usePathname` reports the whole `/{locale}/cabinet/...` path.
-        const returnTo = `${pathname}${window.location.search}`;
-        router.replace(href(returnTo === "/" ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`));
-      }),
-    [href, pathname, router],
-  );
 
   return null;
 }

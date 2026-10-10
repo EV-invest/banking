@@ -55,7 +55,7 @@ export function DesktopPane({
           </div>
         )}
         {section === "personal" && <PersonalSection {...personal} />}
-        {section === "security" && <SecuritySection email={personal.email} loading={personal.loading} sessions={sessionList} onManageSessions={() => onSelect("sessions")} />}
+        {section === "security" && <SecuritySection sessions={sessionList} onManageSessions={() => onSelect("sessions")} />}
         {section === "sessions" && sessions}
         {section === "documents" && (
           <div>
